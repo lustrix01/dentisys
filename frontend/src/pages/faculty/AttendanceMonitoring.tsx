@@ -874,17 +874,6 @@ export const AttendanceMonitoring: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* 1. Clean Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            Attendance Monitoring
-          </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            Select an assigned class below to manage its roll call, monitor active check-ins, and schedule attendance sessions.
-          </p>
-        </div>
-      </div>
 
       <FacultyExcusedRequestsPanel onDecided={() => {
         const csIdNum = parseInt(selectedCsId, 10);

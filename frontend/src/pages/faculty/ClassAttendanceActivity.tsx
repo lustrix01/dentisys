@@ -39,20 +39,14 @@ export const ClassAttendanceActivity: React.FC<{ classIds?: string[] }> = ({ cla
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-        <div>
-          <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">Class Attendance Activity</h1>
-          <p className="text-xs text-slate-400 mt-1">Attendance changes in your classes: manual records and corrections by you or the class Secretary.</p>
+      <div className="flex justify-end gap-2 pb-2">
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <input aria-label="Search class attendance activity" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search student, section, session" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-xs dark:border-slate-700 dark:bg-slate-800" />
         </div>
-        <div className="flex gap-2">
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-            <input aria-label="Search class attendance activity" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search student, section, session" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-xs dark:border-slate-700 dark:bg-slate-800" />
-          </div>
-          <button type="button" aria-label="Refresh class attendance activity" onClick={() => setReloadKey(key => key + 1)} disabled={loading} className="rounded-xl border border-slate-200 px-3 text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
+        <button type="button" aria-label="Refresh class attendance activity" onClick={() => setReloadKey(key => key + 1)} disabled={loading} className="rounded-xl border border-slate-200 px-3 text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300">
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       <Card className="p-0 overflow-x-auto">

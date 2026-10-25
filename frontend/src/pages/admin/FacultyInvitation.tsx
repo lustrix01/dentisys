@@ -301,14 +301,6 @@ export const FacultyInvitation: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12 animate-fade-in">
-      <div className="border-b border-slate-200/80 pb-5 dark:border-slate-800">
-        <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100 sm:text-3xl">
-          Faculty Invitations
-        </h1>
-        <p className="mt-1 max-w-xl text-xs text-slate-500 dark:text-slate-400">
-          Admin invitations authorize Faculty accounts. The invited person establishes their password to activate their account; no second approval is needed.
-        </p>
-      </div>
 
       {(error || notice) && (
         <div

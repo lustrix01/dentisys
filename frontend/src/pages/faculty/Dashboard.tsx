@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowRight, BookOpen } from 'lucide-react';
+import { Search, ArrowRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Card } from '../../components/Card';
@@ -12,12 +12,10 @@ import {
   getFacultyClassesApi,
   getFacultyDashboardKpisApi,
   getFacultyRetentionApi,
-  getNotificationsApi,
   saveFacultyRemedialApi,
   type FacultyClassItem,
   type FacultyRetentionRecord,
 } from '../../services/apiClient';
-import type { NotificationItem } from '../../types';
 import type { AuditEntry } from '../../services/auditService';
 import { AuditCompactList } from '../../components/AuditTrailPage';
 
@@ -31,8 +29,6 @@ export const Dashboard: React.FC = () => {
   const [dashboardKpis, setDashboardKpis] = useState<Awaited<ReturnType<typeof getFacultyDashboardKpisApi>> | null>(null);
   const [retentionRecords, setRetentionRecords] = useState<FacultyRetentionRecord[]>([]);
   const [retentionError, setRetentionError] = useState('');
-  const [announcements, setAnnouncements] = useState<NotificationItem[]>([]);
-  const [announcementsError, setAnnouncementsError] = useState('');
   const [recentActivity, setRecentActivity] = useState<AuditEntry[]>([]);
   const [activityError, setActivityError] = useState('');
   const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
@@ -47,8 +43,8 @@ export const Dashboard: React.FC = () => {
     setSelectedClassId('');
     setLoading(true);
     setDashboardError('');
-    Promise.allSettled([getFacultyDashboardKpisApi(schoolYear), getFacultyRetentionApi(), getNotificationsApi({ limit: 5 }), getFacultyActivityApi(), getFacultyClassesApi()])
-      .then(([kpiResult, retentionResult, announcementsResult, activityResult, classesResult]) => {
+    Promise.allSettled([getFacultyDashboardKpisApi(schoolYear), getFacultyRetentionApi(), getFacultyActivityApi(), getFacultyClassesApi()])
+      .then(([kpiResult, retentionResult, activityResult, classesResult]) => {
         if (activityResult.status === 'fulfilled') {
           setRecentActivity(Array.isArray(activityResult.value.entries) ? activityResult.value.entries.slice(0, 5) : []);
           setActivityError('');
@@ -75,17 +71,6 @@ export const Dashboard: React.FC = () => {
           setRetentionError(retentionResult.reason instanceof Error
             ? retentionResult.reason.message
             : 'Authoritative retention data is unavailable.');
-        }
-        if (announcementsResult.status === 'fulfilled') {
-          setAnnouncements(Array.isArray(announcementsResult.value.notifications)
-            ? announcementsResult.value.notifications
-            : []);
-          setAnnouncementsError('');
-        } else {
-          setAnnouncements([]);
-          setAnnouncementsError(announcementsResult.reason instanceof Error
-            ? announcementsResult.reason.message
-            : 'Authoritative announcements are unavailable.');
         }
         setLoading(false);
       });
@@ -340,15 +325,6 @@ export const Dashboard: React.FC = () => {
           availableSchoolYears={dashboardKpis?.availableSchoolYears}
           onChange={setSchoolYear}
         />
-
-        <button
-          onClick={() => navigate('/classes')}
-          className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-clinical-600 hover:bg-clinical-700 active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-clinical-600/20 transition-all cursor-pointer flex-shrink-0"
-        >
-          <BookOpen className="w-4 h-4" />
-          <span>Manage Classes</span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
       </div>
 
       {/* 2-Column Layout */}
@@ -380,38 +356,38 @@ export const Dashboard: React.FC = () => {
 
             {/* Consolidated Faculty Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 text-left">
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between min-h-[92px] min-w-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block leading-tight min-h-[28px] break-words">
                   {schoolYear === 'current' ? 'Currently Assigned Classes' : schoolYear === 'all' ? 'Assigned Classes (All Years)' : `Assigned Classes (${schoolYear})`}
                 </span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-2 break-words">
                   {dashboardKpis?.kpis.activeClasses ?? 0}
                 </span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Active Students</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between min-h-[92px] min-w-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block leading-tight min-h-[28px] break-words">Active Students</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-2 break-words">
                   {facultyTotalStudents}
                 </span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Attendance Rate</span>
-                <span className="text-lg font-extrabold text-clinical-600 dark:text-clinical-400 block mt-0.5 break-words xl:break-normal">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between min-h-[92px] min-w-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block leading-tight min-h-[28px] break-words">Attendance Rate</span>
+                <span className="text-lg font-extrabold text-clinical-600 dark:text-clinical-400 block mt-2 break-words">
                   {(() => {
                     const rate = classAttendanceRate ?? dashboardKpis?.kpis.averageAttendance ?? null;
                     return rate === null ? 'N/A' : `${rate}%`;
                   })()}
                 </span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">At-Risk Watchlist</span>
-                <span className={`text-lg font-extrabold block mt-0.5 ${atRiskCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100'}`}>
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between min-h-[92px] min-w-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block leading-tight min-h-[28px] break-words">At-Risk Watchlist</span>
+                <span className={`text-lg font-extrabold block mt-2 break-words ${atRiskCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100'}`}>
                   {atRiskCount}
                 </span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 col-span-2 sm:col-span-1 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Pending Remedials</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 col-span-2 sm:col-span-1 flex flex-col justify-between min-h-[92px] min-w-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block leading-tight min-h-[28px] break-words">Pending Remedials</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-2 break-words">
                   {dashboardKpis?.kpis.remedialCount ?? 0}
                 </span>
               </div>
@@ -471,38 +447,9 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Right Sidebar Panel (Spans 4) */}
-        <div className="xl:col-span-4 space-y-5">
+        <div className="xl:col-span-4 space-y-6">
           
-          {/* Widget 1: Announcements */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
-                Announcements
-              </h3>
-              <span className="text-[10px] font-bold text-clinical-600 bg-clinical-50 dark:bg-clinical-950/60 px-2 py-0.5 rounded-full">
-                BU CDM
-              </span>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              {announcementsError ? (
-                <p className="text-xs text-amber-700 dark:text-amber-300">{announcementsError}</p>
-              ) : announcements.length === 0 ? (
-                <p className="text-xs text-slate-400">No authoritative announcements are available.</p>
-              ) : announcements.map(notification => (
-                <div key={notification.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
-                  <span className="text-[9px] font-bold text-clinical-600 dark:text-clinical-400 uppercase tracking-wider">
-                    {notification.type || 'Notification'}
-                  </span>
-                  <h4 className="font-bold text-slate-800 dark:text-slate-100">{notification.title}</h4>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">{notification.body}</p>
-                  <time className="text-[10px] text-slate-400 block mt-1" dateTime={notification.createdAt}>{notification.createdAt}</time>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Widget 2: Pending Remedials */}
+          {/* Widget: Pending Remedials */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">Pending Remedials</h3>

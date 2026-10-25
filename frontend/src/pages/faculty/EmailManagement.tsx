@@ -3,7 +3,6 @@ import {
   CheckCircle2,
   Clock3,
   History,
-  Mail,
   Send,
   Users,
   Briefcase,
@@ -360,34 +359,6 @@ export const EmailManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      
-      {/* 1. Clean Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-              Email Management & Class Invitations
-            </h1>
-            {currentSchoolYear && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300">
-                <CalendarDays className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                S.Y. {currentSchoolYear} (Current)
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            Dispatch official class roster invitations, manage Class Secretary appointments, and track email transmission logs.
-          </p>
-        </div>
-
-        <div className="text-right hidden sm:block">
-          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20 inline-flex items-center gap-1.5">
-            <Mail className="w-3.5 h-3.5" />
-            Live Email Gateway • Auto Sending
-          </span>
-        </div>
-      </div>
-
       {notice && (
         <div
           className={`p-4 rounded-2xl border text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in ${

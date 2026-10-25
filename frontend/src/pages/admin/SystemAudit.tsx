@@ -346,6 +346,27 @@ export const DeanReports: React.FC = () => {
     );
   };
 
+  const exportPrintControls = (
+    <div className="flex items-center gap-2 no-print flex-shrink-0">
+      <button
+        type="button"
+        onClick={handleExportCSV}
+        className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white font-bold text-xs transition-all shadow-sm cursor-pointer whitespace-nowrap"
+      >
+        <Download className="w-3.5 h-3.5" />
+        <span>Export CSV</span>
+      </button>
+      <button
+        type="button"
+        onClick={handlePrint}
+        className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-xs transition-all cursor-pointer bg-white dark:bg-slate-950 whitespace-nowrap"
+      >
+        <Printer className="w-3.5 h-3.5" />
+        <span>Print PDF</span>
+      </button>
+    </div>
+  );
+
   const tabs: { id: ReportTab; label: string; icon: React.ReactNode }[] = [
     { id: 'students', label: 'Student Summaries', icon: <Users className="w-3.5 h-3.5" /> },
     { id: 'retention', label: 'Retention Reports', icon: <ShieldAlert className="w-3.5 h-3.5" /> },
@@ -354,34 +375,6 @@ export const DeanReports: React.FC = () => {
 
   return (
     <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto px-1 sm:px-2 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4 no-print">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            Reports & Analytics
-          </h1>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 sm:mt-1">
-            Generate institutional academic, retention, and attendance reports.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto no-print">
-          <button
-            onClick={handleExportCSV}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white font-bold text-xs transition-all shadow-md cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export CSV
-          </button>
-          <button
-            onClick={handlePrint}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 font-bold text-xs transition-all cursor-pointer bg-white dark:bg-slate-950"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            Print PDF
-          </button>
-        </div>
-      </div>
-
       {/* Tab Navigation */}
       <div className="flex bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm no-print overflow-x-auto gap-1">
         {tabs.map(tab => (
@@ -451,7 +444,7 @@ export const DeanReports: React.FC = () => {
         {activeTab === 'students' && selectedClassId === null && (
           <div className="space-y-4">
             {/* Class Section Filter Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
               <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto">
                 <button
                   type="button"
@@ -504,7 +497,33 @@ export const DeanReports: React.FC = () => {
                     onChange={value => { setSchoolYear(value); setSelectedClassId(null); setClassFilter('all'); }}
                   />
                 </div>
+                <div className="hidden sm:block h-5 w-px bg-slate-200 dark:bg-slate-800" />
+                {exportPrintControls}
               </div>
+            </div>
+
+            {/* Overall Student Summaries Overview */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 no-print">
+              <Card className="p-2.5 sm:p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Enrolled</p>
+                <p className="text-xl sm:text-2xl font-extrabold font-heading mt-0.5 text-accent-600 dark:text-accent-400">{students.length}</p>
+              </Card>
+              <Card className="p-2.5 sm:p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Classes</p>
+                <p className="text-xl sm:text-2xl font-extrabold font-heading mt-0.5 text-slate-700 dark:text-slate-200">{activeClasses.length}</p>
+              </Card>
+              <Card className="p-2.5 sm:p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Good Standing</p>
+                <p className="text-xl sm:text-2xl font-extrabold font-heading mt-0.5 text-emerald-600 dark:text-emerald-400">
+                  {students.filter((s: any) => s.status === 'active').length}
+                </p>
+              </Card>
+              <Card className="p-2.5 sm:p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Remedial</p>
+                <p className="text-xl sm:text-2xl font-extrabold font-heading mt-0.5 text-violet-600 dark:text-violet-400">
+                  {students.filter((s: any) => s.status === 'remedial').length}
+                </p>
+              </Card>
             </div>
 
             {/* Class Cards Grid */}
@@ -525,7 +544,7 @@ export const DeanReports: React.FC = () => {
                 </p>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+              <div className={`grid ${displayedClassCards.length === 4 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'} gap-3.5 sm:gap-4`}>
                 {displayedClassCards.map(cls => (
                   <div
                     key={cls.id}
@@ -657,6 +676,8 @@ export const DeanReports: React.FC = () => {
                     <option value="cleared">Cleared</option>
                   </select>
                   <span className="text-[10px] text-slate-400 font-semibold whitespace-nowrap">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
+                  <div className="hidden sm:block h-5 w-px bg-slate-200 dark:bg-slate-800" />
+                  {exportPrintControls}
                 </div>
               </div>
             </div>
@@ -813,6 +834,8 @@ export const DeanReports: React.FC = () => {
                     onChange={value => { setSchoolYear(value); setSelectedClassId(null); setClassFilter('all'); }}
                   />
                 </div>
+                <div className="hidden sm:block h-5 w-px bg-slate-200 dark:bg-slate-800" />
+                {exportPrintControls}
               </div>
             </div>
 
@@ -848,7 +871,7 @@ export const DeanReports: React.FC = () => {
                 </p>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+              <div className={`grid ${displayedClassCards.length === 4 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'} gap-3.5 sm:gap-4`}>
                 {displayedClassCards.map(cls => {
                   const atRisk = cls.remedialCount;
                   return (
@@ -982,6 +1005,8 @@ export const DeanReports: React.FC = () => {
                     <option value="cleared">Cleared</option>
                   </select>
                   <span className="text-[10px] text-slate-400 font-semibold whitespace-nowrap">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
+                  <div className="hidden sm:block h-5 w-px bg-slate-200 dark:bg-slate-800" />
+                  {exportPrintControls}
                 </div>
               </div>
             </div>
@@ -1145,7 +1170,29 @@ export const DeanReports: React.FC = () => {
                     onChange={value => { setSchoolYear(value); setSelectedClassId(null); setClassFilter('all'); }}
                   />
                 </div>
+                <div className="hidden sm:block h-5 w-px bg-slate-200 dark:bg-slate-800" />
+                {exportPrintControls}
               </div>
+            </div>
+
+            {/* Overall Attendance Summary */}
+            <div className="grid grid-cols-3 gap-2.5 sm:gap-3 no-print">
+              <Card className="p-2.5 sm:p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Recorded Sessions</p>
+                <p className="text-xl sm:text-2xl font-extrabold font-heading mt-0.5 text-sky-600 dark:text-sky-400">{attendanceRecords.length}</p>
+              </Card>
+              <Card className="p-2.5 sm:p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Classes</p>
+                <p className="text-xl sm:text-2xl font-extrabold font-heading mt-0.5 text-slate-700 dark:text-slate-200">{activeClasses.length}</p>
+              </Card>
+              <Card className="p-2.5 sm:p-3 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Overall Attendance</p>
+                <p className="text-xl sm:text-2xl font-extrabold font-heading mt-0.5 text-emerald-600 dark:text-emerald-400">
+                  {attendanceRecords.length > 0
+                    ? `${Math.round((attendanceRecords.filter(r => r.status === 'present' || r.status === 'late' || r.status === 'excused').length / attendanceRecords.length) * 100)}%`
+                    : '0%'}
+                </p>
+              </Card>
             </div>
 
             {/* Class Attendance Cards Grid */}
@@ -1166,7 +1213,7 @@ export const DeanReports: React.FC = () => {
                 </p>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+              <div className={`grid ${displayedClassCards.length === 4 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'} gap-3.5 sm:gap-4`}>
                 {displayedClassCards.map(cls => {
                   const att = classAttendanceMap.get(cls.id);
                   const rate = att ? att.rate : 0;
@@ -1303,6 +1350,8 @@ export const DeanReports: React.FC = () => {
                     <option value="excused">Excused</option>
                   </select>
                   <span className="text-[10px] text-slate-400 font-semibold whitespace-nowrap">{filteredAttendanceRows.length} record{filteredAttendanceRows.length !== 1 ? 's' : ''}</span>
+                  <div className="hidden sm:block h-5 w-px bg-slate-200 dark:bg-slate-800" />
+                  {exportPrintControls}
                 </div>
               </div>
             </div>

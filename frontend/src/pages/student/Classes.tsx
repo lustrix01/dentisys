@@ -72,6 +72,22 @@ const classSchedule = (cls: StudentAcademicClass, component: 'Lecture' | 'Labora
   return cls.meetingsRecorded ? { ...legacy, schedule: 'Schedule TBA', days: [], time: '' } : legacy;
 };
 
+const getFormattedSchedule = (cls: StudentAcademicClass, component: 'Lecture' | 'Laboratory'): { times: string; room: string } | null => {
+  const meetings = cls.meetings?.filter(meeting => meeting.component === component) ?? [];
+  if (meetings.length > 0) {
+    const times = meetings.map(m => `${m.day} ${m.startTime} - ${m.endTime}`).join('; ');
+    const rooms = Array.from(new Set(meetings.map(m => m.room).filter(Boolean))).join(', ') || 'TBA';
+    return { times, room: rooms };
+  }
+  const rawRoom = component === 'Lecture' ? cls.lecRoom : cls.labRoom;
+  if (!rawRoom && !cls.meetingsRecorded) return null;
+  const parsed = parseRoomAndSchedule(rawRoom);
+  return {
+    times: parsed.schedule || 'Schedule TBA',
+    room: parsed.room || 'TBA',
+  };
+};
+
 export const calculateClassAttendanceRate = (records: Array<{ status: string }>): number | null => {
   if (records.length === 0) return null;
   const attendedCount = records.filter(r => r.status === 'present' || r.status === 'late' || r.status === 'excused').length;
@@ -233,33 +249,22 @@ export const Classes: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto animate-fade-in pb-12">
       {/* 1. Top Header */}
-      <div className="flex flex-col sm:flex-row sm:flex-wrap xl:flex-nowrap sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            My Enrolled Classes & Schedule
-          </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            Official study load, assigned classroom rooms, and weekly schedule timetable for Dental Medicine.
-          </p>
+      <div className="flex items-center justify-end gap-3 pb-2">
+        <div className="text-right hidden sm:block">
+          <span className="text-[10px] font-mono font-bold text-slate-400 block leading-none">STUDENT ID</span>
+          <span className="text-xs font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentNumber}</span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden sm:block">
-            <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
-            <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentNumber}</span>
-          </div>
-
-          <button
-            onClick={() => navigate('/student/attendance')}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
-          >
-            <CalendarDays className="w-4 h-4" />
-            <span>Daily Check-In</span>
-          </button>
-        </div>
+        <button
+          onClick={() => navigate('/student/attendance')}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
+        >
+          <CalendarDays className="w-4 h-4" />
+          <span>Daily Check-In</span>
+        </button>
       </div>
 
-      <p className="text-xs text-slate-500">Course grades and retention status come from saved academic records. Missing grades remain Pending. Review Retention Standing or contact Faculty for an actionable warning.</p>
+      <p className="text-xs text-slate-400">Course grades and retention status come from official academic records. Missing grades remain pending.</p>
       {currentClasses.some(cls => cls.retentionState?.toLowerCase() === 'remedial') && (
         <div role="status" className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs font-semibold">Retention Standing Warning: review your flagged courses with Faculty.</div>
       )}
@@ -384,83 +389,110 @@ export const Classes: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={`grid ${currentClasses.length === 1 ? 'grid-cols-1 max-w-xl' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'} gap-4`}>
               {currentClasses.map((cls) => {
-                const lecSched = classSchedule(cls, 'Lecture');
-                const labSched = cls.labRoom || cls.meetings?.some(meeting => meeting.component === 'Laboratory') ? classSchedule(cls, 'Laboratory') : null;
+                const lecSched = getFormattedSchedule(cls, 'Lecture');
+                const labSched = cls.labRoom || cls.meetings?.some(meeting => meeting.component === 'Laboratory') ? getFormattedSchedule(cls, 'Laboratory') : null;
 
                 return (
-                  <Card key={cls.enrollmentId} className="p-5 sm:p-6 hover:border-blue-300 dark:hover:border-blue-800/80 transition-all flex flex-col justify-between">
-                    <div className="space-y-3.5">
+                  <Card key={cls.enrollmentId} className="p-4 sm:p-5 hover:border-blue-300 dark:hover:border-blue-800/80 transition-all flex flex-col justify-between">
+                    <div className="space-y-3">
                       {/* Course Code & Units */}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="px-2.5 py-1 rounded-lg font-mono font-extrabold text-xs bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/80 dark:border-blue-900">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-md font-mono font-bold text-xs bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/60 dark:border-blue-900/60">
                             {cls.courseCode}
                           </span>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                            {cls.units} Academic Units
+                          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                            {cls.units} Units
                           </span>
                         </div>
-                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                          Section {cls.className}
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                          Sec. {cls.className}
                         </span>
                       </div>
 
                       {/* Course Title */}
                       <div>
-                        <h3 className="text-base sm:text-lg font-extrabold text-slate-800 dark:text-slate-100 leading-snug">
+                        <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100 leading-snug">
                           {cls.courseName}
                         </h3>
                         <p className="text-[11px] text-slate-400 mt-0.5">
-                          {cls.semester} Semester • School Year {cls.schoolYear}
+                          {cls.semester} Semester • S.Y. {cls.schoolYear}
                         </p>
                       </div>
 
                       {/* Details Box: Instructor & Schedule */}
-                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-2 text-xs">
+                      <div className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 space-y-1.5 text-xs">
                         {/* Instructor */}
                         <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
                           <User className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                          <span className="font-semibold text-slate-400 text-[11px]">Instructor:</span>
-                          <span className="font-bold">{cls.instructorName || 'Faculty Member'}</span>
+                          <span className="text-slate-400 text-[11px] font-medium">Instructor:</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-200">{cls.instructorName || 'Faculty Member'}</span>
                         </div>
 
-                        {/* Lecture Schedule & Room */}
-                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
-                          <Clock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          <span className="font-semibold text-slate-400 text-[11px]">Lecture:</span>
-                          <span className="font-bold font-mono text-[11px]">{lecSched.schedule}</span>
-                        </div>
-
-                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
-                          <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                          <span className="font-semibold text-slate-400 text-[11px]">Room:</span>
-                          <span className="font-bold">{lecSched.room}</span>
-                        </div>
+                        {/* Lecture Schedule */}
+                        {lecSched && (
+                          <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                            <Clock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="text-slate-400 text-[11px] font-medium">Lecture:</span>
+                            <span className="font-medium text-slate-700 dark:text-slate-200 text-xs truncate">
+                              {lecSched.times} <span className="text-slate-300 dark:text-slate-600 font-normal">·</span> {lecSched.room}
+                            </span>
+                          </div>
+                        )}
 
                         {/* Laboratory if present */}
                         {labSched && (
-                          <div className="pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 space-y-1.5">
-                            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
-                              <Building className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                              <span className="font-semibold text-slate-400 text-[11px]">Lab:</span>
-                              <span className="font-bold font-mono text-[11px]">{labSched.schedule}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
-                              <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                              <span className="font-semibold text-slate-400 text-[11px]">Lab Room:</span>
-                              <span className="font-bold">{labSched.room}</span>
-                            </div>
+                          <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                            <Building className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <span className="text-slate-400 text-[11px] font-medium">Lab:</span>
+                            <span className="font-medium text-slate-700 dark:text-slate-200 text-xs truncate">
+                              {labSched.times} <span className="text-slate-300 dark:text-slate-600 font-normal">·</span> {labSched.room}
+                            </span>
                           </div>
                         )}
                       </div>
                     </div>
-                    <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-wrap gap-x-4 gap-y-2 text-xs">
-                      <span>Course Grade: <strong>{typeof cls.grade === 'number' ? <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue> : 'Pending'}</strong></span>
-                      <span>Score %: <strong>{typeof cls.percentage === 'number' ? `${cls.percentage.toFixed(2)}%` : 'Pending'}</strong></span>
-                      <span>Clinical Hours Completed: <strong>{typeof cls.clinicHoursCompleted === 'number' ? `${cls.clinicHoursCompleted} hrs` : 'Unavailable'}</strong></span>
-                      <span className={cls.retentionState?.toLowerCase() === 'remedial' ? 'text-amber-700 dark:text-amber-300 font-bold' : ''}>Retention: <strong>{cls.retentionState?.toLowerCase() === 'remedial' ? cls.retentionState : cls.grade === null ? 'Pending' : cls.retentionState || 'Unavailable'}</strong></span>
+
+                    {/* Academic Status Footer */}
+                    <div className="mt-3.5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] text-slate-400 font-medium">Grade:</span>
+                        {typeof cls.grade === 'number' ? (
+                          <span className="font-bold text-slate-700 dark:text-slate-200">
+                            <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue>
+                            {typeof cls.percentage === 'number' && (
+                              <span className="text-[10px] text-slate-400 font-normal ml-1">({cls.percentage.toFixed(1)}%)</span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">Pending</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        {typeof cls.clinicHoursCompleted === 'number' && cls.clinicHoursCompleted > 0 && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
+                            {cls.clinicHoursCompleted} hrs
+                          </span>
+                        )}
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                            cls.retentionState?.toLowerCase() === 'remedial'
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
+                              : cls.grade !== null && cls.retentionState
+                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                              : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                          }`}
+                        >
+                          {cls.retentionState?.toLowerCase() === 'remedial'
+                            ? 'Remedial'
+                            : cls.grade === null
+                            ? 'Pending Evaluation'
+                            : cls.retentionState || 'Good Standing'}
+                        </span>
+                      </div>
                     </div>
                     <StudentComponentGradeSummary cls={cls} />
                   </Card>
@@ -478,77 +510,114 @@ export const Classes: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={`grid ${archivedClasses.length === 1 ? 'grid-cols-1 max-w-xl' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'} gap-4`}>
               {archivedClasses.map((cls) => {
-                const lecSched = classSchedule(cls, 'Lecture');
-                const labSched = cls.labRoom || cls.meetings?.some(meeting => meeting.component === 'Laboratory') ? classSchedule(cls, 'Laboratory') : null;
+                const lecSched = getFormattedSchedule(cls, 'Lecture');
+                const labSched = cls.labRoom || cls.meetings?.some(meeting => meeting.component === 'Laboratory') ? getFormattedSchedule(cls, 'Laboratory') : null;
 
                 return (
-                  <Card key={cls.enrollmentId} className="p-5 sm:p-6 opacity-90 hover:opacity-100 border-slate-200 dark:border-slate-800 transition-all flex flex-col justify-between bg-slate-50/50 dark:bg-slate-900/50">
-                    <div className="space-y-3.5">
+                  <Card key={cls.enrollmentId} className="p-4 sm:p-5 opacity-90 hover:opacity-100 border-slate-200 dark:border-slate-800 transition-all flex flex-col justify-between bg-slate-50/50 dark:bg-slate-900/50">
+                    <div className="space-y-3">
                       {/* Course Code & Archived Status */}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="px-2.5 py-1 rounded-lg font-mono font-extrabold text-xs bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300/80 dark:border-slate-700">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-md font-mono font-bold text-xs bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300/80 dark:border-slate-700">
                             {cls.courseCode}
                           </span>
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700">
-                            Archived
-                          </span>
-                          {cls.archiveReason === 'finished' && (
-                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 text-[9px] font-extrabold uppercase tracking-wider">Completed</span>
-                          )}
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                             {cls.units} Units
                           </span>
                         </div>
-                        <span className="px-2.5 py-1 rounded-lg font-bold text-[10px] uppercase bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50">
-                          S.Y. {cls.schoolYear}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {cls.archiveReason === 'finished' && (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px] font-bold">
+                              Completed
+                            </span>
+                          )}
+                          <span className="px-2 py-0.5 rounded-md font-bold text-[10px] uppercase bg-slate-100 dark:bg-slate-800 text-slate-500">
+                            S.Y. {cls.schoolYear}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Course Title */}
                       <div>
-                        <h3 className="text-base sm:text-lg font-extrabold text-slate-700 dark:text-slate-200 leading-snug">
+                        <h3 className="text-base font-extrabold text-slate-700 dark:text-slate-200 leading-snug">
                           {cls.courseName}
                         </h3>
                         <p className="text-[11px] text-slate-400 mt-0.5">
-                          {cls.semester} Semester • Section {cls.className}
+                          {cls.semester} Semester • Sec. {cls.className}
                         </p>
                       </div>
 
                       {/* Details Box */}
-                      <div className="p-3 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-2 text-xs">
-                        <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                          <span className="font-semibold text-slate-400 text-[11px]">Instructor:</span>
-                          <span className="font-bold">{cls.instructorName || 'Faculty Member'}</span>
+                      <div className="p-3 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5 text-xs">
+                        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                          <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="text-slate-400 text-[11px] font-medium">Instructor:</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-200">{cls.instructorName || 'Faculty Member'}</span>
                         </div>
 
-                        {cls.grade !== null && (
-                          <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-700">
-                            <span className="font-semibold text-slate-400 text-[11px]">Final Grade:</span>
-                            <span className="font-bold text-blue-600 dark:text-blue-400 font-mono">
-                              <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue> {cls.percentage !== null ? `(${cls.percentage.toFixed(1)}%)` : ''}
+                        {lecSched && (
+                          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="text-slate-400 text-[11px] font-medium">Lecture:</span>
+                            <span className="font-medium text-slate-600 dark:text-slate-300 text-xs truncate">
+                              {lecSched.times} <span className="text-slate-300 dark:text-slate-600 font-normal">·</span> {lecSched.room}
                             </span>
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-700 text-[11px] text-slate-400">
-                          <span>Lecture Room:</span>
-                          <span className="font-medium text-slate-600 dark:text-slate-300">{lecSched.room}</span>
-                        </div>
+                        {labSched && (
+                          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                            <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="text-slate-400 text-[11px] font-medium">Lab:</span>
+                            <span className="font-medium text-slate-600 dark:text-slate-300 text-xs truncate">
+                              {labSched.times} <span className="text-slate-300 dark:text-slate-600 font-normal">·</span> {labSched.room}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <div className="mt-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
-                      <span>Historical record</span>
-                      <span className="font-medium">Read only</span>
-                    </div>
-                    <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-wrap gap-x-4 gap-y-2 text-xs">
-                      <span>Course Grade: <strong>{typeof cls.grade === 'number' ? <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue> : 'Pending'}</strong></span>
-                      <span>Score %: <strong>{typeof cls.percentage === 'number' ? `${cls.percentage.toFixed(2)}%` : 'Pending'}</strong></span>
-                      <span>Clinical Hours Completed: <strong>{typeof cls.clinicHoursCompleted === 'number' ? `${cls.clinicHoursCompleted} hrs` : 'Unavailable'}</strong></span>
-                      <span className={cls.retentionState?.toLowerCase() === 'remedial' ? 'text-amber-700 dark:text-amber-300 font-bold' : ''}>Retention: <strong>{cls.retentionState?.toLowerCase() === 'remedial' ? cls.retentionState : cls.grade === null ? 'Pending' : cls.retentionState || 'Unavailable'}</strong></span>
+                    {/* Academic Status Footer */}
+                    <div className="mt-3.5 pt-3 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-xs gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] text-slate-400 font-medium">Final Grade:</span>
+                        {typeof cls.grade === 'number' ? (
+                          <span className="font-bold text-slate-700 dark:text-slate-200">
+                            <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue>
+                            {typeof cls.percentage === 'number' && (
+                              <span className="text-[10px] text-slate-400 font-normal ml-1">({cls.percentage.toFixed(1)}%)</span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">Pending</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        {typeof cls.clinicHoursCompleted === 'number' && cls.clinicHoursCompleted > 0 && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
+                            {cls.clinicHoursCompleted} hrs
+                          </span>
+                        )}
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                            cls.retentionState?.toLowerCase() === 'remedial'
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
+                              : cls.grade !== null && cls.retentionState
+                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                              : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                          }`}
+                        >
+                          {cls.retentionState?.toLowerCase() === 'remedial'
+                            ? 'Remedial'
+                            : cls.grade === null
+                            ? 'Pending Evaluation'
+                            : cls.retentionState || 'Good Standing'}
+                        </span>
+                      </div>
                     </div>
                     <StudentComponentGradeSummary cls={cls} />
                   </Card>

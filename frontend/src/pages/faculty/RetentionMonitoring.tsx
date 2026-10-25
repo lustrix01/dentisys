@@ -381,6 +381,52 @@ export const RetentionMonitoring: React.FC = () => {
     return Array.from(labels.entries()).sort(([left], [right]) => left.localeCompare(right));
   }, [recordsForSchoolYear]);
 
+  const subjectGroupedClasses = useMemo(() => {
+    const groups = new Map<string, Array<{ classId: string; label: string }>>();
+    const seenClasses = new Set<string>();
+
+    recordsForSchoolYear.forEach(record => {
+      if (seenClasses.has(record.classId)) return;
+      seenClasses.add(record.classId);
+
+      const subj = isPersistedText(record.subjectCode) ? record.subjectCode : 'Other Subjects';
+      if (!groups.has(subj)) {
+        groups.set(subj, []);
+      }
+      const label = isPersistedText(record.className)
+        ? record.className
+        : `Class (${record.classId})`;
+      groups.get(subj)!.push({ classId: record.classId, label });
+    });
+
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([subjectCode, classes]) => ({
+        subjectCode,
+        classes: classes.sort((a, b) => a.label.localeCompare(b.label)),
+      }));
+  }, [recordsForSchoolYear]);
+
+  const mixedFilterValue = useMemo(() => {
+    if (selectedClassId !== 'all') return `class:${selectedClassId}`;
+    if (selectedSubjectCode !== 'all') return `subject:${selectedSubjectCode}`;
+    return 'all';
+  }, [selectedClassId, selectedSubjectCode]);
+
+  const handleMixedFilterChange = (val: string) => {
+    if (val === 'all') {
+      setSelectedSubjectCode('all');
+      setSelectedClassId('all');
+    } else if (val.startsWith('subject:')) {
+      setSelectedSubjectCode(val.replace('subject:', ''));
+      setSelectedClassId('all');
+    } else if (val.startsWith('class:')) {
+      const cid = val.replace('class:', '');
+      setSelectedClassId(cid);
+      setSelectedSubjectCode('all');
+    }
+  };
+
   const selectedClassName = useMemo(() => {
     if (selectedClassId === 'all') return '';
     return classOptions.find(([id]) => id === selectedClassId)?.[1] || '';
@@ -720,20 +766,6 @@ export const RetentionMonitoring: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">Retention & Remedial Monitoring</h1>
-            {currentSchoolYear && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300">
-                <CalendarDays className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                S.Y. {currentSchoolYear} (Current)
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">Review standing and remedial progress for each student’s course enrollment.</p>
-        </div>
-      </div>
 
       {notification && (
         <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in">
@@ -827,16 +859,26 @@ export const RetentionMonitoring: React.FC = () => {
             </select>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs">
-            <select value={selectedSubjectCode} onChange={(event) => setSelectedSubjectCode(event.target.value)} className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1">
-              <option value="all">All Subjects</option>
-              {subjectOptions.map(subjectCode => <option key={subjectCode} value={subjectCode}>{subjectCode}</option>)}
-            </select>
-          </div>
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs">
-            <select value={selectedClassId} onChange={(event) => setSelectedClassId(event.target.value)} className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1">
-              <option value="all">All Class Sections</option>
-              {classOptions.map(([classId, label]) => <option key={classId} value={classId}>{label}</option>)}
+          <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
+            <Filter className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <select
+              value={mixedFilterValue}
+              onChange={(event) => handleMixedFilterChange(event.target.value)}
+              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1"
+            >
+              <option value="all">All Subjects & Sections</option>
+              {subjectGroupedClasses.map(group => (
+                <optgroup key={group.subjectCode} label={group.subjectCode}>
+                  {group.classes.length > 1 && (
+                    <option value={`subject:${group.subjectCode}`}>All {group.subjectCode} Sections</option>
+                  )}
+                  {group.classes.map(cls => (
+                    <option key={cls.classId} value={`class:${cls.classId}`}>
+                      {cls.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
             </select>
           </div>
           <div className="relative w-full sm:w-56 sm:min-w-[10rem] xl:min-w-[auto]">

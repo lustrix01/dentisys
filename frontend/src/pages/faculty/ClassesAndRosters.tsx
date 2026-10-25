@@ -29,6 +29,7 @@ import {
   MoreVertical,
   Archive,
   RotateCcw,
+  ArrowLeft,
 } from 'lucide-react';
 import { isViewOnlyClass, archiveGroup, type ArchiveReason } from '../../utils/classArchiving';
 import { Student } from '../../types';
@@ -1382,41 +1383,6 @@ export const ClassesAndRosters: React.FC = () => {
   return (
     <div className="space-y-6">
 
-      {/* 1. Clean Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            My Classes & Student Rosters
-          </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            Create classes, import provisional student rosters (PDF/CSV), manage students, and send email invitations. Official import format not confirmed.
-          </p>
-          <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-1">
-            {newSchoolYear ? `Current school year: ${newSchoolYear}. Past school-year classes are view-only.` : 'Current school year is unavailable. Class creation is disabled.'}
-          </p>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 w-full sm:w-auto">
-          <button
-            onClick={handleOpenCreateClassModal}
-            disabled={!newSchoolYear}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create Class</span>
-          </button>
-
-          <button
-            onClick={() => setIsImportRosterOpen(true)}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-700/20 transition-all cursor-pointer"
-          >
-            <Upload className="w-4 h-4" />
-            <span>Import Roster (Provisional)</span>
-          </button>
-        </div>
-      </div>
-
       {fetchError && (
         <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in">
           <div className="flex items-center gap-2.5">
@@ -1437,110 +1403,97 @@ export const ClassesAndRosters: React.FC = () => {
         </div>
       )}
 
-      {/* Control Bar: Tabs, Filters & Search */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-        {/* Tab Buttons */}
-        <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-fit overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('classes')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'classes'
-                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            <BookMarked className="w-4 h-4 text-emerald-600" />
-            Assigned Classes
-            <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold">
-              {filteredClasses.length}
-            </span>
-          </button>
+      {/* Unified Toolbar: Tabs (Left) & Search / Actions (Right) */}
+      {activeTab !== 'roster' && (
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+          {/* Tab Buttons */}
+          <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-fit">
+            <button
+              onClick={() => setActiveTab('classes')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'classes'
+                  ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              <BookMarked className="w-4 h-4 text-emerald-600" />
+              Assigned Classes
+              <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold">
+                {filteredClasses.length}
+              </span>
+            </button>
 
-          <button
-            onClick={() => setActiveTab('archived')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'archived'
-                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            <Archive className="w-4 h-4 text-emerald-600" />
-            Archived Classes
-            <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
-              {archivedGroups.total}
-            </span>
-          </button>
+            <button
+              onClick={() => setActiveTab('archived')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'archived'
+                  ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              <Archive className="w-4 h-4 text-emerald-600" />
+              Archived Classes
+              <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
+                {archivedGroups.total}
+              </span>
+            </button>
+          </div>
 
-          <button
-            onClick={() => setActiveTab('roster')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'roster'
-                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            <Users className="w-4 h-4 text-emerald-600" />
-            Enrolled Student Roster
-            <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
-              {filteredStudents.length}
-            </span>
-          </button>
-        </div>
-
-        {/* Filters & Search Bar */}
-        <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-2.5 w-full xl:w-auto xl:max-w-3xl">
-          {/* Dropdowns Wrapper */}
-          <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-2 flex-1">
-            {/* Class Section Filter Dropdown Pill */}
-            <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-3.5 py-2 shadow-xs flex-1 hover:border-emerald-500 transition-colors">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <BookMarked className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <select
-                  value={selectedClassFilterId}
-                  onChange={(e) => setSelectedClassFilterId(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer w-full truncate pr-1"
-                >
-                  <option value="all">All Class Sections</option>
-                  {availableClassFilterOptions.map(c => (
-                    <option key={c.id} value={c.id}>{c.courseCode} ({c.block})</option>
-                  ))}
-                </select>
+          {/* Right Controls: Filter (if archived), Search & Actions */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-wrap">
+            {/* School Year Selector Filter Pill (Archived Classes tab only) */}
+            {activeTab === 'archived' && (
+              <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <select
+                    value={archivedSchoolYear}
+                    onChange={(e) => setArchivedSchoolYear(e.target.value)}
+                    className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer w-full truncate pr-1"
+                  >
+                    <option value="all">All School Years</option>
+                    {availableSchoolYears.map(sy => (
+                      <option key={sy} value={sy}>S.Y. {sy}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
-
-            {/* School Year Selector Filter Pill (Archived Classes and Roster tabs only) */}
-            {activeTab !== 'classes' && (
-            <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-3.5 py-2 shadow-xs flex-1 hover:border-emerald-500 transition-colors">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <select
-                  value={activeTab === 'archived' ? archivedSchoolYear : selectedSchoolYear}
-                  onChange={(e) => (activeTab === 'archived' ? setArchivedSchoolYear : setSelectedSchoolYear)(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer w-full truncate pr-1"
-                >
-                  <option value="all">All School Years</option>
-                  {availableSchoolYears.map(sy => (
-                    <option key={sy} value={sy}>S.Y. {sy}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
             )}
-          </div>
 
-          {/* Search Input Pill */}
-          <div className="relative w-full xl:w-64">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder={activeTab !== 'roster' ? "Search code, title..." : "Search student ID, name..."}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-8 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-xs"
-            />
+            {/* Search Input Pill */}
+            <div className="relative w-full sm:w-60">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder={activeTab === 'classes' ? "Search code, title, block..." : "Search archived classes..."}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-8 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-xs"
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={handleOpenCreateClassModal}
+                disabled={!newSchoolYear}
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create Class</span>
+              </button>
+
+              <button
+                onClick={() => setIsImportRosterOpen(true)}
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-700/20 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Import Roster</span>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* TAB 1: ASSIGNED CLASSES */}
       {activeTab === 'classes' && (
@@ -1689,19 +1642,34 @@ export const ClassesAndRosters: React.FC = () => {
         </>
       )}
 
-      {/* TAB 2: STUDENT ROSTER (WITH ENROLLED CLASS COLUMN) */}
+      {/* TAB: DEDICATED STUDENT ROSTER (OPENED VIA CLASS CARD "VIEW ROSTER") */}
       {activeTab === 'roster' && (
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div className="sm:flex-1 sm:basis-64">
-              <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
-                Enrolled Student Roster ({filteredStudents.length})
-              </h2>
-              <p className="text-xs text-slate-400">
-                {selectedClassFilterId !== 'all'
-                  ? `Showing enrolled students for selected class section.`
-                  : `Add, manage, or remove roster entries and invite eligible Students to activate their accounts.`}
-              </p>
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedClassFilterId('all');
+                  setActiveTab('classes');
+                  setSearchQuery('');
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer group flex-shrink-0 shadow-xs"
+              >
+                <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+                <span>Back to Classes</span>
+              </button>
+              <div className="min-w-0">
+                <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2 truncate">
+                  <span>{selectedClass ? `${selectedClass.courseCode} (${selectedClass.block})` : 'Class'} Roster</span>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex-shrink-0">
+                    {filteredStudents.length} {filteredStudents.length === 1 ? 'Student' : 'Students'}
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-400 truncate">
+                  {selectedClass?.courseName ? `${selectedClass.courseName} • ` : ''}Room: {selectedClass?.lecRoom || selectedClass?.labRoom || 'N/A'}
+                </p>
+              </div>
             </div>
 
             <div className="flex max-sm:flex-wrap items-center gap-2">

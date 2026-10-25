@@ -993,32 +993,19 @@ export const Attendance: React.FC = () => {
     <div className="space-y-6 max-w-4xl mx-auto pb-12 animate-fade-in">
 
       {/* 1. Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            Daily Class Check-In
-          </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            {isAuthoritative
-              ? 'Select your active class session, verify liveness, and submit your attendance.'
-              : 'Verify session status, check geofence location, and scan face to submit attendance.'}
-          </p>
+      <div className="flex items-center justify-end gap-3 pb-2">
+        <div className="text-right hidden sm:block">
+          <span className="text-[10px] font-mono font-bold text-slate-400 block leading-none">STUDENT ID</span>
+          <span className="text-xs font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden sm:block">
-            <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
-            <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
-          </div>
-
-          <button
-            onClick={() => navigate('/student/attendance-logs')}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors cursor-pointer"
-          >
-            <History className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-            <span>Attendance Logs</span>
-          </button>
-        </div>
+        <button
+          onClick={() => navigate('/student/attendance-logs')}
+          className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors cursor-pointer"
+        >
+          <History className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+          <span>Attendance Logs</span>
+        </button>
       </div>
 
       {/* 2. FACE REGISTRATION WARNING / ENROLLMENT CHECK */}

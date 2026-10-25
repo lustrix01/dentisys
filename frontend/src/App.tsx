@@ -16,11 +16,11 @@ import { Reports } from './pages/faculty/Reports';
 import { EmailManagement } from './pages/faculty/EmailManagement';
 import { ClassesAndRosters } from './pages/faculty/ClassesAndRosters';
 
-// Dean (Admin) Page Imports
 import { Dashboard as DeanDashboard } from './pages/admin/Dashboard';
 import { DeanReports } from './pages/admin/SystemAudit';
 import { AuditTrail as DeanAuditTrail } from './pages/admin/AuditTrail';
 import { FacultyInvitation } from './pages/admin/FacultyInvitation';
+import { AcademicTerms } from './pages/admin/AcademicTerms';
 
 // Class Secretary Page Imports
 import { Dashboard as SecretaryDashboard } from './pages/secretary/Dashboard';
@@ -242,6 +242,8 @@ function App() {
                 </Route>
 
                 <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+                  <Route path="/admin/terms" element={<AcademicTerms />} />
+                  <Route path="/admin/academic-terms" element={<Navigate to="/admin/terms" replace />} />
                   <Route path="/admin/faculty-invite" element={<FacultyInvitation />} />
                   <Route path="/admin/faculty-approval" element={<Navigate to="/admin/faculty-invite" replace />} />
                   <Route path="/admin/retention-criteria" element={<Navigate to="/admin/reports" replace />} />

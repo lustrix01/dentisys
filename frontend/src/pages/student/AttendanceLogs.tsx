@@ -145,33 +145,20 @@ export const AttendanceLogs: React.FC = () => {
     <div className="space-y-6 max-w-6xl mx-auto pb-12 animate-fade-in">
 
       {/* 1. Header */}
-      <div className="flex flex-col sm:flex-row sm:flex-wrap xl:flex-nowrap sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            My Session Attendance Logs
-          </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            {isAuthoritative
-              ? 'Authoritative attendance audit trail including biometric, faculty manual, and secretary manual entries.'
-              : 'Complete historical audit log of facial recognition and geofence verified class check-ins.'}
-          </p>
+      <div className="flex items-center justify-end gap-3 pb-2">
+        <div className="text-right hidden sm:block">
+          <span className="text-[10px] font-mono font-bold text-slate-400 block leading-none">STUDENT ID</span>
+          <span className="text-xs font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 block">{studentName}</span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden sm:block">
-            <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
-            <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
-            <span className="text-xs text-slate-500 dark:text-slate-400 block">{studentName}</span>
-          </div>
-
-          <button
-            onClick={() => navigate('/student/attendance')}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
-          >
-            <Camera className="w-4 h-4" />
-            <span>Daily Check-In</span>
-          </button>
-        </div>
+        <button
+          onClick={() => navigate('/student/attendance')}
+          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
+        >
+          <Camera className="w-4 h-4" />
+          <span>Daily Check-In</span>
+        </button>
       </div>
 
       {/* Error Banner */}

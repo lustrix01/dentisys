@@ -282,7 +282,6 @@ export const RetentionMonitoring: React.FC = () => {
     const sampleSubjects = currentMockStudent?.enrolledSubjects ?? [];
     return (
       <div className="space-y-4 max-w-7xl mx-auto">
-        <h1 className="text-2xl font-bold">Clinical Retention Standing</h1>
         <div role="status" className="p-4 rounded-xl bg-amber-50 text-amber-900 border border-amber-200">Development-only Retention prototype — sample data, not official academic decisions.</div>
         <Card className="p-5 space-y-3">
           <h2 className="font-bold">Course Performance Breakdown ({sampleSubjects.length} Enrolled)</h2>
@@ -335,15 +334,10 @@ export const RetentionMonitoring: React.FC = () => {
   return (
     <div className="space-y-5">
       {/* 1. Header Bar: Simple & Direct */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100">
-            Retention Risk Monitoring
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Student: <strong className="text-slate-700 dark:text-slate-200">{studentName}</strong> ({studentId})
-          </p>
-        </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Student: <strong className="text-slate-700 dark:text-slate-200">{studentName}</strong> ({studentId})
+        </p>
 
         {/* Status Pill & Limit */}
         <div className="flex items-center gap-3">

@@ -198,29 +198,34 @@ export const Reports: React.FC = () => {
   }, [classesForSchoolYear]);
 
   const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>('');
+  const [selectedClassId, setSelectedClassId] = useState<string>('');
 
   useEffect(() => {
-    if (activeCourses.length > 0 && !activeCourses.some(c => c.code === selectedSubjectCode)) {
-      setSelectedSubjectCode(activeCourses[0].code);
-    } else if (activeCourses.length === 0) {
+    if (classesForSchoolYear.length > 0 && !classesForSchoolYear.some(c => String(c.csId || c.id) === selectedClassId)) {
+      const first = classesForSchoolYear[0];
+      setSelectedClassId(String(first.csId || first.id));
+      if (first.courseCode) {
+        setSelectedSubjectCode(first.courseCode);
+      }
+    } else if (classesForSchoolYear.length === 0) {
+      setSelectedClassId('');
       setSelectedSubjectCode('');
     }
-  }, [activeCourses, selectedSubjectCode]);
+  }, [classesForSchoolYear, selectedClassId]);
+
+  useEffect(() => {
+    if (selectedClassId) {
+      const match = classesForSchoolYear.find(c => String(c.csId || c.id) === selectedClassId);
+      if (match?.courseCode && match.courseCode !== selectedSubjectCode) {
+        setSelectedSubjectCode(match.courseCode);
+      }
+    }
+  }, [selectedClassId, classesForSchoolYear, selectedSubjectCode]);
 
   // Available classes for selected course within selected school year
   const availableClasses = useMemo(() => {
     return classesForSchoolYear.filter(c => c.courseCode === selectedSubjectCode);
   }, [classesForSchoolYear, selectedSubjectCode]);
-
-  const [selectedClassId, setSelectedClassId] = useState<string>('');
-
-  useEffect(() => {
-    if (availableClasses.length > 0 && !availableClasses.some(c => String(c.csId || c.id) === selectedClassId)) {
-      setSelectedClassId(String(availableClasses[0].csId || availableClasses[0].id));
-    } else if (availableClasses.length === 0) {
-      setSelectedClassId('');
-    }
-  }, [availableClasses, selectedClassId]);
 
   const selectedClass = useMemo(
     () => classesForSchoolYear.find(c => String(c.csId || c.id) === selectedClassId) ?? null,
@@ -647,24 +652,6 @@ export const Reports: React.FC = () => {
   return (
     <div className="space-y-6">
       
-      {/* Page Header - Hidden during print */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 no-print border-b border-slate-205 dark:border-slate-800 pb-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <FileSpreadsheet className="w-6 h-6 text-clinical-550" />
-              Reports & Analytics
-            </h1>
-            {currentSchoolYear && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-clinical-50 dark:bg-clinical-950/60 border border-clinical-200 dark:border-clinical-800/60 text-clinical-800 dark:text-clinical-300">
-                <CalendarDays className="w-3.5 h-3.5 text-clinical-600 dark:text-clinical-400" />
-                S.Y. {currentSchoolYear} (Current)
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Generate course grade reports, print report sheets, and review analytics dashboards</p>
-        </div>
-      </div>
 
       {/* Unified Course, Class, and School Year Selector Bar */}
       <Card className="p-4 flex flex-col xl:flex-row gap-4 xl:items-center no-print">
@@ -688,51 +675,41 @@ export const Reports: React.FC = () => {
           </select>
         </div>
 
-        {/* Active Course */}
+        {/* Active Class & Section (Unified Course and Section Filter) */}
         <div className="w-full xl:flex-1">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Class & Section</label>
           <select
-            value={selectedSubjectCode}
+            value={selectedClassId}
             onChange={(e) => {
-              const newCode = e.target.value;
-              setSelectedSubjectCode(newCode);
-              const matching = classesForSchoolYear.filter(c => c.courseCode === newCode);
-              if (matching.length > 0) {
-                setSelectedClassId(String(matching[0].csId || matching[0].id));
-              } else {
-                setSelectedClassId('');
+              const newClassId = e.target.value;
+              setSelectedClassId(newClassId);
+              const found = classesForSchoolYear.find(c => String(c.csId || c.id) === newClassId);
+              if (found?.courseCode) {
+                setSelectedSubjectCode(found.courseCode);
               }
             }}
             className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 cursor-pointer"
           >
-            {activeCourses.length === 0 ? (
-              <option value="">No active courses for selected year</option>
+            {classesForSchoolYear.length === 0 ? (
+              <option value="">No active classes for selected year</option>
             ) : (
-              activeCourses.map(course => (
-                <option key={course.code} value={course.code}>
-                  {course.code} - {course.name}
-                </option>
-              ))
-            )}
-          </select>
-        </div>
-
-        {/* Active Section / Class */}
-        <div className="w-full xl:w-56">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
-          <select
-            value={selectedClassId}
-            onChange={(e) => setSelectedClassId(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 cursor-pointer"
-          >
-            {availableClasses.length === 0 ? (
-              <option value="">No active sections assigned</option>
-            ) : (
-              availableClasses.map(classItem => (
-                <option key={String(classItem.csId || classItem.id)} value={String(classItem.csId || classItem.id)}>
-                  {classItem.csName || classItem.block || `Section ${classItem.id}`}
-                </option>
-              ))
+              activeCourses.map(course => {
+                const courseClasses = classesForSchoolYear.filter(c => c.courseCode === course.code);
+                if (courseClasses.length === 0) return null;
+                return (
+                  <optgroup key={course.code} label={`${course.code} — ${course.name}`}>
+                    {courseClasses.map(classItem => {
+                      const cid = String(classItem.csId || classItem.id);
+                      const blockLabel = classItem.csName || classItem.block || `Section ${classItem.id}`;
+                      return (
+                        <option key={cid} value={cid}>
+                          {course.code} ({blockLabel})
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                );
+              })
             )}
           </select>
         </div>
