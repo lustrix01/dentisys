@@ -7,7 +7,6 @@ import {
   AlertTriangle, 
   CalendarDays, 
   FileSpreadsheet, 
-  UserCircle, 
   Settings as SettingsIcon,
   Menu,
   X,
@@ -220,8 +219,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Faculty Invitations', path: '/admin/faculty-invite', icon: UserPlus },
         { name: 'Reports & Analytics', path: '/admin/reports', icon: FileSpreadsheet },
         { name: 'Audit Trail', path: '/admin/audit-trail', icon: ListChecks },
-        { name: 'Dean Profile', path: '/admin/profile', icon: UserCircle },
-        { name: 'Dean Settings', path: '/admin/settings', icon: SettingsIcon },
       ];
     }
     
@@ -230,8 +227,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
         { name: 'Attendance Monitoring', path: '/secretary/attendance', icon: CalendarDays },
         { name: 'My Activity Log', path: '/secretary/audit-trail', icon: ListChecks },
-        { name: 'Secretary Profile', path: '/secretary/profile', icon: UserCircle },
-        { name: 'Settings', path: '/secretary/settings', icon: SettingsIcon },
       ];
     }
 
@@ -253,7 +248,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         items.push(
           { name: 'My Classes', path: '/student/classes', icon: BookOpen },
           { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
-          { name: 'My Profile', path: user?.role === 'secretary' ? '/secretary/profile' : '/student/profile', icon: UserCircle },
         );
       }
       return items;
@@ -269,9 +263,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       { name: 'Reports & Export', path: '/reports', icon: FileSpreadsheet },
       { name: 'Email Management', path: '/email-management', icon: Mail },
       { name: 'My Activity Log', path: '/faculty/audit-trail', icon: ListChecks },
-
-      { name: 'My Profile', path: '/faculty/profile', icon: UserCircle },
-      { name: 'Faculty Settings', path: '/faculty/settings', icon: SettingsIcon },
     ];
   };
 
@@ -796,30 +787,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             );
           })}
         </nav>
-
-        {/* Sidebar Footer / User Profile Summary */}
-        <div className={`pt-4 mt-auto border-t border-slate-200/80 dark:border-slate-800/80 flex items-center ${
-          isSidebarCollapsed ? 'justify-center px-0' : 'space-x-3 px-1.5'
-        } min-w-0`}>
-          <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} flex-shrink-0 shadow-sm group relative cursor-pointer`}>
-            <span className="font-extrabold text-xs">{initials}</span>
-            {isSidebarCollapsed && (
-              <div className="pointer-events-none absolute left-full ml-3 px-3 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white text-xs font-bold rounded-xl shadow-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap border border-slate-700/50">
-                <div>{currentUser.name}</div>
-                <div className="text-[10px] text-slate-400 font-normal">{ROLE_TITLES[currentUser.role] || ''}</div>
-                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
-              </div>
-            )}
-          </div>
-          {!isSidebarCollapsed && (
-            <div className="flex-1 min-w-0 transition-opacity duration-300">
-              <h2 className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
-                {currentUser.name}
-              </h2>
-              <p className="text-[10px] text-slate-400 truncate">{ROLE_TITLES[currentUser.role] || ''}</p>
-            </div>
-          )}
-        </div>
       </aside>
 
       {/* Main Container — offset by sidebar width, fills remaining height, scrolls independently */}
@@ -847,7 +814,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
               ))}
             </nav>
             <h2 className="text-xl font-bold font-heading text-slate-800 dark:text-slate-100">
-              {navItems.find(x => x.path === location.pathname)?.name || 'DentiSYS Portal'}
+              {navItems.find(x => x.path === location.pathname)?.name || breadcrumbs[breadcrumbs.length - 1]?.name || 'DentiSYS Portal'}
             </h2>
           </div>
 
