@@ -13,7 +13,7 @@ const ROUTES: Record<Role, string[]> = {
   admin: ['/', '/admin/faculty-invite', '/admin/faculty-approval', '/admin/retention-criteria', '/admin/reports',
     '/admin/audit-trail', '/admin/users', '/admin/audit', '/admin/profile', '/admin/settings', '/admin/rules'],
   faculty: ['/', '/classes', '/students', '/grades', '/retention', '/attendance', '/reports', '/email-management',
-    '/faculty/audit-trail', '/faculty/attendance-activity', '/faculty/profile', '/faculty/settings'],
+    '/faculty/audit-trail', '/attendance?tab=activity','/faculty/profile', '/faculty/settings'],
   secretary: ['/', '/secretary/start-session', '/secretary/attendance', '/secretary/override', '/secretary/audit-trail',
     '/secretary/profile', '/secretary/settings', '/student/attendance', '/student/classes'],
   student: ['/student/dashboard', '/student/attendance', '/student/attendance-logs', '/student/face-registration',
@@ -25,6 +25,8 @@ const ROUTES: Record<Role, string[]> = {
 //  2. Phone/tablet hamburger in the Layout header (sidebar drawer), on the dashboard pages only
 //  3. One safe button per signed-in page whose whole label is View / Details / Help / FAQ / How to ...
 const SAFE_MODAL_BUTTON = /^(view|details|help|faq|how to\b.*)$/i;
+// Tab buttons found next to set*Tab(...) calls in pages/ (labels may carry a count badge after them).
+const TAB_LABEL = /^\s*(Archived Classes|Enrolled Student Roster|Assessments Manager|Grade Weights Editor|Grade Summar\w*|Import Grade Sheets|Retention Watch Lists|Attendance Registers|Interactive Analytics|Remedials|Midterm Watchlist|Remedial Exams|Midterm Advisory|Past Courses|Archived|Upcoming Sessions)\b/i;
 
 const themes = (process.env.AUDIT_THEMES ?? 'light,dark').split(',').map(s => s.trim()).filter(Boolean);
 const routeFilter = process.env.AUDIT_ROUTES;
@@ -133,6 +135,114 @@ function inPageCheck(): Finding[] {
     const a = fx[i].getBoundingClientRect(), b = fx[j].getBoundingClientRect();
     const w = Math.min(a.right, b.right) - Math.max(a.left, b.left), h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
     if (w > 4 && h > 4) add('fixed-overlap', 'medium', fx[i], a);
+  }
+
+  // 7. content escaping its card (the Face Registration miss): a control or text leaf whose box pokes
+  //    past the nearest bordered/filled ancestor, with no horizontal scroller in between.
+  const boxed = (n: Element) => {
+    const s = css(n);
+    return parseFloat(s.borderLeftWidth) > 0 || parseFloat(s.borderRightWidth) > 0 ||
+      (s.backgroundColor !== 'rgba(0, 0, 0, 0)' && s.backgroundColor !== 'transparent');
+  };
+  const leaves = all.filter(e => {
+    if (!visible(e)) return false;
+    if (e.matches('button, a, input, select, textarea, img, svg, [role=button]')) return true;
+    return Array.from(e.childNodes).some(c => c.nodeType === 3 && c.textContent!.trim().length > 1);
+  });
+  for (const e of leaves) {
+    if (e.closest('svg') && e.tagName.toLowerCase() !== 'svg') continue;
+    const s = css(e);
+    if (s.position === 'absolute' || s.position === 'fixed') continue; // badges/dots placed on purpose
+    const r = e.getBoundingClientRect();
+    for (let n = e.parentElement; n && n !== document.body; n = n.parentElement) {
+      const ns = css(n);
+      if (ns.overflowX === 'auto' || ns.overflowX === 'scroll') break;
+      if (ns.position === 'fixed' && n.getBoundingClientRect().width >= W * 0.95) break; // overlay backdrops
+      if (!boxed(n)) continue;
+      const p = n.getBoundingClientRect();
+      if (p.width < 40) break;
+      const over = Math.max(p.left - r.left, r.right - p.right);
+      if (over > 2) add(isClip(ns.overflowX) ? 'clipped-by-card' : 'escapes-card', 'high', e, r);
+      break;
+    }
+  }
+
+  // 8. text cut off inside a clipping element (no ellipsis, no line clamp)
+  for (const e of leaves) {
+    const s = css(e);
+    if (!isClip(s.overflowX) && !isClip(s.overflowY)) continue;
+    if (s.textOverflow === 'ellipsis' || s.webkitLineClamp !== 'none' && s.webkitLineClamp !== '') continue;
+    if (e.matches('input, select, textarea, img, svg')) continue;
+    if ((isClip(s.overflowX) && e.scrollWidth > e.clientWidth + 2) || (isClip(s.overflowY) && s.overflowY !== 'auto' && s.overflowY !== 'scroll' && e.scrollHeight > e.clientHeight + 2))
+      add('clipped-text', 'medium', e, e.getBoundingClientRect());
+  }
+
+  // 9. text leaves drawn on top of each other
+  const texts = leaves.filter(e => !e.matches('img, svg, input, select, textarea') && css(e).opacity !== '0')
+    .map(e => ({ e, r: e.getBoundingClientRect() })).filter(t => t.r.bottom > 0 && t.r.top < H).slice(0, 700);
+  for (let i = 0; i < texts.length; i++) for (let j = i + 1; j < texts.length; j++) {
+    const a = texts[i], b = texts[j];
+    if (a.e.contains(b.e) || b.e.contains(a.e)) continue;
+    const w = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);
+    const h = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
+    if (w > 6 && h > 6) { add('text-overlap', 'high', a.e, a.r); out[out.length - 1].text += ' x ' + ((b.e as HTMLElement).innerText || '').slice(0, 30); }
+  }
+
+  // 10. a single word broken across two lines (e.g. "ATTENDAN / CE RATE")
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let splits = 0;
+  for (let t = walker.nextNode(); t && splits < 40; t = walker.nextNode()) {
+    const el = t.parentElement;
+    if (!el || !visible(el)) continue;
+    const s = t.textContent!;
+    for (const m of s.matchAll(/[A-Za-z0-9.%]{3,}/g)) {
+      const range = document.createRange();
+      range.setStart(t, m.index!); range.setEnd(t, m.index! + m[0].length);
+      const lines = new Set(Array.from(range.getClientRects()).filter(r => r.width > 0).map(r => Math.round(r.top)));
+      if (lines.size > 1) { add('word-split', 'medium', el, el.getBoundingClientRect()); out[out.length - 1].text = m[0]; splits++; break; }
+    }
+  }
+
+  // 12. short buttons / chips whose label wraps onto two lines ("Add / Student", "DENT101- / 1A")
+  for (const e of document.querySelectorAll('button, a, [role=button], span, label')) {
+    const label = (e as HTMLElement).innerText?.replace(/\s+/g, ' ').trim() ?? '';
+    if (!label || label.length > 30 || !visible(e)) continue;
+    const s = css(e);
+    const chip = e.matches('button, a, [role=button]') || parseFloat(s.borderLeftWidth) > 0 ||
+      (s.backgroundColor !== 'rgba(0, 0, 0, 0)' && s.backgroundColor !== 'transparent');
+    if (!chip) continue;
+    // text nodes only (icons sit at a different height); a new line = a text box starting >= 1 line-height lower
+    const tw = document.createTreeWalker(e, NodeFilter.SHOW_TEXT);
+    const boxes: DOMRect[] = [];
+    for (let t = tw.nextNode(); t; t = tw.nextNode()) {
+      if (!t.textContent!.trim()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(t);
+      boxes.push(...Array.from(range.getClientRects()).filter(r => r.width > 1));
+    }
+    if (boxes.length > 1 && boxes.some(b => b.top >= boxes[0].bottom - 2)) add('squeezed-label', 'medium', e, e.getBoundingClientRect());
+  }
+
+  // 11. low text contrast (WCAG ratio < 3) against the nearest painted background
+  const lum = (c: number[]) => { const f = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+  const rgba = (v: string) => (v.match(/[\d.]+/g) ?? []).map(Number);
+  for (const e of leaves) {
+    if (e.matches('img, svg, input, select, textarea') || !(e as HTMLElement).innerText?.trim()) continue;
+    const s = css(e);
+    if (parseFloat(s.opacity) < 1 || e.closest('[disabled], [aria-disabled=true]')) continue;
+    const fg = rgba(s.color);
+    if (fg.length > 3 && fg[3] < 0.5) continue;
+    let bg: number[] | null = null;
+    for (let n: Element | null = e; n; n = n.parentElement) {
+      const b = css(n);
+      if (b.backgroundImage !== 'none') { bg = null; break; } // gradients/images: skip
+      const c = rgba(b.backgroundColor);
+      if (c.length >= 3 && (c.length < 4 || c[3] > 0.9)) { bg = c; break; }
+    }
+    if (!bg) continue;
+    const [a, b] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+    const ratio = (a + 0.05) / (b + 0.05);
+    if (ratio < 3) { add('low-contrast', ratio < 2 ? 'high' : 'medium', e, e.getBoundingClientRect()); out[out.length - 1].text += ` (${ratio.toFixed(1)}:1)`; }
   }
 
   // 6. modals taller than the viewport that cannot scroll
@@ -251,6 +361,21 @@ for (const device of wantedDevices()) for (const role of wantedRoles()) {
           await b.click({ timeout: 3000 });
           return true;
         });
+      }
+      // In-page tabs: state switches only, never saves.
+      if (role !== 'public' && !process.env.AUDIT_NO_TABS) {
+        const tabs = page.getByRole('button', { name: TAB_LABEL });
+        const n = await tabs.count().catch(() => 0);
+        for (let i = 0; i < n; i++) {
+          const t = tabs.nth(i);
+          const name = ((await t.innerText().catch(() => '')) || 'tab').split('\n')[0].slice(0, 30);
+          try {
+            if (!(await t.isVisible())) continue;
+            await t.click({ timeout: 3000 });
+            await settle(page);
+            await record(theme, `${route}#tab-${name}`);
+          } catch { /* tab gone */ }
+        }
       }
       if (role !== 'public') {
         const before = page.url();

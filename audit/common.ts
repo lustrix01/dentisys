@@ -20,7 +20,8 @@ export const wantedRoles = (): Role[] => {
   return ALL_ROLES.filter(r => !f.length || f.includes(r));
 };
 
-const phone = ['iPhone SE', 'iPhone 13', 'iPhone 14 Pro Max', 'Pixel 7', 'Galaxy S9+', 'iPhone 13 landscape',
+// iPhone SE / Galaxy S9+ profiles are 320px wide; Galaxy S24 (360) and iPhone SE 3rd gen (375) cover today's small phones.
+const phone = ['iPhone SE', 'Galaxy S24', 'iPhone SE (3rd gen)', 'iPhone 13', 'iPhone 14 Pro Max', 'Pixel 7', 'Galaxy S9+', 'iPhone 13 landscape',
   'Pixel 7 landscape', 'iPad Mini', 'iPad Pro 11', 'iPad Mini landscape'];
 const desktop = [[1280, 800], [1440, 900], [1920, 1080]];
 
