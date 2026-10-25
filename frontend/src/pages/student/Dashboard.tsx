@@ -116,14 +116,14 @@ export const Dashboard: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Welcome back, {studentName}!
           </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             Monitor your clinical attendance, today's schedule, and academic retention standing.
           </p>
         </div>
 
         <div className="flex items-center gap-4">
           <div className="text-right hidden sm:block">
-            <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
+            <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400 block">STUDENT ID</span>
             <span className="whitespace-nowrap text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentId}</span>
           </div>
 
@@ -234,28 +234,28 @@ export const Dashboard: React.FC = () => {
             {/* 4 Metric Boxes */}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-3 text-left">
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
                 <span className="text-lg font-extrabold text-blue-600 dark:text-blue-400 block mt-0.5 whitespace-nowrap">
                   {overallAttendanceRate !== null ? `${overallAttendanceRate}%` : '—'}
                 </span>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Today Sessions</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Today Sessions</span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 whitespace-nowrap">
-                  {todaySessions.filter(s => s.timeInStatus === 'done').length} / {todaySessions.length} <span className="text-[10px] font-normal text-slate-400">done</span>
+                  {todaySessions.filter(s => s.timeInStatus === 'done').length} / {todaySessions.length} <span className="text-[10px] font-normal text-slate-500 dark:text-slate-400">done</span>
                 </span>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Face Biometrics</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Face Biometrics</span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 whitespace-nowrap">
                   {isFaceRegistered ? 'Active ✓' : 'Pending'}
                 </span>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Enrolled Subjects</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Enrolled Subjects</span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 whitespace-nowrap">
                   {enrolledSubjects.length}
                 </span>
@@ -317,14 +317,14 @@ export const Dashboard: React.FC = () => {
                 <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
                   Today's Class Sessions & Check-In Status
                 </h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">Track Time-In & Time-Out for today's scheduled classes</p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Track Time-In & Time-Out for today's scheduled classes</p>
               </div>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <th className="pb-3">Class Subject</th>
                     <th className="pb-3">Schedule & Room</th>
                     <th className="pb-3">Time-In Status</th>
@@ -398,7 +398,7 @@ export const Dashboard: React.FC = () => {
                             Check-Out (Time Out)
                           </button>
                         ) : (
-                          <span className="text-[11px] font-bold text-slate-400">Completed ✓</span>
+                          <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Completed ✓</span>
                         )}
                       </td>
                     </tr>

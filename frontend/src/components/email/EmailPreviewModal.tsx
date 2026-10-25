@@ -115,24 +115,24 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${meta.badgeColor}`}>
               Simulated Outbox Message
             </span>
-            <span className="text-[11px] text-slate-400">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
               Format: Official HTML Email
             </span>
           </div>
 
           <div className="grid grid-cols-1 gap-1 text-[11px] font-medium text-slate-600 dark:text-slate-300">
             <div className="flex items-center gap-2">
-              <span className="text-slate-400 w-14 font-mono uppercase text-[10px]">From:</span>
+              <span className="text-slate-500 dark:text-slate-400 w-14 font-mono uppercase text-[10px]">From:</span>
               <span className="font-semibold text-slate-800 dark:text-slate-100">{meta.sender}</span>
-              <span className="text-slate-400 font-mono text-[10px]">&lt;{meta.senderEmail}&gt;</span>
+              <span className="text-slate-500 dark:text-slate-400 font-mono text-[10px]">&lt;{meta.senderEmail}&gt;</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-slate-400 w-14 font-mono uppercase text-[10px]">To:</span>
+              <span className="text-slate-500 dark:text-slate-400 w-14 font-mono uppercase text-[10px]">To:</span>
               <span className="font-semibold text-slate-800 dark:text-slate-100">{recipientName}</span>
-              {recipientEmail && <span className="text-slate-400 font-mono text-[10px]">&lt;{recipientEmail}&gt;</span>}
+              {recipientEmail && <span className="text-slate-500 dark:text-slate-400 font-mono text-[10px]">&lt;{recipientEmail}&gt;</span>}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-slate-400 w-14 font-mono uppercase text-[10px]">Subject:</span>
+              <span className="text-slate-500 dark:text-slate-400 w-14 font-mono uppercase text-[10px]">Subject:</span>
               <span className="font-bold text-slate-900 dark:text-slate-100">{meta.subject}</span>
             </div>
           </div>
@@ -185,7 +185,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
                     <div className="space-y-0.5">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
                         <BookOpen className="w-3 h-3 text-slate-400" /> Class Section / Course
                       </span>
                       <p className="font-extrabold text-sm text-slate-800 dark:text-slate-100">
@@ -194,7 +194,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
                     </div>
 
                     <div className="space-y-0.5">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
                         <Calendar className="w-3 h-3 text-slate-400" /> Academic School Year
                       </span>
                       <p className="font-extrabold text-sm text-slate-800 dark:text-slate-100">
@@ -203,7 +203,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
                     </div>
 
                     <div className="space-y-0.5">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                         Course Faculty Instructor
                       </span>
                       <p className="font-bold text-slate-800 dark:text-slate-100">
@@ -212,7 +212,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
                     </div>
 
                     <div className="space-y-0.5">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
                         <Building2 className="w-3 h-3 text-slate-400" /> Department / College
                       </span>
                       <p className="font-bold text-slate-800 dark:text-slate-100">
@@ -299,7 +299,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
                 <div className="p-3 rounded-xl font-mono text-xs break-all border bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900/50 text-blue-800 dark:text-blue-300">
                   {effectiveInvitationLink}
                 </div>
-                <p className="text-xs text-slate-400 italic">
+                <p className="text-xs text-slate-500 dark:text-slate-400 italic">
                   Notice: This invitation link is valid for 7 days from issuance.
                 </p>
               </>
@@ -337,7 +337,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
                   : facultyName}
               </p>
               <p>Bicol University College of Dental Medicine</p>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 DentiSys Academic & Clinical Management System · Legazpi City, Philippines
               </p>
             </div>

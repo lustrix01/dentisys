@@ -69,7 +69,7 @@ export const EmailHistoryTable: React.FC<EmailHistoryTableProps> = ({
       <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
         <table className="w-full text-left text-xs">
           <thead className="sticky top-0 bg-white dark:bg-slate-900 z-10 shadow-sm">
-            <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 uppercase tracking-wide">
+            <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-wide">
               <th className="p-3">Action</th>
               <th className="p-3">Recipients</th>
               <th className="p-3">Status</th>
@@ -89,7 +89,7 @@ export const EmailHistoryTable: React.FC<EmailHistoryTableProps> = ({
                         onClick={() => setOpen((prev) => ({ ...prev, [action.id]: !expanded }))}
                         className="flex items-center gap-2 text-left"
                       >
-                        <ChevronRight className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+                        <ChevronRight className={`w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
                         <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[11px]">
                           {action.type}
                         </span>
@@ -116,7 +116,7 @@ export const EmailHistoryTable: React.FC<EmailHistoryTableProps> = ({
                     action.recipients.map((recipient, index) => (
                       <tr key={`${action.id}-${index}`} className="bg-slate-50/60 dark:bg-slate-900/40">
                         <td className="p-3 pl-10 font-semibold text-slate-700 dark:text-slate-200">{recipient.name}</td>
-                        <td className="p-3 text-slate-400">{recipient.email}</td>
+                        <td className="p-3 text-slate-500 dark:text-slate-400">{recipient.email}</td>
                         <td className="p-3" colSpan={2}>
                           <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${statusChipClass(recipient.status)}`}>
                             {recipient.status === 'Suppressed' ? 'Suppressed (test mode)' : recipient.status}
@@ -132,7 +132,7 @@ export const EmailHistoryTable: React.FC<EmailHistoryTableProps> = ({
             })}
           </tbody>
         </table>
-        {visible.length === 0 && <p className="text-center py-8 text-slate-400">No email records match your filters.</p>}
+        {visible.length === 0 && <p className="text-center py-8 text-slate-500 dark:text-slate-400">No email records match your filters.</p>}
       </div>
     </>
   );

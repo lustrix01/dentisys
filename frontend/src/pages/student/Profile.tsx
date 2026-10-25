@@ -58,13 +58,13 @@ export const Profile: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             My Profile
           </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             View your academic standing, personal enrollment record, biometric facial verification status, and security settings.
           </p>
         </div>
 
         <div className="text-right hidden sm:block">
-          <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
+          <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400 block">STUDENT ID</span>
           <span className="whitespace-nowrap text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
         </div>
       </div>
@@ -114,20 +114,20 @@ export const Profile: React.FC = () => {
             {/* Quick Metrics */}
             <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-0.5">Enrolled Subjects</span>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-0.5">Enrolled Subjects</span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100">{enrolledSubjects.length || 3}</span>
               </div>
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-0.5">Attendance Rate</span>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-0.5">Attendance Rate</span>
                 <span className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">96%</span>
               </div>
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-0.5">Retention Status</span>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-0.5">Retention Status</span>
                 <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 block mt-1">Cleared</span>
               </div>
               {biometricPrototypeEnabled && (
                 <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-0.5">Biometric Face</span>
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-0.5">Biometric Face</span>
                   <span className={`text-xs font-extrabold block mt-1 ${isFaceRegistered ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
                     {isFaceRegistered ? 'Active ✓' : 'Pending'}
                   </span>
@@ -147,32 +147,32 @@ export const Profile: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Student Number</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Student Number</span>
                 <p className="font-mono font-bold text-slate-800 dark:text-slate-100 text-sm">{studentIdNum}</p>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Degree Program</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Degree Program</span>
                 <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">Doctor of Dental Medicine</p>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Current Year & Section</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Current Year & Section</span>
                 <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">4th Year — Section 4-A</p>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Academic Term</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Academic Term</span>
                 <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">1st Semester, AY 2025-2026</p>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">College & Campus</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">College & Campus</span>
                 <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">BU College of Dental Medicine (Main)</p>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Enrollment Status</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Enrollment Status</span>
                 <p className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">Regular Enrolled Student</p>
               </div>
             </div>
@@ -189,27 +189,27 @@ export const Profile: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Official Email</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Official Email</span>
                 <p className="font-semibold text-slate-800 dark:text-slate-100">{studentEmail}</p>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Contact Phone Number</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Contact Phone Number</span>
                 <p className="font-semibold text-slate-800 dark:text-slate-100">+63 (917) 555-0192</p>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1 sm:col-span-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Home Address</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Home Address</span>
                 <p className="font-semibold text-slate-800 dark:text-slate-100">Barangay Washington, Legazpi City, Albay 4500</p>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Emergency Contact Person</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Emergency Contact Person</span>
                 <p className="font-semibold text-slate-800 dark:text-slate-100">Maria Dela Cruz (Parent / Guardian)</p>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Emergency Contact Phone</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Emergency Contact Phone</span>
                 <p className="font-semibold text-slate-800 dark:text-slate-100">+63 (920) 888-4321</p>
               </div>
             </div>
@@ -233,7 +233,7 @@ export const Profile: React.FC = () => {
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 flex items-center justify-between">
                 <div>
                   <h4 className="font-bold text-slate-800 dark:text-slate-100">Facial Recognition Descriptor</h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                     {isFaceRegistered ? 'Template registered and verified for attendance' : 'Registration pending student consent'}
                   </p>
                 </div>

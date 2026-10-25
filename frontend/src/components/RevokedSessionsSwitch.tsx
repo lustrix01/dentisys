@@ -7,8 +7,8 @@ export function RevokedSessionsSwitch({ showRevoked, revokedCount, onChange, dis
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Revoked sessions:</span>
-      <div role="group" aria-label="Revoked sessions" className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-755">
+      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Revoked sessions:</span>
+      <div role="group" aria-label="Revoked sessions" className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-700">
         {([['Hide', false], [`Show (${revokedCount})`, true]] as const).map(([label, show]) => (
           <button
             key={label}

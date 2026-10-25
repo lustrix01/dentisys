@@ -46,7 +46,7 @@ export const Profile: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
         <div>
           <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">My Profile</h1>
-          <p className="text-xs text-slate-400 mt-1">Executive identity and institutional administration details.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Executive identity and institutional administration details.</p>
         </div>
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-accent-700 dark:text-accent-400 bg-accent-50 dark:bg-accent-950/30 px-3 py-2 rounded-xl">
           <CheckCircle2 className="w-3.5 h-3.5" />Administrator access
@@ -58,7 +58,7 @@ export const Profile: React.FC = () => {
             <div className="h-20 bg-gradient-to-r from-accent-600 to-violet-500" />
             <CardContent className="relative pt-0 pb-5">
               <div className="-mt-10 w-20 h-20 rounded-2xl bg-white dark:bg-slate-900 p-1 shadow-lg">
-                <div className="w-full h-full rounded-xl bg-gradient-to-tr from-accent-200 to-violet-200 dark:from-accent-850 dark:to-violet-900 flex items-center justify-center text-xl font-extrabold text-accent-700 dark:text-accent-300">{initials}</div>
+                <div className="w-full h-full rounded-xl bg-gradient-to-tr from-accent-200 to-violet-200 dark:from-accent-800 dark:to-violet-900 flex items-center justify-center text-xl font-extrabold text-accent-700 dark:text-accent-300">{initials}</div>
               </div>
               <h2 className="mt-3 text-base font-bold text-slate-800 dark:text-slate-100">{name}</h2>
               <ChangeNameDialog currentParts={nameParts} authenticatorEnabled={authenticatorEnabled} onSave={saveName} onSuccess={applyName} />
@@ -94,10 +94,10 @@ export const Profile: React.FC = () => {
 };
 /** The login email is permanent after activation (REG-009), so it is shown, not edited. */
 const ReadOnlyEmail = ({ value }: { value: string }) => (
-  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+  <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
     Email address
     <span className="relative block">
-      <span className="absolute left-3.5 top-4 z-10 text-slate-400"><Mail className="w-4 h-4" /></span>
+      <span className="absolute left-3.5 top-4 z-10 text-slate-500 dark:text-slate-400"><Mail className="w-4 h-4" /></span>
       <input type="text" value={value} readOnly aria-readonly="true" className="mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 pl-10 px-3.5 py-2.5 text-sm text-slate-600 dark:text-slate-300 outline-none cursor-not-allowed" />
     </span>
     <span className="mt-1 block normal-case tracking-normal font-medium">Your login email cannot be changed.</span>

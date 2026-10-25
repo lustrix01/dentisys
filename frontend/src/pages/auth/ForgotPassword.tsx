@@ -139,7 +139,7 @@ export function ForgotPassword() {
                       Email address
                     </label>
                     <div className="relative rounded-xl shadow-xs group">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-accent-600 dark:group-focus-within:text-accent-400 transition-colors z-10">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 dark:text-slate-400 group-focus-within:text-accent-600 dark:group-focus-within:text-accent-400 transition-colors z-10">
                         <Mail className="h-4 w-4" aria-hidden="true" />
                       </div>
                       <div className="flex">

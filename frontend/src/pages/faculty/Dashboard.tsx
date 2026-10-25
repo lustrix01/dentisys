@@ -330,7 +330,7 @@ export const Dashboard: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Welcome back, {user?.display_name || 'Faculty Member'}
           </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             Access your assigned dental courses, grade computations, student attendance records, and retention evaluations in one place.
           </p>
         </div>
@@ -381,7 +381,7 @@ export const Dashboard: React.FC = () => {
             {/* Consolidated Faculty Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 text-left">
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block break-words xl:break-normal">
                   {schoolYear === 'current' ? 'Currently Assigned Classes' : schoolYear === 'all' ? 'Assigned Classes (All Years)' : `Assigned Classes (${schoolYear})`}
                 </span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
@@ -389,13 +389,13 @@ export const Dashboard: React.FC = () => {
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Active Students</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Active Students</span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
                   {facultyTotalStudents}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Attendance Rate</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Attendance Rate</span>
                 <span className="text-lg font-extrabold text-clinical-600 dark:text-clinical-400 block mt-0.5 break-words xl:break-normal">
                   {(() => {
                     const rate = classAttendanceRate ?? dashboardKpis?.kpis.averageAttendance ?? null;
@@ -404,13 +404,13 @@ export const Dashboard: React.FC = () => {
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">At-Risk Watchlist</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block break-words xl:break-normal">At-Risk Watchlist</span>
                 <span className={`text-lg font-extrabold block mt-0.5 ${atRiskCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100'}`}>
                   {atRiskCount}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 col-span-2 sm:col-span-1 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Pending Remedials</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Pending Remedials</span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
                   {dashboardKpis?.kpis.remedialCount ?? 0}
                 </span>
@@ -437,9 +437,9 @@ export const Dashboard: React.FC = () => {
             {/* Filtered Search Results */}
             {searchQuery.trim() !== '' && (
               <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200/60 dark:border-slate-700 text-xs space-y-2 max-h-48 overflow-y-auto">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Search Results</div>
+                <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Search Results</div>
                 {filteredSearchSubjects.length === 0 && filteredSearchStudents.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-1">No matching classes or students found.</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 py-1">No matching classes or students found.</p>
                 ) : (
                   <>
                     {filteredSearchSubjects.map(sub => (
@@ -488,7 +488,7 @@ export const Dashboard: React.FC = () => {
               {announcementsError ? (
                 <p className="text-xs text-amber-700 dark:text-amber-300">{announcementsError}</p>
               ) : announcements.length === 0 ? (
-                <p className="text-xs text-slate-400">No authoritative announcements are available.</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">No authoritative announcements are available.</p>
               ) : announcements.map(notification => (
                 <div key={notification.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
                   <span className="text-[9px] font-bold text-clinical-600 dark:text-clinical-400 uppercase tracking-wider">
@@ -496,7 +496,7 @@ export const Dashboard: React.FC = () => {
                   </span>
                   <h4 className="font-bold text-slate-800 dark:text-slate-100">{notification.title}</h4>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">{notification.body}</p>
-                  <time className="text-[10px] text-slate-400 block mt-1" dateTime={notification.createdAt}>{notification.createdAt}</time>
+                  <time className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1" dateTime={notification.createdAt}>{notification.createdAt}</time>
                 </div>
               ))}
             </div>
@@ -507,7 +507,7 @@ export const Dashboard: React.FC = () => {
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">Pending Remedials</h3>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-400 font-semibold">Authoritative</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Authoritative</span>
                 <button
                   type="button"
                   onClick={() => navigate('/retention')}
@@ -520,7 +520,7 @@ export const Dashboard: React.FC = () => {
             {retentionError ? (
               <p className="text-xs text-amber-700 dark:text-amber-300">{retentionError}</p>
             ) : pendingRemedials.length === 0 ? (
-              <p className="text-xs text-slate-400">No pending remedial records.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">No pending remedial records.</p>
             ) : (
               <div className="space-y-2">
                 {pendingRemedials.slice(0, 5).map(remedial => (
@@ -557,7 +557,7 @@ export const Dashboard: React.FC = () => {
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
                 Class Details
               </h3>
-              <span className="text-[10px] text-slate-400 font-semibold">Current classes</span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Current classes</span>
             </div>
 
             <div className="space-y-2.5 text-xs">
@@ -569,7 +569,7 @@ export const Dashboard: React.FC = () => {
                     </div>
                     <div>
                       <h4 className="font-bold text-slate-800 dark:text-slate-100">{subj.code}</h4>
-                      <p className="text-[10px] text-slate-400">{subj.name}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">{subj.name}</p>
                     </div>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 bg-clinical-100 text-clinical-700 dark:bg-clinical-950 dark:text-clinical-300 rounded-md max-xl:self-start max-xl:ml-10">
@@ -622,14 +622,14 @@ export const Dashboard: React.FC = () => {
         {activeRemedialToRecord && (
           <form onSubmit={handleResolveRemedial} className="space-y-4">
             <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 text-xs space-y-1">
-              <div><span className="text-slate-400 font-semibold">Student:</span> <strong className="text-slate-800 dark:text-slate-200">{activeRemedialToRecord.studentName}</strong></div>
-              <div><span className="text-slate-400 font-semibold">Subject:</span> <strong className="text-clinical-600 dark:text-clinical-400">{activeRemedialToRecord.subjectCode}</strong></div>
-              <div><span className="text-slate-400 font-semibold">Original Grade:</span> <strong className="text-rose-500">{activeRemedialToRecord.originalGrade ?? 'N/A'}</strong></div>
-              <div><span className="text-slate-400 font-semibold">Current Attempt:</span> <span className="font-bold text-amber-600">Attempt {activeRemedialToRecord.attemptNumber}</span></div>
+              <div><span className="text-slate-500 dark:text-slate-400 font-semibold">Student:</span> <strong className="text-slate-800 dark:text-slate-200">{activeRemedialToRecord.studentName}</strong></div>
+              <div><span className="text-slate-500 dark:text-slate-400 font-semibold">Subject:</span> <strong className="text-clinical-600 dark:text-clinical-400">{activeRemedialToRecord.subjectCode}</strong></div>
+              <div><span className="text-slate-500 dark:text-slate-400 font-semibold">Original Grade:</span> <strong className="text-rose-500">{activeRemedialToRecord.originalGrade ?? 'N/A'}</strong></div>
+              <div><span className="text-slate-500 dark:text-slate-400 font-semibold">Current Attempt:</span> <span className="font-bold text-amber-600">Attempt {activeRemedialToRecord.attemptNumber}</span></div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Remedial Exam Percentage Score (%)
               </label>
               <input
@@ -652,7 +652,7 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Authoritative Outcome
               </label>
               <select
@@ -667,7 +667,7 @@ export const Dashboard: React.FC = () => {
                   <option value="failed">Cost Recovery (Transfer to Cost Recovery)</option>
                 )}
               </select>
-              <p className="text-[10px] text-slate-400">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">
                 {remedialOutcome === 'passed'
                   ? 'Student will be marked as cleared and notified.'
                   : activeRemedialToRecord.attemptNumber === 1
@@ -678,7 +678,7 @@ export const Dashboard: React.FC = () => {
 
             {activeRemedialToRecord.attemptNumber === 1 && remedialOutcome === 'failed' && (
               <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                   Optional Attempt 2 Scheduled Date
                 </label>
                 <input
@@ -692,7 +692,7 @@ export const Dashboard: React.FC = () => {
             )}
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Faculty Remarks / Notes
               </label>
               <textarea

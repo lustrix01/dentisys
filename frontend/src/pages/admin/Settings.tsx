@@ -89,7 +89,7 @@ export const Settings: React.FC = () => {
           <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             My Settings
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Appearance, assessment transmutation defaults, and local cache controls.
           </p>
         </div>
@@ -132,7 +132,7 @@ export const Settings: React.FC = () => {
                   }}
                   aria-pressed={theme === mode}
                   key={mode}
-                  className={`rounded-xl p-3 lg:max-xl:px-2 whitespace-nowrap text-center border text-[10px] font-bold transition-all ${theme === mode ? "border-accent-500 bg-accent-50 dark:bg-accent-950/30 text-accent-700 dark:text-accent-400" : "border-slate-200 dark:border-slate-800 text-slate-400"}`}
+                  className={`rounded-xl p-3 lg:max-xl:px-2 whitespace-nowrap text-center border text-[10px] font-bold transition-all ${theme === mode ? "border-accent-500 bg-accent-50 dark:bg-accent-950/30 text-accent-700 dark:text-accent-400" : "border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400"}`}
                 >
                   {mode === "light" ? (
                     <Sun className="w-4.5 h-4.5 mx-auto mb-1.5" />
@@ -142,7 +142,7 @@ export const Settings: React.FC = () => {
                   {mode === "light" ? "Light mode" : "Dark mode"}
                 </button>
               ))}
-              <p role="status" className="col-span-2 text-[10px] text-slate-400">
+              <p role="status" className="col-span-2 text-[10px] text-slate-500 dark:text-slate-400">
                 {themeError || "Applies immediately and is saved to your account."}
               </p>
             </CardContent>
@@ -186,7 +186,7 @@ export const Settings: React.FC = () => {
                 <RotateCcw className="w-4 h-4" />
                 Clear local cache
               </button>
-              <p className="mt-2 text-[10px] text-center text-slate-400">
+              <p className="mt-2 text-[10px] text-center text-slate-500 dark:text-slate-400">
                 The database remains unchanged.
               </p>
             </CardContent>
@@ -201,13 +201,13 @@ export const Settings: React.FC = () => {
           </CardHeader>
           <CardContent className="p-5">
             <div>
-              <p className="text-[10px] text-slate-400 mb-4">New assessments start with these bounded transformation values.</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-4">New assessments start with these bounded transformation values.</p>
               <div className="grid sm:grid-cols-2 gap-4">
                 {([
                   ['minimumPercentage', 'Minimum percentage'],
                   ['maximumPercentage', 'Maximum percentage'],
                 ] as const).map(([key, label]) => (
-                  <label key={key} className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <label key={key} className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     {label}
                     <div className="relative mt-1.5">
                       <input
@@ -219,7 +219,7 @@ export const Settings: React.FC = () => {
                         onChange={(event) => setTransmutationDefaults({ ...transmutationDefaults, [key]: Number(event.target.value) || 0 })}
                         className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100"
                       />
-                      <span className="absolute right-3.5 top-2.5 text-xs text-slate-400">%</span>
+                      <span className="absolute right-3.5 top-2.5 text-xs text-slate-500 dark:text-slate-400">%</span>
                     </div>
                   </label>
                 ))}

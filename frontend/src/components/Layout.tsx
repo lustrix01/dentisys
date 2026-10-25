@@ -363,7 +363,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${
               notificationFilter === 'all'
                 ? 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100'
-                : 'text-slate-400 hover:text-slate-600'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-600'
             }`}
           >
             All ({notifications.length})
@@ -374,7 +374,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${
               notificationFilter === 'unread'
                 ? 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100'
-                : 'text-slate-400 hover:text-slate-600'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-600'
             }`}
           >
             Unread ({unreadCount})
@@ -384,12 +384,12 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         {/* List of items */}
         <div className="flex-1 overflow-y-auto space-y-2 pr-1">
           {notificationsLoading ? (
-            <div className="py-8 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
+            <div className="py-8 text-center text-slate-500 dark:text-slate-400 flex flex-col items-center justify-center gap-2">
               <Loader2 className="w-5 h-5 animate-spin" />
               <p className="text-xs">Loading notifications…</p>
             </div>
           ) : filteredNotifications.length === 0 ? (
-            <div className="py-8 text-center text-slate-400">
+            <div className="py-8 text-center text-slate-500 dark:text-slate-400">
               <p className="text-xs font-semibold">
                 {notificationFilter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
               </p>
@@ -420,7 +420,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
                     {item.body}
                   </p>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 font-medium">
+                  <p className="text-[10px] text-slate-500 dark:text-slate-500 mt-1.5 font-medium">
                     {new Date(item.createdAt).toLocaleString(undefined, {
                       month: 'short',
                       day: 'numeric',
@@ -578,14 +578,14 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                 <div className="absolute right-0 mt-3 w-56 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-2.5 z-50 space-y-1">
                   
                   <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 pb-2 mb-1.5">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Signed in as</p>
+                    <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Signed in as</p>
                     <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5">{currentUser.email}</p>
                   </div>
 
                   <Link
                     to={currentUser.role === 'admin' ? '/admin/profile' : user?.role === 'secretary' ? '/secretary/profile' : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
                     onClick={() => setIsProfileOpen(false)}
-                    className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
+                    className="flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-slate-100/50 dark:hover:bg-slate-900/50 dark:hover:text-slate-100 text-xs font-semibold transition-all"
                   >
                     <User className="w-4 h-4 text-slate-400" />
                     <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? 'My Secretary Profile' : currentUser.role === 'student' ? 'My Profile' : 'My Faculty Profile'}</span>
@@ -595,7 +595,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                     <Link
                       to={currentUser.role === 'admin' ? '/admin/settings' : currentUser.role === 'secretary' ? '/secretary/settings' : '/faculty/settings'}
                       onClick={() => setIsProfileOpen(false)}
-                      className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
+                      className="flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-slate-100/50 dark:hover:bg-slate-900/50 dark:hover:text-slate-100 text-xs font-semibold transition-all"
                     >
                       <SettingsIcon className="w-4 h-4 text-slate-400" />
                       <span>{currentUser.role === 'admin' ? 'System Settings' : 'My Settings'}</span>
@@ -644,7 +644,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                 <h1 className="font-heading font-extrabold text-xl tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-1.5 truncate">
                   DentiSYS
                 </h1>
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase truncate">
+                <p className="text-[10px] font-bold text-slate-500 dark:text-slate-500 tracking-wider uppercase truncate">
                   BU College of Dental Medicine
                 </p>
               </div>
@@ -757,7 +757,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                 >
                   <div className={`flex items-center min-w-0 ${isSidebarCollapsed ? 'justify-center' : 'space-x-3'}`}>
                     <Icon className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110 ${
-                      isActive ? colors.iconActive : `text-slate-400 dark:text-slate-400 ${colors.iconHover}`
+                      isActive ? colors.iconActive : `text-slate-500 dark:text-slate-400 ${colors.iconHover}`
                     }`} />
                     {!isSidebarCollapsed && (
                       <span className="text-sm font-medium truncate transition-opacity duration-300">{item.name}</span>
@@ -806,7 +806,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             {isSidebarCollapsed && (
               <div className="pointer-events-none absolute left-full ml-3 px-3 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white text-xs font-bold rounded-xl shadow-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap border border-slate-700/50">
                 <div>{currentUser.name}</div>
-                <div className="text-[10px] text-slate-400 font-normal">{ROLE_TITLES[currentUser.role] || ''}</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">{ROLE_TITLES[currentUser.role] || ''}</div>
                 <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
               </div>
             )}
@@ -816,7 +816,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
               <h2 className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
                 {currentUser.name}
               </h2>
-              <p className="text-[10px] text-slate-400 truncate">{ROLE_TITLES[currentUser.role] || ''}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{ROLE_TITLES[currentUser.role] || ''}</p>
             </div>
           )}
         </div>
@@ -832,7 +832,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           
           {/* Dynamic Breadcrumbs Area */}
           <div className="flex flex-col space-y-1">
-            <nav className="flex items-center space-x-1.5 text-xs text-slate-400 font-medium">
+            <nav className="flex items-center space-x-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
               {breadcrumbs.map((crumb, idx) => (
                 <React.Fragment key={crumb.path + idx}>
                   {idx > 0 && <span className="text-slate-300 dark:text-slate-700">/</span>}
@@ -896,7 +896,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                   setIsProfileOpen(!isProfileOpen);
                   setIsNotificationsOpen(false);
                 }}
-                className="flex items-center space-x-3 pl-3 py-1.5 pr-2 rounded-xl hover:bg-slate-100/60 dark:hover:bg-slate-900/60 transition-colors border-l border-slate-200 dark:border-slate-850"
+                className="flex items-center space-x-3 pl-3 py-1.5 pr-2 rounded-xl hover:bg-slate-100/60 dark:hover:bg-slate-900/60 transition-colors border-l border-slate-200 dark:border-slate-800"
               >
                 <div className={`w-8 h-8 rounded-xl bg-gradient-to-tr ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} text-sm shadow-md`}>
                   {initials}
@@ -914,14 +914,14 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                   <div className="absolute right-0 mt-3 w-56 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-2.5 z-50 space-y-1">
                     
                     <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 pb-2 mb-1.5">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Signed in as</p>
+                      <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Signed in as</p>
                       <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5">{currentUser.email}</p>
                     </div>
 
                     <Link
                       to={currentUser.role === 'admin' ? '/admin/profile' : user?.role === 'secretary' ? '/secretary/profile' : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
                       onClick={() => setIsProfileOpen(false)}
-                      className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
+                      className="flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-slate-100/50 dark:hover:bg-slate-900/50 dark:hover:text-slate-100 text-xs font-semibold transition-all"
                     >
                       <User className="w-4 h-4 text-slate-400" />
                       <span>{currentUser.role === 'admin' ? 'My Dean Profile' : (user?.role === 'secretary' || currentUser.role === 'student') ? 'My Profile' : 'My Faculty Profile'}</span>
@@ -931,7 +931,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                       <Link
                         to={currentUser.role === 'admin' ? '/admin/settings' : currentUser.role === 'secretary' ? '/secretary/settings' : '/faculty/settings'}
                         onClick={() => setIsProfileOpen(false)}
-                        className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
+                        className="flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-slate-100/50 dark:hover:bg-slate-900/50 dark:hover:text-slate-100 text-xs font-semibold transition-all"
                       >
                         <SettingsIcon className="w-4 h-4 text-slate-400" />
                         <span>{currentUser.role === 'admin' ? 'System Settings' : 'My Settings'}</span>

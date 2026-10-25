@@ -297,7 +297,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
               </option>
             ))}
           </select>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
             Imported students will be registered in the institution and immediately enrolled into this class section.
           </p>
         </div>
@@ -343,7 +343,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                 <p className="font-extrabold text-sm text-slate-800 dark:text-slate-100">
                   {file ? file.name : 'Click to select a roster file'}
                 </p>
-                <p className="text-[11px] text-slate-400 mt-0.5">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                   Text PDFs matching the sample layout, CSV, TSV and TXT. Scans and Excel workbooks are not supported.
                 </p>
               </div>
@@ -471,7 +471,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                           type="button"
                           onClick={() => handleRemoveStudent(st.tempKey)}
                           aria-label={`Remove student ${st.studentId} from preview`}
-                          className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                          className="p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -514,7 +514,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={isImporting}
-            className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-350 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-xs cursor-pointer"
+            className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-xs cursor-pointer"
           >
             Cancel
           </button>

@@ -47,7 +47,7 @@ export const Settings: React.FC = () => {
           <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             My Settings
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Set your workspace appearance and review the attendance tools available to your assignment.
           </p>
         </div>
@@ -67,7 +67,7 @@ export const Settings: React.FC = () => {
       {loading ? (
         <div className="py-16 text-center">
           <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-xs text-slate-400">Loading settings...</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Loading settings...</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
@@ -93,19 +93,19 @@ export const Settings: React.FC = () => {
                           : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900'
                       }`}
                     >
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${theme === mode ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${theme === mode ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
                         {mode === 'light' ? <Sun className="w-4.5 h-4.5" /> : <Moon className="w-4.5 h-4.5" />}
                       </div>
                       <p className="mt-3 text-xs font-bold text-slate-700 dark:text-slate-200">
                         {mode === 'light' ? 'Light mode' : 'Dark mode'}
                       </p>
-                      <p className="text-[10px] text-slate-400 mt-1">
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
                         {theme === mode ? 'Selected appearance' : 'Select this appearance'}
                       </p>
                     </button>
                   ))}
                 </div>
-                <p role="status" className="pt-4 mt-5 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400">
+                <p role="status" className="pt-4 mt-5 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
                   {saving ? 'Saving to your account…' : saved ? 'Appearance saved to your account.' : 'Your choice applies immediately and is saved to your account.'}
                 </p>
               </CardContent>
@@ -122,17 +122,17 @@ export const Settings: React.FC = () => {
               </CardHeader>
               <CardContent className="space-y-3 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Assigned class</span>
+                  <span className="text-slate-500 dark:text-slate-400">Assigned class</span>
                   <span className="font-bold text-slate-700 dark:text-slate-200">
                     {assignedClassName || 'Not assigned'}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Manual attendance override</span>
+                  <span className="text-slate-500 dark:text-slate-400">Manual attendance override</span>
                   <span className="font-bold text-emerald-600">Allowed</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Audit trail review</span>
+                  <span className="text-slate-500 dark:text-slate-400">Audit trail review</span>
                   <span className="font-bold text-emerald-600">Allowed</span>
                 </div>
               </CardContent>

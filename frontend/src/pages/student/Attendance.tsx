@@ -998,7 +998,7 @@ export const Attendance: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Daily Class Check-In
           </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             {isAuthoritative
               ? 'Select your active class session, verify liveness, and submit your attendance.'
               : 'Verify session status, check geofence location, and scan face to submit attendance.'}
@@ -1007,7 +1007,7 @@ export const Attendance: React.FC = () => {
 
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
-            <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
+            <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400 block">STUDENT ID</span>
             <span className="whitespace-nowrap text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
           </div>
 
@@ -1090,7 +1090,7 @@ export const Attendance: React.FC = () => {
               key={step.number}
               className={`p-3 rounded-2xl border text-center transition-all ${step.active
                 ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20'
-                : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800'
+                : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800'
                 }`}
             >
               <span className="text-[10px] font-bold uppercase tracking-wider block">Step {step.number}</span>
@@ -1154,14 +1154,14 @@ export const Attendance: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Course</span>
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Course</span>
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block">
                     {currentSelectedSession?.courseCode} — {currentSelectedSession?.courseName}
                   </span>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Recorded Status</span>
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Recorded Status</span>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ${verificationResult.status === 'present'
                     ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
                     : verificationResult.status === 'late'
@@ -1173,7 +1173,7 @@ export const Attendance: React.FC = () => {
                 </div>
 
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Verification Method</span>
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Verification Method</span>
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block flex items-center gap-1.5">
                     <ShieldCheck className="w-4 h-4 text-blue-600" />
                     Biometric 1:1 Verification
@@ -1232,7 +1232,7 @@ export const Attendance: React.FC = () => {
 
                 {upcomingToday.length > 0 && (
                   <div className="space-y-2">
-                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Today</h4>
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Today</h4>
                     {upcomingToday.map(sess => {
                       const pill = upcomingPill(sess, serverNowParts.minutes);
                       const selectable = Boolean(sess.isOpen) && activeSessions.some(a => a.id === sess.id);
@@ -1291,7 +1291,7 @@ export const Attendance: React.FC = () => {
 
                 {upcomingLater.length > 0 && (
                   <div className="space-y-2">
-                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       {upcomingRange === 'week' ? 'Next 7 days' : 'Later'}
                     </h4>
                     {upcomingLater.map(sess => (
@@ -1646,7 +1646,7 @@ export const Attendance: React.FC = () => {
                     disabled={!isAuthoritativeActiveEnrolled(profile?.enrollmentStatus) || Boolean(currentSelectedSession.alreadyRecordedStatus)}
                     className={`px-6 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 flex-shrink-0 ${isAuthoritativeActiveEnrolled(profile?.enrollmentStatus) && !currentSelectedSession.alreadyRecordedStatus
                       ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20 active:scale-[0.99] cursor-pointer'
-                      : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                      : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed'
                       }`}
                   >
                     <Camera className="w-4 h-4" />
@@ -1671,7 +1671,7 @@ export const Attendance: React.FC = () => {
 
           {/* Step 1: Dropdown Course Selection */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Step 1: Select Enrolled Subject
             </h3>
             <select
@@ -1690,7 +1690,7 @@ export const Attendance: React.FC = () => {
           {/* Step 2: Geofence Live Location & Override */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Step 2: Geofence Status</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Step 2: Geofence Status</span>
               <label className="flex items-center gap-2 text-xs cursor-pointer">
                 <input
                   type="checkbox"

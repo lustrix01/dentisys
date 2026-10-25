@@ -118,7 +118,7 @@ export function LandingPage() {
       </main>
 
       {/* 3. Dark Footer Bar */}
-      <footer className="bg-slate-900 text-slate-400 py-3 px-6 sm:px-12 border-t border-slate-800 flex-shrink-0">
+      <footer className="bg-slate-900 text-slate-500 dark:text-slate-400 py-3 px-6 sm:px-12 border-t border-slate-800 flex-shrink-0">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-center sm:text-left">
 
           {/* Left Copyright */}
@@ -127,7 +127,7 @@ export function LandingPage() {
           </div>
 
           {/* Right Contact Info */}
-          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-4 sm:gap-6 text-slate-400">
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-4 sm:gap-6 text-slate-500 dark:text-slate-400">
             <div className="flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-accent-400 flex-shrink-0" />
               <span>Legazpi City</span>
@@ -156,7 +156,7 @@ export function LandingPage() {
             {/* Close Button */}
             <button
               onClick={() => setIsFaqModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              className="absolute top-4 right-4 text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>

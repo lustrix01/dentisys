@@ -375,7 +375,7 @@ export const EmailManagement: React.FC = () => {
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             Dispatch official class roster invitations, manage Class Secretary appointments, and track email transmission logs.
           </p>
         </div>
@@ -404,7 +404,7 @@ export const EmailManagement: React.FC = () => {
             )}
             <span>{notice.message}</span>
           </div>
-          <button onClick={() => setNotice(null)} className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer">
+          <button onClick={() => setNotice(null)} className="text-slate-500 dark:text-slate-400 hover:text-slate-600 text-xs cursor-pointer">
             Dismiss
           </button>
         </div>
@@ -505,7 +505,7 @@ export const EmailManagement: React.FC = () => {
               <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
                 Student Class Roster Invitations ({filteredStudents.length})
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Select enrolled dental students to dispatch class onboarding invitations & activation instructions via email.
               </p>
             </div>
@@ -538,7 +538,7 @@ export const EmailManagement: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                   <th className="py-3 px-4 w-10">
                     <input
                       type="checkbox"
@@ -556,7 +556,7 @@ export const EmailManagement: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {filteredStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-10 text-center text-slate-400">
+                    <td colSpan={5} className="py-10 text-center text-slate-500 dark:text-slate-400">
                       No enrolled students match current section filter.
                     </td>
                   </tr>
@@ -576,7 +576,7 @@ export const EmailManagement: React.FC = () => {
 
                         <td className="py-3.5 px-4">
                           <span className="font-bold text-slate-800 dark:text-slate-100 block">{student.name}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">{student.studentId} • {student.email}</span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId} • {student.email}</span>
                         </td>
 
                         <td className="py-3.5 px-4">
@@ -640,7 +640,7 @@ export const EmailManagement: React.FC = () => {
               <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
                 Class Secretary Appointment Invitations
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Designate a student as Class Secretary with elevated attendance override & session logging privileges.
               </p>
             </div>
@@ -660,7 +660,7 @@ export const EmailManagement: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                   <th className="py-3 px-4 w-10">Select</th>
                   <th className="py-3 px-4">Student Details</th>
                   <th className="py-3 px-4">Class Section</th>
@@ -683,7 +683,7 @@ export const EmailManagement: React.FC = () => {
 
                       <td className="py-3.5 px-4">
                         <span className="font-bold text-slate-800 dark:text-slate-100 block">{student.name}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">{student.studentId} • {student.email}</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId} • {student.email}</span>
                       </td>
 
                       <td className="py-3.5 px-4">
@@ -718,14 +718,14 @@ export const EmailManagement: React.FC = () => {
             </h3>
             
             {secretaryInvs.length === 0 ? (
-              <p className="text-xs text-slate-400">No active Secretary invitation tokens issued yet.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">No active Secretary invitation tokens issued yet.</p>
             ) : (
               <div className="space-y-2">
                 {secretaryInvs.map(inv => (
                   <div key={inv.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 text-xs">
                     <div>
                       <span className="font-bold text-slate-800 dark:text-slate-100 block">{inv.studentName} ({inv.email})</span>
-                      <span className="text-[10px] text-slate-400 font-mono">Status: {inv.status.toUpperCase()}</span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Status: {inv.status.toUpperCase()}</span>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -768,7 +768,7 @@ export const EmailManagement: React.FC = () => {
             <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
               Email Dispatch History ({logs.length})
             </h2>
-            <p className="text-xs text-slate-400">Complete transmission audit ledger for student notifications & invitations.</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Complete transmission audit ledger for student notifications & invitations.</p>
           </div>
 
           <EmailHistoryTable actions={logs} search={search} onSearch={setSearch} filter={historyTypeFilter} onFilter={setHistoryTypeFilter} />

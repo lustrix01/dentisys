@@ -42,7 +42,7 @@ export const ClassAttendanceActivity: React.FC<{ classIds?: string[] }> = ({ cla
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
         <div>
           <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">Class Attendance Activity</h1>
-          <p className="text-xs text-slate-400 mt-1">Attendance changes in your classes: manual records and corrections by you or the class Secretary.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Attendance changes in your classes: manual records and corrections by you or the class Secretary.</p>
         </div>
         <div className="flex gap-2">
           <div className="relative w-full sm:w-64">
@@ -61,7 +61,7 @@ export const ClassAttendanceActivity: React.FC<{ classIds?: string[] }> = ({ cla
         ) : (
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                 <th className="px-4 py-3">When</th>
                 <th className="px-4 py-3">Student</th>
                 <th className="px-4 py-3">Section</th>
@@ -73,18 +73,18 @@ export const ClassAttendanceActivity: React.FC<{ classIds?: string[] }> = ({ cla
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {loading ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Loading class attendance activity…</td></tr>
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">Loading class attendance activity…</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">No attendance changes found.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">No attendance changes found.</td></tr>
               ) : filtered.map(row => (
                 <tr key={row.id}>
                   <td className="px-4 py-3 whitespace-nowrap">{formatManila(row.occurredAt)}</td>
-                  <td className="px-4 py-3"><span className="font-semibold">{row.studentName ?? '—'}</span><span className="block text-slate-400">{row.studentNumber ?? ''}</span></td>
+                  <td className="px-4 py-3"><span className="font-semibold">{row.studentName ?? '—'}</span><span className="block text-slate-500 dark:text-slate-400">{row.studentNumber ?? ''}</span></td>
                   <td className="px-4 py-3">{row.courseCode ?? ''} {row.className ?? '—'}</td>
-                  <td className="px-4 py-3">{row.sessionDate ?? '—'}<span className="block font-mono text-slate-400">{row.sessionCode ?? ''}</span></td>
+                  <td className="px-4 py-3">{row.sessionDate ?? '—'}<span className="block font-mono text-slate-500 dark:text-slate-400">{row.sessionCode ?? ''}</span></td>
                   <td className="px-4 py-3 whitespace-nowrap">{statusLabel(row.previousStatus)} → <strong>{statusLabel(row.newStatus)}</strong></td>
                   <td className="px-4 py-3">{row.reason ?? '—'}</td>
-                  <td className="px-4 py-3">{row.actorName ?? '—'}<span className="block text-slate-400 capitalize">{row.actorRole}</span></td>
+                  <td className="px-4 py-3">{row.actorName ?? '—'}<span className="block text-slate-500 dark:text-slate-400 capitalize">{row.actorRole}</span></td>
                 </tr>
               ))}
             </tbody>

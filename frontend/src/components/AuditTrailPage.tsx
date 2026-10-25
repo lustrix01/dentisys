@@ -43,7 +43,7 @@ export const AuditCompactList: React.FC<{ entries: AuditEntry[]; variant?: 'list
     {entries.map(entry => (
       <div key={entry.id} className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
         <p className="text-slate-700 dark:text-slate-300 text-xs font-medium break-words">{entry.what} — {entry.record}{entry.change && entry.change !== '—' ? ` · ${entry.change}` : ''}</p>
-        <span className="text-[10px] text-slate-400 block mt-1">{formatManilaWhen(entry.occurredAt)}</span>
+        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1">{formatManilaWhen(entry.occurredAt)}</span>
       </div>
     ))}
   </>
@@ -55,7 +55,7 @@ export const AuditCompactList: React.FC<{ entries: AuditEntry[]; variant?: 'list
           <span className="font-semibold">{auditWho(entry)}</span>
           {' — '}{entry.what} · <span className="whitespace-nowrap">{entry.record}</span>{entry.change && entry.change !== '—' ? ` · ${entry.change}` : ''}
         </span>
-        <span className="text-slate-400 whitespace-nowrap">{entry.status} · {formatManilaWhen(entry.occurredAt)}</span>
+        <span className="text-slate-500 dark:text-slate-400 whitespace-nowrap">{entry.status} · {formatManilaWhen(entry.occurredAt)}</span>
       </li>
     ))}
   </ul>
@@ -67,7 +67,7 @@ const ChangesTable: React.FC<{ changes: AuditEntry['details']['changes'] }> = ({
   const needle = search.trim().toLowerCase();
   const matching = needle ? changes.filter(c => `${c.field} ${c.before} ${c.after}`.toLowerCase().includes(needle)) : changes;
   const shown = showAll || needle ? matching : matching.slice(0, CHANGES_PREVIEW);
-  if (changes.length === 0) return <p className="mt-1 text-slate-400">No field changes recorded.</p>;
+  if (changes.length === 0) return <p className="mt-1 text-slate-500 dark:text-slate-400">No field changes recorded.</p>;
   return (
     <div className="mt-1 space-y-2">
       {changes.length > CHANGES_PREVIEW && (
@@ -75,7 +75,7 @@ const ChangesTable: React.FC<{ changes: AuditEntry['details']['changes'] }> = ({
       )}
       <div className="overflow-x-auto rounded-lg bg-slate-50 dark:bg-slate-900">
         <table className="w-full min-w-[420px] text-left text-[11px]">
-          <thead className="text-[9px] uppercase tracking-wider font-bold text-slate-400">
+          <thead className="text-[9px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
             <tr><th className="px-3 py-2">Field</th><th className="px-3 py-2">Before</th><th className="px-3 py-2">After</th></tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -86,7 +86,7 @@ const ChangesTable: React.FC<{ changes: AuditEntry['details']['changes'] }> = ({
                 <td className="px-3 py-2 break-words text-slate-700 dark:text-slate-300">{c.after}</td>
               </tr>
             ))}
-            {shown.length === 0 && <tr><td colSpan={3} className="px-3 py-4 text-center text-slate-400">No changes match.</td></tr>}
+            {shown.length === 0 && <tr><td colSpan={3} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">No changes match.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -101,7 +101,7 @@ const ChangesTable: React.FC<{ changes: AuditEntry['details']['changes'] }> = ({
 
 const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="min-w-0">
-    <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">{label}</p>
+    <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">{label}</p>
     <div className="mt-1 font-medium text-slate-700 dark:text-slate-300 break-words">{children}</div>
   </div>
 );
@@ -257,8 +257,8 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
       <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4 no-print">
         <div className="sm:flex-1 sm:basis-64">
           <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">{title}</h1>
-          <p className="text-xs text-slate-400 mt-1">{subtitle}</p>
-          {role === 'admin' && <p className="text-xs text-slate-400 mt-1">Class work (grades, attendance, retention) is not shown here; it stays recorded.</p>}
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{subtitle}</p>
+          {role === 'admin' && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Class work (grades, attendance, retention) is not shown here; it stays recorded.</p>}
         </div>
         <div className="flex gap-2 whitespace-nowrap no-print">
           <button onClick={exportCsv} disabled={working} className={`${tapButton} border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900 disabled:opacity-50`}>
@@ -304,7 +304,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
                 ? 'border-rose-200/60 bg-rose-50/50 dark:border-rose-900/30 dark:bg-rose-950/15'
                 : 'border-amber-200/60 bg-amber-50/50 dark:border-amber-900/30 dark:bg-amber-950/15'}`}>
                 <div className="min-w-0 xl:min-w-[auto]">
-                  <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">{label.replace(/-/g, '‑')}</p>
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">{label.replace(/-/g, '‑')}</p>
                   <p className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{count}</p>
                 </div>
                 <div className={`p-2.5 max-sm:p-1.5 shrink-0 xl:shrink rounded-xl bg-white/70 dark:bg-slate-900/60 ${tone === 'rose' ? 'text-rose-500' : 'text-amber-500'}`}><Icon className="w-5 h-5 max-sm:w-4 max-sm:h-4" /></div>
@@ -366,7 +366,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
             {filtersActive && (
               <button type="button" onClick={clearFilters} className="flex items-center gap-1 min-h-[44px] xl:min-h-0 text-xs font-bold underline hover:opacity-80">Clear filters</button>
             )}
-            <span className="ml-auto text-[10px] text-slate-400 font-semibold">{total} logs</span>
+            <span className="ml-auto text-[10px] text-slate-500 dark:text-slate-400 font-semibold">{total} logs</span>
           </div>
         </CardContent>
       </Card>
@@ -382,12 +382,12 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
           {loading ? (
             <div className="py-12 text-center">
               <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-xs text-slate-400">Loading audit trail records...</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Loading audit trail records...</p>
             </div>
           ) : (
             <table className="w-full min-w-[900px] text-left text-xs">
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-20 shadow-sm">
-                <tr className="text-[9px] uppercase tracking-wider font-bold text-slate-400">
+                <tr className="text-[9px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
                   <th className="px-5 py-3 sticky left-0 z-30 bg-slate-50 dark:bg-slate-900 w-36 min-w-[9rem]">When</th>
                   <th className="px-5 py-3">Who</th>
                   <th className="px-5 py-3">What</th>
@@ -399,7 +399,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
               {groups.map(group => (
                 <tbody key={group.key} className="divide-y divide-slate-100 dark:divide-slate-800/60">
                   <tr className="bg-slate-50 dark:bg-slate-900">
-                    <th colSpan={6} scope="colgroup" className="px-5 py-1.5 text-left text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                    <th colSpan={6} scope="colgroup" className="px-5 py-1.5 text-left text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       <span className="sticky left-5">{group.label}</span>
                     </th>
                   </tr>
@@ -409,7 +409,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
                         <td className="px-5 py-3 sticky left-0 z-10 bg-white dark:bg-slate-950 w-36 min-w-[9rem] text-slate-500">{formatManilaWhen(entry.occurredAt)}</td>
                         <td className="px-5 py-3 break-words min-w-[9rem]">
                           <p className="font-bold text-slate-800 dark:text-slate-200">{entry.who ? entry.who.name : entry.whoText ?? '—'}</p>
-                          {entry.who && <p className="text-[10px] text-slate-400">{entry.who.roleLabel}</p>}
+                          {entry.who && <p className="text-[10px] text-slate-500 dark:text-slate-400">{entry.who.roleLabel}</p>}
                         </td>
                         <td className="px-5 py-3 font-semibold text-slate-700 dark:text-slate-300 break-words min-w-[8rem]">{entry.what}</td>
                         <td className="px-5 py-3 text-slate-600 dark:text-slate-400 max-2xl:whitespace-nowrap 2xl:break-words min-w-[10rem]">{entry.record}</td>
@@ -451,7 +451,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
               {entries.length === 0 && (
                 <tbody>
                   <tr>
-                    <td colSpan={6} className="px-5 py-10 text-center text-slate-400">
+                    <td colSpan={6} className="px-5 py-10 text-center text-slate-500 dark:text-slate-400">
                       No audit records match the selected filters.
                     </td>
                   </tr>
@@ -464,7 +464,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
 
       {total > 0 && (
         <div className="flex items-center justify-between text-xs no-print">
-          <span className="text-slate-400">
+          <span className="text-slate-500 dark:text-slate-400">
             Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
           </span>
           <div className="flex items-center gap-2">
@@ -514,7 +514,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
               {selected.who ? (
                 <>
                   <p>{selected.who.name} · {selected.who.roleLabel}</p>
-                  {selected.who.email && <p className="text-slate-400">{selected.who.email}</p>}
+                  {selected.who.email && <p className="text-slate-500 dark:text-slate-400">{selected.who.email}</p>}
                 </>
               ) : selected.whoText ?? '—'}
             </Field>
@@ -524,7 +524,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
             <Field label="Status"><StatusBadge status={selected.status} /></Field>
             <div className="sm:col-span-2"><Field label="Reason">{selected.details.reason || '—'}</Field></div>
             <div className="sm:col-span-2 min-w-0">
-              <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Changes</p>
+              <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">Changes</p>
               <ChangesTable key={selected.id} changes={selected.details.changes} />
             </div>
             {selected.details.technical && (

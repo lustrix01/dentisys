@@ -186,7 +186,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
               className={`flex w-full items-center justify-between text-left ${boxClass}`}
             >
               <span className="block">{info('span')}</span>
-              <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${pickerOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400 transition-transform ${pickerOpen ? 'rotate-180' : ''}`} />
             </button>
             {pickerOpen && (
               <div role="listbox" aria-label="Class sections" className="mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -226,17 +226,17 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
         <label className="block">
           <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Class end time</span>
           <input type="time" required aria-label="Class end time" value={classEndTime} onChange={(event) => setClassEndTime(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
-          <small className="mt-1 block text-slate-400">The session ends automatically at this time; students without a record are marked Absent.</small>
+          <small className="mt-1 block text-slate-500 dark:text-slate-400">The session ends automatically at this time; students without a record are marked Absent.</small>
         </label>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
             <input type="checkbox" checked={biometricRequired} onChange={(event) => setBiometricRequired(event.target.checked)} className={a.check} />
-            <span><strong className="block text-slate-700 dark:text-slate-200">Face biometric</strong><small className="text-slate-400">Require verified attendance</small></span>
+            <span><strong className="block text-slate-700 dark:text-slate-200">Face biometric</strong><small className="text-slate-500 dark:text-slate-400">Require verified attendance</small></span>
           </label>
           <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
             <input type="checkbox" checked={geofenceEnabled} onChange={(event) => setGeofenceEnabled(event.target.checked)} className={a.check} />
-            <span><strong className="block text-slate-700 dark:text-slate-200">Geofence</strong><small className="text-slate-400">Use a configured room radius</small></span>
+            <span><strong className="block text-slate-700 dark:text-slate-200">Geofence</strong><small className="text-slate-500 dark:text-slate-400">Use a configured room radius</small></span>
           </label>
         </div>
 

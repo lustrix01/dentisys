@@ -880,7 +880,7 @@ export const AttendanceMonitoring: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Attendance Monitoring
           </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             Select an assigned class below to manage its roll call, monitor active check-ins, and schedule attendance sessions.
           </p>
         </div>
@@ -910,7 +910,7 @@ export const AttendanceMonitoring: React.FC = () => {
           </div>
           <button
             onClick={() => setNotification(null)}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs cursor-pointer"
+            className="text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs cursor-pointer"
           >
             Dismiss
           </button>
@@ -932,14 +932,14 @@ export const AttendanceMonitoring: React.FC = () => {
                 {scopedClasses.length}
               </span>
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Click a card to view its live attendance roll call, session controls, and student roster.
             </p>
           </div>
 
           {/* School Year / Term Selector */}
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Term:</span>
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Term:</span>
             <select
               aria-label="Attendance school year"
               value={selectedSchoolYear}
@@ -971,7 +971,7 @@ export const AttendanceMonitoring: React.FC = () => {
             ))}
           </div>
         ) : scopedClasses.length === 0 ? (
-          <Card className="p-8 text-center text-slate-400">
+          <Card className="p-8 text-center text-slate-500 dark:text-slate-400">
             <BookOpen className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
             <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
               No classes assigned for {selectedSchoolYear === 'current' ? (currentSchoolYear || 'this school year') : 'the selected term'}.
@@ -1016,7 +1016,7 @@ export const AttendanceMonitoring: React.FC = () => {
                             Live
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium text-slate-500 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50">
                             <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />
                             {isPastClass ? 'Archived' : 'Idle'}
                           </span>
@@ -1175,11 +1175,11 @@ export const AttendanceMonitoring: React.FC = () => {
                 <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-extrabold bg-accent-100 dark:bg-accent-950/60 text-accent-800 dark:text-accent-300">
                   {selectedClass?.courseCode || 'CLASS'}
                 </span>
-                <span className="text-xs font-bold text-slate-400">&bull;</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">&bull;</span>
                 <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
                   {selectedClass?.csName || 'Section'} {selectedClass?.block ? `(Block ${selectedClass.block})` : ''}
                 </span>
-                <span className="text-xs font-bold text-slate-400">&bull;</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">&bull;</span>
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                   {selectedClass ? semesterLabel(selectedClass.semester) : ''} {selectedClass?.schoolYear || currentSchoolYear}
                 </span>
@@ -1262,7 +1262,7 @@ export const AttendanceMonitoring: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700">
                 <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Worksheet Date:</span>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Worksheet Date:</span>
                 <input
                   type="date"
                   value={selectedDate}
@@ -1333,15 +1333,15 @@ export const AttendanceMonitoring: React.FC = () => {
           <span className="rounded-lg bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">Late: {stats.late}</span>
           <span className="rounded-lg bg-rose-500/10 px-2.5 py-1 text-[10px] font-bold text-rose-700 dark:text-rose-300">Absent: {stats.absent}</span>
           <span className="rounded-lg bg-sky-500/10 px-2.5 py-1 text-[10px] font-bold text-sky-700 dark:text-sky-300">Excused: {stats.excused}</span>
-          <span className="ml-auto text-[10px] font-bold text-slate-400">{stats.total ? Math.round((stats.recorded / stats.total) * 100) : 0}% recorded</span>
+          <span className="ml-auto text-[10px] font-bold text-slate-500 dark:text-slate-400">{stats.total ? Math.round((stats.recorded / stats.total) * 100) : 0}% recorded</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
           <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Enrolled</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Enrolled</span>
             <span className="text-xl font-extrabold font-heading text-slate-800 dark:text-slate-100">{stats.total}</span>
           </div>
           <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Recorded</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Recorded</span>
             <span className="text-xl font-extrabold font-heading text-slate-700 dark:text-slate-300">{stats.recorded}</span>
           </div>
           <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shadow-xs">
@@ -1366,17 +1366,17 @@ export const AttendanceMonitoring: React.FC = () => {
 
       {/* 5. Main Worksheet Register */}
       {!selectedCsId ? (
-        <Card className="p-12 text-center text-slate-400">
+        <Card className="p-12 text-center text-slate-500 dark:text-slate-400">
           <Layers className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
           <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
             Please click &ldquo;View Attendance&rdquo; on one of your class cards above to view the roll call worksheet.
           </p>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Attendance records are loaded directly from the authoritative database.
           </p>
         </Card>
       ) : loadingWorksheet ? (
-        <Card className="p-12 text-center text-slate-400">
+        <Card className="p-12 text-center text-slate-500 dark:text-slate-400">
           <RefreshCw className="w-8 h-8 mx-auto mb-2 text-emerald-500 animate-spin" />
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
             Loading authoritative attendance worksheet...
@@ -1553,7 +1553,7 @@ export const AttendanceMonitoring: React.FC = () => {
           {/* Roster Table: Bounded Scroll Container with Sticky Header & Mobile Horizontal Scroll */}
           <div className="max-h-[560px] overflow-y-auto overflow-x-auto border border-slate-200/80 dark:border-slate-800 rounded-xl">
             <table className="w-full min-w-[640px] text-left text-xs border-collapse">
-              <thead className="sticky top-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-xs border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 z-10">
+              <thead className="sticky top-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-xs border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
                 <tr>
                   <th className="py-3 px-4 sm:py-4 sm:px-6">STUDENT DETAILS</th>
                   <th className="py-3 px-4 sm:py-4 sm:px-6">CHECK-IN TIME</th>
@@ -1565,7 +1565,7 @@ export const AttendanceMonitoring: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {filteredRoster.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-slate-400">
+                    <td colSpan={5} className="py-12 text-center text-slate-500 dark:text-slate-400">
                       {worksheet.roster.length === 0
                         ? 'No enrolled students found in this class section.'
                         : 'No students match the current filter.'}
@@ -1584,7 +1584,7 @@ export const AttendanceMonitoring: React.FC = () => {
                           <span className="font-bold text-slate-800 dark:text-slate-100 block text-xs sm:text-sm">
                             {item.studentName}
                           </span>
-                          <span className="text-[11px] text-slate-400 font-medium">
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                             {item.studentNumber} • Year {item.yearLevel || 1}
                           </span>
                         </td>
@@ -1609,7 +1609,7 @@ export const AttendanceMonitoring: React.FC = () => {
                               <span>{attendanceMethodLabel(item.verificationMethod, item.overrideReason)}</span>
                             </span>
                           ) : (
-                            <span className="text-slate-400 text-xs">—</span>
+                            <span className="text-slate-500 dark:text-slate-400 text-xs">—</span>
                           )}
                         </td>
 
@@ -1641,7 +1641,7 @@ export const AttendanceMonitoring: React.FC = () => {
                         {/* Column 5: ACTIONS */}
                         <td className="py-3 px-4 sm:py-4 sm:px-6 text-right">
                           {revokedSessionOpen ? (
-                            <span className="text-xs font-bold text-slate-400">View-only</span>
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">View-only</span>
                           ) : (
                           <button
                             type="button"
@@ -1792,7 +1792,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 placeholder="Enter justification for attendance override..."
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:border-emerald-500"
               />
-              <span className="text-[10px] text-slate-400 block mt-1">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1">
                 Reason is audited and recorded with your Faculty credentials.
               </span>
             </div>
@@ -1920,7 +1920,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 placeholder="e.g. Schedule adjustment, instructor requested cancellation, or incorrect session parameters..."
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:border-rose-500"
               />
-              <span className="text-[10px] text-slate-400 block mt-1 text-right">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 text-right">
                 {revokeReason.length}/500
               </span>
             </div>
@@ -1973,7 +1973,7 @@ export const AttendanceMonitoring: React.FC = () => {
             )}
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/50">
-              <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Selected session</p>
+              <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Selected session</p>
               <p className="mt-1 font-bold text-slate-800 dark:text-slate-100">
                 {editingSession.sessionCode} · Status: <span className="capitalize">{editingSession.status}</span>
               </p>
@@ -2032,7 +2032,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 onChange={(event) => setEditClassEndTime(event.target.value)}
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
-              <small className="mt-1 block text-slate-400">The session ends automatically at this time; unrecorded students are marked Absent.</small>
+              <small className="mt-1 block text-slate-500 dark:text-slate-400">The session ends automatically at this time; unrecorded students are marked Absent.</small>
             </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2043,7 +2043,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   onChange={(event) => setEditBiometricRequired(event.target.checked)}
                   className="accent-emerald-600"
                 />
-                <span><strong className="block text-slate-700 dark:text-slate-200">Face biometric</strong><small className="text-slate-400">Require verified attendance</small></span>
+                <span><strong className="block text-slate-700 dark:text-slate-200">Face biometric</strong><small className="text-slate-500 dark:text-slate-400">Require verified attendance</small></span>
               </label>
               <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
                 <input
@@ -2052,7 +2052,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   onChange={(event) => setEditGeofenceEnabled(event.target.checked)}
                   className="accent-emerald-600"
                 />
-                <span><strong className="block text-slate-700 dark:text-slate-200">Geofence</strong><small className="text-slate-400">Use a configured room radius</small></span>
+                <span><strong className="block text-slate-700 dark:text-slate-200">Geofence</strong><small className="text-slate-500 dark:text-slate-400">Use a configured room radius</small></span>
               </label>
             </div>
 
@@ -2179,7 +2179,7 @@ export const AttendanceMonitoring: React.FC = () => {
             {sessionModalTab === 'current' && (
               <div className="space-y-4">
                 {loadingWorksheet ? (
-                  <div className="p-8 text-center text-slate-400">
+                  <div className="p-8 text-center text-slate-500 dark:text-slate-400">
                     <RefreshCw className="w-6 h-6 mx-auto mb-2 text-emerald-500 animate-spin" />
                     <p className="font-semibold">Checking current session status…</p>
                   </div>
@@ -2292,7 +2292,7 @@ export const AttendanceMonitoring: React.FC = () => {
                     <Clock className="w-8 h-8 mx-auto text-slate-400" />
                     <div>
                       <p className="font-bold text-slate-700 dark:text-slate-200 text-sm">No Active Session Right Now</p>
-                      <p className="text-slate-400 text-xs mt-0.5">There is no attendance session currently running for this class at this time.</p>
+                      <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">There is no attendance session currently running for this class at this time.</p>
                     </div>
                     <button
                       type="button"
@@ -2403,10 +2403,10 @@ export const AttendanceMonitoring: React.FC = () => {
                     })}
                   </div>
                 ) : (
-                  <div className="p-8 text-center text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700">
+                  <div className="p-8 text-center text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700">
                     <Calendar className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                     <p className="font-semibold text-slate-600 dark:text-slate-300">No Upcoming Sessions Scheduled</p>
-                    <p className="text-xs text-slate-400 mt-1">Use "+ Schedule New" to schedule an attendance session for future dates.</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Use "+ Schedule New" to schedule an attendance session for future dates.</p>
                   </div>
                 )}
               </div>

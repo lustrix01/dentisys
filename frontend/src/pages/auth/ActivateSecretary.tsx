@@ -145,8 +145,8 @@ export function ActivateSecretary() {
       <div className="absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] dark:bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-75 pointer-events-none -z-10" />
 
       {/* Background Decorative Blur Blobs (Blue Accent for Class Secretary) */}
-      <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-blue-150/20 dark:bg-blue-950/10 rounded-full blur-[120px] floating-orb-1 pointer-events-none -z-20" />
-      <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] bg-sky-150/15 dark:bg-sky-950/5 rounded-full blur-[120px] floating-orb-2 pointer-events-none -z-20" />
+      <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] dark:bg-blue-950/10 rounded-full blur-[120px] floating-orb-1 pointer-events-none -z-20" />
+      <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] dark:bg-sky-950/5 rounded-full blur-[120px] floating-orb-2 pointer-events-none -z-20" />
 
       {/* Main Activation Card */}
       <div className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-[32px] shadow-xl shadow-slate-100 dark:shadow-none border border-slate-200/30 dark:border-slate-800/80 overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[600px] transition-all relative z-10 my-6">
@@ -294,7 +294,7 @@ export function ActivateSecretary() {
                   <p className="text-[11px] text-slate-600 dark:text-slate-300">
                     Appointed by: <strong>{invitation.facultyName}</strong> (Dental Faculty Member)
                   </p>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                  <p className="text-[10px] text-slate-500 dark:text-slate-500 flex items-center gap-1">
                     <Clock className="w-3 h-3" /> Link expires: {new Date(invitation.expiresAt).toLocaleDateString('en-PH')}
                   </p>
                 </div>
@@ -309,11 +309,11 @@ export function ActivateSecretary() {
 
                 {/* Pre-filled Full Name (Disabled) */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                     Full Name (Pre-filled)
                   </label>
                   <div className="relative rounded-xl shadow-sm bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 dark:text-slate-400">
                       <User className="h-4 w-4" />
                     </div>
                     <input
@@ -327,11 +327,11 @@ export function ActivateSecretary() {
 
                 {/* Pre-filled BU Email (Disabled) */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                     Official BU Email Address (Pre-filled)
                   </label>
                   <div className="relative rounded-xl shadow-sm bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 dark:text-slate-400">
                       <Mail className="h-4 w-4" />
                     </div>
                     <input
@@ -349,7 +349,7 @@ export function ActivateSecretary() {
                     Create Password <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-xl shadow-sm group">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-600 transition-colors">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 dark:text-slate-400 group-focus-within:text-blue-600 transition-colors">
                       <Lock className="h-4 w-4" />
                     </div>
                     <input
@@ -363,7 +363,7 @@ export function ActivateSecretary() {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -376,23 +376,23 @@ export function ActivateSecretary() {
                         Password Requirements:
                       </div>
                       <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                        <div className={`flex items-center gap-1.5 ${passwordCriteria.hasMinLength ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-400'}`}>
+                        <div className={`flex items-center gap-1.5 ${passwordCriteria.hasMinLength ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
                           {passwordCriteria.hasMinLength ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 opacity-60" />}
                           <span>At least 8 characters</span>
                         </div>
-                        <div className={`flex items-center gap-1.5 ${passwordCriteria.hasUppercase ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-400'}`}>
+                        <div className={`flex items-center gap-1.5 ${passwordCriteria.hasUppercase ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
                           {passwordCriteria.hasUppercase ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 opacity-60" />}
                           <span>1+ Uppercase letter</span>
                         </div>
-                        <div className={`flex items-center gap-1.5 ${passwordCriteria.hasLowercase ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-400'}`}>
+                        <div className={`flex items-center gap-1.5 ${passwordCriteria.hasLowercase ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
                           {passwordCriteria.hasLowercase ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 opacity-60" />}
                           <span>1+ Lowercase letter</span>
                         </div>
-                        <div className={`flex items-center gap-1.5 ${passwordCriteria.hasNumber ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-400'}`}>
+                        <div className={`flex items-center gap-1.5 ${passwordCriteria.hasNumber ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
                           {passwordCriteria.hasNumber ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 opacity-60" />}
                           <span>1+ Number (0-9)</span>
                         </div>
-                        <div className={`flex items-center gap-1.5 ${passwordCriteria.hasSpecial ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-400'} col-span-2`}>
+                        <div className={`flex items-center gap-1.5 ${passwordCriteria.hasSpecial ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'} col-span-2`}>
                           {passwordCriteria.hasSpecial ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 opacity-60" />}
                           <span>1+ Special character (!@#$%^&*)</span>
                         </div>
@@ -407,7 +407,7 @@ export function ActivateSecretary() {
                     Confirm Password <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-xl shadow-sm group">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-600 transition-colors">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 dark:text-slate-400 group-focus-within:text-blue-600 transition-colors">
                       <Lock className="h-4 w-4" />
                     </div>
                     <input
@@ -428,7 +428,7 @@ export function ActivateSecretary() {
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
                     >
                       {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>

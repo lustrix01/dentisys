@@ -731,14 +731,14 @@ export const RetentionMonitoring: React.FC = () => {
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">Review standing and remedial progress for each student’s course enrollment.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">Review standing and remedial progress for each student’s course enrollment.</p>
         </div>
       </div>
 
       {notification && (
         <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in">
           <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /><span>{notification.message}</span></div>
-          <button type="button" onClick={() => setNotification(null)} className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer">Dismiss</button>
+          <button type="button" onClick={() => setNotification(null)} className="text-slate-500 dark:text-slate-400 hover:text-slate-600 text-xs cursor-pointer">Dismiss</button>
         </div>
       )}
 
@@ -908,7 +908,7 @@ export const RetentionMonitoring: React.FC = () => {
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="text-[10px] uppercase text-slate-400">
+              <thead className="text-[10px] uppercase text-slate-500 dark:text-slate-400">
                 <tr>
                   <th className="p-3">Student</th>
                   <th className="p-3">Class</th>
@@ -923,7 +923,7 @@ export const RetentionMonitoring: React.FC = () => {
                     <tr key={record.enrollmentId} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                       <td className="p-3 font-bold">
                         {record.studentName}
-                        <span className="block text-[10px] font-normal text-slate-400">{record.studentNumber}</span>
+                        <span className="block text-[10px] font-normal text-slate-500 dark:text-slate-400">{record.studentNumber}</span>
                       </td>
                       <td className="p-3">{record.className}</td>
                       <td className="p-3">
@@ -935,7 +935,7 @@ export const RetentionMonitoring: React.FC = () => {
                             </span>
                           </div>
                         ) : (
-                          <span className="text-slate-400 italic">Incomplete assessments</span>
+                          <span className="text-slate-500 dark:text-slate-400 italic">Incomplete assessments</span>
                         )}
                       </td>
                       <td className="p-3">
@@ -955,7 +955,7 @@ export const RetentionMonitoring: React.FC = () => {
             </table>
           </div>
           {midtermDisplayRecords.length === 0 && (
-            <div className="py-8 text-center text-xs text-slate-400 space-y-1">
+            <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1">
               {showAtRiskOnly ? (
                 <>
                   <p className="font-semibold text-slate-600 dark:text-slate-300">No students are currently on the Midterm Watchlist (no fully graded midterm of 2.5 or worse).</p>
@@ -979,19 +979,19 @@ export const RetentionMonitoring: React.FC = () => {
       {activeTab === 'watchlist' && (
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Retention Watchlist ({watchlistRecords.length})</h2><p className="text-xs text-slate-400">Final grades and computed retention status. Select a status to view policy progression.</p></div>
+            <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Retention Watchlist ({watchlistRecords.length})</h2><p className="text-xs text-slate-500 dark:text-slate-400">Final grades and computed retention status. Select a status to view policy progression.</p></div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Student Number</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center">Course Grade</th><th className="py-3 px-4">State</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
+              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Student Number</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center">Course Grade</th><th className="py-3 px-4">State</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {watchlistRecords.length === 0 ? <tr><td colSpan={7} className="py-10 text-center text-slate-400">{isLoading ? 'Loading authoritative retention records...' : 'No persisted retention records match the selected filters.'}</td></tr> : watchlistRecords.map(record => (
+                {watchlistRecords.length === 0 ? <tr><td colSpan={7} className="py-10 text-center text-slate-500 dark:text-slate-400">{isLoading ? 'Loading authoritative retention records...' : 'No persisted retention records match the selected filters.'}</td></tr> : watchlistRecords.map(record => (
                   <tr key={record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(record.studentName, 'Student name unavailable')}</td>
                     <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-mono">{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
                     <td className="py-3.5 px-4 font-mono">{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
                     <td className="py-3.5 px-4">{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
-                    <td className="py-3.5 px-4 text-center font-mono">{isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage} grade={record.gwa}>{formatGrade(record.gwa)}</GradeValue> : 'Grade unavailable'}<span className="block text-[10px] text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
+                    <td className="py-3.5 px-4 text-center font-mono">{isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage} grade={record.gwa}>{formatGrade(record.gwa)}</GradeValue> : 'Grade unavailable'}<span className="block text-[10px] text-slate-500 dark:text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
                     <td className="py-3.5 px-4"><button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1.5 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button></td>
                     <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-1.5"><button type="button" onClick={() => openSchedule(record)} disabled={!canScheduleRecord(record)} title={!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam'} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button></div></td>
                   </tr>
@@ -1005,17 +1005,17 @@ export const RetentionMonitoring: React.FC = () => {
       {activeTab === 'remedials' && (
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Remedial Progression ({remedialRows.length})</h2><p className="text-xs text-slate-400">Attempt stages, scores and outcomes are read from the authoritative retention API. Removal is unavailable because no approved authoritative delete contract exists.</p></div>
+            <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Remedial Progression ({remedialRows.length})</h2><p className="text-xs text-slate-500 dark:text-slate-400">Attempt stages, scores and outcomes are read from the authoritative retention API. Removal is unavailable because no approved authoritative delete contract exists.</p></div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Original grade</th><th className="py-3 px-4">Attempts</th><th className="py-3 px-4">Current stage</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
+              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Original grade</th><th className="py-3 px-4">Attempts</th><th className="py-3 px-4">Current stage</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {remedialRows.length === 0 ? <tr><td colSpan={6} className="py-10 text-center text-slate-400">{isLoading ? 'Loading authoritative remedial records...' : 'No persisted remedial records match the selected filters.'}</td></tr> : remedialRows.map(row => (
+                {remedialRows.length === 0 ? <tr><td colSpan={6} className="py-10 text-center text-slate-500 dark:text-slate-400">{isLoading ? 'Loading authoritative remedial records...' : 'No persisted remedial records match the selected filters.'}</td></tr> : remedialRows.map(row => (
                   <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-400 font-mono">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
-                    <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage} grade={row.record.gwa}>{formatGrade(row.record.gwa)}</GradeValue> : <span className="text-[10px] font-medium text-slate-400">Grade unavailable</span>}</td>
+                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-500 dark:text-slate-400 font-mono">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
+                    <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-500 dark:text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
+                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage} grade={row.record.gwa}>{formatGrade(row.record.gwa)}</GradeValue> : <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Grade unavailable</span>}</td>
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       {(() => {
                         const activeAttemptNumber = row.progression.attempts.length === 2
@@ -1042,7 +1042,7 @@ export const RetentionMonitoring: React.FC = () => {
                               {attemptStatusLabel(status)}{isFiniteNumber(attempt?.percentage) ? ` · ${attempt.percentage.toFixed(2)}%` : ''}
                             </span>
                             {attempt?.scheduledDate && (
-                              <span className="text-[10px] text-slate-400 font-mono">
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                                 {attempt.scheduledDate}
                               </span>
                             )}
@@ -1134,14 +1134,14 @@ export const RetentionMonitoring: React.FC = () => {
           <form onSubmit={handleScheduleSubmit} className="space-y-4 text-xs">
             {selectedScheduleRecord && (
               <dl className="grid grid-cols-3 gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-900">
-                <div><dt className="text-[10px] font-bold uppercase text-slate-400">Student</dt><dd className="font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(selectedScheduleRecord.studentName, 'Student name unavailable')}<span className="block font-mono text-[10px] font-normal text-slate-400">{textOrUnavailable(selectedScheduleRecord.studentNumber, 'Student number unavailable')}</span></dd></div>
-                <div><dt className="text-[10px] font-bold uppercase text-slate-400">Course</dt><dd className="font-mono font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(selectedScheduleRecord.subjectCode, 'Subject code unavailable')}</dd></div>
-                <div><dt className="text-[10px] font-bold uppercase text-slate-400">Section</dt><dd className="font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(selectedScheduleRecord.className, `Class name unavailable (${selectedScheduleRecord.classId})`)}</dd></div>
+                <div><dt className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Student</dt><dd className="font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(selectedScheduleRecord.studentName, 'Student name unavailable')}<span className="block font-mono text-[10px] font-normal text-slate-500 dark:text-slate-400">{textOrUnavailable(selectedScheduleRecord.studentNumber, 'Student number unavailable')}</span></dd></div>
+                <div><dt className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Course</dt><dd className="font-mono font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(selectedScheduleRecord.subjectCode, 'Subject code unavailable')}</dd></div>
+                <div><dt className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Section</dt><dd className="font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(selectedScheduleRecord.className, `Class name unavailable (${selectedScheduleRecord.classId})`)}</dd></div>
               </dl>
             )}
-            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Attempt</label><select required value={scheduleAttempt} onChange={(event) => setScheduleAttempt(Number(event.target.value) as AllowedAttempt)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer" disabled={!selectedScheduleProgression || allowedAttemptNumbers(selectedScheduleProgression).length <= 1}>{selectedScheduleProgression && allowedAttemptNumbers(selectedScheduleProgression).map(attemptNumber => <option key={attemptNumber} value={attemptNumber}>Attempt {attemptNumber}</option>)}</select><p className="mt-1 text-[11px] text-slate-400">The server-authorized stage determines whether Attempt 1 or Attempt 2 can be scheduled.</p></div>
-            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Remedial Exam Date <span className="font-normal text-slate-400">(optional)</span></label><input type="date" min={manilaToday()} value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /><p className="mt-1 text-[11px] text-slate-400">Today or later.</p></div>
-            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Notes <span className="font-normal text-slate-400">(optional)</span></label><textarea value={scheduleNotes} onChange={(event) => setScheduleNotes(event.target.value)} maxLength={500} rows={2} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100" /></div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Attempt</label><select required value={scheduleAttempt} onChange={(event) => setScheduleAttempt(Number(event.target.value) as AllowedAttempt)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer" disabled={!selectedScheduleProgression || allowedAttemptNumbers(selectedScheduleProgression).length <= 1}>{selectedScheduleProgression && allowedAttemptNumbers(selectedScheduleProgression).map(attemptNumber => <option key={attemptNumber} value={attemptNumber}>Attempt {attemptNumber}</option>)}</select><p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">The server-authorized stage determines whether Attempt 1 or Attempt 2 can be scheduled.</p></div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Remedial Exam Date <span className="font-normal text-slate-500 dark:text-slate-400">(optional)</span></label><input type="date" min={manilaToday()} value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /><p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Today or later.</p></div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Notes <span className="font-normal text-slate-500 dark:text-slate-400">(optional)</span></label><textarea value={scheduleNotes} onChange={(event) => setScheduleNotes(event.target.value)} maxLength={500} rows={2} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100" /></div>
             <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={resetScheduleForm} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button><button type="submit" disabled={isSubmitting || !selectedScheduleRecord || !canScheduleRecord(selectedScheduleRecord)} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-600/20">{isSubmitting ? 'Saving...' : 'Confirm & Schedule Exam'}</button></div>
           </form>
         </Modal>
@@ -1155,7 +1155,7 @@ export const RetentionMonitoring: React.FC = () => {
                 <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">
                   {textOrUnavailable(selectedResolveRecord.studentName, 'Student name unavailable')}
                 </p>
-                <p className="text-slate-400 text-[11px] font-mono">
+                <p className="text-slate-500 dark:text-slate-400 text-[11px] font-mono">
                   {textOrUnavailable(selectedResolveRecord.studentNumber, 'No ID')} · {textOrUnavailable(selectedResolveRecord.subjectCode, 'Subject unavailable')}
                 </p>
               </div>
@@ -1230,7 +1230,7 @@ export const RetentionMonitoring: React.FC = () => {
                 placeholder="Enter score"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold text-sm"
               />
-              <span className="text-[11px] text-slate-400 block mt-1">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-1">
                 The server determines Pass or Fail at 50% or higher. This form sends only the attempt number and percentage.
               </span>
             </div>
@@ -1268,7 +1268,7 @@ export const RetentionMonitoring: React.FC = () => {
 
             <div>
               <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                Notes <span className="font-normal text-slate-400">(optional)</span>
+                Notes <span className="font-normal text-slate-500 dark:text-slate-400">(optional)</span>
               </label>
               <textarea
                 value={resolveNotes}
@@ -1279,7 +1279,7 @@ export const RetentionMonitoring: React.FC = () => {
               />
             </div>
 
-            <p className="text-[11px] text-slate-400 italic">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">
               The student will be automatically notified in their own account.
             </p>
 
@@ -1352,8 +1352,8 @@ export const RetentionMonitoring: React.FC = () => {
                 {renderStatusBadge(selectedPolicyRecord.state)}
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-400">Final Grade</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.gwa) ? <GradeValue percentage={selectedPolicyRecord.percentage} grade={selectedPolicyRecord.gwa}>{formatGrade(selectedPolicyRecord.gwa)}</GradeValue> : 'Unavailable'}</span></div>
-                <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-400">Recorded score</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.percentage) ? `${selectedPolicyRecord.percentage.toFixed(2)}%` : 'Unavailable'}</span></div>
+                <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-500 dark:text-slate-400">Final Grade</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.gwa) ? <GradeValue percentage={selectedPolicyRecord.percentage} grade={selectedPolicyRecord.gwa}>{formatGrade(selectedPolicyRecord.gwa)}</GradeValue> : 'Unavailable'}</span></div>
+                <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-500 dark:text-slate-400">Recorded score</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.percentage) ? `${selectedPolicyRecord.percentage.toFixed(2)}%` : 'Unavailable'}</span></div>
               </div>
             </div>
             {selectedPolicyProgression && (
@@ -1366,7 +1366,7 @@ export const RetentionMonitoring: React.FC = () => {
                   {([1, 2] as AllowedAttempt[]).map(attemptNumber => {
                     const attempt = selectedPolicyProgression.attempts.find(item => item.attemptNumber === attemptNumber);
                     const status = attemptStatus(selectedPolicyProgression, attemptNumber);
-                    return <div key={attemptNumber} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950"><div className="flex-1"><p className="font-bold text-slate-800 dark:text-slate-100">Attempt {attemptNumber}</p><p className="text-[10px] text-slate-400">{attempt?.scheduledDate ? `Scheduled ${attempt.scheduledDate} · ` : ''}{isFiniteNumber(attempt?.percentage) ? `${attempt.percentage.toFixed(2)}% · ` : ''}{attemptStatusLabel(status)}</p></div><span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{status === 'passed' ? 'Passed' : status === 'failed' ? 'Failed' : status === 'pending' ? 'Pending' : status === 'available' ? 'Available' : 'Not started'}</span></div>;
+                    return <div key={attemptNumber} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950"><div className="flex-1"><p className="font-bold text-slate-800 dark:text-slate-100">Attempt {attemptNumber}</p><p className="text-[10px] text-slate-500 dark:text-slate-400">{attempt?.scheduledDate ? `Scheduled ${attempt.scheduledDate} · ` : ''}{isFiniteNumber(attempt?.percentage) ? `${attempt.percentage.toFixed(2)}% · ` : ''}{attemptStatusLabel(status)}</p></div><span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{status === 'passed' ? 'Passed' : status === 'failed' ? 'Failed' : status === 'pending' ? 'Pending' : status === 'available' ? 'Available' : 'Not started'}</span></div>;
                   })}
                 </div>
                 <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">Original final grade remains unchanged. A remedial pass changes progression readiness only. Legacy records are not interpreted as a new attempt.</p>

@@ -637,7 +637,7 @@ export const AttendanceList: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Attendance Monitoring
           </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             Select an assigned class below to manage its roll call, monitor active check-ins, and schedule attendance sessions.
           </p>
         </div>
@@ -685,7 +685,7 @@ export const AttendanceList: React.FC = () => {
           <button
             type="button"
             onClick={() => setFeedback(null)}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs cursor-pointer"
+            className="text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs cursor-pointer"
           >
             Dismiss
           </button>
@@ -706,14 +706,14 @@ export const AttendanceList: React.FC = () => {
                     {assignedClassCards.length}
                   </span>
                 </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Click a card to view its live attendance roll call, session controls, and student roster.
                 </p>
               </div>
 
               {/* Term Selector */}
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Term:</span>
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Term:</span>
                 <div className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 shadow-xs">
                   2026-2027 (Current)
                 </div>
@@ -731,7 +731,7 @@ export const AttendanceList: React.FC = () => {
                 ))}
               </div>
             ) : assignedClassCards.length === 0 ? (
-              <Card className="p-8 text-center text-slate-400">
+              <Card className="p-8 text-center text-slate-500 dark:text-slate-400">
                 <BookOpen className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
                 <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
                   No classes assigned to this workspace.
@@ -771,7 +771,7 @@ export const AttendanceList: React.FC = () => {
                                 Live
                               </span>
                             ) : (
-                              <span className="inline-flex whitespace-nowrap items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50">
+                              <span className="inline-flex whitespace-nowrap items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium text-slate-500 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50">
                                 <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />
                                 Idle
                               </span>
@@ -932,11 +932,11 @@ export const AttendanceList: React.FC = () => {
                 <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-extrabold bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300">
                   {selectedSubject !== 'all' ? selectedSubject : (className || 'SECTION')}
                 </span>
-                <span className="text-xs font-bold text-slate-400">&bull;</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">&bull;</span>
                 <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
                   {className || 'Class Section'}
                 </span>
-                <span className="text-xs font-bold text-slate-400">&bull;</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">&bull;</span>
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                   1st Semester 2026-2027
                 </span>
@@ -974,7 +974,7 @@ export const AttendanceList: React.FC = () => {
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700">
                   <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Worksheet Date:</span>
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Worksheet Date:</span>
                   <input
                     type="date"
                     value={date}
@@ -1007,7 +1007,7 @@ export const AttendanceList: React.FC = () => {
                       setDate('');
                       setSessionId('');
                     }}
-                    className="px-3 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
+                    className="px-3 py-2 rounded-xl text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
                   >
                     Clear Date
                   </button>
@@ -1076,7 +1076,7 @@ export const AttendanceList: React.FC = () => {
               <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-800/80 text-xs">
                 {shownSessions.length > 0 && (
                 <label className="flex items-center gap-2 font-bold text-slate-600 dark:text-slate-300">
-                  <span className="text-[10px] uppercase tracking-wider text-slate-400">Switch Session:</span>
+                  <span className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Switch Session:</span>
                   <select
                     value={sessionId}
                     disabled={submitting}
@@ -1137,18 +1137,18 @@ export const AttendanceList: React.FC = () => {
             <span className="rounded-lg bg-sky-500/10 px-2.5 py-1 text-[10px] font-bold text-sky-700 dark:text-sky-300">
               Excused: {excused}
             </span>
-            <span className="ml-auto text-[10px] font-bold text-slate-400">
+            <span className="ml-auto text-[10px] font-bold text-slate-500 dark:text-slate-400">
               {filtered.length ? Math.round((attended / filtered.length) * 100) : 0}% attended
             </span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
             <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Enrolled</span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Enrolled</span>
               <span className="text-xl font-extrabold font-heading text-slate-800 dark:text-slate-100">{filtered.length}</span>
             </div>
             <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Recorded</span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Recorded</span>
               <span className="text-xl font-extrabold font-heading text-slate-700 dark:text-slate-300">{recorded}</span>
             </div>
             <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shadow-xs">
@@ -1180,7 +1180,7 @@ export const AttendanceList: React.FC = () => {
           <Card className="p-0 overflow-hidden border border-slate-200/80 dark:border-slate-800 shadow-xs">
             <div className="max-h-[560px] overflow-y-auto overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-xs border-collapse">
-                <thead className="sticky top-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-xs border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 z-10">
+                <thead className="sticky top-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-xs border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
                   <tr>
                     <th className="py-3 px-4 sm:py-4 sm:px-6">STUDENT DETAILS</th>
                     <th className="py-3 px-4 sm:py-4 sm:px-6">CHECK-IN TIME</th>
@@ -1192,14 +1192,14 @@ export const AttendanceList: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                   {loading || sessionLoading ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-slate-400">
+                      <td colSpan={5} className="py-12 text-center text-slate-500 dark:text-slate-400">
                         <RefreshCw className="w-6 h-6 mx-auto mb-2 text-blue-500 animate-spin" />
                         <span>Loading persisted attendance…</span>
                       </td>
                     </tr>
                   ) : filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-slate-400">
+                      <td colSpan={5} className="py-12 text-center text-slate-500 dark:text-slate-400">
                         No attendance records match this filter.
                       </td>
                     </tr>
@@ -1214,7 +1214,7 @@ export const AttendanceList: React.FC = () => {
                           <span className="font-bold text-slate-800 dark:text-slate-100 block text-xs sm:text-sm">
                             {record.studentName}
                           </span>
-                          <span className="text-[11px] text-slate-400 font-medium">
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                             {record.studentNumber} • Year {record.yearLevel || 1}
                           </span>
                         </td>
@@ -1258,9 +1258,9 @@ export const AttendanceList: React.FC = () => {
                         {/* Column 5: ACTIONS */}
                         <td className="py-3 px-4 sm:py-4 sm:px-6 text-right">
                           {revokedSessionOpen ? (
-                            <span className="text-xs font-bold text-slate-400">View-only</span>
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">View-only</span>
                           ) : record.excusedApprovedByFaculty ? (
-                            <span className="text-xs font-bold text-slate-400">Approved by Faculty</span>
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Approved by Faculty</span>
                           ) : (
                           <button
                             type="button"
@@ -1358,25 +1358,25 @@ export const AttendanceList: React.FC = () => {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1 text-slate-700 dark:text-slate-300">
                         {liveCurrentSession.subjectCode && (
                           <div>
-                            <span className="font-semibold text-slate-400">Subject: </span>
+                            <span className="font-semibold text-slate-500 dark:text-slate-400">Subject: </span>
                             <span className="font-bold">{liveCurrentSession.subjectCode}</span>
                           </div>
                         )}
                         {liveCurrentSession.room && (
                           <div>
-                            <span className="font-semibold text-slate-400">Room: </span>
+                            <span className="font-semibold text-slate-500 dark:text-slate-400">Room: </span>
                             <span className="font-bold">{liveCurrentSession.room}</span>
                           </div>
                         )}
                         <div>
-                          <span className="font-semibold text-slate-400">Time window: </span>
+                          <span className="font-semibold text-slate-500 dark:text-slate-400">Time window: </span>
                           <span>
                             {liveCurrentSession.openingTime ? formatSessionTime(liveCurrentSession.openingTime) : '—'} – {liveCurrentSession.classEndTime ? formatSessionTime(liveCurrentSession.classEndTime) : '—'}
                           </span>
                         </div>
                         {liveCurrentSession.presentCutoff && (
                           <div>
-                            <span className="font-semibold text-slate-400">Present cutoff: </span>
+                            <span className="font-semibold text-slate-500 dark:text-slate-400">Present cutoff: </span>
                             <span>{formatSessionTime(liveCurrentSession.presentCutoff)}</span>
                           </div>
                         )}
@@ -1436,12 +1436,12 @@ export const AttendanceList: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="p-8 text-center text-slate-400 space-y-2">
+                  <div className="p-8 text-center text-slate-500 dark:text-slate-400 space-y-2">
                     <Clock className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
                     <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
                       No active attendance session is running right now.
                     </p>
-                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
                       When a scheduled session arrives at its opening time, it will automatically appear here.
                     </p>
                     <div className="pt-2">
@@ -1463,12 +1463,12 @@ export const AttendanceList: React.FC = () => {
             {sessionModalTab === 'upcoming' && (
               <div className="space-y-3">
                 {upcomingSessions.length === 0 ? (
-                  <div className="p-8 text-center text-slate-400 space-y-2">
+                  <div className="p-8 text-center text-slate-500 dark:text-slate-400 space-y-2">
                     <Calendar className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
                     <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
                       No upcoming sessions scheduled.
                     </p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                       You can schedule future sessions in the Start Attendance Session screen.
                     </p>
                   </div>
@@ -1489,7 +1489,7 @@ export const AttendanceList: React.FC = () => {
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                               {countdown}
                             </span>
-                            <span className="font-mono text-xs text-slate-400">({s.sessionCode})</span>
+                            <span className="font-mono text-xs text-slate-500 dark:text-slate-400">({s.sessionCode})</span>
                           </div>
                           <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
                             <span>Date: {sDate}</span>
@@ -1645,7 +1645,7 @@ export const AttendanceList: React.FC = () => {
                 placeholder="e.g. Schedule cancellation, room change, or incorrect session parameters..."
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:border-rose-500"
               />
-              <span className="text-[10px] text-slate-400 block mt-1 text-right">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 text-right">
                 {revokeReason.length}/500
               </span>
             </div>
@@ -1703,7 +1703,7 @@ export const AttendanceList: React.FC = () => {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Current:</span>
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Current:</span>
                   <span className={`rounded-lg px-2.5 py-1 text-xs font-extrabold capitalize ${statusClass[selectedRecord.status] || 'bg-slate-100 text-slate-600'}`}>
                     {selectedRecord.status || 'Not recorded'}
                   </span>
@@ -1773,7 +1773,7 @@ export const AttendanceList: React.FC = () => {
                 maxLength={overrideStatus === 'excused' ? 500 : 240}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800 outline-none focus:border-blue-500 focus:bg-white dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-100 dark:focus:bg-slate-800"
               />
-              <span className="text-[10px] text-slate-400 block mt-1 text-right">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 text-right">
                 {reason.length}/{overrideStatus === 'excused' ? 500 : 240}
               </span>
             </div>
@@ -1816,7 +1816,7 @@ export const AttendanceList: React.FC = () => {
         onSelectSection={id => void selectStartSection(id)}
         initialRoom={startSections.find(sec => sec.classId === startCsId)?.classroomName ?? ''}
         initialLocation={startLocation}
-        note={otherLiveName ? <p className="text-xs text-slate-400 dark:text-slate-500">{otherLiveName} has a live session.</p> : null}
+        note={otherLiveName ? <p className="text-xs text-slate-500 dark:text-slate-500">{otherLiveName} has a live session.</p> : null}
       />
     </div>
   );

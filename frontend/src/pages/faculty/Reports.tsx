@@ -648,11 +648,11 @@ export const Reports: React.FC = () => {
     <div className="space-y-6">
       
       {/* Page Header - Hidden during print */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 no-print border-b border-slate-205 dark:border-slate-800 pb-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 no-print border-b dark:border-slate-800 pb-4">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <FileSpreadsheet className="w-6 h-6 text-clinical-550" />
+              <FileSpreadsheet className="w-6 h-6" />
               Reports & Analytics
             </h1>
             {currentSchoolYear && (
@@ -662,7 +662,7 @@ export const Reports: React.FC = () => {
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Generate course grade reports, print report sheets, and review analytics dashboards</p>
+          <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">Generate course grade reports, print report sheets, and review analytics dashboards</p>
         </div>
       </div>
 
@@ -670,14 +670,14 @@ export const Reports: React.FC = () => {
       <Card className="p-4 flex flex-col xl:flex-row gap-4 xl:items-center no-print">
         {/* School Year Filter */}
         <div className="w-full xl:w-52">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
             <CalendarDays className="w-3 h-3 text-clinical-600" />
             School Year
           </label>
           <select
             value={selectedSchoolYear}
             onChange={(e) => setSelectedSchoolYear(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 cursor-pointer"
+            className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 cursor-pointer"
           >
             <option value="all">All School Years</option>
             {availableSchoolYears.map(sy => (
@@ -690,7 +690,7 @@ export const Reports: React.FC = () => {
 
         {/* Active Course */}
         <div className="w-full xl:flex-1">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
+          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
           <select
             value={selectedSubjectCode}
             onChange={(e) => {
@@ -703,7 +703,7 @@ export const Reports: React.FC = () => {
                 setSelectedClassId('');
               }
             }}
-            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 cursor-pointer"
+            className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 cursor-pointer"
           >
             {activeCourses.length === 0 ? (
               <option value="">No active courses for selected year</option>
@@ -719,11 +719,11 @@ export const Reports: React.FC = () => {
 
         {/* Active Section / Class */}
         <div className="w-full xl:w-56">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
+          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
           <select
             value={selectedClassId}
             onChange={(e) => setSelectedClassId(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 cursor-pointer"
+            className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 cursor-pointer"
           >
             {availableClasses.length === 0 ? (
               <option value="">No active sections assigned</option>
@@ -745,7 +745,7 @@ export const Reports: React.FC = () => {
           className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
             reportTab === 'academic' 
               ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
-              : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+              : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
           }`}
         >
           <GraduationCap className="w-4 h-4" />
@@ -756,7 +756,7 @@ export const Reports: React.FC = () => {
           className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
             reportTab === 'retention' 
               ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
-              : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+              : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
           }`}
         >
           <AlertTriangle className="w-4 h-4" />
@@ -767,7 +767,7 @@ export const Reports: React.FC = () => {
           className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
             reportTab === 'attendance' 
               ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
-              : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+              : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
           }`}
         >
           <CalendarDays className="w-4 h-4" />
@@ -778,7 +778,7 @@ export const Reports: React.FC = () => {
           className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
             reportTab === 'analytics' 
               ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
-              : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+              : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
           }`}
         >
           <TrendingUp className="w-4 h-4" />
@@ -791,10 +791,10 @@ export const Reports: React.FC = () => {
       ---------------------------------------------------- */}
       {reportTab === 'academic' && (
         <Card className="p-0 overflow-hidden no-print">
-          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex flex-wrap gap-2 justify-between items-center">
+          <div className="px-5 py-4 border-b dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex flex-wrap gap-2 justify-between items-center">
             <div className="flex-1 basis-40">
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Class Course Grade Reports</h3>
-              <p className="text-[10px] text-slate-400 mt-0.5">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                 {selectedClass ? `${selectedClass.courseCode} · ${selectedClass.csName}` : 'Overview of final academic standing'}
               </p>
             </div>
@@ -824,7 +824,7 @@ export const Reports: React.FC = () => {
           <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="w-full text-left">
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
-                <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
                   <th className="px-5 py-3">Student details</th>
                   {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Midterm Lecture</th>}
                   {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Midterm Laboratory</th>}
@@ -836,10 +836,10 @@ export const Reports: React.FC = () => {
                   <th className="px-5 py-3">Remarks</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium text-slate-750">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium">
                 {paginatedStudentsInSubject.length === 0 ? (
                   <tr>
-                    <td colSpan={isLectureLaboratoryMode ? 9 : 5} className="px-5 py-12 text-center text-slate-400 font-semibold">
+                    <td colSpan={isLectureLaboratoryMode ? 9 : 5} className="px-5 py-12 text-center text-slate-500 dark:text-slate-400 font-semibold">
                       No student records found for the selected course and class section.
                     </td>
                   </tr>
@@ -853,7 +853,7 @@ export const Reports: React.FC = () => {
                       <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
                         <td className="px-5 py-3.5">
                           <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
-                          <span className="whitespace-nowrap text-[10px] text-slate-400 font-mono">{student.studentId}</span>
+                          <span className="whitespace-nowrap text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId}</span>
                         </td>
                         {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus)}</td>}
                         {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.midtermComponents?.laboratory, evaluation.midtermStatus)}</td>}
@@ -861,7 +861,7 @@ export const Reports: React.FC = () => {
                         {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.finalComponents?.lecture, evaluation.finalStatus)}</td>}
                         {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus)}</td>}
                         <td className="px-5 py-3.5 text-center font-mono">{formatPercent(evaluation.finalPercentage)}</td>
-                        <td className="px-5 py-3.5 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
+                        <td className="px-5 py-3.5 text-center font-extrabold text-sm dark:text-slate-100">
                           {evaluation.overallGwa !== null ? <GradeValue percentage={evaluation.overallPercentage} grade={evaluation.overallGwa}>{formatCourseGrade(evaluation)}</GradeValue> : formatCourseGrade(evaluation)}
                         </td>
                         <td className="px-5 py-3.5">
@@ -888,7 +888,7 @@ export const Reports: React.FC = () => {
           {/* Pagination controls */}
           {totalPagesInSubject > 1 && (
             <div className="flex items-center justify-between p-4 border-t border-slate-100 dark:border-slate-800 text-xs">
-              <span className="text-slate-400">
+              <span className="text-slate-500 dark:text-slate-400">
                 Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, studentsInSelectedSubject.length)} of {studentsInSelectedSubject.length} records
               </span>
               <div className="flex gap-2">
@@ -920,7 +920,7 @@ export const Reports: React.FC = () => {
       ---------------------------------------------------- */}
       {reportTab === 'retention' && (
         <Card className="p-0 overflow-hidden no-print">
-          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex flex-wrap gap-2 justify-between items-center">
+          <div className="px-5 py-4 border-b dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex flex-wrap gap-2 justify-between items-center">
             <h3 className="flex-1 basis-40 font-bold text-sm text-slate-800 dark:text-slate-200">Retention Status Reports</h3>
             <div className="flex shrink-0 items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
               <button
@@ -948,7 +948,7 @@ export const Reports: React.FC = () => {
           <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="w-full text-left">
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
-                <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
                   <th className="px-5 py-3">Student details</th>
                   <th className="px-5 py-3 text-center">Standing Grade</th>
                   <th className="px-5 py-3 text-center">At-Risk Courses</th>
@@ -956,7 +956,7 @@ export const Reports: React.FC = () => {
                   <th className="px-5 py-3">Remedial Program Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium text-slate-750">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium">
                 {facultyStudents.map((student: any) => {
                   const warnings = retentionUnavailable ? [] : (student.enrolledSubjects || []).filter((sub: any) =>
                     assignedSubjects.includes(sub.code)
@@ -970,7 +970,7 @@ export const Reports: React.FC = () => {
                     <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
                       <td className="px-5 py-3.5">
                         <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
-                        <span className="whitespace-nowrap text-[10px] text-slate-404">{student.studentId} • Year {student.yearLevel}</span>
+                        <span className="whitespace-nowrap text-[10px]">{student.studentId} • Year {student.yearLevel}</span>
                       </td>
                       <td className="px-5 py-3.5 text-center font-bold text-slate-800 dark:text-slate-100">
                         {gwa !== null ? gwa.toFixed(2) : '—'}
@@ -983,11 +983,11 @@ export const Reports: React.FC = () => {
                           {retentionUnavailable ? 'UNAVAILABLE' : isAtRisk ? 'At Risk' : ''}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-slate-550 dark:text-slate-400">
+                      <td className="px-5 py-3.5 dark:text-slate-400">
                         {remedialStatus === 'No remedial' || remedialStatus === 'Unavailable' ? (
-                          <span className="font-medium text-slate-400">{remedialStatus}</span>
+                          <span className="font-medium text-slate-500 dark:text-slate-400">{remedialStatus}</span>
                         ) : (
-                          <span className="font-semibold text-violet-555 flex items-center gap-1">
+                          <span className="font-semibold flex items-center gap-1">
                             <Clock className="w-3.5 h-3.5" /> {remedialStatus}
                           </span>
                         )}
@@ -1006,10 +1006,10 @@ export const Reports: React.FC = () => {
       ---------------------------------------------------- */}
       {reportTab === 'attendance' && (
         <Card className="p-0 overflow-hidden no-print">
-          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex flex-wrap gap-2 justify-between items-center">
+          <div className="px-5 py-4 border-b dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex flex-wrap gap-2 justify-between items-center">
             <div className="flex-1 basis-40">
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Authoritative Attendance Register</h3>
-              <p className="text-[11px] text-slate-400 mt-1">{selectedClass?.courseCode || 'Class unavailable'} · {attendanceDate}</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{selectedClass?.courseCode || 'Class unavailable'} · {attendanceDate}</p>
             </div>
             <div className="flex items-center gap-2">
               <input
@@ -1065,28 +1065,28 @@ export const Reports: React.FC = () => {
                 <span>{attendanceError}</span>
               </div>
             )}
-            {attendanceLoading && <p className="p-6 text-center text-xs text-slate-400">Loading persisted attendance records…</p>}
+            {attendanceLoading && <p className="p-6 text-center text-xs text-slate-500 dark:text-slate-400">Loading persisted attendance records…</p>}
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
                   <th className="px-5 py-3">Date</th>
                   <th className="px-5 py-3">Student details</th>
                   <th className="px-5 py-3">Subject Code</th>
                   <th className="px-5 py-3">Recorded Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium text-slate-750">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium">
                 {!attendanceLoading && attendanceRecords.length === 0 ? (
-                  <tr><td colSpan={4} className="px-5 py-10 text-center text-xs text-slate-400">No persisted attendance records for this class and date.</td></tr>
+                  <tr><td colSpan={4} className="px-5 py-10 text-center text-xs text-slate-500 dark:text-slate-400">No persisted attendance records for this class and date.</td></tr>
                 ) : attendanceRecords.map(record => {
                     return (
                       <tr key={record.enrollmentId} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
                         <td className="px-5 py-3 font-mono">{record.date}</td>
                         <td className="px-5 py-3">
                           <div className="font-bold text-slate-800 dark:text-slate-200">{record.studentName || 'Student name unavailable'}</div>
-                          <span className="whitespace-nowrap text-[10px] text-slate-400 font-mono">{record.studentNumber || 'Student number unavailable'}</span>
+                          <span className="whitespace-nowrap text-[10px] text-slate-500 dark:text-slate-400 font-mono">{record.studentNumber || 'Student number unavailable'}</span>
                         </td>
-                        <td className="px-5 py-3 font-bold font-mono text-clinical-650">{selectedClass?.courseCode || 'Course unavailable'}</td>
+                        <td className="px-5 py-3 font-bold font-mono">{selectedClass?.courseCode || 'Course unavailable'}</td>
                         <td className="px-5 py-3">
                           <span className={`whitespace-nowrap px-2 py-0.5 rounded font-extrabold uppercase text-[9px] ${
                             record.status === 'present' ? 'bg-emerald-100 text-emerald-700' :
@@ -1114,19 +1114,19 @@ export const Reports: React.FC = () => {
           {/* Pie Chart */}
           <Card className="p-5 flex flex-col justify-between">
             <div>
-              <h4 className="text-xs font-bold text-slate-850 dark:text-slate-200 uppercase tracking-wider mb-2 flex items-center gap-1">
-                <Layers className="w-4 h-4 text-clinical-550" />
+              <h4 className="text-xs font-bold dark:text-slate-200 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <Layers className="w-4 h-4" />
                 Retention Watch Standings
               </h4>
-              <p className="text-[10px] text-slate-400 mb-4">Proportion of students by computed retention status</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-4">Proportion of students by computed retention status</p>
             </div>
             <div className="h-56 flex items-center justify-center">
               {retentionUnavailable ? (
-                <p className="text-xs text-slate-400 font-semibold">
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
                   {retentionLoading ? 'Loading authoritative retention data…' : 'Retention distribution unavailable.'}
                 </p>
               ) : pieData.length === 0 ? (
-                <p className="text-xs text-slate-400 font-semibold">No retention distribution data available.</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">No retention distribution data available.</p>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -1160,11 +1160,11 @@ export const Reports: React.FC = () => {
           {/* Bar Chart */}
           <Card className="p-5 flex flex-col justify-between">
             <div>
-              <h4 className="text-xs font-bold text-slate-850 dark:text-slate-200 uppercase tracking-wider mb-2 flex items-center gap-1">
-                <FileCheck className="w-4 h-4 text-accent-505" />
+              <h4 className="text-xs font-bold dark:text-slate-200 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <FileCheck className="w-4 h-4" />
                 Grade Distribution
               </h4>
-              <p className="text-[10px] text-slate-400 mb-4">Students per course grade band in the selected section; 2.50 or worse triggers remedial</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-4">Students per course grade band in the selected section; 2.50 or worse triggers remedial</p>
             </div>
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
@@ -1182,19 +1182,19 @@ export const Reports: React.FC = () => {
           {/* Assessment Performance Chart */}
           <Card className="p-5 flex flex-col justify-between md:col-span-2">
             <div>
-              <h4 className="text-xs font-bold text-slate-855 dark:text-slate-200 uppercase tracking-wider mb-2 flex items-center gap-1">
-                <FileText className="w-4 h-4 text-clinical-550" />
+              <h4 className="text-xs font-bold dark:text-slate-200 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <FileText className="w-4 h-4" />
                 Assessment Average Success Rates
               </h4>
-              <p className="text-[10px] text-slate-400 mb-4">Average scores across created assessment activities (out of 100%)</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-4">Average scores across created assessment activities (out of 100%)</p>
             </div>
             <div className="h-56">
               {analyticsAttendanceLoading ? (
-                <div className="py-12 text-center text-slate-405 text-xs">Loading authoritative attendance records…</div>
+                <div className="py-12 text-center text-xs">Loading authoritative attendance records…</div>
               ) : analyticsAttendanceError ? (
-                <div className="py-12 text-center text-slate-405 text-xs">Assessment attendance data is unavailable.</div>
+                <div className="py-12 text-center text-xs">Assessment attendance data is unavailable.</div>
               ) : assessmentStatsData.length === 0 ? (
-                <div className="py-12 text-center text-slate-405 text-xs">No assessment grades recorded yet.</div>
+                <div className="py-12 text-center text-xs">No assessment grades recorded yet.</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={assessmentStatsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>

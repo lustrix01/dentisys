@@ -123,7 +123,7 @@ const attemptStatusLabel = (status: RemedialAttemptStatus | 'available' | 'not_s
 
 const GradePill: React.FC<{ grade: number | null; percentage?: number | null }> = ({ grade, percentage }) => {
   if (grade === null) {
-    return <span className="text-slate-400 italic text-xs">Pending</span>;
+    return <span className="text-slate-500 dark:text-slate-400 italic text-xs">Pending</span>;
   }
   const isSafe = grade < 2.5;
   const isLimit = grade === 2.5;
@@ -451,7 +451,7 @@ export const RetentionMonitoring: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-50/50 dark:bg-slate-800/40">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-50/50 dark:bg-slate-800/40">
                   <th className="py-3 px-4">Course</th>
                   <th className="py-3 px-4 text-center">Midterm</th>
                   <th className="py-3 px-4 text-center">Final Grade</th>
@@ -461,7 +461,7 @@ export const RetentionMonitoring: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {currentRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-10 text-center text-slate-400">
+                    <td colSpan={4} className="py-10 text-center text-slate-500 dark:text-slate-400">
                       No courses enrolled for the active term.
                     </td>
                   </tr>
@@ -483,7 +483,7 @@ export const RetentionMonitoring: React.FC = () => {
                             <span className="text-slate-800 dark:text-slate-100 font-semibold">
                               {cls.courseName}
                             </span>
-                            <div className="text-[10px] text-slate-400">
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400">
                               {cls.isClinical ? 'Clinical Lab' : 'Lecture'} · {cls.units} Units · {cls.instructorName || 'Faculty'}
                             </div>
                           </div>
@@ -502,7 +502,7 @@ export const RetentionMonitoring: React.FC = () => {
                               )}
                             </div>
                           ) : (
-                            <span className="text-slate-400 italic">Pending</span>
+                            <span className="text-slate-500 dark:text-slate-400 italic">Pending</span>
                           )}
                         </td>
 
@@ -548,7 +548,7 @@ export const RetentionMonitoring: React.FC = () => {
           <Card className="p-8 text-center space-y-2 border border-slate-200 dark:border-slate-800">
             <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
             <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">{standingPending ? 'Remedial Requirements Pending' : 'No Remedial Exams Required'}</h3>
-            <p className="text-xs text-slate-400">{standingPending ? 'Final grades are pending; remedial requirements cannot yet be confirmed.' : 'No remedial requirements are recorded.'}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{standingPending ? 'Final grades are pending; remedial requirements cannot yet be confirmed.' : 'No remedial requirements are recorded.'}</p>
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -580,7 +580,7 @@ export const RetentionMonitoring: React.FC = () => {
                       <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-tight">
                         {cls.courseName}
                       </h4>
-                      <p className="text-[10px] text-slate-400">Instructor: {cls.instructorName || 'Faculty'}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Instructor: {cls.instructorName || 'Faculty'}</p>
                     </div>
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
                       Grade: {cls.grade !== null ? <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue> : '—'}
@@ -668,7 +668,7 @@ export const RetentionMonitoring: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-50/50 dark:bg-slate-800/40">
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-50/50 dark:bg-slate-800/40">
                     <th className="py-3 px-4">Course</th>
                     <th className="py-3 px-4 text-center">Midterm Score</th>
                     <th className="py-3 px-4 text-center">Midterm Grade</th>
@@ -678,7 +678,7 @@ export const RetentionMonitoring: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                   {midtermRiskRecords.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="py-8 text-center text-slate-400">
+                      <td colSpan={4} className="py-8 text-center text-slate-500 dark:text-slate-400">
                         <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
                         {currentRecords.length === 0 ? 'No current courses available for a midterm advisory.' : 'No courses are on the Midterm Advisory.'}
                       </td>
@@ -693,7 +693,7 @@ export const RetentionMonitoring: React.FC = () => {
                           <span className="font-semibold text-slate-800 dark:text-slate-100">
                             {cls.courseName}
                           </span>
-                          <div className="text-[10px] text-slate-400">
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">
                             Instructor: {cls.instructorName || 'Faculty'}
                           </div>
                         </td>
@@ -720,7 +720,7 @@ export const RetentionMonitoring: React.FC = () => {
       {/* --- TAB 4: PAST COURSES --- */}
       {activeTab === 'past' && (
         pastSemesters.length === 0 ? (
-          <Card className="p-8 text-center text-xs text-slate-400">
+          <Card className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
             No past course history available.
           </Card>
         ) : (
@@ -742,7 +742,7 @@ export const RetentionMonitoring: React.FC = () => {
                       <h4 className="font-bold text-xs text-slate-800 dark:text-slate-100">
                         S.Y. {sem.schoolYear} · {sem.semester}
                       </h4>
-                      <p className="text-[10px] text-slate-400">
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
                         {sem.records.length} Courses
                       </p>
                     </div>
@@ -753,7 +753,7 @@ export const RetentionMonitoring: React.FC = () => {
                     <div className="p-3 border-t border-slate-100 dark:border-slate-800 overflow-x-auto">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
-                          <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                          <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                             <th className="py-2 px-3">Course</th>
                             <th className="py-2 px-3 text-center">Grade</th>
                             <th className="py-2 px-3">Status</th>

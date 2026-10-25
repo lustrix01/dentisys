@@ -83,7 +83,7 @@ export const Profile: React.FC = () => {
           <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             My Profile
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Review and update the account and classroom scope assigned to your attendance role.
           </p>
         </div>
@@ -103,7 +103,7 @@ export const Profile: React.FC = () => {
       {loading ? (
         <div className="py-16 text-center">
           <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-xs text-slate-400">Loading profile details...</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Loading profile details...</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
@@ -146,8 +146,8 @@ export const Profile: React.FC = () => {
               <CardContent className="p-5">
                 <div className="grid sm:grid-cols-2 gap-3">
                   {details.map(({ label, value, icon: Icon }) => (
-                    <div key={label} className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-150 dark:border-slate-800">
-                      <div className="flex items-center gap-2 text-slate-400">
+                    <div key={label} className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border dark:border-slate-800">
+                      <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
                         <Icon className="w-4 h-4 text-blue-500" />
                         <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
                       </div>
@@ -175,7 +175,7 @@ export const Profile: React.FC = () => {
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
             <div>
               <h4 className="font-bold text-slate-800 dark:text-slate-100">Secretary Attendance Operations</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                 Class Secretaries supervise room attendance and manual overrides. Student self-service biometrics are managed under Student view.
               </p>
             </div>

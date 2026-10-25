@@ -141,7 +141,7 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
 
           {/* Current Password */}
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
               Current Password *
             </label>
             <div className="relative">
@@ -160,7 +160,7 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
                 type="button"
                 onClick={() => setShowCurrent(!showCurrent)}
                 aria-label={showCurrent ? 'Hide current password' : 'Show current password'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
               >
                 {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -169,7 +169,7 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
 
           {/* New Password */}
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
               New Password *
             </label>
             <div className="relative">
@@ -191,7 +191,7 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
                 type="button"
                 onClick={() => setShowNew(!showNew)}
                 aria-label={showNew ? 'Hide new password' : 'Show new password'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
               >
                 {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -210,13 +210,13 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
                   );
                 })}
               </ul>
-              <p className="mt-1.5 text-[10px] text-slate-400">It must also be different from your current password.</p>
+              <p className="mt-1.5 text-[10px] text-slate-500 dark:text-slate-400">It must also be different from your current password.</p>
             </div>
           </div>
 
           {/* Confirm Password */}
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
               Confirm New Password *
             </label>
             <div className="relative">
@@ -236,7 +236,7 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
                 type="button"
                 onClick={() => setShowConfirm(!showConfirm)}
                 aria-label={showConfirm ? 'Hide confirmation password' : 'Show confirmation password'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
               >
                 {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>

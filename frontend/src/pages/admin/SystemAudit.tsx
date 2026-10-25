@@ -360,7 +360,7 @@ export const DeanReports: React.FC = () => {
           <h1 className="text-xl sm:text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Reports & Analytics
           </h1>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 sm:mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-500 mt-0.5 sm:mt-1">
             Generate institutional academic, retention, and attendance reports.
           </p>
         </div>
@@ -391,7 +391,7 @@ export const DeanReports: React.FC = () => {
             className={`flex-1 min-w-[125px] sm:min-w-[140px] py-2 px-2.5 sm:px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
               activeTab === tab.id
                 ? 'bg-accent-600 text-white shadow-md'
-                : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
           >
             {tab.icon}
@@ -510,13 +510,13 @@ export const DeanReports: React.FC = () => {
             {/* Class Cards Grid */}
             {displayedClassCards.length === 0 ? (
               <Card className="p-8 sm:p-10 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400 mb-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-500 dark:text-slate-400 mb-3">
                   {classSectionTab === 'archived' ? <Archive className="w-6 h-6" /> : <GraduationCap className="w-6 h-6" />}
                 </div>
                 <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
                   {classSectionTab === 'archived' ? 'No Archived Classes' : 'No Active Classes Found'}
                 </h3>
-                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
                   {classSearch
                     ? 'No classes match your search query. Try clearing the search filter.'
                     : classSectionTab === 'archived'
@@ -548,7 +548,7 @@ export const DeanReports: React.FC = () => {
                               {cls.name}
                             </h3>
                             {cls.yearLevel && (
-                              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
+                              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-500">
                                 Year {cls.yearLevel}
                               </span>
                             )}
@@ -627,7 +627,7 @@ export const DeanReports: React.FC = () => {
                     )}
                   </h2>
                   {currentSelectedClass?.subjectCode && (
-                    <p className="text-xs text-slate-400 mt-0.5 truncate">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                       {currentSelectedClass.subjectCode} {currentSelectedClass.subjectName ? `· ${currentSelectedClass.subjectName}` : ''}
                     </p>
                   )}
@@ -656,7 +656,7 @@ export const DeanReports: React.FC = () => {
                     <option value="remedial">Remedial</option>
                     <option value="cleared">Cleared</option>
                   </select>
-                  <span className="text-[10px] text-slate-400 font-semibold whitespace-nowrap">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold whitespace-nowrap">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
                 </div>
               </div>
             </div>
@@ -671,7 +671,7 @@ export const DeanReports: React.FC = () => {
               <CardContent className="overflow-x-auto max-h-[480px] overflow-y-auto">
                 <table className="w-full text-left text-xs min-w-[640px]">
                   <thead className="sticky top-0 bg-white dark:bg-slate-950 z-10">
-                    <tr className="text-[9px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                    <tr className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                       <th className="py-2.5 px-3">Student ID</th>
                       <th className="py-2.5 px-3">Name</th>
                       <th className="py-2.5 px-3">Class</th>
@@ -696,12 +696,12 @@ export const DeanReports: React.FC = () => {
                             {gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? (
                               <GradeValue percentage={sub?.percentage} grade={Number(gradeVal)}>{formatGrade(Number(gradeVal))}</GradeValue>
                             ) : (
-                              <span className="text-slate-400 font-normal">—</span>
+                              <span className="text-slate-500 dark:text-slate-400 font-normal">—</span>
                             )}
                           </td>
                           <td className="py-3 px-3"><StatusBadge status={s.status} /></td>
                           <td className="py-3 px-3">
-                            <span className={`text-[9px] font-bold ${s.faceEnrolled ? 'text-emerald-600' : 'text-slate-400'}`}>
+                            <span className={`text-[9px] font-bold ${s.faceEnrolled ? 'text-emerald-600' : 'text-slate-500 dark:text-slate-400'}`}>
                               {s.faceEnrolled ? '✓ Enrolled' : 'Not enrolled'}
                             </span>
                             {s.faceEnrolled && (
@@ -722,12 +722,12 @@ export const DeanReports: React.FC = () => {
                     })}
                   </tbody>
                 </table>
-                {filtered.length === 0 && <p className="py-8 text-center text-xs text-slate-400">No students match the current filters.</p>}
+                {filtered.length === 0 && <p className="py-8 text-center text-xs text-slate-500 dark:text-slate-400">No students match the current filters.</p>}
 
                 {/* Pagination controls */}
                 {totalPages > 1 && (
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 text-xs">
-                    <span className="text-slate-400 text-center sm:text-left text-[11px] sm:text-xs">
+                    <span className="text-slate-500 dark:text-slate-400 text-center sm:text-left text-[11px] sm:text-xs">
                       Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filtered.length)} of {filtered.length} records
                     </span>
                     <div className="flex items-center gap-1.5 sm:gap-2">
@@ -824,7 +824,7 @@ export const DeanReports: React.FC = () => {
                 { label: 'Cleared', val: students.filter((s: any) => s.status === 'cleared').length, color: 'text-sky-600' },
               ].map(item => (
                 <Card key={item.label} className="p-2.5 sm:p-3 text-center">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{item.label}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{item.label}</p>
                   <p className={`text-xl sm:text-2xl font-extrabold font-heading mt-0.5 ${item.color}`}>{item.val}</p>
                 </Card>
               ))}
@@ -833,13 +833,13 @@ export const DeanReports: React.FC = () => {
             {/* Class Cards Grid */}
             {displayedClassCards.length === 0 ? (
               <Card className="p-8 sm:p-10 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400 mb-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-500 dark:text-slate-400 mb-3">
                   {classSectionTab === 'archived' ? <Archive className="w-6 h-6" /> : <GraduationCap className="w-6 h-6" />}
                 </div>
                 <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
                   {classSectionTab === 'archived' ? 'No Archived Classes' : 'No Active Classes Found'}
                 </h3>
-                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
                   {classSearch
                     ? 'No classes match your search query.'
                     : classSectionTab === 'archived'
@@ -873,7 +873,7 @@ export const DeanReports: React.FC = () => {
                                 {cls.name}
                               </h3>
                               {cls.yearLevel && (
-                                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
+                                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-500">
                                   Year {cls.yearLevel}
                                 </span>
                               )}
@@ -952,7 +952,7 @@ export const DeanReports: React.FC = () => {
                     )}
                   </h2>
                   {currentSelectedClass?.subjectCode && (
-                    <p className="text-xs text-slate-400 mt-0.5 truncate">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                       {currentSelectedClass.subjectCode} {currentSelectedClass.subjectName ? `· ${currentSelectedClass.subjectName}` : ''}
                     </p>
                   )}
@@ -981,7 +981,7 @@ export const DeanReports: React.FC = () => {
                     <option value="remedial">Remedial</option>
                     <option value="cleared">Cleared</option>
                   </select>
-                  <span className="text-[10px] text-slate-400 font-semibold whitespace-nowrap">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold whitespace-nowrap">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
                 </div>
               </div>
             </div>
@@ -994,7 +994,7 @@ export const DeanReports: React.FC = () => {
                 { label: 'Cleared', val: filtered.filter((s: any) => s.status === 'cleared').length, color: 'text-sky-600' },
               ].map(item => (
                 <Card key={item.label} className="p-2.5 sm:p-3 text-center">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{item.label}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{item.label}</p>
                   <p className={`text-xl sm:text-2xl font-extrabold font-heading mt-0.5 ${item.color}`}>{item.val}</p>
                 </Card>
               ))}
@@ -1010,7 +1010,7 @@ export const DeanReports: React.FC = () => {
               <CardContent className="overflow-x-auto max-h-[480px] overflow-y-auto">
                 <table className="w-full text-left text-xs min-w-[640px]">
                   <thead className="sticky top-0 bg-white dark:bg-slate-950 z-10">
-                    <tr className="text-[9px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                    <tr className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                       <th className="py-2.5 px-3">Student</th>
                       <th className="py-2.5 px-3">Class</th>
                       <th className="py-2.5 px-3">Grade</th>
@@ -1034,7 +1034,7 @@ export const DeanReports: React.FC = () => {
                             {gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? (
                               <GradeValue percentage={sub?.percentage} grade={Number(gradeVal)}>{formatGrade(Number(gradeVal))}</GradeValue>
                             ) : (
-                              <span className="text-slate-400 font-normal">—</span>
+                              <span className="text-slate-500 dark:text-slate-400 font-normal">—</span>
                             )}
                           </td>
                           <td className="py-3 px-3"><StatusBadge status={s.status} /></td>
@@ -1042,7 +1042,7 @@ export const DeanReports: React.FC = () => {
                           <td className="py-3 px-3">
                             {pendingRem > 0
                               ? <span className="text-[9px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/20 px-2 py-0.5 rounded-md">{pendingRem} Pending</span>
-                              : <span className="text-slate-400 text-[10px]">None</span>}
+                              : <span className="text-slate-500 dark:text-slate-400 text-[10px]">None</span>}
                           </td>
                           <td className="py-3 px-3">
                             {flagged > 0
@@ -1054,12 +1054,12 @@ export const DeanReports: React.FC = () => {
                     })}
                   </tbody>
                 </table>
-                {filtered.length === 0 && <p className="py-8 text-center text-xs text-slate-400">No students match the current filters.</p>}
+                {filtered.length === 0 && <p className="py-8 text-center text-xs text-slate-500 dark:text-slate-400">No students match the current filters.</p>}
 
                 {/* Pagination controls */}
                 {totalPages > 1 && (
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 text-xs">
-                    <span className="text-slate-400 text-center sm:text-left text-[11px] sm:text-xs">
+                    <span className="text-slate-500 dark:text-slate-400 text-center sm:text-left text-[11px] sm:text-xs">
                       Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filtered.length)} of {filtered.length} records
                     </span>
                     <div className="flex items-center gap-1.5 sm:gap-2">
@@ -1151,13 +1151,13 @@ export const DeanReports: React.FC = () => {
             {/* Class Attendance Cards Grid */}
             {displayedClassCards.length === 0 ? (
               <Card className="p-8 sm:p-10 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400 mb-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-500 dark:text-slate-400 mb-3">
                   {classSectionTab === 'archived' ? <Archive className="w-6 h-6" /> : <GraduationCap className="w-6 h-6" />}
                 </div>
                 <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
                   {classSectionTab === 'archived' ? 'No Archived Classes' : 'No Active Classes Found'}
                 </h3>
-                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
                   {classSearch
                     ? 'No classes match your search query.'
                     : classSectionTab === 'archived'
@@ -1193,7 +1193,7 @@ export const DeanReports: React.FC = () => {
                                 {cls.name}
                               </h3>
                               {cls.yearLevel && (
-                                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
+                                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-500">
                                   Year {cls.yearLevel}
                                 </span>
                               )}
@@ -1215,7 +1215,7 @@ export const DeanReports: React.FC = () => {
 
                         <div className="mt-4">
                           <div className="flex items-baseline justify-between mb-1.5">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Attendance Rate</span>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Attendance Rate</span>
                             <span className={`text-xl font-extrabold font-heading ${rate >= 90 ? 'text-emerald-600' : rate >= 80 ? 'text-amber-600' : 'text-rose-600'}`}>
                               {rate}%
                             </span>
@@ -1272,7 +1272,7 @@ export const DeanReports: React.FC = () => {
                     )}
                   </h2>
                   {currentSelectedClass?.subjectCode && (
-                    <p className="text-xs text-slate-400 mt-0.5 truncate">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                       {currentSelectedClass.subjectCode} {currentSelectedClass.subjectName ? `· ${currentSelectedClass.subjectName}` : ''}
                     </p>
                   )}
@@ -1302,7 +1302,7 @@ export const DeanReports: React.FC = () => {
                     <option value="absent">Absent</option>
                     <option value="excused">Excused</option>
                   </select>
-                  <span className="text-[10px] text-slate-400 font-semibold whitespace-nowrap">{filteredAttendanceRows.length} record{filteredAttendanceRows.length !== 1 ? 's' : ''}</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold whitespace-nowrap">{filteredAttendanceRows.length} record{filteredAttendanceRows.length !== 1 ? 's' : ''}</span>
                 </div>
               </div>
             </div>
@@ -1318,23 +1318,23 @@ export const DeanReports: React.FC = () => {
               return (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 no-print">
                   <Card className="p-2.5 sm:p-3 text-center">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Attendance Rate</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Attendance Rate</p>
                     <p className={`text-xl sm:text-2xl font-extrabold font-heading mt-0.5 ${rate >= 90 ? 'text-emerald-600' : rate >= 80 ? 'text-amber-600' : 'text-rose-600'}`}>{rate}%</p>
                   </Card>
                   <Card className="p-2.5 sm:p-3 text-center">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Present</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Present</p>
                     <p className="text-xl sm:text-2xl font-extrabold font-heading mt-0.5 text-emerald-600">{presentCount}</p>
                   </Card>
                   <Card className="p-2.5 sm:p-3 text-center">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Late</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Late</p>
                     <p className="text-xl sm:text-2xl font-extrabold font-heading mt-0.5 text-amber-600">{lateCount}</p>
                   </Card>
                   <Card className="p-2.5 sm:p-3 text-center">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Absent</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Absent</p>
                     <p className="text-xl sm:text-2xl font-extrabold font-heading mt-0.5 text-rose-600">{absentCount}</p>
                   </Card>
                   <Card className="p-2.5 sm:p-3 text-center col-span-2 sm:col-span-1">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Excused</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Excused</p>
                     <p className="text-xl sm:text-2xl font-extrabold font-heading mt-0.5 text-sky-600">{excusedCount}</p>
                   </Card>
                 </div>
@@ -1352,7 +1352,7 @@ export const DeanReports: React.FC = () => {
               <CardContent className="overflow-x-auto max-h-[480px] overflow-y-auto">
                 <table className="w-full text-left text-xs min-w-[560px]">
                   <thead className="sticky top-0 bg-white dark:bg-slate-950 z-10">
-                    <tr className="text-[9px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                    <tr className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                       <th className="py-2.5 px-3">Date</th>
                       <th className="py-2.5 px-3">Student No.</th>
                       <th className="py-2.5 px-3">Student Name</th>
@@ -1363,7 +1363,7 @@ export const DeanReports: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
                     {filteredAttendanceRows.length === 0 ? (
-                      <tr><td colSpan={6} className="py-8 text-center text-slate-400">No attendance records match the current filters.</td></tr>
+                      <tr><td colSpan={6} className="py-8 text-center text-slate-500 dark:text-slate-400">No attendance records match the current filters.</td></tr>
                     ) : (
                       paginatedAttendance.map((r, i) => {
                         const s = students.find(st => st.id === r.studentId);
@@ -1393,7 +1393,7 @@ export const DeanReports: React.FC = () => {
                 {/* Pagination controls */}
                 {totalAttendancePages > 1 && (
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 text-xs">
-                    <span className="text-slate-400 text-center sm:text-left text-[11px] sm:text-xs">
+                    <span className="text-slate-500 dark:text-slate-400 text-center sm:text-left text-[11px] sm:text-xs">
                       Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredAttendanceRows.length)} of {filteredAttendanceRows.length} records
                     </span>
                     <div className="flex items-center gap-1.5 sm:gap-2">

@@ -717,7 +717,7 @@ export const FaceRegistration: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Facial Recognition Registration
           </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             {isAuthoritative
               ? 'Authoritative facial biometric verification for automated clinical attendance check-in.'
               : 'Register your facial biometric model for automated, location-verified attendance check-in.'}
@@ -726,7 +726,7 @@ export const FaceRegistration: React.FC = () => {
 
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
-            <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
+            <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400 block">STUDENT ID</span>
             <span className="whitespace-nowrap text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
           </div>
         </div>
@@ -752,7 +752,7 @@ export const FaceRegistration: React.FC = () => {
           ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20'
           : currentStep > 1
             ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-            : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800'
+            : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800'
           }`}>
           <span className="text-[10px] font-bold uppercase tracking-wider block">Step 1</span>
           <span className="text-xs font-extrabold block mt-0.5">Privacy Agreement</span>
@@ -762,13 +762,13 @@ export const FaceRegistration: React.FC = () => {
           ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20'
           : currentStep > 2
             ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-            : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800'
+            : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800'
           }`}>
           <span className="text-[10px] font-bold uppercase tracking-wider block">Step 2</span>
           <span className="text-xs font-extrabold block mt-0.5">Liveness & Capture</span>
         </div>
 
-        <div className="p-3 rounded-2xl border text-center transition-all bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800">
+        <div className="p-3 rounded-2xl border text-center transition-all bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800">
           <span className="text-[10px] font-bold uppercase tracking-wider block">Step 3</span>
           <span className="text-xs font-extrabold block mt-0.5">Registration Status</span>
         </div>
@@ -846,7 +846,7 @@ export const FaceRegistration: React.FC = () => {
               disabled={!hasAgreed || isSubmittingConsent}
               className={`px-6 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 ${hasAgreed && !isSubmittingConsent
                 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20 active:scale-[0.99] cursor-pointer'
-                : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed'
                 }`}
             >
               {isSubmittingConsent ? (
@@ -1119,13 +1119,13 @@ export const FaceRegistration: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Student Name</span>
+              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Student Name</span>
               <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block">{studentName}</span>
               <span className="text-xs text-slate-500 font-mono">ID: {studentIdNum}</span>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registration Date</span>
+              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Registration Date</span>
               <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block">
                 {isAuthoritative
                   ? (profile?.enrolledAt ? new Date(profile.enrolledAt).toLocaleDateString() : 'Active')
@@ -1135,13 +1135,13 @@ export const FaceRegistration: React.FC = () => {
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Semester Expiration</span>
+              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Semester Expiration</span>
               <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block">
                 {isAuthoritative
                   ? (profile?.expiresAt ? new Date(profile.expiresAt).toLocaleDateString() : 'End of Semester')
                   : 'End of Semester'}
               </span>
-              <span className="text-[10px] text-slate-400">Expires seasonally</span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400">Expires seasonally</span>
             </div>
           </div>
 

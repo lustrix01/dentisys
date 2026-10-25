@@ -350,13 +350,13 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
   const totalCell = 'px-2 py-2 text-center font-mono font-bold text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-800/60';
 
   if (!configLoaded) {
-    return <p className="p-6 text-xs text-slate-400">Loading the grading matrix…</p>;
+    return <p className="p-6 text-xs text-slate-500 dark:text-slate-400">Loading the grading matrix…</p>;
   }
 
   return (
     <div className="space-y-3">
       {/* Interactive Filters Bar */}
-      <div className="px-5 py-3 bg-white dark:bg-slate-900 border-b border-slate-150 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="px-5 py-3 bg-white dark:bg-slate-900 border-b dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex flex-wrap items-center gap-3">
           {/* Student Search */}
           <div className="relative min-w-[210px]">
@@ -372,7 +372,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
               <button
                 type="button"
                 onClick={() => setSearchTerm('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                 title="Clear search"
               >
                 <X className="w-3.5 h-3.5" />
@@ -381,8 +381,8 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 xl:hidden">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pin:</span>
-            <div role="group" aria-label="Pin student columns" className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-755">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pin:</span>
+            <div role="group" aria-label="Pin student columns" className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-700">
               {([['Full Name', false], ['ID Number + Full Name', true]] as const).map(([label, both]) => (
                 <button
                   key={label}
@@ -405,8 +405,8 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
             <>
               {/* Period Filter */}
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Period:</span>
-                <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-750">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Period:</span>
+                <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-700">
                   <button
                     type="button"
                     onClick={() => setPeriodFilter('all')}
@@ -446,8 +446,8 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
               {/* Component Filter */}
               {config?.componentMode === 'lecture_laboratory' && (
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Component:</span>
-                <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-755">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Component:</span>
+                <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-700">
                   <button
                     type="button"
                     onClick={() => setComponentFilter('all')}
@@ -488,7 +488,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
           )}
         </div>
 
-        <div className="text-[11px] text-slate-400">
+        <div className="text-[11px] text-slate-500 dark:text-slate-400">
           Showing <span className="font-bold text-slate-700 dark:text-slate-200">{filteredStudents.length}</span> of {students.length} students
         </div>
       </div>
@@ -499,7 +499,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
         </p>
       )}
       {computeNotice && <p className="px-5 pt-1 text-[11px] text-slate-500">Calculated columns: {computeNotice}</p>}
-      <p className="px-5 text-[10px] text-slate-400">Calculated columns use the server's grade computation of the saved scores; they update after “Save All Matrix Scores”.</p>
+      <p className="px-5 text-[10px] text-slate-500 dark:text-slate-400">Calculated columns use the server's grade computation of the saved scores; they update after “Save All Matrix Scores”.</p>
 
       <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
         <table className="min-w-full border-collapse text-xs">
@@ -635,7 +635,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
             {filteredStudents.length === 0 ? (
-              <tr><td colSpan={99} className="py-12 text-center text-slate-400 font-semibold">No matching student records found.</td></tr>
+              <tr><td colSpan={99} className="py-12 text-center text-slate-500 dark:text-slate-400 font-semibold">No matching student records found.</td></tr>
             ) : filteredStudents.map((student, studentIndex) => {
               const result = results[student.id] as { status?: string; percentage?: number; gwa?: number } | undefined;
               const computed = result?.status === 'computed';

@@ -413,7 +413,7 @@ export const FacultyInvitation: React.FC = () => {
                   </span>
                 )}
               </div>
-              <span className="block text-[10px] font-medium text-slate-400">
+              <span className="block text-[10px] font-medium text-slate-500 dark:text-slate-400">
                 Enter a local part to use @{DEFAULT_EMAIL_DOMAIN}; other configured domains remain supported.
               </span>
               <datalist id="admin-faculty-create-email-domains">
@@ -482,7 +482,7 @@ export const FacultyInvitation: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                 <th className="px-4 py-3">Faculty</th>
                 <th className="px-4 py-3">Institutional email</th>
                 <th className="px-4 py-3">Invited</th>
@@ -492,9 +492,9 @@ export const FacultyInvitation: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {loading ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Loading invitations…</td></tr>
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">Loading invitations…</td></tr>
               ) : filteredInvitations.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">No Faculty invitations found.</td></tr>
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">No Faculty invitations found.</td></tr>
               ) : (
                 filteredInvitations.map(invitation => (
                   <tr key={invitation.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
@@ -586,7 +586,7 @@ export const FacultyInvitation: React.FC = () => {
                     className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                   />
                 </label>
-                <p className="text-[11px] text-slate-400">This legacy invitation has one stored display name. It is kept intact; name parts are not guessed.</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">This legacy invitation has one stored display name. It is kept intact; name parts are not guessed.</p>
               </div>
             ) : (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
@@ -670,7 +670,7 @@ export const FacultyInvitation: React.FC = () => {
               </datalist>
             </label>
 
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
               {editingInvitation?.status === 'Pending'
                 ? 'Updating a pending invitation revokes all previous security tokens and dispatches an updated invitation link.'
                 : 'Updating an expired or revoked invitation corrects the stored record. Use Reissue to send a new activation link.'}

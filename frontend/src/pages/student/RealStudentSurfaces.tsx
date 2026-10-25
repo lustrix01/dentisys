@@ -73,24 +73,24 @@ export function StudentIdentityFields({ profile }: { profile?: StudentAcademicPr
           ['Suffix', profile.suffix],
         ].map(([label, value]) => (
           <div key={label} className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{label}</span>
+            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">{label}</span>
             <p className="font-bold text-slate-800 dark:text-slate-100 text-sm break-words xl:break-normal">{value || '—'}</p>
           </div>
         ))}
         <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Full Name</span>
+          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Full Name</span>
           <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">{displayName}</p>
         </div>
         <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Login email</span>
+          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Login email</span>
           <p className="font-semibold text-slate-800 dark:text-slate-100 text-sm break-all">{loginEmail}</p>
         </div>
         <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Student number</span>
+          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Student number</span>
           <p className="font-mono font-bold text-slate-800 dark:text-slate-100 text-sm">{studentNum}</p>
         </div>
         <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Student status</span>
+          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Student status</span>
           <p className="font-bold capitalize text-slate-800 dark:text-slate-100 text-sm">{studentStatus}</p>
         </div>
       </div>
@@ -164,7 +164,7 @@ export const RealStudentDashboard: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Welcome back, {student.name}!
           </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             Monitor your clinical attendance, academic progress, and retention standing.
           </p>
         </div>
@@ -177,7 +177,7 @@ export const RealStudentDashboard: React.FC = () => {
 
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
-            <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
+            <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400 block">STUDENT ID</span>
             <span className="whitespace-nowrap text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{student.studentNumber || '—'}</span>
           </div>
           <button
@@ -201,7 +201,7 @@ export const RealStudentDashboard: React.FC = () => {
       {/* Summary KPI Cards (Preserves nulls without converting to 0!) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
         <Card className="p-4 max-[389px]:p-3 lg:max-2xl:p-3 flex flex-col justify-between min-w-0 xl:block xl:min-w-[auto] bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+          <span className="text-[9px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wider block">
             Enrolled Classes
           </span>
           <span className="text-2xl max-[389px]:text-base lg:max-2xl:text-base font-extrabold text-slate-800 dark:text-slate-100 block mt-1 whitespace-nowrap">
@@ -210,7 +210,7 @@ export const RealStudentDashboard: React.FC = () => {
         </Card>
 
         <Card className="p-4 max-[389px]:p-3 lg:max-2xl:p-3 flex flex-col justify-between min-w-0 xl:block xl:min-w-[auto] bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+          <span className="text-[9px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wider block">
             Overall Grade
           </span>
           <span className="text-2xl max-[389px]:text-base lg:max-2xl:text-base font-extrabold text-blue-600 dark:text-blue-400 block mt-1 whitespace-nowrap">
@@ -219,7 +219,7 @@ export const RealStudentDashboard: React.FC = () => {
         </Card>
 
         <Card className="p-4 max-[389px]:p-3 lg:max-2xl:p-3 flex flex-col justify-between min-w-0 xl:block xl:min-w-[auto] bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+          <span className="text-[9px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wider block">
             Attendance Rate
           </span>
           <span className="text-2xl max-[389px]:text-base lg:max-2xl:text-base font-extrabold text-emerald-600 dark:text-emerald-400 block mt-1 whitespace-nowrap">
@@ -228,7 +228,7 @@ export const RealStudentDashboard: React.FC = () => {
         </Card>
 
         <Card className="p-4 max-[389px]:p-3 lg:max-2xl:p-3 flex flex-col justify-between min-w-0 xl:block xl:min-w-[auto] bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+          <span className="text-[9px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wider block">
             Clinical Hours
           </span>
           <span className="text-2xl max-[389px]:text-base lg:max-2xl:text-base font-extrabold text-slate-800 dark:text-slate-100 block mt-1 whitespace-nowrap">
@@ -237,7 +237,7 @@ export const RealStudentDashboard: React.FC = () => {
         </Card>
 
         <Card className="p-4 max-[389px]:p-3 lg:max-2xl:p-3 flex flex-col justify-between min-w-0 xl:block xl:min-w-[auto] bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+          <span className="text-[9px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wider block">
             Retention Alerts
           </span>
           <span
@@ -286,13 +286,13 @@ export const RealStudentDashboard: React.FC = () => {
         </CardHeader>
         <CardContent className="p-0">
           {classes.length === 0 ? (
-            <div className="p-8 text-center text-xs text-slate-400">
+            <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
               No active course enrollments recorded for this term.
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
-                <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-400 uppercase text-[10px] font-bold border-b border-slate-100 dark:border-slate-800">
+                <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 uppercase text-[10px] font-bold border-b border-slate-100 dark:border-slate-800">
                   <tr>
                     <th className="py-3 px-4">Subject</th>
                     <th className="py-3 px-4">Section</th>
@@ -322,7 +322,7 @@ export const RealStudentDashboard: React.FC = () => {
                         <td className="py-3 px-4 text-center font-bold">{cls.units}</td>
                         <td className="py-3 px-4 text-center font-mono font-bold">
                           {cls.grade !== null ? <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue> : (
-                            <span className="text-slate-400 font-normal">Pending</span>
+                            <span className="text-slate-500 dark:text-slate-400 font-normal">Pending</span>
                           )}
                         </td>
                         <td className="py-3 px-4 text-center font-mono">
@@ -463,29 +463,29 @@ export const RealStudentProfile: React.FC = () => {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Institutional Email</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Institutional Email</span>
                 <p className="font-semibold text-slate-800 dark:text-slate-100 text-sm break-all">{profile?.email || '—'}</p>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Contact Number</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Contact Number</span>
                 <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">{profile?.contact || '—'}</p>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Year Level</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Year Level</span>
                 <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">
                   {profile?.yearLevel ? `Year ${profile.yearLevel}` : '—'}
                 </p>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Sex</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Sex</span>
                 <p className="font-bold capitalize text-slate-800 dark:text-slate-100 text-sm">{profile?.sex || '—'}</p>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Admission Date</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Admission Date</span>
                 <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">{profile?.admissionDate || '—'}</p>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Date of Birth</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Date of Birth</span>
                 <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">{profile?.birthdate || '—'}</p>
               </div>
             </div>

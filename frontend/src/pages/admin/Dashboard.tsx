@@ -82,7 +82,7 @@ export const Dashboard: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Welcome back, {user?.display_name || 'Dean'}
           </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             Oversee university faculty email invitations, student attendance logs, system reports, and activity audit trails.
           </p>
         </div>
@@ -128,31 +128,31 @@ export const Dashboard: React.FC = () => {
             {/* Consolidated Admin Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 text-left">
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Total Faculty</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Total Faculty</span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
                   {totalFaculty}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Total Students</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Total Students</span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
                   {totalStudents}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Good Standing</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Good Standing</span>
                 <span className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 block mt-0.5 break-words xl:break-normal">
                   {goodStanding}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">At-Risk Count</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block break-words xl:break-normal">At-Risk Count</span>
                 <span className="text-lg font-extrabold text-amber-600 dark:text-amber-400 block mt-0.5 break-words xl:break-normal">
                   {atRisk}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 col-span-2 sm:col-span-1 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Attendance Rate</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Attendance Rate</span>
                 <span className="text-lg font-extrabold text-accent-600 dark:text-accent-400 block mt-0.5 break-words xl:break-normal">
                   {typeof attendanceRate === 'number' ? `${attendanceRate}%` : '—'}
                 </span>
@@ -164,7 +164,7 @@ export const Dashboard: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <section aria-label="Grade distribution" className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Grade distribution</h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Graded enrollments by course grade</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Graded enrollments by course grade</p>
               <div className="h-48 mt-3">
                 {hasGrades ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -176,13 +176,13 @@ export const Dashboard: React.FC = () => {
                       <Bar dataKey="count" fill="#4f46e5" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
-                ) : <p className="h-full flex items-center justify-center text-xs text-slate-400">No graded enrollments for this school year.</p>}
+                ) : <p className="h-full flex items-center justify-center text-xs text-slate-500 dark:text-slate-400">No graded enrollments for this school year.</p>}
               </div>
             </section>
 
             <section aria-label="Standing breakdown" className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Standing breakdown</h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Students by most serious standing</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Students by most serious standing</p>
               <div className="h-48 mt-3">
                 {hasStanding ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -196,13 +196,13 @@ export const Dashboard: React.FC = () => {
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
-                ) : <p className="h-full flex items-center justify-center text-xs text-slate-400">No students for this school year.</p>}
+                ) : <p className="h-full flex items-center justify-center text-xs text-slate-500 dark:text-slate-400">No students for this school year.</p>}
               </div>
             </section>
 
             <section aria-label="Attendance by class" className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Attendance by class</h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Present, late or excused, as a share of records</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Present, late or excused, as a share of records</p>
               <div className="h-48 mt-3">
                 {classAttendance.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -214,7 +214,7 @@ export const Dashboard: React.FC = () => {
                       <Bar dataKey="rate" fill="#0d9488" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
-                ) : <p className="h-full flex items-center justify-center text-xs text-slate-400">No attendance records for this school year.</p>}
+                ) : <p className="h-full flex items-center justify-center text-xs text-slate-500 dark:text-slate-400">No attendance records for this school year.</p>}
               </div>
             </section>
           </div>
@@ -226,7 +226,7 @@ export const Dashboard: React.FC = () => {
               <button type="button" onClick={() => navigate('/admin/audit-trail')} className="text-xs font-bold whitespace-nowrap text-accent-600 hover:underline cursor-pointer">View audit trail</button>
             </div>
             {recentAuditEvents.length === 0 ? (
-              <p className="mt-3 text-xs text-slate-400">No audit events recorded yet.</p>
+              <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">No audit events recorded yet.</p>
             ) : (
               <AuditCompactList entries={recentAuditEvents} />
             )}

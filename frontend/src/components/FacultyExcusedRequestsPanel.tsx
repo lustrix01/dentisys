@@ -54,7 +54,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{ onDecided?: () => void }> =
         {pending.map(request => (
           <li key={request.id} className="py-3 text-xs space-y-2">
             <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
-              <span><strong>{request.studentName}</strong> <span className="text-slate-400">{request.studentNumber}</span> · {request.courseCode} {request.className} · {request.sessionDate}{request.sessionCode ? ` (${request.sessionCode})` : ''}</span>
+              <span><strong>{request.studentName}</strong> <span className="text-slate-500 dark:text-slate-400">{request.studentNumber}</span> · {request.courseCode} {request.className} · {request.sessionDate}{request.sessionCode ? ` (${request.sessionCode})` : ''}</span>
               <span className="text-slate-500">Now: {request.currentStatus ?? 'not recorded'} · by {request.requestedBy ?? 'Secretary'}</span>
             </div>
             <p className="text-slate-600 dark:text-slate-300">Reason: {request.reason}</p>

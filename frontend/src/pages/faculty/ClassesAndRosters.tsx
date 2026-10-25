@@ -1329,7 +1329,7 @@ export const ClassesAndRosters: React.FC = () => {
                         </div>
                       </div>
                       {archivedClass && (
-                        <div className="text-[11px] font-semibold text-slate-400">
+                        <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                           {cls.archiveReason
                             ? `Archived ${archivedDateLabel} · ${reasonLabel}`
                             : `Archived automatically when S.Y. ${cls.schoolYear} ended`}
@@ -1388,7 +1388,7 @@ export const ClassesAndRosters: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             My Classes & Student Rosters
           </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             Create classes, import provisional student rosters (PDF/CSV), manage students, and send email invitations. Official import format not confirmed.
           </p>
           <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-1">
@@ -1433,7 +1433,7 @@ export const ClassesAndRosters: React.FC = () => {
             <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
             <span>{notification.message}</span>
           </div>
-          <button onClick={() => setNotification(null)} className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer">Dismiss</button>
+          <button onClick={() => setNotification(null)} className="text-slate-500 dark:text-slate-400 hover:text-slate-600 text-xs cursor-pointer">Dismiss</button>
         </div>
       )}
 
@@ -1546,7 +1546,7 @@ export const ClassesAndRosters: React.FC = () => {
       {activeTab === 'classes' && (
         <>
           {loading ? (
-            <div className="py-16 text-center text-slate-400 text-xs font-semibold">
+            <div className="py-16 text-center text-slate-500 dark:text-slate-400 text-xs font-semibold">
               <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3 text-emerald-600" />
               Loading assigned classes from server...
             </div>
@@ -1554,7 +1554,7 @@ export const ClassesAndRosters: React.FC = () => {
             <Card className="p-8 text-center space-y-3">
               <BookMarked className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
               <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">No Assigned Classes Found</h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
                 {searchQuery
                   ? 'No class sections match your search query.'
                   : (selectedSchoolYear !== 'all' && selectedSchoolYear !== newSchoolYear)
@@ -1618,7 +1618,7 @@ export const ClassesAndRosters: React.FC = () => {
               );
             })}
             <div>
-              <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Also happens</div>
+              <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Also happens</div>
               <ul className="list-disc pl-4 text-slate-600 dark:text-slate-300 space-y-1">
                 {(archiveTarget.scheduledSessionCount ?? 0) > 0 && (
                   <li>{archiveTarget.scheduledSessionCount} scheduled attendance {archiveTarget.scheduledSessionCount === 1 ? 'session is' : 'sessions are'} revoked.</li>
@@ -1657,7 +1657,7 @@ export const ClassesAndRosters: React.FC = () => {
       {activeTab === 'archived' && (
         <>
           {loading ? (
-            <div className="py-16 text-center text-slate-400 text-xs font-semibold">
+            <div className="py-16 text-center text-slate-500 dark:text-slate-400 text-xs font-semibold">
               <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3 text-emerald-600" />
               Loading archived classes from server...
             </div>
@@ -1670,7 +1670,7 @@ export const ClassesAndRosters: React.FC = () => {
                 <div key={group.key} className="space-y-3">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">{group.title}</h3>
-                    <p className="text-xs text-slate-400">{group.note}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{group.note}</p>
                   </div>
                   {group.list.length === 0 ? (
                     <Card className="p-8 text-center space-y-3">
@@ -1697,7 +1697,7 @@ export const ClassesAndRosters: React.FC = () => {
               <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
                 Enrolled Student Roster ({filteredStudents.length})
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {selectedClassFilterId !== 'all'
                   ? `Showing enrolled students for selected class section.`
                   : `Add, manage, or remove roster entries and invite eligible Students to activate their accounts.`}
@@ -1736,7 +1736,7 @@ export const ClassesAndRosters: React.FC = () => {
           <div className="overflow-x-auto min-h-[220px]">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                   <th className="py-3 px-4">Student ID</th>
                   <th className="py-3 px-4">Full Name</th>
                   <th className="py-3 px-4">BU Email Address</th>
@@ -1748,14 +1748,14 @@ export const ClassesAndRosters: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400 font-semibold">
+                    <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400 font-semibold">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-emerald-600" />
                       Loading student roster...
                     </td>
                   </tr>
                 ) : filteredStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400 font-semibold">
+                    <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400 font-semibold">
                       <Users className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
                       <p className="text-xs text-slate-500 dark:text-slate-400">
                         {searchQuery
@@ -1957,12 +1957,12 @@ export const ClassesAndRosters: React.FC = () => {
                 />
                 <p id="student-id-lookup-status" role="status" className="mt-1 text-[11px] font-semibold">
                   {loadingAvailable
-                    ? <span className="text-slate-400">Checking existing students…</span>
+                    ? <span className="text-slate-500 dark:text-slate-400">Checking existing students…</span>
                     : existingStudentMatch
                       ? <span className="text-emerald-600 dark:text-emerald-400">Existing student found: {existingStudentMatch.name}. Their details are filled in and they will be enrolled in this class.</span>
                       : studentAlreadyInTargetClass
                         ? <span className="text-amber-600 dark:text-amber-400">This student is already enrolled in the selected class.</span>
-                        : <span className="text-slate-400">Enter an existing student's ID number to fill in their details automatically.</span>}
+                        : <span className="text-slate-500 dark:text-slate-400">Enter an existing student's ID number to fill in their details automatically.</span>}
                 </p>
               </div>
 
@@ -2015,7 +2015,7 @@ export const ClassesAndRosters: React.FC = () => {
                   className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-xs" />
               </label>
               <div className="p-2.5 bg-slate-100 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">
-                <span className="font-semibold text-slate-400">Composed Name Preview:</span>
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Composed Name Preview:</span>
                 <span className="font-bold font-mono text-slate-800 dark:text-slate-100">
                   {composedStudentName || '—'}
                 </span>
@@ -2149,7 +2149,7 @@ export const ClassesAndRosters: React.FC = () => {
                   className={`w-full px-3.5 py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 font-medium ${fieldCls('title', 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900')}`}
                 />
                 {fieldErr('title')}
-                <p className="mt-1 text-[10px] text-slate-400">
+                <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
                   {selectedCatalogCourse
                     ? `Catalog name: ${selectedCatalogCourse.name}. A different title here shows only for your class.`
                     : 'New course code: it will be added to the shared course catalog.'}
@@ -2225,7 +2225,7 @@ export const ClassesAndRosters: React.FC = () => {
                   </label>
                 )}
               </div>
-              <p className="text-[10px] text-slate-400">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">
                 {catalogUnitsLocked
                   ? 'Components and units come from the shared course catalog for this code.'
                   : 'Lecture and laboratory each get their own schedule below.'}
@@ -2341,7 +2341,7 @@ export const ClassesAndRosters: React.FC = () => {
                     </div>
                     {fieldErr(`days-${slot.id}`)}
                     <div className="flex items-center gap-2 mt-1.5 text-[10px]">
-                      <span className="text-slate-400 font-semibold">Presets:</span>
+                      <span className="text-slate-500 dark:text-slate-400 font-semibold">Presets:</span>
                       {SCHEDULE_PRESETS.map(preset => (
                         <button
                           key={`${slot.id}-preset-${preset.label}`}
@@ -2364,7 +2364,7 @@ export const ClassesAndRosters: React.FC = () => {
 
             {/* Generated Schedule Preview */}
             <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Class Schedule Preview</span>
+              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Class Schedule Preview</span>
               {sessionSlots.map((slot) => (
                 <div key={`prev-${slot.id}`} className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                   <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${
@@ -2651,7 +2651,7 @@ export const ClassesAndRosters: React.FC = () => {
                 />
               </div>
             </div>
-            <p className="text-[10px] text-slate-400 -mt-2">
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 -mt-2">
               Semester and school year stay fixed. The course title you enter shows only for your class.
             </p>
 
@@ -2693,7 +2693,7 @@ export const ClassesAndRosters: React.FC = () => {
                   </label>
                 )}
               </div>
-              <p className="text-[10px] text-slate-400">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">
                 {editCodeIsNew && editCodeChanged
                   ? 'New course code: these components and units are saved to the shared course catalog.'
                   : editUnitsLocked
@@ -2760,7 +2760,7 @@ export const ClassesAndRosters: React.FC = () => {
                   })}
                 </div>
                 <div className="flex items-center gap-2 mt-1.5 text-[10px]">
-                  <span className="text-slate-400 font-semibold">Presets:</span>
+                  <span className="text-slate-500 dark:text-slate-400 font-semibold">Presets:</span>
                   {SCHEDULE_PRESETS.map(preset => (
                     <button
                       key={`edit-lec-preset-${preset.label}`}
@@ -2775,7 +2775,7 @@ export const ClassesAndRosters: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setEditLecDays([])}
-                      className="text-slate-400 hover:text-rose-500 font-semibold ml-auto cursor-pointer"
+                      className="text-slate-500 dark:text-slate-400 hover:text-rose-500 font-semibold ml-auto cursor-pointer"
                     >
                       Clear
                     </button>
@@ -2844,7 +2844,7 @@ export const ClassesAndRosters: React.FC = () => {
                   })}
                 </div>
                 <div className="flex items-center gap-2 mt-1.5 text-[10px]">
-                  <span className="text-slate-400 font-semibold">Presets:</span>
+                  <span className="text-slate-500 dark:text-slate-400 font-semibold">Presets:</span>
                   {SCHEDULE_PRESETS.map(preset => (
                     <button
                       key={`edit-lab-preset-${preset.label}`}
@@ -2859,7 +2859,7 @@ export const ClassesAndRosters: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setEditLabDays([])}
-                      className="text-slate-400 hover:text-rose-500 font-semibold ml-auto cursor-pointer"
+                      className="text-slate-500 dark:text-slate-400 hover:text-rose-500 font-semibold ml-auto cursor-pointer"
                     >
                       Clear
                     </button>

@@ -150,7 +150,7 @@ export const AttendanceLogs: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             My Session Attendance Logs
           </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             {isAuthoritative
               ? 'Authoritative attendance audit trail including biometric, faculty manual, and secretary manual entries.'
               : 'Complete historical audit log of facial recognition and geofence verified class check-ins.'}
@@ -159,7 +159,7 @@ export const AttendanceLogs: React.FC = () => {
 
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
-            <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
+            <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400 block">STUDENT ID</span>
             <span className="whitespace-nowrap text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
             <span className="text-xs text-slate-500 dark:text-slate-400 block">{studentName}</span>
           </div>
@@ -185,32 +185,32 @@ export const AttendanceLogs: React.FC = () => {
       {/* Summary metric cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-left">
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Recorded Sessions</span>
+          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Recorded Sessions</span>
           <span className="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1 whitespace-nowrap">
             {totalCount}
           </span>
         </div>
 
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
+          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
           <span className="text-xl sm:text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1 whitespace-nowrap">
             {attendanceRate !== null ? `${attendanceRate}%` : '—'}
           </span>
         </div>
 
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">On{'‑'}Time Check{'‑'}Ins</span>
+          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">On{'‑'}Time Check{'‑'}Ins</span>
           <span className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 block mt-1 whitespace-nowrap">
             {presentCount}
           </span>
         </div>
 
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Late Entries</span>
+          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Late Entries</span>
           <span className="text-xl sm:text-2xl font-extrabold text-amber-600 dark:text-amber-400 block mt-1 whitespace-nowrap">
             {lateCount}
           </span>
-          {excusedCount > 0 && <span className="text-[10px] text-slate-400 block mt-0.5">{excusedCount} excused</span>}
+          {excusedCount > 0 && <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">{excusedCount} excused</span>}
         </div>
       </div>
 
@@ -277,7 +277,7 @@ export const AttendanceLogs: React.FC = () => {
           <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
             Attendance Log Entries ({displayRecords.length})
           </h3>
-          <span className="text-[10px] text-slate-400 font-mono hidden sm:block">Student: {studentName} ({studentIdNum})</span>
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono hidden sm:block">Student: {studentName} ({studentIdNum})</span>
         </div>
         {authLoading ? (
           <div className="flex flex-col items-center justify-center py-20 space-y-3 text-slate-500">
@@ -288,7 +288,7 @@ export const AttendanceLogs: React.FC = () => {
           <div className="py-20 text-center space-y-2">
             <History className="w-8 h-8 text-slate-300 mx-auto" />
             <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No Attendance Records Found</p>
-            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
               No matching attendance logs were found for the selected search and filter criteria.
             </p>
           </div>
@@ -296,7 +296,7 @@ export const AttendanceLogs: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   <th className="pb-3">Date</th>
                   <th className="pb-3">Class Subject</th>
                   <th className="pb-3">Check-In Time</th>
@@ -319,7 +319,7 @@ export const AttendanceLogs: React.FC = () => {
                           <span className="font-mono font-bold text-blue-600 dark:text-blue-400 block">{rec.courseCode}</span>
                           <span className="text-slate-600 dark:text-slate-300 text-[11px] block">{rec.courseName}</span>
                           {rec.room && (
-                            <span className="text-slate-400 text-[10px] block mt-0.5">{rec.room}</span>
+                            <span className="text-slate-500 dark:text-slate-400 text-[10px] block mt-0.5">{rec.room}</span>
                           )}
                         </td>
                         <td className="py-3.5 text-slate-500">
@@ -331,7 +331,7 @@ export const AttendanceLogs: React.FC = () => {
                             <span>{methodInfo.label}</span>
                           </span>
                           {rec.instructorName && (
-                            <span className="text-[10px] text-slate-400 block mt-0.5">By {rec.instructorName}</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">By {rec.instructorName}</span>
                           )}
                         </td>
                         <td className="py-3.5 text-slate-500">
@@ -360,14 +360,14 @@ export const AttendanceLogs: React.FC = () => {
                     <tr key={rec.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="py-3.5">
                         <span className="font-bold text-slate-800 dark:text-slate-100 block">{rec.date}</span>
-                        <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
                           <Clock className="w-3 h-3" />
                           {rec.verifiedAt?.split(' ')[1] || '08:15 AM'}
                         </span>
                       </td>
                       <td className="py-3.5">
                         <span className="font-mono font-bold text-blue-600 dark:text-blue-400 block">{rec.subjectCode}</span>
-                        <span className="text-slate-400 text-[10px] block mt-0.5">{rec.verifiedLocationName || 'BU Dental Clinic'}</span>
+                        <span className="text-slate-500 dark:text-slate-400 text-[10px] block mt-0.5">{rec.verifiedLocationName || 'BU Dental Clinic'}</span>
                       </td>
                       <td className="py-3.5 text-slate-500">
                         {rec.verifiedAt?.split(' ')[1] || '—'}

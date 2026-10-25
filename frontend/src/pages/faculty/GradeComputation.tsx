@@ -3078,13 +3078,13 @@ export const GradeComputation: React.FC = () => {
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
 
       {/* Top Header */}
-      <div className="no-print flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-205 dark:border-slate-800 pb-4">
+      <div className="no-print flex flex-col sm:flex-row sm:items-center sm:justify-between border-b dark:border-slate-800 pb-4">
         <div>
           <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <Calculator className="w-6 h-6 text-clinical-550" />
+            <Calculator className="w-6 h-6" />
             Grade Management Portal
           </h1>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
             Perform assessment tracking, grading components editing, grade calculations, and CSV score sheet imports
           </p>
         </div>
@@ -3093,7 +3093,7 @@ export const GradeComputation: React.FC = () => {
       {/* Unified Class and Course Selector Bar for All Tabs */}
       <Card className="no-print p-4 flex flex-col xl:flex-row gap-4 xl:items-center">
         <div className="w-full xl:flex-1">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
+          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
           <select
             value={selectedSubjectCode}
             onChange={async (e) => {
@@ -3118,7 +3118,7 @@ export const GradeComputation: React.FC = () => {
                 setSelectedClassId('');
               }
             }}
-            className="w-full px-2 pr-8 sm:px-4 sm:pr-8 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+            className="w-full px-2 pr-8 sm:px-4 sm:pr-8 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
           >
             {activeCourses.length === 0 ? (
               <option value="">No active courses for current school year</option>
@@ -3133,7 +3133,7 @@ export const GradeComputation: React.FC = () => {
         </div>
 
         <div className="w-full xl:w-56">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
+          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
           <select
             value={selectedClassId}
             onChange={async (e) => {
@@ -3151,7 +3151,7 @@ export const GradeComputation: React.FC = () => {
                 }
               }
             }}
-            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+            className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
           >
             {availableClasses.length === 0
               ? <option value="">No active sections assigned</option>
@@ -3166,7 +3166,7 @@ export const GradeComputation: React.FC = () => {
       <div className="no-print flex flex-wrap xl:flex-nowrap bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
         <button
           onClick={() => setActiveSubTab('scores')}
-          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'scores' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'scores' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <ClipboardCheck className="w-4 h-4" />
@@ -3174,7 +3174,7 @@ export const GradeComputation: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('assessments')}
-          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'assessments' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'assessments' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <FileText className="w-4 h-4" />
@@ -3182,7 +3182,7 @@ export const GradeComputation: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('components')}
-          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'components' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'components' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <Settings className="w-4 h-4" />
@@ -3190,7 +3190,7 @@ export const GradeComputation: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('summaries')}
-          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'summaries' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'summaries' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <Printer className="w-4 h-4" />
@@ -3198,7 +3198,7 @@ export const GradeComputation: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('import')}
-          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'import' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'import' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <Upload className="w-4 h-4" />
@@ -3243,10 +3243,10 @@ export const GradeComputation: React.FC = () => {
               <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                    <Grid className="w-4 h-4 text-clinical-550" />
+                    <Grid className="w-4 h-4" />
                     Full Gradebook Matrix View
                   </h3>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Edit all course assessments side-by-side in a spreadsheet grid.</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Edit all course assessments side-by-side in a spreadsheet grid.</p>
                 </div>
 
                 <div className="flex items-center gap-2.5">
@@ -3296,14 +3296,14 @@ export const GradeComputation: React.FC = () => {
                 <Card className="h-full flex flex-col justify-between">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-sm">
-                      <Calculator className="w-4.5 h-4.5 text-clinical-550" />
+                      <Calculator className="w-4.5 h-4.5" />
                       Select Assessment Activity
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 flex-1">
                     <div className="space-y-3">
                       {/* Filter Controls Bar */}
-                      <div className="p-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-150 dark:border-slate-800 space-y-2">
+                      <div className="p-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border dark:border-slate-800 space-y-2">
                         {/* Period Segmented Pills */}
                         <div className="flex flex-wrap items-center gap-1 bg-slate-200/60 dark:bg-slate-800 p-0.5 rounded-lg">
                           <button
@@ -3350,13 +3350,13 @@ export const GradeComputation: React.FC = () => {
                               placeholder="Search..."
                               value={activityFilterSearch}
                               onChange={(e) => setActivityFilterSearch(e.target.value)}
-                              className="w-full pl-8 pr-6 py-1.5 rounded-lg border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                              className="w-full pl-8 pr-6 py-1.5 rounded-lg border dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
                             />
                             {activityFilterSearch && (
                               <button
                                 type="button"
                                 onClick={() => setActivityFilterSearch('')}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                               >
                                 <X className="w-3 h-3" />
                               </button>
@@ -3366,7 +3366,7 @@ export const GradeComputation: React.FC = () => {
                           <select
                             value={activityFilterType}
                             onChange={(e) => changeActivityFilter(activityFilterPeriod, e.target.value)}
-                            className="w-full px-2 py-1.5 rounded-lg border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                            className="w-full px-2 py-1.5 rounded-lg border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-clinical-500"
                           >
                             <option value="all">All Categories</option>
                             {availableActivityTypes.map((t) => (
@@ -3379,8 +3379,8 @@ export const GradeComputation: React.FC = () => {
                       {/* Choose Assessment */}
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Choose Assessment</label>
-                          <span className="text-[10px] text-slate-450 dark:text-slate-500 font-semibold">
+                          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Choose Assessment</label>
+                          <span className="text-[10px] dark:text-slate-500 font-semibold">
                             {singleActivityFilteredAssessments.length === activeAssessments.length
                               ? `${activeAssessments.length} total`
                               : `${singleActivityFilteredAssessments.length} of ${activeAssessments.length}`}
@@ -3388,11 +3388,11 @@ export const GradeComputation: React.FC = () => {
                         </div>
 
                         {activeAssessments.length === 0 ? (
-                          <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-150 rounded-xl text-xs text-slate-450 text-center">
+                          <div className="p-4 bg-slate-50 dark:bg-slate-900 border rounded-xl text-xs text-center">
                             No active assessments. Please create one under "Assessments Manager" first.
                           </div>
                         ) : singleActivityFilteredAssessments.length === 0 ? (
-                          <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-xl text-center space-y-1">
+                          <div className="p-3 bg-slate-50 dark:bg-slate-900 border dark:border-slate-800 rounded-xl text-center space-y-1">
                             <p className="text-xs text-slate-500">No assessments match the active filters.</p>
                             <button
                               type="button"
@@ -3415,7 +3415,7 @@ export const GradeComputation: React.FC = () => {
                               flushSingleAutoSave();
                               setSelectedAssessmentId(next);
                             }}
-                            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                            className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
                           >
                             {activeAssessment && !singleActivityFilteredAssessments.some(a => a.id === activeAssessment.id) && (
                               <option value={activeAssessment.id}>
@@ -3435,16 +3435,16 @@ export const GradeComputation: React.FC = () => {
                     </div>
 
                     {activeAssessment && (
-                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-150 dark:border-slate-800 text-xs space-y-2">
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border dark:border-slate-800 text-xs space-y-2">
                         <h4 className="font-bold text-slate-800 dark:text-slate-200">Assessment Spec:</h4>
-                        <div><span className="text-slate-400 font-semibold">Type:</span> {activeAssessment.type}</div>
-                        <div><span className="text-slate-400 font-semibold">Grading Period:</span> {activeAssessment.gradingPeriod}</div>
-                        <div><span className="text-slate-400 font-semibold">Max Score:</span> {activeAssessment.maxScore} points</div>
-                        <div><span className="text-slate-400 font-semibold">Due Date:</span> {activeAssessment.dueDate || 'No deadline'}</div>
+                        <div><span className="text-slate-500 dark:text-slate-400 font-semibold">Type:</span> {activeAssessment.type}</div>
+                        <div><span className="text-slate-500 dark:text-slate-400 font-semibold">Grading Period:</span> {activeAssessment.gradingPeriod}</div>
+                        <div><span className="text-slate-500 dark:text-slate-400 font-semibold">Max Score:</span> {activeAssessment.maxScore} points</div>
+                        <div><span className="text-slate-500 dark:text-slate-400 font-semibold">Due Date:</span> {activeAssessment.dueDate || 'No deadline'}</div>
                         {activeAssessment.instructions && (
                           <div>
-                            <span className="text-slate-400 font-semibold">Instructions:</span>
-                            <p className="text-slate-550 dark:text-slate-400 italic mt-0.5">{activeAssessment.instructions}</p>
+                            <span className="text-slate-500 dark:text-slate-400 font-semibold">Instructions:</span>
+                            <p className="dark:text-slate-400 italic mt-0.5">{activeAssessment.instructions}</p>
                           </div>
                         )}
                       </div>
@@ -3455,26 +3455,26 @@ export const GradeComputation: React.FC = () => {
                       <div className="p-3.5 rounded-2xl bg-clinical-50/40 dark:bg-clinical-950/20 border border-clinical-100 dark:border-clinical-900/30 text-xs space-y-2">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-clinical-600 dark:text-clinical-400 block">Class Stats Summary</span>
                         <div className="grid grid-cols-2 gap-2 text-center">
-                          <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-150 dark:border-slate-800">
-                            <div className="text-[10px] text-slate-400 font-semibold">Graded</div>
+                          <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border dark:border-slate-800">
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Graded</div>
                             <div className="font-extrabold text-slate-800 dark:text-slate-200 text-xs">
                               {activeAssessmentStats.graded} / {activeAssessmentStats.total}
                             </div>
                           </div>
-                          <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-150 dark:border-slate-800">
-                            <div className="text-[10px] text-slate-400 font-semibold">Class Avg</div>
+                          <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border dark:border-slate-800">
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Class Avg</div>
                             <div className="font-extrabold text-clinical-600 dark:text-clinical-400 text-xs">
                               {activeAssessmentStats.avg} pts
                             </div>
                           </div>
-                          <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-150 dark:border-slate-800">
-                            <div className="text-[10px] text-slate-400 font-semibold">Highest Score</div>
+                          <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border dark:border-slate-800">
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Highest Score</div>
                             <div className="font-bold text-slate-700 dark:text-slate-300 text-xs">
                               {activeAssessmentStats.max}
                             </div>
                           </div>
-                          <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-150 dark:border-slate-800">
-                            <div className="text-[10px] text-slate-400 font-semibold">Lowest Score</div>
+                          <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border dark:border-slate-800">
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Lowest Score</div>
                             <div className="font-bold text-slate-700 dark:text-slate-300 text-xs">
                               {activeAssessmentStats.min}
                             </div>
@@ -3483,7 +3483,7 @@ export const GradeComputation: React.FC = () => {
                       </div>
                     )}
 
-                    <div className="flex items-center space-x-2 pt-2 border-t border-slate-150 dark:border-slate-850">
+                    <div className="flex items-center space-x-2 pt-2 border-t dark:border-slate-800">
                       <input
                         type="checkbox"
                         id="autosave"
@@ -3500,7 +3500,7 @@ export const GradeComputation: React.FC = () => {
                         }}
                         className="rounded border-slate-300 text-clinical-600 focus:ring-clinical-500"
                       />
-                      <label htmlFor="autosave" className="text-xs text-slate-555 font-semibold">
+                      <label htmlFor="autosave" className="text-xs font-semibold">
                         Enable Auto-Save (saves 10 seconds after you stop typing)
                       </label>
                     </div>
@@ -3513,7 +3513,7 @@ export const GradeComputation: React.FC = () => {
                   <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Roster Score Entries</h3>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Use Enter / Down / Up arrow keys to quickly navigate between student score boxes.</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Use Enter / Down / Up arrow keys to quickly navigate between student score boxes.</p>
                     </div>
 
                     <div className="relative w-full sm:w-56 sm:shrink-0 xl:shrink">
@@ -3523,18 +3523,18 @@ export const GradeComputation: React.FC = () => {
                         placeholder="Search student..."
                         value={scoreSearch}
                         onChange={(e) => setScoreSearch(e.target.value)}
-                        className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                        className="w-full pl-9 pr-3 py-1.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
                       />
                     </div>
                   </div>
 
                   <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
                     {!selectedAssessmentId ? (
-                      <div className="py-12 text-center text-slate-400 text-xs font-semibold">
+                      <div className="py-12 text-center text-slate-500 dark:text-slate-400 text-xs font-semibold">
                         Please select or create an assessment activity on the left pane.
                       </div>
                     ) : filteredScoreStudents.length === 0 ? (
-                      <div className="py-12 text-center text-slate-400 text-xs font-semibold">
+                      <div className="py-12 text-center text-slate-500 dark:text-slate-400 text-xs font-semibold">
                         No matching student records found.
                       </div>
                     ) : (
@@ -3546,7 +3546,7 @@ export const GradeComputation: React.FC = () => {
                           <div key={student.id} className="px-5 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50/30 dark:hover:bg-slate-900/10">
                             <div className="min-w-0">
                               <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200">{student.name}</h4>
-                              <span className="text-[10px] text-slate-400 font-mono">{student.studentId}</span>
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId}</span>
                             </div>
 
                             <div className="flex items-center space-x-2 self-start md:self-auto">
@@ -3584,7 +3584,7 @@ export const GradeComputation: React.FC = () => {
                                     ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-600'
                                     : row.score === ''
                                       ? 'border-slate-200 dark:border-slate-800 dark:bg-slate-950'
-                                      : 'border-clinical-550/30 bg-clinical-50/20 text-clinical-650'
+                                      : 'bg-clinical-50/20'
                                     }`}
                                 />
                                 {!isValid && (
@@ -3630,10 +3630,10 @@ export const GradeComputation: React.FC = () => {
       ---------------------------------------------------- */}
       {activeSubTab === 'assessments' && (
         <Card className="p-0 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex max-sm:flex-wrap max-sm:gap-2 justify-between items-center">
+          <div className="px-5 py-4 border-b dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex max-sm:flex-wrap max-sm:gap-2 justify-between items-center">
             <div>
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Active Course Assessments</h3>
-              <p className="text-[10px] text-slate-400 mt-0.5">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                 {currentAssessmentOffering
                   ? `${currentAssessmentOffering.courseCode} · ${currentAssessmentOffering.courseName}`
                   : 'Manage assignments, quizzes, laboratories, and exams'}
@@ -3674,12 +3674,12 @@ export const GradeComputation: React.FC = () => {
                   placeholder="Search assessment..."
                   value={assessmentSearch}
                   onChange={(e) => setAssessmentSearch(e.target.value)}
-                  className="w-full pl-9 pr-7 py-1.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                  className="w-full pl-9 pr-7 py-1.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
                 />
                 {assessmentSearch && (
                   <button
                     onClick={() => setAssessmentSearch('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -3699,7 +3699,7 @@ export const GradeComputation: React.FC = () => {
                     }
                   }
                 }}
-                className="px-3 py-1.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                className="px-3 py-1.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-clinical-500"
               >
                 <option value="all">All Periods</option>
                 <option value="Midterm">Midterm</option>
@@ -3711,7 +3711,7 @@ export const GradeComputation: React.FC = () => {
                 <select
                   value={assessmentCategoryFilter}
                   onChange={(e) => setAssessmentCategoryFilter(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-clinical-500 max-w-[200px] truncate"
+                  className="px-3 py-1.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-clinical-500 max-w-[200px] truncate"
                 >
                   <option value="all">All Categories</option>
                   {assessmentConfig.categories
@@ -3735,7 +3735,7 @@ export const GradeComputation: React.FC = () => {
               <select
                 value={assessmentStatusFilter}
                 onChange={(e) => setAssessmentStatusFilter(e.target.value)}
-                className="px-3 py-1.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                className="px-3 py-1.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-clinical-500"
               >
                 <option value="all">All Statuses</option>
                 <option value="Active">Active</option>
@@ -3759,15 +3759,15 @@ export const GradeComputation: React.FC = () => {
               )}
             </div>
 
-            <div className="text-[11px] text-slate-400 font-medium whitespace-nowrap shrink-0">
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap shrink-0">
               Showing <span className="font-bold text-slate-700 dark:text-slate-200">{filteredAssessments.length}</span> of {activeAssessments.length}
             </div>
           </div>
 
           <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
-            <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800">
+            <table className="min-w-full divide-y dark:divide-slate-800">
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
-                <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-left">
+                <tr className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">
                   <th className="px-5 py-3">Assessment Title</th>
                   <th className="px-5 py-3">Category</th>
                   <th className="px-5 py-3">Grading Period</th>
@@ -3780,13 +3780,13 @@ export const GradeComputation: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs">
                 {activeAssessments.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-10 text-center text-slate-400">
+                    <td colSpan={7} className="px-5 py-10 text-center text-slate-500 dark:text-slate-400">
                       No active assessments created for this course. Click "Add Assessment" to create one.
                     </td>
                   </tr>
                 ) : filteredAssessments.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-10 text-center text-slate-400 font-semibold">
+                    <td colSpan={7} className="px-5 py-10 text-center text-slate-500 dark:text-slate-400 font-semibold">
                       No assessments match the selected filters.
                     </td>
                   </tr>
@@ -3804,21 +3804,21 @@ export const GradeComputation: React.FC = () => {
                         </div>
                         {ass.transmutationEnabled && (
                           <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                            <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-bold bg-clinical-50 text-clinical-650 dark:bg-clinical-950/40 dark:text-clinical-400 border border-clinical-200 dark:border-clinical-800">
+                            <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-bold bg-clinical-50 dark:bg-clinical-950/40 dark:text-clinical-400 border border-clinical-200 dark:border-clinical-800">
                               Transmuted ({ass.transmutationMinimumPercentage ?? 50}%–{ass.transmutationMaximumPercentage ?? 100}%)
                             </span>
                             {ass.attendanceSessionDate ? (
-                              <span className="text-[9px] text-slate-400 font-mono">
+                              <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">
                                 Linked: {ass.attendanceSessionDate}
                               </span>
                             ) : (
-                              <span className="text-[9px] text-slate-400">
+                              <span className="text-[9px] text-slate-500 dark:text-slate-400">
                                 (No attendance link)
                               </span>
                             )}
                           </div>
                         )}
-                        {ass.instructions && <span className="text-[10px] text-slate-400 line-clamp-1">{ass.instructions}</span>}
+                        {ass.instructions && <span className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1">{ass.instructions}</span>}
                       </td>
                       <td className="px-5 py-3.5">
                         {(() => {
@@ -3836,7 +3836,7 @@ export const GradeComputation: React.FC = () => {
                             );
                             if (matchedCategory) {
                               return (
-                                <span className="px-2 py-0.5 rounded-md font-semibold bg-clinical-50 text-clinical-600 dark:bg-clinical-950/40 dark:text-clinical-450 uppercase text-[9px] tracking-wide">
+                                <span className="px-2 py-0.5 rounded-md font-semibold bg-clinical-50 text-clinical-600 dark:bg-clinical-950/40 dark:text-clinical-400 uppercase text-[9px] tracking-wide">
                                   {matchedCategory.component ? `${matchedCategory.component} · ${matchedCategory.name}` : matchedCategory.name}
                                 </span>
                               );
@@ -3849,17 +3849,17 @@ export const GradeComputation: React.FC = () => {
                             );
                           }
                           return (
-                            <span className="px-2 py-0.5 rounded-md font-semibold bg-clinical-50 text-clinical-600 dark:bg-clinical-950/40 dark:text-clinical-450 uppercase text-[9px] tracking-wide">
+                            <span className="px-2 py-0.5 rounded-md font-semibold bg-clinical-50 text-clinical-600 dark:bg-clinical-950/40 dark:text-clinical-400 uppercase text-[9px] tracking-wide">
                               {ass.type}
                             </span>
                           );
                         })()}
                       </td>
-                      <td className="px-5 py-3.5 font-semibold text-slate-700 dark:text-slate-350">{ass.gradingPeriod}</td>
+                      <td className="px-5 py-3.5 font-semibold text-slate-700 dark:text-slate-300">{ass.gradingPeriod}</td>
                       <td className="px-5 py-3.5 text-center font-extrabold text-slate-800 dark:text-slate-100">{ass.maxScore} pts</td>
-                      <td className="px-5 py-3.5 font-mono text-slate-450 dark:text-slate-500">{ass.dueDate || 'No deadline'}</td>
+                      <td className="px-5 py-3.5 font-mono dark:text-slate-500">{ass.dueDate || 'No deadline'}</td>
                       <td className="px-5 py-3.5">
-                        <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase ${ass.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-650'
+                        <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase ${ass.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100'
                           }`}>
                           {ass.status}
                         </span>
@@ -3869,7 +3869,7 @@ export const GradeComputation: React.FC = () => {
                           {availableClasses.some(c => c.id === ass.classId) && (
                           <button
                             onClick={() => openEditAssessmentModal(ass)}
-                            className="p-1 text-slate-455 hover:text-clinical-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900"
+                            className="p-1 hover:text-clinical-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900"
                             title="Edit"
                           >
                             <Edit className="w-3.8 h-3.8" />
@@ -3887,7 +3887,7 @@ export const GradeComputation: React.FC = () => {
                                 }
                               }
                             }}
-                            className="p-1 text-slate-455 hover:text-amber-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900"
+                            className="p-1 hover:text-amber-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900"
                             title="Archive"
                           >
                             <Archive className="w-3.8 h-3.8" />
@@ -3904,7 +3904,7 @@ export const GradeComputation: React.FC = () => {
                                 }
                               }
                             }}
-                            className="p-1 text-slate-455 hover:text-rose-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900"
+                            className="p-1 hover:text-rose-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900"
                             title="Delete"
                           >
                             <Trash2 className="w-3.8 h-3.8" />
@@ -3938,7 +3938,7 @@ export const GradeComputation: React.FC = () => {
                   </p>
                 )}
                 {currentOffering && (
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500" data-testid="weights-sections-note">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-500" data-testid="weights-sections-note">
                     These weights apply to all {currentOffering.sections.length === 1 ? 'sections' : `${currentOffering.sections.length} sections`} of this course ({currentOffering.sectionNames.join(', ')}). The section selector above does not change them.
                   </p>
                 )}
@@ -3971,7 +3971,7 @@ export const GradeComputation: React.FC = () => {
                     type="button"
                     onClick={handleReload}
                     disabled={configLoading || configSaving}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-350 hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-2xs disabled:opacity-50 cursor-pointer transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-2xs disabled:opacity-50 cursor-pointer transition-colors"
                     title="Reload latest configuration from server"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${configLoading ? 'animate-spin' : ''}`} />
@@ -4093,8 +4093,8 @@ export const GradeComputation: React.FC = () => {
 
             {/* Loading State */}
             {configLoading ? (
-              <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
-                <RefreshCw className="w-6 h-6 animate-spin text-clinical-550" />
+              <div className="py-12 flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 gap-2">
+                <RefreshCw className="w-6 h-6 animate-spin" />
                 <span className="text-xs">Loading course grade configuration...</span>
               </div>
             ) : schemaMode === 'overall' ? (
@@ -4106,7 +4106,7 @@ export const GradeComputation: React.FC = () => {
                       <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                       Legacy Overall Grading Active
                     </div>
-                    <p className="text-[11px] text-slate-650 dark:text-slate-350 mt-0.5">
+                    <p className="text-[11px] dark:text-slate-300 mt-0.5">
                       This course offering uses single-list overall grading categories. You can continue editing or convert to period grading.
                     </p>
                   </div>
@@ -4123,7 +4123,7 @@ export const GradeComputation: React.FC = () => {
                 <form onSubmit={handleSaveGradingConfig} className="space-y-5">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between px-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Grading Categories ({categoryRows.length})
                       </span>
                       <button
@@ -4138,10 +4138,10 @@ export const GradeComputation: React.FC = () => {
 
                     {categoryRows.length === 0 ? (
                       <div className="py-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
-                        <p className="text-xs text-slate-400">No categories added yet.</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">No categories added yet.</p>
                       </div>
                     ) : (
-                      <div className="divide-y divide-slate-150 dark:divide-slate-800 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-950">
+                      <div className="divide-y dark:divide-slate-800 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-950">
                         {categoryRows.map((row, index) => (
                           <div key={row.tempId} className="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
                             <div className="flex flex-col gap-0.5">
@@ -4150,7 +4150,7 @@ export const GradeComputation: React.FC = () => {
                                 aria-label="Move category up"
                                 onClick={() => handleMoveCategory(index, 'up')}
                                 disabled={index === 0}
-                                className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20"
+                                className="p-1 rounded text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20"
                               >
                                 <ChevronUp className="w-3.5 h-3.5" />
                               </button>
@@ -4159,7 +4159,7 @@ export const GradeComputation: React.FC = () => {
                                 aria-label="Move category down"
                                 onClick={() => handleMoveCategory(index, 'down')}
                                 disabled={index === categoryRows.length - 1}
-                                className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20"
+                                className="p-1 rounded text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20"
                               >
                                 <ChevronDown className="w-3.5 h-3.5" />
                               </button>
@@ -4171,7 +4171,7 @@ export const GradeComputation: React.FC = () => {
                                 value={row.name}
                                 placeholder="Category name (e.g. Quizzes, Final Exam)"
                                 onChange={(e) => handleUpdateCategory(row.tempId, 'name', e.target.value)}
-                                className="w-full px-3 py-2 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                                className="w-full px-3 py-2 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
                               />
                             </div>
 
@@ -4181,9 +4181,9 @@ export const GradeComputation: React.FC = () => {
                                 value={row.weight}
                                 placeholder="0"
                                 onChange={(e) => handleUpdateCategory(row.tempId, 'weight', e.target.value)}
-                                className="w-20 px-2.5 py-2 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-bold text-right focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                                className="w-20 px-2.5 py-2 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-bold text-right focus:outline-none focus:ring-2 focus:ring-clinical-500"
                               />
-                              <span className="text-xs font-bold text-slate-400">%</span>
+                              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">%</span>
                             </div>
 
                             <div>
@@ -4205,14 +4205,14 @@ export const GradeComputation: React.FC = () => {
                   </div>
 
                   {saveResultBanner}
-                  <div className="pt-4 border-t border-slate-150 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="pt-4 border-t dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                       <div className="text-xs">
-                        <span className="text-slate-400">Total Weight: </span>
+                        <span className="text-slate-500 dark:text-slate-400">Total Weight: </span>
                         <span className={`font-extrabold text-sm ${weightCalculation.isExact100 ? 'text-emerald-500' : 'text-rose-500'}`}>
                           {weightCalculation.displayPercent}
                         </span>
-                        <span className="text-slate-400 text-xs"> / 100%</span>
+                        <span className="text-slate-500 dark:text-slate-400 text-xs"> / 100%</span>
                       </div>
                       {weightCalculation.isExact100 ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
@@ -4300,7 +4300,7 @@ export const GradeComputation: React.FC = () => {
                   {/* LEVEL 1: TOPMOST PERIOD TABS (MIDTERM & FINAL WITH INLINE RATIO EDITING) */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between px-1">
-                      <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wider">
                         1. Select Period & Term Split
                       </span>
                       <span className={`text-[11px] font-bold ${termRatioCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
@@ -4326,9 +4326,9 @@ export const GradeComputation: React.FC = () => {
                           <div>
                             <div className="font-extrabold text-sm sm:text-base text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
                               <span>Midterm</span>
-                              <span className="text-[11px] font-bold text-slate-400">Categories</span>
+                              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Categories</span>
                             </div>
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                            <p className="text-[11px] text-slate-500 dark:text-slate-500">
                               Midterm Period Weight
                             </p>
                           </div>
@@ -4350,7 +4350,7 @@ export const GradeComputation: React.FC = () => {
                               }}
                               className="w-16 sm:w-20 pl-2.5 pr-6 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs sm:text-sm text-right focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
                             />
-                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">%</span>
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500 dark:text-slate-400 pointer-events-none">%</span>
                           </div>
                         </div>
                       </div>
@@ -4372,9 +4372,9 @@ export const GradeComputation: React.FC = () => {
                           <div>
                             <div className="font-extrabold text-sm sm:text-base text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
                               <span>Finals</span>
-                              <span className="text-[11px] font-bold text-slate-400">Categories</span>
+                              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Categories</span>
                             </div>
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                            <p className="text-[11px] text-slate-500 dark:text-slate-500">
                               Finals Period Weight
                             </p>
                           </div>
@@ -4396,7 +4396,7 @@ export const GradeComputation: React.FC = () => {
                               }}
                               className="w-16 sm:w-20 pl-2.5 pr-6 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs sm:text-sm text-right focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
                             />
-                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">%</span>
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500 dark:text-slate-400 pointer-events-none">%</span>
                           </div>
                         </div>
                       </div>
@@ -4407,7 +4407,7 @@ export const GradeComputation: React.FC = () => {
                   {componentMode === 'lecture_laboratory' && (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between px-1">
-                        <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wider">
                           2. {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'} Component Contribution
                         </span>
                         <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
@@ -4439,9 +4439,9 @@ export const GradeComputation: React.FC = () => {
                             <div>
                               <div className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1">
                                 <span>Lecture</span>
-                                <span className="text-[10px] font-semibold text-slate-400">Categories</span>
+                                <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Categories</span>
                               </div>
-                              <p className="text-[10px] text-slate-400 dark:text-slate-500">Component Contribution</p>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-500">Component Contribution</p>
                             </div>
                           </div>
 
@@ -4457,7 +4457,7 @@ export const GradeComputation: React.FC = () => {
                                 }}
                                 className="w-14 sm:w-16 pl-2 pr-5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs text-right focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
                               />
-                              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400 pointer-events-none">%</span>
+                              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-500 dark:text-slate-400 pointer-events-none">%</span>
                             </div>
                           </div>
                         </div>
@@ -4481,9 +4481,9 @@ export const GradeComputation: React.FC = () => {
                             <div>
                               <div className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1">
                                 <span>Laboratory</span>
-                                <span className="text-[10px] font-semibold text-slate-400">Categories</span>
+                                <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Categories</span>
                               </div>
-                              <p className="text-[10px] text-slate-400 dark:text-slate-500">Component Contribution</p>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-500">Component Contribution</p>
                             </div>
                           </div>
 
@@ -4499,7 +4499,7 @@ export const GradeComputation: React.FC = () => {
                                 }}
                                 className="w-14 sm:w-16 pl-2 pr-5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs text-right focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
                               />
-                              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400 pointer-events-none">%</span>
+                              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-500 dark:text-slate-400 pointer-events-none">%</span>
                             </div>
                           </div>
                         </div>
@@ -4548,7 +4548,7 @@ export const GradeComputation: React.FC = () => {
                         <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
                           3. {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'} • {activeComponentEditorTab} Categories ({activePeriodVisibleCategories.length})
                         </span>
-                        <span className="text-[11px] text-slate-400">• Must total 100%</span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">• Must total 100%</span>
                       </div>
 
                       <div className="flex items-center gap-2.5 max-[359px]:flex-wrap">
@@ -4576,7 +4576,7 @@ export const GradeComputation: React.FC = () => {
 
                     {/* Categories rows list */}
                     {activePeriodVisibleCategories.length === 0 ? (
-                      <div className="py-12 text-center text-slate-400 space-y-2">
+                      <div className="py-12 text-center text-slate-500 dark:text-slate-400 space-y-2">
                         <p className="text-xs">No {activeComponentEditorTab} categories defined for {activePeriodEditorTab}.</p>
                         <button
                           type="button"
@@ -4601,7 +4601,7 @@ export const GradeComputation: React.FC = () => {
                                 aria-label={`Move category ${row.name || 'unnamed'} up`}
                                 onClick={() => handleMovePeriodCategory(activePeriodEditorTab, index, 'up')}
                                 disabled={isLegacyCombinedPeriodConfig || index === 0}
-                                className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
+                                className="p-1 rounded text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                               >
                                 <ChevronUp className="w-3.5 h-3.5" />
                               </button>
@@ -4610,7 +4610,7 @@ export const GradeComputation: React.FC = () => {
                                 aria-label={`Move category ${row.name || 'unnamed'} down`}
                                 onClick={() => handleMovePeriodCategory(activePeriodEditorTab, index, 'down')}
                                 disabled={isLegacyCombinedPeriodConfig || index === list.length - 1}
-                                className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
+                                className="p-1 rounded text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                               >
                                 <ChevronDown className="w-3.5 h-3.5" />
                               </button>
@@ -4618,7 +4618,7 @@ export const GradeComputation: React.FC = () => {
 
                             {/* Category Name */}
                             <div className="flex-1 min-w-0">
-                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                              <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
                                 Category Name
                               </label>
                               <div className="flex items-center gap-2">
@@ -4641,7 +4641,7 @@ export const GradeComputation: React.FC = () => {
 
                             {/* Weight (%) */}
                             <div className="w-full sm:w-28 shrink-0">
-                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                              <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
                                 Weight (%)
                               </label>
                               <div className="relative">
@@ -4653,7 +4653,7 @@ export const GradeComputation: React.FC = () => {
                                   onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'weight', e.target.value)}
                                   className="w-full pl-2 pr-6 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold text-right focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
                                 />
-                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">%</span>
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500 dark:text-slate-400 pointer-events-none">%</span>
                               </div>
                             </div>
 
@@ -4665,7 +4665,7 @@ export const GradeComputation: React.FC = () => {
                                 onClick={() => handleRemovePeriodCategory(activePeriodEditorTab, row.compositeKey)}
                                 disabled={isLegacyCombinedPeriodConfig || row.inUse}
                                 title={row.inUse ? 'Cannot delete category with associated assessments' : 'Delete category'}
-                                className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-20 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                                className="p-1.5 rounded-xl text-slate-500 dark:text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-20 disabled:cursor-not-allowed transition-colors cursor-pointer"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -4683,7 +4683,7 @@ export const GradeComputation: React.FC = () => {
                         <Settings className="w-3.5 h-3.5 text-slate-400" />
                         <span>Faculty-Defined Attendance Date Ranges (Optional Calendar Settings)</span>
                       </div>
-                      <span className="text-[10px] font-semibold text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+                      <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 group-open:rotate-180 transition-transform">▼</span>
                     </summary>
                     <div className="p-4 pt-1 border-t border-slate-200/60 dark:border-slate-800/60 space-y-3">
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -4702,7 +4702,7 @@ export const GradeComputation: React.FC = () => {
                           <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Midterm Attendance Range</div>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <label htmlFor="midterm-start-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">Start Date</label>
+                              <label htmlFor="midterm-start-date" className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold mb-0.5">Start Date</label>
                               <input
                                 id="midterm-start-date"
                                 type="date"
@@ -4713,7 +4713,7 @@ export const GradeComputation: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <label htmlFor="midterm-end-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">End Date</label>
+                              <label htmlFor="midterm-end-date" className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold mb-0.5">End Date</label>
                               <input
                                 id="midterm-end-date"
                                 type="date"
@@ -4730,7 +4730,7 @@ export const GradeComputation: React.FC = () => {
                           <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Finals Attendance Range</div>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <label htmlFor="final-start-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">Start Date</label>
+                              <label htmlFor="final-start-date" className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold mb-0.5">Start Date</label>
                               <input
                                 id="final-start-date"
                                 type="date"
@@ -4741,7 +4741,7 @@ export const GradeComputation: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <label htmlFor="final-end-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">End Date</label>
+                              <label htmlFor="final-end-date" className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold mb-0.5">End Date</label>
                               <input
                                 id="final-end-date"
                                 type="date"
@@ -4865,7 +4865,7 @@ export const GradeComputation: React.FC = () => {
 
             <div className="space-y-2 text-xs">
               <h4 className="font-bold text-slate-800 dark:text-slate-200">Proposed Term Ratio:</h4>
-              <div className="flex items-center gap-4 text-slate-650 dark:text-slate-350">
+              <div className="flex items-center gap-4 dark:text-slate-300">
                 <span>Midterm: <strong>{termRatio.midterm}%</strong></span>
                 <span>Finals: <strong>{termRatio.final}%</strong></span>
               </div>
@@ -4885,7 +4885,7 @@ export const GradeComputation: React.FC = () => {
                       <div key={c.compositeKey} className="flex items-center justify-between text-[11px] py-1 border-b border-slate-100 dark:border-slate-800 last:border-none">
                         <div className="flex items-center gap-1.5 truncate">
                           <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{c.name}</span>
-                          <span className="text-[9px] font-mono text-slate-400">
+                          <span className="text-[9px] font-mono text-slate-500 dark:text-slate-400">
                             {c.id ? `(#${c.id})` : '(New)'}
                           </span>
                         </div>
@@ -4893,7 +4893,7 @@ export const GradeComputation: React.FC = () => {
                           <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 capitalize">
                             {c.sourceKind}
                           </span>
-                          <span className="font-mono font-bold text-slate-700 dark:text-slate-350">{c.weight}%</span>
+                          <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{c.weight}%</span>
                         </div>
                       </div>
                     ))}
@@ -4911,7 +4911,7 @@ export const GradeComputation: React.FC = () => {
                       <div key={c.compositeKey} className="flex items-center justify-between text-[11px] py-1 border-b border-slate-100 dark:border-slate-800 last:border-none">
                         <div className="flex items-center gap-1.5 truncate">
                           <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{c.name}</span>
-                          <span className="text-[9px] font-mono text-slate-400">
+                          <span className="text-[9px] font-mono text-slate-500 dark:text-slate-400">
                             {c.id ? `(#${c.id})` : '(New)'}
                           </span>
                         </div>
@@ -4919,7 +4919,7 @@ export const GradeComputation: React.FC = () => {
                           <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 capitalize">
                             {c.sourceKind}
                           </span>
-                          <span className="font-mono font-bold text-slate-700 dark:text-slate-350">{c.weight}%</span>
+                          <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{c.weight}%</span>
                         </div>
                       </div>
                     ))}
@@ -4928,11 +4928,11 @@ export const GradeComputation: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-150 dark:border-slate-800">
+            <div className="flex justify-end gap-2 pt-3 border-t dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setIsConversionModalOpen(false)}
-                className="px-4 py-2 rounded-xl border border-slate-205 dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900"
+                className="px-4 py-2 rounded-xl border dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900"
               >
                 Cancel
               </button>
@@ -4968,11 +4968,11 @@ export const GradeComputation: React.FC = () => {
                 This will recalculate student period evaluations and final grades for all enrolled students in class <strong>{selectedClassId}</strong> using the authoritative grading configuration.
               </p>
             </div>
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-150 dark:border-slate-800">
+            <div className="flex justify-end gap-2 pt-3 border-t dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setIsRecomputeConfirmOpen(false)}
-                className="px-4 py-2 rounded-xl border border-slate-205 dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900"
+                className="px-4 py-2 rounded-xl border dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900"
               >
                 Cancel
               </button>
@@ -4998,7 +4998,7 @@ export const GradeComputation: React.FC = () => {
       ---------------------------------------------------- */}
       {activeSubTab === 'summaries' && (
         <Card className="p-0 overflow-hidden no-print">
-          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+          <div className="px-5 py-4 border-b dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-200">Academic Grade Summaries</h3>
@@ -5006,7 +5006,7 @@ export const GradeComputation: React.FC = () => {
                   {selectedSubjectCode || 'Course'} · {selectedClassId || 'Section'}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-0.5">Final grades and periodic evaluations based on current component scores</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Final grades and periodic evaluations based on current component scores</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
@@ -5046,7 +5046,7 @@ export const GradeComputation: React.FC = () => {
             </div>
           </div>
 
-          <div className="px-5 py-3 border-b border-slate-150 dark:border-slate-800/80 bg-slate-50/10 dark:bg-slate-900/10 flex items-center justify-between gap-3">
+          <div className="px-5 py-3 border-b dark:border-slate-800/80 bg-slate-50/10 dark:bg-slate-900/10 flex items-center justify-between gap-3">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
@@ -5054,10 +5054,10 @@ export const GradeComputation: React.FC = () => {
                 placeholder="Search student by name or ID..."
                 value={summarySearch}
                 onChange={(e) => setSummarySearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-205 dark:border-slate-850 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                className="w-full pl-9 pr-3 py-2 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
               />
             </div>
-            <span className="text-[11px] font-semibold text-slate-400 hidden sm:inline">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hidden sm:inline">
               Showing {sortedSummaryStudents.length} {sortedSummaryStudents.length === 1 ? 'student' : 'students'}
             </span>
           </div>
@@ -5093,9 +5093,9 @@ export const GradeComputation: React.FC = () => {
           )}
 
           <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
-            <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800">
+            <table className="min-w-full divide-y dark:divide-slate-800">
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
-                <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-left">
+                <tr className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">
                   <th className="px-5 py-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => toggleSort('name')}>
                     <div className="flex items-center gap-1">
                       Student Details
@@ -5140,7 +5140,7 @@ export const GradeComputation: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs">
                 {sortedSummaryStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={isPeriodMode ? (isLectureLaboratoryMode ? 9 : 5) : 7} className="px-5 py-8 text-center text-slate-400">
+                    <td colSpan={isPeriodMode ? (isLectureLaboratoryMode ? 9 : 5) : 7} className="px-5 py-8 text-center text-slate-500 dark:text-slate-400">
                       No matching student grade summaries found.
                     </td>
                   </tr>
@@ -5163,47 +5163,47 @@ export const GradeComputation: React.FC = () => {
                         <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
                           <td className="px-5 py-3">
                             <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
-                            <span className="text-[10px] text-slate-400">{student.studentId}</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">{student.studentId}</span>
                           </td>
                           {isLectureLaboratoryMode && (
                             <>
-                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{formatComponentResultCell(evalResult.midtermComponents?.lecture, evalResult.midtermStatus)}</td>
-                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{formatComponentResultCell(evalResult.midtermComponents?.laboratory, evalResult.midtermStatus)}</td>
+                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{formatComponentResultCell(evalResult.midtermComponents?.lecture, evalResult.midtermStatus)}</td>
+                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{formatComponentResultCell(evalResult.midtermComponents?.laboratory, evalResult.midtermStatus)}</td>
                             </>
                           )}
-                          <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">
+                          <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">
                             {evalResult.midtermPercentage !== null ? (
                               `${evalResult.midtermPercentage.toFixed(2)}%`
                             ) : evalResult.midtermStatus === 'pending' ? (
-                              <span className="text-slate-400 font-sans">Pending</span>
+                              <span className="text-slate-500 dark:text-slate-400 font-sans">Pending</span>
                             ) : evalResult.midtermReasons.length > 0 ? (
                               <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold" title={evalResult.midtermReasons.join(', ')}>
                                 Incomplete ({evalResult.midtermReasons[0]})
                               </span>
                             ) : (
-                              <span className="text-slate-400 font-sans">—</span>
+                              <span className="text-slate-500 dark:text-slate-400 font-sans">—</span>
                             )}
                           </td>
                           {isLectureLaboratoryMode && (
                             <>
-                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{formatComponentResultCell(evalResult.finalComponents?.lecture, evalResult.finalStatus)}</td>
-                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{formatComponentResultCell(evalResult.finalComponents?.laboratory, evalResult.finalStatus)}</td>
+                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{formatComponentResultCell(evalResult.finalComponents?.lecture, evalResult.finalStatus)}</td>
+                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{formatComponentResultCell(evalResult.finalComponents?.laboratory, evalResult.finalStatus)}</td>
                             </>
                           )}
-                          <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">
+                          <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">
                             {evalResult.finalPercentage !== null ? (
                               `${evalResult.finalPercentage.toFixed(2)}%`
                             ) : evalResult.finalStatus === 'pending' ? (
-                              <span className="text-slate-400 font-sans">Pending</span>
+                              <span className="text-slate-500 dark:text-slate-400 font-sans">Pending</span>
                             ) : evalResult.finalReasons.length > 0 ? (
                               <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold" title={evalResult.finalReasons.join(', ')}>
                                 Incomplete ({evalResult.finalReasons[0]})
                               </span>
                             ) : (
-                              <span className="text-slate-400 font-sans">—</span>
+                              <span className="text-slate-500 dark:text-slate-400 font-sans">—</span>
                             )}
                           </td>
-                          <td className="px-5 py-3 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
+                          <td className="px-5 py-3 text-center font-extrabold text-sm dark:text-slate-100">
                             {evalResult.overallGwa !== null ? (
                               <GradeValue percentage={evalResult.overallPercentage} grade={evalResult.overallGwa}>{formatGrade(evalResult.overallGwa)}</GradeValue>
                             ) : evalResult.historicalGwa !== null ? (
@@ -5245,13 +5245,13 @@ export const GradeComputation: React.FC = () => {
                       <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
                         <td className="px-5 py-3">
                           <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
-                          <span className="text-[10px] text-slate-400">{student.studentId}</span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400">{student.studentId}</span>
                         </td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.quizzes === 'number' ? `${subj.components.quizzes.toFixed(1)}%` : '—'}</td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.practicum === 'number' ? `${subj.components.practicum.toFixed(1)}%` : '—'}</td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—'}</td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—'}</td>
-                        <td className="px-5 py-3 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
+                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{subj && typeof subj.components?.quizzes === 'number' ? `${subj.components.quizzes.toFixed(1)}%` : '—'}</td>
+                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{subj && typeof subj.components?.practicum === 'number' ? `${subj.components.practicum.toFixed(1)}%` : '—'}</td>
+                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—'}</td>
+                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—'}</td>
+                        <td className="px-5 py-3 text-center font-extrabold text-sm dark:text-slate-100">
                           {hasGrade ? <GradeValue percentage={evalResult.overallPercentage} grade={subj.grade}>{formatGrade(subj.grade)}</GradeValue> : '—'}
                         </td>
                         <td className="px-5 py-3">
@@ -5304,10 +5304,10 @@ export const GradeComputation: React.FC = () => {
             {/* Top Grid: Destination & Upload Dropzone */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
               {/* Left Column: Component Destination & Template Guide */}
-              <div className="space-y-4 flex flex-col justify-between p-5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 border border-slate-150 dark:border-slate-800">
+              <div className="space-y-4 flex flex-col justify-between p-5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 border dark:border-slate-800">
                 <div className="space-y-3">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1.5">
                       1. Grading Component Destination
                     </label>
                     {importPeriodMode && (
@@ -5333,7 +5333,7 @@ export const GradeComputation: React.FC = () => {
                       value={importSelection}
                       onChange={(e) => setImportSelection(e.target.value)}
                       disabled={assessmentConfigStatus !== 'configured' || !importHasOptions}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-205 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="w-full px-3.5 py-2.5 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       <option value="">
                         {assessmentConfigStatus === 'loading' ? 'Loading components…'
@@ -5378,7 +5378,7 @@ export const GradeComputation: React.FC = () => {
                   </div>
 
                   <div className="space-y-1.5 pt-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                       Required Columns
                     </span>
                     <div className="flex flex-wrap gap-1.5">
@@ -5406,7 +5406,7 @@ export const GradeComputation: React.FC = () => {
 
               {/* Right Column: Interactive Dropzone */}
               <div className="flex flex-col">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1.5">
                   2. Select CSV Score Sheet
                 </label>
                 <div
@@ -5434,7 +5434,7 @@ export const GradeComputation: React.FC = () => {
                         <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate max-w-xs">
                           {csvFile.name}
                         </p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                           {(csvFile.size / 1024).toFixed(1)} KB • CSV Spreadsheet
                         </p>
                       </div>
@@ -5463,9 +5463,9 @@ export const GradeComputation: React.FC = () => {
                         <span className="text-xs font-bold text-clinical-600 dark:text-clinical-400 hover:underline">
                           Browse CSV file
                         </span>
-                        <span className="text-xs text-slate-400"> or drag and drop</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400"> or drag and drop</span>
                       </div>
-                      <p className="text-[10px] text-slate-400">Standard Comma-Separated Values (.csv)</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Standard Comma-Separated Values (.csv)</p>
                     </label>
                   )}
                 </div>
@@ -5495,7 +5495,7 @@ export const GradeComputation: React.FC = () => {
                     <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">
                       Data Verification Preview
                     </h4>
-                    <p className="text-[10px] text-slate-400">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
                       Inspected {csvPreviewData.length} records against current roster
                     </p>
                   </div>
@@ -5512,9 +5512,9 @@ export const GradeComputation: React.FC = () => {
                 </div>
 
                 <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden max-h-64 overflow-y-auto">
-                  <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800 text-xs">
+                  <table className="min-w-full divide-y dark:divide-slate-800 text-xs">
                     <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10">
-                      <tr className="text-left font-bold text-[10px] uppercase text-slate-400 tracking-wider">
+                      <tr className="text-left font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400 tracking-wider">
                         <th className="px-4 py-2.5">Student ID</th>
                         <th className="px-4 py-2.5">Student Name</th>
                         <th className="px-4 py-2.5">Imported Score</th>
@@ -5552,7 +5552,7 @@ export const GradeComputation: React.FC = () => {
               </div>
             )}
 
-            <div className="flex max-[369px]:flex-wrap items-center justify-between gap-2 pt-4 border-t border-slate-150 dark:border-slate-800">
+            <div className="flex max-[369px]:flex-wrap items-center justify-between gap-2 pt-4 border-t dark:border-slate-800">
               <button
                 type="button"
                 onClick={handleClearCsv}
@@ -5772,7 +5772,7 @@ export const GradeComputation: React.FC = () => {
       >
         <form onSubmit={handleAssessmentSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
               Assessment Title / Activity Name
             </label>
             <input
@@ -5781,19 +5781,19 @@ export const GradeComputation: React.FC = () => {
               placeholder="e.g. Molar Crown Prep quiz"
               value={assTitle}
               onChange={(e) => setAssTitle(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+              className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
               Target Class / Section
             </label>
             {/* The class comes from the Active Section selector at the top of
                 the page, so the page has a single place to choose a class. */}
             <div
               data-testid="assessment-target-class"
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-slate-200 text-xs font-semibold"
+              className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-slate-200 text-xs font-semibold"
             >
               {[...availableClasses, ...(currentAssessmentOffering?.sections ?? [])].find(classItem => classItem.id === assClassId)?.csName
                 || 'Choose a class with the Active Section selector at the top of the page.'}
@@ -5802,13 +5802,13 @@ export const GradeComputation: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Grading Period
               </label>
               <select
                 value={assPeriod}
                 onChange={(e) => handlePeriodChange(e.target.value as any)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
               >
                 <option value="Midterm">Midterm Period</option>
                 <option value="Final">Final Period</option>
@@ -5816,11 +5816,11 @@ export const GradeComputation: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Category Type
               </label>
               {modalConfigStatus === 'loading' && (
-                <div className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-400 text-xs flex items-center gap-2">
+                <div className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs flex items-center gap-2">
                   <RefreshCw className="w-3.5 h-3.5 animate-spin text-clinical-600" />
                   <span>Loading grading categories...</span>
                 </div>
@@ -5870,7 +5870,7 @@ export const GradeComputation: React.FC = () => {
                       setModalCategoryWarning(false);
                     }}
                     required
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                    className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
                   >
                     <option value="">Select grading category</option>
                     {(() => {
@@ -5933,7 +5933,7 @@ export const GradeComputation: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Maximum Score (Points)
               </label>
               <input
@@ -5956,21 +5956,21 @@ export const GradeComputation: React.FC = () => {
                     setAssMaxScore(50);
                   }
                 }}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Due Date
               </label>
               <input
                 type="date"
                 value={assDueDate}
                 onChange={(e) => setAssDueDate(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
+                className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
               />
-              <p className="text-[10px] text-slate-400">Optional. Leave blank for activities without a specific deadline.</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">Optional. Leave blank for activities without a specific deadline.</p>
             </div>
           </div>
 
@@ -5986,21 +5986,21 @@ export const GradeComputation: React.FC = () => {
                 <div>
                   <div className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
                     <span>Attendance Linking & Transmutation</span>
-                    <span className="text-[10px] font-normal text-slate-400">(Optional)</span>
+                    <span className="text-[10px] font-normal text-slate-500 dark:text-slate-400">(Optional)</span>
                     {assTransmutationEnabled ? (
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-clinical-50 text-clinical-650 dark:bg-clinical-950/40 dark:text-clinical-400 border border-clinical-200 dark:border-clinical-800">
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-clinical-50 dark:bg-clinical-950/40 dark:text-clinical-400 border border-clinical-200 dark:border-clinical-800">
                         Active
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-medium bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500">
                         Off
                       </span>
                     )}
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Scale raw percentages or link to a biometric attendance session</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Scale raw percentages or link to a biometric attendance session</p>
                 </div>
               </div>
-              <div className="flex items-center gap-1 text-slate-400">
+              <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
                 {isTransmutationSectionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </div>
             </button>
@@ -6019,7 +6019,7 @@ export const GradeComputation: React.FC = () => {
                 {assTransmutationEnabled && (
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Minimum percentage
                         <input
                           type="number"
@@ -6031,7 +6031,7 @@ export const GradeComputation: React.FC = () => {
                           className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
                         />
                       </label>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Maximum percentage
                         <input
                           type="number"
@@ -6048,7 +6048,7 @@ export const GradeComputation: React.FC = () => {
                       Preview: 0% raw -&gt; {assTransmutationMinimum.toFixed(2)}%, 50% raw -&gt; {(assTransmutationMinimum + (assTransmutationMaximum - assTransmutationMinimum) / 2).toFixed(2)}%, 100% raw -&gt; {assTransmutationMaximum.toFixed(2)}%. Absent -&gt; 0%.
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Attendance session date (Optional)
                         <select
                           value={assAttendanceDate}
@@ -6066,7 +6066,7 @@ export const GradeComputation: React.FC = () => {
                           ))}
                         </select>
                       </label>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Attendance session code (Optional)
                         <select
                           value={assAttendanceCode}
@@ -6088,7 +6088,7 @@ export const GradeComputation: React.FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
               Instructions
             </label>
             <textarea
@@ -6096,13 +6096,13 @@ export const GradeComputation: React.FC = () => {
               placeholder="Instructions details..."
               value={assInstructions}
               onChange={(e) => setAssInstructions(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500 resize-none"
+              className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500 resize-none"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Remarks / Metadata
               </label>
               <input
@@ -6110,18 +6110,18 @@ export const GradeComputation: React.FC = () => {
                 placeholder="Remarks..."
                 value={assRemarks}
                 onChange={(e) => setAssRemarks(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Assessment Status
               </label>
               <select
                 value={assStatus}
                 onChange={(e) => setAssStatus(e.target.value as any)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
+                className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
               >
                 <option value="Active">Active / Open</option>
                 <option value="Closed">Closed</option>
@@ -6133,7 +6133,7 @@ export const GradeComputation: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsAssessmentModalOpen(false)}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-650 dark:text-slate-400 font-semibold text-xs hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
+              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:text-slate-400 font-semibold text-xs hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
             >
               Cancel
             </button>

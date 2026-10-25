@@ -428,7 +428,7 @@ export function SsoLogin() {
               {/* Divider */}
               <div className="my-4 flex items-center gap-3">
                 <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Or Sign In with Email
                 </span>
                 <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
@@ -441,7 +441,7 @@ export function SsoLogin() {
                     Bicol University Email Address
                   </label>
                   <div className="relative rounded-xl shadow-xs group">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-accent-500 transition-colors">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 dark:text-slate-400 group-focus-within:text-accent-500 transition-colors">
                       <Mail className="h-4 w-4" />
                     </div>
                     <div className="flex">
@@ -470,7 +470,7 @@ export function SsoLogin() {
                     Password
                   </label>
                   <div className="relative rounded-xl shadow-xs group">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-accent-500 transition-colors">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 dark:text-slate-400 group-focus-within:text-accent-500 transition-colors">
                       <Lock className="h-4 w-4" />
                     </div>
                     <input
@@ -487,7 +487,7 @@ export function SsoLogin() {
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -526,12 +526,12 @@ export function SsoLogin() {
       </main>
 
       {/* 3. Dark Footer Bar (Full Width) */}
-      <footer className="bg-slate-900 text-slate-400 py-3 px-6 sm:px-12 border-t border-slate-800 flex-shrink-0">
+      <footer className="bg-slate-900 text-slate-500 dark:text-slate-400 py-3 px-6 sm:px-12 border-t border-slate-800 flex-shrink-0">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-center sm:text-left">
           <div className="text-slate-300 font-medium">
             © 2026 Bicol University College of Dental Medicine. All rights reserved.
           </div>
-          <div className="hidden sm:flex flex-wrap items-center justify-center sm:justify-end gap-4 sm:gap-6 text-slate-400">
+          <div className="hidden sm:flex flex-wrap items-center justify-center sm:justify-end gap-4 sm:gap-6 text-slate-500 dark:text-slate-400">
             <div className="flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-accent-400 flex-shrink-0" />
               <span>Legazpi City</span>
