@@ -853,7 +853,7 @@ export const Reports: React.FC = () => {
                       <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
                         <td className="px-5 py-3.5">
                           <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
-                          <span className="text-[10px] text-slate-400 font-mono">{student.studentId}</span>
+                          <span className="whitespace-nowrap text-[10px] text-slate-400 font-mono">{student.studentId}</span>
                         </td>
                         {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus)}</td>}
                         {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.midtermComponents?.laboratory, evaluation.midtermStatus)}</td>}
@@ -970,7 +970,7 @@ export const Reports: React.FC = () => {
                     <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
                       <td className="px-5 py-3.5">
                         <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
-                        <span className="text-[10px] text-slate-404">{student.studentId} • Year {student.yearLevel}</span>
+                        <span className="whitespace-nowrap text-[10px] text-slate-404">{student.studentId} • Year {student.yearLevel}</span>
                       </td>
                       <td className="px-5 py-3.5 text-center font-bold text-slate-800 dark:text-slate-100">
                         {gwa !== null ? gwa.toFixed(2) : '—'}
@@ -1084,11 +1084,11 @@ export const Reports: React.FC = () => {
                         <td className="px-5 py-3 font-mono">{record.date}</td>
                         <td className="px-5 py-3">
                           <div className="font-bold text-slate-800 dark:text-slate-200">{record.studentName || 'Student name unavailable'}</div>
-                          <span className="text-[10px] text-slate-400 font-mono">{record.studentNumber || 'Student number unavailable'}</span>
+                          <span className="whitespace-nowrap text-[10px] text-slate-400 font-mono">{record.studentNumber || 'Student number unavailable'}</span>
                         </td>
                         <td className="px-5 py-3 font-bold font-mono text-clinical-650">{selectedClass?.courseCode || 'Course unavailable'}</td>
                         <td className="px-5 py-3">
-                          <span className={`px-2 py-0.5 rounded font-extrabold uppercase text-[9px] ${
+                          <span className={`whitespace-nowrap px-2 py-0.5 rounded font-extrabold uppercase text-[9px] ${
                             record.status === 'present' ? 'bg-emerald-100 text-emerald-700' :
                             record.status === 'late' ? 'bg-amber-100 text-amber-700' :
                             record.status === 'excused' ? 'bg-sky-100 text-sky-700' :

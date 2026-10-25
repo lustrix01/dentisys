@@ -1008,7 +1008,7 @@ export const Attendance: React.FC = () => {
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
             <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
-            <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
+            <span className="whitespace-nowrap text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
           </div>
 
           <button

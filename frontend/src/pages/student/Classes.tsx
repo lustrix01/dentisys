@@ -246,7 +246,7 @@ export const Classes: React.FC = () => {
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
             <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
-            <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentNumber}</span>
+            <span className="whitespace-nowrap text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentNumber}</span>
           </div>
 
           <button
@@ -393,16 +393,16 @@ export const Classes: React.FC = () => {
                   <Card key={cls.enrollmentId} className="p-5 sm:p-6 hover:border-blue-300 dark:hover:border-blue-800/80 transition-all flex flex-col justify-between">
                     <div className="space-y-3.5">
                       {/* Course Code & Units */}
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="px-2.5 py-1 rounded-lg font-mono font-extrabold text-xs bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/80 dark:border-blue-900">
+                          <span className="whitespace-nowrap px-2.5 py-1 rounded-lg font-mono font-extrabold text-xs bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/80 dark:border-blue-900">
                             {cls.courseCode}
                           </span>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                          <span className="whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                             {cls.units} Academic Units
                           </span>
                         </div>
-                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        <span className="whitespace-nowrap text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                           Section {cls.className}
                         </span>
                       </div>
@@ -487,22 +487,22 @@ export const Classes: React.FC = () => {
                   <Card key={cls.enrollmentId} className="p-5 sm:p-6 opacity-90 hover:opacity-100 border-slate-200 dark:border-slate-800 transition-all flex flex-col justify-between bg-slate-50/50 dark:bg-slate-900/50">
                     <div className="space-y-3.5">
                       {/* Course Code & Archived Status */}
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="px-2.5 py-1 rounded-lg font-mono font-extrabold text-xs bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300/80 dark:border-slate-700">
+                          <span className="whitespace-nowrap px-2.5 py-1 rounded-lg font-mono font-extrabold text-xs bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300/80 dark:border-slate-700">
                             {cls.courseCode}
                           </span>
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700">
+                          <span className="whitespace-nowrap px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700">
                             Archived
                           </span>
                           {cls.archiveReason === 'finished' && (
-                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 text-[9px] font-extrabold uppercase tracking-wider">Completed</span>
+                            <span className="whitespace-nowrap px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 text-[9px] font-extrabold uppercase tracking-wider">Completed</span>
                           )}
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                          <span className="whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
                             {cls.units} Units
                           </span>
                         </div>
-                        <span className="px-2.5 py-1 rounded-lg font-bold text-[10px] uppercase bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50">
+                        <span className="whitespace-nowrap px-2.5 py-1 rounded-lg font-bold text-[10px] uppercase bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50">
                           S.Y. {cls.schoolYear}
                         </span>
                       </div>

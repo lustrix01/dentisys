@@ -1783,7 +1783,7 @@ export const ClassesAndRosters: React.FC = () => {
 
                     return (
                       <tr key={st.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="py-3.5 px-4 font-mono font-bold text-slate-700 dark:text-slate-200">
+                        <td className="py-3.5 px-4 whitespace-nowrap font-mono font-bold text-slate-700 dark:text-slate-200">
                           {st.studentId}
                         </td>
                         <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">
@@ -1793,7 +1793,7 @@ export const ClassesAndRosters: React.FC = () => {
                           {st.email}
                         </td>
                         <td className="py-3.5 px-4">
-                          <span className="px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 font-extrabold text-[10px] uppercase tracking-wider border border-accent-200/60 dark:border-accent-800/40">
+                          <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 font-extrabold text-[10px] uppercase tracking-wider border border-accent-200/60 dark:border-accent-800/40">
                             {assignedClassLabel}
                           </span>
                         </td>

@@ -369,7 +369,7 @@ export const EmailManagement: React.FC = () => {
               Email Management & Class Invitations
             </h1>
             {currentSchoolYear && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300">
+              <span className="hidden sm:inline-flex whitespace-nowrap items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300">
                 <CalendarDays className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 S.Y. {currentSchoolYear} (Current)
               </span>
@@ -580,7 +580,7 @@ export const EmailManagement: React.FC = () => {
                         </td>
 
                         <td className="py-3.5 px-4">
-                          <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-[11px] text-slate-700 dark:text-slate-300">
+                          <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-[11px] text-slate-700 dark:text-slate-300">
                             {student.classSections?.[0]?.className || 'Section 4-A'}
                           </span>
                         </td>
@@ -591,7 +591,7 @@ export const EmailManagement: React.FC = () => {
                             const accountStatus = student.accountStatus ?? 'none';
                             if (accountStatus === 'active' || accountStatus === 'secretary' || accountStatus === 'disabled') {
                               const registeredLabel = accountStatus === 'active' ? 'Registered' : accountStatus === 'secretary' ? 'Secretary Account' : 'Account Disabled';
-                              return <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60">{registeredLabel}</span>;
+                              return <span className="whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60">{registeredLabel}</span>;
                             }
                             const label = invitation
                               ? invitation.status === 'Sent' ? 'Invitation Sent'
@@ -603,7 +603,7 @@ export const EmailManagement: React.FC = () => {
                               : invitation
                                 ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200/60'
                                 : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60';
-                            return <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border ${tone}`}>{label}</span>;
+                            return <span className={`whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border ${tone}`}>{label}</span>;
                           })()}
                         </td>
 
@@ -687,7 +687,7 @@ export const EmailManagement: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-[11px] text-slate-700 dark:text-slate-300">
+                        <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-[11px] text-slate-700 dark:text-slate-300">
                           {section.className || '—'}
                         </span>
                       </td>
@@ -695,11 +695,11 @@ export const EmailManagement: React.FC = () => {
                       <td className="py-3.5 px-4 text-center">
                         {section.isSecretary ? (
                           <span className="inline-flex items-center gap-2">
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">Class Secretary</span>
+                            <span className="whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">Class Secretary</span>
                             <button type="button" disabled={isSending} onClick={() => void handleRemoveSecretary(student, section.classId, section.className)} className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-bold text-[10px] hover:bg-rose-100 disabled:opacity-50 cursor-pointer">Remove</button>
                           </span>
                         ) : (
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                          <span className="whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                             {student.accountStatus === 'active' || student.accountStatus === 'secretary' ? 'Student (has account)' : 'Student (no account yet)'}
                           </span>
                         )}

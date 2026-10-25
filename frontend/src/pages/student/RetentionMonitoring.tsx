@@ -341,7 +341,7 @@ export const RetentionMonitoring: React.FC = () => {
             Retention Risk Monitoring
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Student: <strong className="text-slate-700 dark:text-slate-200">{studentName}</strong> ({studentId})
+            Student: <strong className="text-slate-700 dark:text-slate-200">{studentName}</strong> <span className="whitespace-nowrap">({studentId})</span>
           </p>
         </div>
 

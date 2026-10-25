@@ -53,7 +53,7 @@ export const AuditCompactList: React.FC<{ entries: AuditEntry[]; variant?: 'list
       <li key={entry.id} className="py-2.5 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
         <span className="text-slate-700 dark:text-slate-200 break-words">
           <span className="font-semibold">{auditWho(entry)}</span>
-          {' — '}{entry.what} · {entry.record}{entry.change && entry.change !== '—' ? ` · ${entry.change}` : ''}
+          {' — '}{entry.what} · <span className="whitespace-nowrap">{entry.record}</span>{entry.change && entry.change !== '—' ? ` · ${entry.change}` : ''}
         </span>
         <span className="text-slate-400 whitespace-nowrap">{entry.status} · {formatManilaWhen(entry.occurredAt)}</span>
       </li>
@@ -412,7 +412,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
                           {entry.who && <p className="text-[10px] text-slate-400">{entry.who.roleLabel}</p>}
                         </td>
                         <td className="px-5 py-3 font-semibold text-slate-700 dark:text-slate-300 break-words min-w-[8rem]">{entry.what}</td>
-                        <td className="px-5 py-3 text-slate-600 dark:text-slate-400 break-words min-w-[10rem]">{entry.record}</td>
+                        <td className="px-5 py-3 text-slate-600 dark:text-slate-400 max-2xl:whitespace-nowrap 2xl:break-words min-w-[10rem]">{entry.record}</td>
                         <td className="px-5 py-3 text-slate-600 dark:text-slate-400 break-words min-w-[8rem]">
                           {entry.change}
                           {entry.batch && (

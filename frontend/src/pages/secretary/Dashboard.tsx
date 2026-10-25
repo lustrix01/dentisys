@@ -161,11 +161,11 @@ export const Dashboard: React.FC = () => {
           
           {/* Section Overview */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div className="flex flex-wrap gap-2 items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
                 Assigned Section
               </h3>
-              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-full">
+              <span className="whitespace-nowrap text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-full">
                 {assignedClassName}
               </span>
             </div>
@@ -200,7 +200,7 @@ export const Dashboard: React.FC = () => {
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
                 Attendance Session
               </h3>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${activeSession ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/60 dark:text-emerald-300' : 'text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400'}`}>
+              <span className={`whitespace-nowrap text-[10px] font-bold px-2 py-0.5 rounded-full ${activeSession ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/60 dark:text-emerald-300' : 'text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400'}`}>
                 {activeSession ? 'Live' : 'None active'}
               </span>
             </div>

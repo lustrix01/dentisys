@@ -178,7 +178,7 @@ export const RealStudentDashboard: React.FC = () => {
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
             <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
-            <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{student.studentNumber || '—'}</span>
+            <span className="whitespace-nowrap text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{student.studentNumber || '—'}</span>
           </div>
           <button
             onClick={() => navigate('/student/attendance')}
@@ -318,7 +318,7 @@ export const RealStudentDashboard: React.FC = () => {
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{cls.className}</td>
+                        <td className="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-400">{cls.className}</td>
                         <td className="py-3 px-4 text-center font-bold">{cls.units}</td>
                         <td className="py-3 px-4 text-center font-mono font-bold">
                           {cls.grade !== null ? <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue> : (

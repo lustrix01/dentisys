@@ -292,7 +292,7 @@ export const FacultyInvitation: React.FC = () => {
             ? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
             : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
     return (
-      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${style}`}>
+      <span className={`inline-flex whitespace-nowrap items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${style}`}>
         <Icon className="h-3 w-3" />
         {status}
       </span>

@@ -996,19 +996,19 @@ export const AttendanceMonitoring: React.FC = () => {
                 >
                   <div className="space-y-2.5">
                     {/* Top Row: Colorful Badge, Section Label & Live Dot */}
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/50 text-accent-700 dark:text-accent-300 text-[10px] font-extrabold uppercase tracking-wider">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/50 text-accent-700 dark:text-accent-300 text-[10px] font-extrabold uppercase tracking-wider">
                         {c.courseCode} &bull; Year {c.yearLevel || 1}
                       </span>
 
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                        <span className="whitespace-nowrap text-xs font-bold text-emerald-600 dark:text-emerald-400">
                           {c.csName || `Block ${c.block}`}
                         </span>
 
                         {/* Live Session Dot Indicator */}
                         {hasActiveSession ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 animate-pulse">
+                          <span className="inline-flex whitespace-nowrap items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 animate-pulse">
                             <span className="relative flex h-2 w-2">
                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
