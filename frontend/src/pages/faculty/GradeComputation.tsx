@@ -3166,7 +3166,7 @@ export const GradeComputation: React.FC = () => {
       <div className="no-print flex flex-wrap xl:flex-nowrap bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
         <button
           onClick={() => setActiveSubTab('scores')}
-          className={`flex-1 min-w-[10.5rem] xl:min-w-[auto] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'scores' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'scores' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <ClipboardCheck className="w-4 h-4" />
@@ -3174,7 +3174,7 @@ export const GradeComputation: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('assessments')}
-          className={`flex-1 min-w-[10.5rem] xl:min-w-[auto] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'assessments' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'assessments' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <FileText className="w-4 h-4" />
@@ -3182,7 +3182,7 @@ export const GradeComputation: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('components')}
-          className={`flex-1 min-w-[10.5rem] xl:min-w-[auto] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'components' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'components' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <Settings className="w-4 h-4" />
@@ -3190,7 +3190,7 @@ export const GradeComputation: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('summaries')}
-          className={`flex-1 min-w-[10.5rem] xl:min-w-[auto] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'summaries' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'summaries' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <Printer className="w-4 h-4" />
@@ -3198,7 +3198,7 @@ export const GradeComputation: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('import')}
-          className={`flex-1 min-w-[10.5rem] xl:min-w-[auto] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'import' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'import' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <Upload className="w-4 h-4" />
@@ -3216,7 +3216,7 @@ export const GradeComputation: React.FC = () => {
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
               <button
                 onClick={() => setScoreEntryMode('single')}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${scoreEntryMode === 'single'
+                className={`flex items-center gap-1.5 min-[375px]:whitespace-nowrap px-3.5 min-[375px]:max-sm:px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${scoreEntryMode === 'single'
                   ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                   }`}
@@ -3226,7 +3226,7 @@ export const GradeComputation: React.FC = () => {
               </button>
               <button
                 onClick={() => setScoreEntryMode('matrix')}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${scoreEntryMode === 'matrix'
+                className={`flex items-center gap-1.5 min-[375px]:whitespace-nowrap px-3.5 min-[375px]:max-sm:px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${scoreEntryMode === 'matrix'
                   ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                   }`}
@@ -3305,11 +3305,11 @@ export const GradeComputation: React.FC = () => {
                       {/* Filter Controls Bar */}
                       <div className="p-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-150 dark:border-slate-800 space-y-2">
                         {/* Period Segmented Pills */}
-                        <div className="flex items-center gap-1 bg-slate-200/60 dark:bg-slate-800 p-0.5 rounded-lg">
+                        <div className="flex flex-wrap items-center gap-1 bg-slate-200/60 dark:bg-slate-800 p-0.5 rounded-lg">
                           <button
                             type="button"
                             onClick={() => changeActivityFilter('all', activityFilterType)}
-                            className={`flex-1 py-1 text-center rounded-md text-[11px] font-bold transition-all ${
+                            className={`flex-1 min-w-fit whitespace-nowrap py-1 text-center rounded-md text-[11px] font-bold transition-all ${
                               activityFilterPeriod === 'all'
                                 ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-2xs'
                                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
@@ -3320,7 +3320,7 @@ export const GradeComputation: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => changeActivityFilter('Midterm', activityFilterType)}
-                            className={`flex-1 py-1 text-center rounded-md text-[11px] font-bold transition-all ${
+                            className={`flex-1 min-w-fit whitespace-nowrap py-1 text-center rounded-md text-[11px] font-bold transition-all ${
                               activityFilterPeriod === 'Midterm'
                                 ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-2xs'
                                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
@@ -3331,7 +3331,7 @@ export const GradeComputation: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => changeActivityFilter('Final', activityFilterType)}
-                            className={`flex-1 py-1 text-center rounded-md text-[11px] font-bold transition-all ${
+                            className={`flex-1 min-w-fit whitespace-nowrap py-1 text-center rounded-md text-[11px] font-bold transition-all ${
                               activityFilterPeriod === 'Final'
                                 ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-2xs'
                                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'

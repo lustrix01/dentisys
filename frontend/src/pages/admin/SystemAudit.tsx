@@ -452,11 +452,11 @@ export const DeanReports: React.FC = () => {
           <div className="space-y-4">
             {/* Class Section Filter Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
-              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setClassSectionTab('active')}
-                  className={`flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`flex-1 sm:flex-initial whitespace-nowrap flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     classSectionTab === 'active'
                       ? 'bg-white dark:bg-slate-900 text-accent-600 dark:text-accent-400 shadow-sm'
                       : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
@@ -471,7 +471,7 @@ export const DeanReports: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setClassSectionTab('archived')}
-                  className={`flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`flex-1 sm:flex-initial whitespace-nowrap flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     classSectionTab === 'archived'
                       ? 'bg-white dark:bg-slate-900 text-accent-600 dark:text-accent-400 shadow-sm'
                       : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
@@ -761,11 +761,11 @@ export const DeanReports: React.FC = () => {
           <div className="space-y-4">
             {/* Class Section Filter Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
-              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setClassSectionTab('active')}
-                  className={`flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`flex-1 sm:flex-initial whitespace-nowrap flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     classSectionTab === 'active'
                       ? 'bg-white dark:bg-slate-900 text-accent-600 dark:text-accent-400 shadow-sm'
                       : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
@@ -780,7 +780,7 @@ export const DeanReports: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setClassSectionTab('archived')}
-                  className={`flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`flex-1 sm:flex-initial whitespace-nowrap flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     classSectionTab === 'archived'
                       ? 'bg-white dark:bg-slate-900 text-accent-600 dark:text-accent-400 shadow-sm'
                       : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
@@ -1093,11 +1093,11 @@ export const DeanReports: React.FC = () => {
           <div className="space-y-4">
             {/* Class Section Filter Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
-              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setClassSectionTab('active')}
-                  className={`flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`flex-1 sm:flex-initial whitespace-nowrap flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     classSectionTab === 'active'
                       ? 'bg-white dark:bg-slate-900 text-accent-600 dark:text-accent-400 shadow-sm'
                       : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
@@ -1112,7 +1112,7 @@ export const DeanReports: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setClassSectionTab('archived')}
-                  className={`flex-1 sm:flex-initial min-w-0 flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`flex-1 sm:flex-initial whitespace-nowrap flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     classSectionTab === 'archived'
                       ? 'bg-white dark:bg-slate-900 text-accent-600 dark:text-accent-400 shadow-sm'
                       : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'

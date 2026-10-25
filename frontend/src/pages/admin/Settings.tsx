@@ -132,7 +132,7 @@ export const Settings: React.FC = () => {
                   }}
                   aria-pressed={theme === mode}
                   key={mode}
-                  className={`rounded-xl p-3 text-center border text-[10px] font-bold transition-all ${theme === mode ? "border-accent-500 bg-accent-50 dark:bg-accent-950/30 text-accent-700 dark:text-accent-400" : "border-slate-200 dark:border-slate-800 text-slate-400"}`}
+                  className={`rounded-xl p-3 lg:max-xl:px-2 whitespace-nowrap text-center border text-[10px] font-bold transition-all ${theme === mode ? "border-accent-500 bg-accent-50 dark:bg-accent-950/30 text-accent-700 dark:text-accent-400" : "border-slate-200 dark:border-slate-800 text-slate-400"}`}
                 >
                   {mode === "light" ? (
                     <Sun className="w-4.5 h-4.5 mx-auto mb-1.5" />
