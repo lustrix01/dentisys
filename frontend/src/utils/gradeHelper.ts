@@ -21,12 +21,14 @@ export const effectiveAssessmentPercentage = (
   return null;
 };
 
+/** Official BUCDM grade sheet (spec 2026-10-26), same as the server: whole percent, .5 up; the inner round guards float noise. */
+export const roundPercent = (value: number): number => Math.floor(Math.round(value * 1e9) / 1e9 + 0.5);
+
 /**
- * BUCDM conversion (spec 2026-10-17), same as the server: truncate to a whole
- * percent, then map to a one-decimal grade (1.0 best). Below 75%: Midterm
- * 3.1..4.0 (65% and below = 4.0); Final and the overall course grade = 5.0.
+ * Whole percent -> one-decimal grade (1.0 best), same table as the server.
+ * Below 75% is 5.0 for Midterm, Final and course grades; `period` is kept for existing callers.
  */
-export const percentageToGWAExact = (pct: number, period: 'Midterm' | 'Final' = 'Final'): number => {
+export const percentageToGWAExact = (pct: number, _period: 'Midterm' | 'Final' = 'Final'): number => {
   if (!Number.isFinite(pct)) return 5.0;
   const t = Math.floor(pct + 1e-9); // epsilon guards float drift (84.0 -> 83.9999999)
   let tenths: number;
@@ -34,7 +36,6 @@ export const percentageToGWAExact = (pct: number, period: 'Midterm' | 'Final' = 
   else if (t >= 84) tenths = 109 - t;
   else if (t >= 76) tenths = 26 + Math.floor((83 - t) / 2);
   else if (t === 75) tenths = 30;
-  else if (period === 'Midterm') tenths = Math.min(40, 31 + (74 - t));
   else tenths = 50;
   return tenths / 10;
 };

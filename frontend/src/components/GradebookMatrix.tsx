@@ -686,7 +686,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                               {format(pct)}
                             </td>
                             <td className={`${totalCell} ${cellBg} font-extrabold`} title={`${isMidterm ? 'Final Midterm Grade' : 'Final Grade'} (1.0–5.0): ${periodEquivalentGrade(pct, isMidterm ? 'Midterm' : 'Final')}`}>
-                              <GradeValue percentage={pct} period={isMidterm ? 'Midterm' : 'Final'}>{periodEquivalentGrade(pct, isMidterm ? 'Midterm' : 'Final')}</GradeValue>
+                              <GradeValue percentage={pct} raw={periodBreakdown(student.id, period.key)?.rawPercentage} period={isMidterm ? 'Midterm' : 'Final'}>{periodEquivalentGrade(pct, isMidterm ? 'Midterm' : 'Final')}</GradeValue>
                             </td>
                           </>
                         );

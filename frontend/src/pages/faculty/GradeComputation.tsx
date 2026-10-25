@@ -14,7 +14,6 @@ import {
   Edit,
   Trash2,
   Archive,
-  Download,
   Upload,
   Printer,
   ArrowUpDown,
@@ -44,6 +43,8 @@ import { recordAudit } from '../../services/auditService';
 
 import {
   computeFacultyGradesApi,
+  getFacultyAssessmentScoresApi,
+  importGradeSheet,
   deleteFacultyAssessmentApi,
   getFacultyClassesApi,
   getFacultySettingsApi,
@@ -81,7 +82,8 @@ import {
   isPeriodComputeResult
 } from '../../utils/periodGradingHelper';
 import { formatGrade, percentageToGWAExact, matchesActivityFilters, saveStatusBadge } from '../../utils/gradeHelper';
-import { buildImportGroups, hasSelectable, importTemplateFileName, isLectureLab, isPeriodConfig, keepSelection, type ImportPeriod } from '../../utils/importDestination';
+import { GradeSheetImportPanel } from '../../components/GradeSheetImportPanel';
+import type { GradeSheetImportPlan } from '../../utils/gradeSheetImport';
 import type {
   PeriodDraftState,
   PeriodCategoryDraftRow,
@@ -2907,123 +2909,29 @@ export const GradeComputation: React.FC = () => {
   };
 
   // ----------------------------------------------------
-  // 5. IMPORT GRADE SHEETS TAB STATE
+  // 5. IMPORT GRADE SHEETS TAB (official .xlsx; see components/GradeSheetImportPanel)
   // ----------------------------------------------------
-  const [importPeriod, setImportPeriod] = useState<ImportPeriod>('Midterm');
-  // Selected destination as "<component>|<name>" (see utils/importDestination); '' = nothing selected.
-  const [importSelection, setImportSelection] = useState('');
-  const importPeriodMode = isPeriodConfig(assessmentConfig);
-  const importGroups = useMemo(() => buildImportGroups(assessmentConfig, importPeriod), [assessmentConfig, importPeriod]);
-  const importHasOptions = hasSelectable(importGroups);
-
-  // Changing class/section or course clears the destination; the period choice is kept.
-  useEffect(() => { setImportSelection(''); }, [selectedClassId, selectedSubjectCode]);
-
-  const handleImportPeriod = (period: ImportPeriod) => {
-    setImportPeriod(period);
-    setImportSelection(prev => keepSelection(buildImportGroups(assessmentConfig, period), prev));
-  };
-  const [csvFile, setCsvFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [csvPreviewData, setCsvPreviewData] = useState<{ id: string; name: string; score: number; valid: boolean; error?: string }[]>([]);
-  const [csvErrors, setCsvErrors] = useState<string[]>([]);
-
-  const handleClearCsv = () => {
-    setCsvFile(null);
-    setCsvPreviewData([]);
-    setCsvErrors([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+  const importClass = useMemo(() => facultyClasses.find(c => c.id === selectedClassId), [facultyClasses, selectedClassId]);
+  const importAssessments = useMemo(
+    () => assessments.filter(a => a.subjectCode === selectedSubjectCode && a.classId === selectedClassId && a.status !== 'Archived'),
+    [assessments, selectedSubjectCode, selectedClassId],
+  );
+  const handleGradeSheetImport = async (plan: GradeSheetImportPlan) => {
+    try {
+      const result = await importGradeSheet(plan);
+      // Created or removed assessments change the list; reload it and this class's scores.
+      const fresh = await refreshAssessments();
+      await Promise.all(fresh.filter(a => a.classId === plan.classId).map(async a => {
+        const response = await getFacultyAssessmentScoresApi(a.id);
+        saveAssessmentScores(a.id, response.scores.map(score => ({ studentId: score.studentId, score: Number(score.score), remarks: score.remarks })));
+      }));
+      showRecomputeNotice(result);
+      setMatrixRefreshKey(key => key + 1);
+      showFeedback(`Grade sheet imported: ${result.scoresSaved} score(s) saved.`, 'success');
+    } catch (requestError) {
+      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to import the grade sheet.', 'error');
+      throw requestError;
     }
-  };
-
-  const handleDownloadCsvTemplate = () => {
-    const headers = 'Student ID,Score\n';
-    const sampleRows = activeStudents.length > 0
-      ? activeStudents.map(s => `${s.studentId},`).join('\n')
-      : '2024-0001,85\n2024-0002,90\n';
-    const blob = new Blob([headers + sampleRows], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', importTemplateFileName(selectedSubjectCode || 'Course', importPeriodMode ? importPeriod : null, importSelection, isLectureLab(assessmentConfig)));
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showFeedback('Sample CSV score template downloaded.', 'success');
-  };
-
-  const handleCsvSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setCsvFile(file);
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      if (!text) return;
-
-      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-      if (lines.length < 2) {
-        setCsvErrors(['CSV must contain a header row and at least one student record.']);
-        setCsvPreviewData([]);
-        return;
-      }
-
-      // Check header format: Student ID, Score (e.g. DENT-2022-0051, 85)
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-      if (!headers.includes('student id') || !headers.includes('score')) {
-        setCsvErrors(['Invalid CSV headers! The file must include "Student ID" and "Score" columns.']);
-        setCsvPreviewData([]);
-        return;
-      }
-
-      const idIdx = headers.indexOf('student id');
-      const scoreIdx = headers.indexOf('score');
-
-      const parsed: typeof csvPreviewData = [];
-      const errorsList: string[] = [];
-
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
-        const studId = cols[idIdx];
-        const scoreStr = cols[scoreIdx];
-
-        if (!studId) continue;
-
-        const matchedStudent = students.find(s => s.studentId === studId);
-        const scoreNum = parseFloat(scoreStr);
-        let valid = true;
-        let rowErr = '';
-
-        if (!matchedStudent) {
-          valid = false;
-          rowErr = `Line ${i + 1}: Student ID "${studId}" is not registered in the system.`;
-          errorsList.push(rowErr);
-        } else if (!matchedStudent.classSections?.some(section => section.classId === selectedClassId)) {
-          valid = false;
-          rowErr = `Line ${i + 1}: Student "${matchedStudent.name}" is not enrolled in Class "${selectedClassId}".`;
-          errorsList.push(rowErr);
-        } else if (isNaN(scoreNum) || scoreNum < 0 || scoreNum > 100) {
-          valid = false;
-          rowErr = `Line ${i + 1}: Score "${scoreStr}" must be a number between 0 and 100.`;
-          errorsList.push(rowErr);
-        }
-
-        parsed.push({
-          id: studId,
-          name: matchedStudent ? matchedStudent.name : 'Unknown Student',
-          score: isNaN(scoreNum) ? 0 : scoreNum,
-          valid,
-          error: rowErr || undefined
-        });
-      }
-
-      setCsvPreviewData(parsed);
-      setCsvErrors(errorsList);
-    };
-
-    reader.readAsText(file);
   };
 
   // Helper styles
@@ -5268,304 +5176,21 @@ export const GradeComputation: React.FC = () => {
           TAB 5: IMPORT GRADE SHEETS
       ---------------------------------------------------- */}
       {activeSubTab === 'import' && (
-        <Card className="max-w-4xl mx-auto shadow-sm border border-slate-200/90 dark:border-slate-800 rounded-3xl overflow-hidden bg-white dark:bg-slate-900">
-          <CardHeader className="border-b border-slate-100 dark:border-slate-800/80 p-6 sm:p-7">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-lg font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2.5">
-                  <Upload className="w-5 h-5 text-clinical-600 dark:text-clinical-400" />
-                  <span>Import Grade Sheets from CSV</span>
-                </CardTitle>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Upload CSV score records to validate and preview assessment marks for enrolled students
-                </p>
-              </div>
-              <div className="shrink-0">
-                <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                  {selectedSubjectCode || 'Course'} · {selectedClassId || 'Section'}
-                </span>
-              </div>
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-6 sm:p-7 space-y-6">
-            {/* Top Grid: Destination & Upload Dropzone */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
-              {/* Left Column: Component Destination & Template Guide */}
-              <div className="space-y-4 flex flex-col justify-between p-5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 border dark:border-slate-800">
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1.5">
-                      1. Grading Component Destination
-                    </label>
-                    {importPeriodMode && (
-                      <div role="group" aria-label="Grading period" className="flex gap-1 p-1 mb-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-                        {(['Midterm', 'Final'] as const).map(p => (
-                          <button
-                            key={p}
-                            type="button"
-                            aria-pressed={importPeriod === p}
-                            onClick={() => handleImportPeriod(p)}
-                            className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                              importPeriod === p
-                                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
-                                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-                            }`}
-                          >
-                            {p}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <select
-                      value={importSelection}
-                      onChange={(e) => setImportSelection(e.target.value)}
-                      disabled={assessmentConfigStatus !== 'configured' || !importHasOptions}
-                      className="w-full px-3.5 py-2.5 rounded-xl border dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      <option value="">
-                        {assessmentConfigStatus === 'loading' ? 'Loading components…'
-                          : assessmentConfigStatus === 'error' ? 'Components unavailable'
-                          : assessmentConfigStatus === 'unconfigured' ? 'Grade weights required'
-                          : !importHasOptions ? `No components set for ${importPeriod}`
-                          : 'Select a component'}
-                      </option>
-                      {assessmentConfigStatus === 'configured' && importGroups.map(g => {
-                        const opts = g.options.map(o => (
-                          <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>
-                        ));
-                        return g.label ? <optgroup key={g.label} label={g.label}>{opts}</optgroup> : opts;
-                      })}
-                    </select>
-                    {assessmentConfigStatus === 'error' && (
-                      <div className="mt-2 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 text-[11px] text-rose-600 dark:text-rose-400 flex flex-wrap items-center justify-between gap-2">
-                        <span className="min-w-0 break-words">{assessmentConfigError}</span>
-                        <button
-                          type="button"
-                          onClick={() => currentAssessmentOffering && loadAssessmentOfferingConfig(currentAssessmentOffering)}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-xs font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                          title="Retry loading configuration"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                          Retry Config
-                        </button>
-                      </div>
-                    )}
-                    {assessmentConfigStatus === 'unconfigured' && (
-                      <div className="mt-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/30 text-[11px] text-amber-700 dark:text-amber-400 space-y-2">
-                        <p>Grade weights required. Save this course's Grade Weights first.</p>
-                        <button
-                          type="button"
-                          onClick={() => setActiveSubTab('components')}
-                          className="px-3 py-1 rounded-lg text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-clinical-600 dark:text-clinical-400 hover:border-clinical-400 cursor-pointer"
-                        >
-                          Open Grade Weights Editor
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5 pt-1">
-                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                      Required Columns
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      <span className="px-2.5 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300">
-                        Student ID
-                      </span>
-                      <span className="px-2.5 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300">
-                        Score (0–100)
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800">
-                  <button
-                    type="button"
-                    onClick={handleDownloadCsvTemplate}
-                    className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-clinical-400 dark:hover:border-clinical-500 text-clinical-600 dark:text-clinical-400 hover:text-clinical-700 font-bold text-xs transition-colors shadow-2xs cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Download CSV Template with Roster</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Right Column: Interactive Dropzone */}
-              <div className="flex flex-col">
-                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1.5">
-                  2. Select CSV Score Sheet
-                </label>
-                <div
-                  className={`flex-1 flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-dashed transition-all text-center ${
-                    csvFile
-                      ? 'border-emerald-400 bg-emerald-50/20 dark:bg-emerald-950/20'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-clinical-500 dark:hover:border-clinical-400 bg-slate-50/40 dark:bg-slate-800/30'
-                  }`}
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".csv"
-                    onChange={handleCsvSelect}
-                    className="hidden"
-                    id="csv-file-upload"
-                  />
-
-                  {csvFile ? (
-                    <div className="space-y-2">
-                      <div className="w-10 h-10 mx-auto rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                        <Check className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate max-w-xs">
-                          {csvFile.name}
-                        </p>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                          {(csvFile.size / 1024).toFixed(1)} KB • CSV Spreadsheet
-                        </p>
-                      </div>
-                      <div className="flex items-center justify-center gap-2 pt-1">
-                        <label
-                          htmlFor="csv-file-upload"
-                          className="px-3 py-1 rounded-lg text-xs font-bold text-clinical-600 dark:text-clinical-400 hover:bg-clinical-50 dark:hover:bg-clinical-950/50 cursor-pointer transition-colors"
-                        >
-                          Change File
-                        </label>
-                        <button
-                          type="button"
-                          onClick={handleClearCsv}
-                          className="px-3 py-1 rounded-lg text-xs font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <label htmlFor="csv-file-upload" className="cursor-pointer space-y-2">
-                      <div className="w-10 h-10 mx-auto rounded-full bg-clinical-50 dark:bg-clinical-950/60 text-clinical-600 dark:text-clinical-400 flex items-center justify-center">
-                        <Upload className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-clinical-600 dark:text-clinical-400 hover:underline">
-                          Browse CSV file
-                        </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400"> or drag and drop</span>
-                      </div>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Standard Comma-Separated Values (.csv)</p>
-                    </label>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Parsing Errors Notification */}
-            {csvErrors.length > 0 && (
-              <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 space-y-1.5 text-xs">
-                <h4 className="font-bold text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>Validation Issues ({csvErrors.length})</span>
-                </h4>
-                <div className="max-h-28 overflow-y-auto text-[11px] text-rose-600 dark:text-rose-400 space-y-0.5 pl-5">
-                  {csvErrors.map((err, idx) => (
-                    <div key={idx}>• {err}</div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* CSV Data Preview */}
-            {csvPreviewData.length > 0 && (
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                      Data Verification Preview
-                    </h4>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                      Inspected {csvPreviewData.length} records against current roster
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                      {csvPreviewData.filter(r => r.valid).length} Valid
-                    </span>
-                    {csvPreviewData.filter(r => !r.valid).length > 0 && (
-                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                        {csvPreviewData.filter(r => !r.valid).length} Invalid
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden max-h-64 overflow-y-auto">
-                  <table className="min-w-full divide-y dark:divide-slate-800 text-xs">
-                    <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10">
-                      <tr className="text-left font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400 tracking-wider">
-                        <th className="px-4 py-2.5">Student ID</th>
-                        <th className="px-4 py-2.5">Student Name</th>
-                        <th className="px-4 py-2.5">Imported Score</th>
-                        <th className="px-4 py-2.5">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
-                      {csvPreviewData.map((row, idx) => (
-                        <tr
-                          key={idx}
-                          className={row.valid ? 'hover:bg-slate-50 dark:hover:bg-slate-800/30' : 'bg-rose-50/30 dark:bg-rose-950/10'}
-                        >
-                          <td className="px-4 py-2 font-mono text-slate-600 dark:text-slate-400 font-semibold">{row.id}</td>
-                          <td className="px-4 py-2 font-bold text-slate-800 dark:text-slate-100">{row.name}</td>
-                          <td className="px-4 py-2 font-mono font-bold text-clinical-600 dark:text-clinical-400">{row.score}%</td>
-                          <td className="px-4 py-2">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                                row.valid
-                                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                  : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
-                              }`}
-                            >
-                              {row.valid ? 'Ready' : 'Error'}
-                            </span>
-                            {row.error && (
-                              <span className="block text-[10px] text-rose-500 mt-0.5">{row.error}</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            <div className="flex max-[369px]:flex-wrap items-center justify-between gap-2 pt-4 border-t dark:border-slate-800">
-              <button
-                type="button"
-                onClick={handleClearCsv}
-                disabled={!csvFile && csvPreviewData.length === 0}
-                className="px-4 max-[359px]:px-2 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
-              >
-                Reset
-              </button>
-
-              <button
-                type="button"
-                disabled
-                title="Importing grade sheets is a preview capability. Apply individual scores in the Student Scores Entry tab."
-                className="flex items-center gap-1.5 whitespace-nowrap max-[359px]:px-2 max-[359px]:gap-1 px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-500 font-bold text-xs cursor-not-allowed"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>Import Preview Verified</span>
-              </button>
-            </div>
-          </CardContent>
-        </Card>
+        <GradeSheetImportPanel
+          classId={selectedClassId}
+          classLabel={`${selectedSubjectCode || 'Course'} · ${importClass?.csName ?? (selectedClassId || 'Section')}`}
+          cls={{ courseName: importClass?.courseName ?? activeSubjectName, semester: importClass?.semester ?? '', schoolYear: importClass?.schoolYear ?? '' }}
+          config={assessmentConfig}
+          configStatus={assessmentConfigStatus}
+          configError={assessmentConfigError ?? undefined}
+          onRetryConfig={() => { if (currentAssessmentOffering) void loadAssessmentOfferingConfig(currentAssessmentOffering); }}
+          onOpenWeights={() => setActiveSubTab('components')}
+          assessments={importAssessments}
+          scores={assessmentScores}
+          students={activeStudents}
+          onImport={handleGradeSheetImport}
+        />
       )}
-
-
-
 
       {/* ----------------------------------------------------
           PRINT LAYOUT SCREEN (HIDDEN NORMALLY)

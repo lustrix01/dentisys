@@ -695,7 +695,7 @@ export const RetentionMonitoring: React.FC = () => {
                           {typeof cls.midtermEvaluation?.percentage === 'number' ? `${cls.midtermEvaluation.percentage.toFixed(1)}%` : 'Pending'}
                         </td>
                         <td className="py-3.5 px-4 text-center font-mono font-extrabold text-amber-600 dark:text-amber-400">
-                          {typeof cls.midtermEvaluation?.grade === 'number' ? <GradeValue percentage={cls.midtermEvaluation.percentage} period="Midterm" grade={cls.midtermEvaluation.grade}>{formatGrade(cls.midtermEvaluation.grade)}</GradeValue> : 'Pending'}
+                          {typeof cls.midtermEvaluation?.grade === 'number' ? <GradeValue percentage={cls.midtermEvaluation.percentage} raw={cls.midtermEvaluation.rawPercentage} period="Midterm" grade={cls.midtermEvaluation.grade}>{formatGrade(cls.midtermEvaluation.grade)}</GradeValue> : 'Pending'}
                         </td>
                         <td className="py-3.5 px-4 text-slate-500">
                           <span className="block font-bold">At Risk · Midterm</span>

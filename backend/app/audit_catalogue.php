@@ -354,7 +354,7 @@ function audit_read_entries(PDO $pdo, array $viewer, array $p): array
             "SELECT * FROM (
                 SELECT e.event_id, e.occurred_at, e.actor_user_id, e.actor_username, e.actor_role, e.actor_display_name,
                        e.scope_cs_id, e.module_code, e.action_code, e.event_status, e.target_type, e.target_id,
-                       e.description, e.reason, e.ip_address, e.user_agent, e.operation_uuid,
+                       e.description, e.reason, e.ip_address, e.user_agent, e.operation_uuid, e.endpoint,
                        e.before_state_json, e.after_state_json, {$gkey} AS gkey,
                        ROW_NUMBER() OVER (PARTITION BY {$gkey} ORDER BY e.occurred_at DESC, e.event_id DESC) AS rn
                   FROM audit_events e
@@ -726,6 +726,9 @@ function audit_build_entry(array $rows, int $count, array $lk, bool $isDean): ar
         $what = $same ? audit_batch_label($code, $count) : $count . ' changes';
         $scopes = array_unique(array_map(static fn(array $r): string => (string) $r['scope_cs_id'], $rows));
         $record = count($scopes) === 1 && isset($lk['class'][(int) $head['scope_cs_id']]) ? $lk['class'][(int) $head['scope_cs_id']] : $count . ' records';
+        if (($head['endpoint'] ?? null) === '/api/faculty/grade-sheet-import') { // grade sheet import (contract G13)
+            $what = "Imported grade sheet · {$count} changes" . (str_ends_with($record, ' records') ? '' : " · {$record}");
+        }
         $change = $count . ' records';
         $changes = [];
         $batch = ['count' => $count, 'members' => array_map(static function (array $r) use ($per): array {

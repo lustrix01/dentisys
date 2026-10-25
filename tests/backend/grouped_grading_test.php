@@ -152,14 +152,16 @@ $final = faculty_compute_period_result($pdo, $periodGroup + [
         $assessment(2003, 401, 'Final', 80),
     ],
 ], 'Final', $finalMemberships);
-$overall = ($midterm['unroundedPercentage'] * 30 / 100) + ($final['unroundedPercentage'] * 70 / 100);
+$overall = faculty_round_percent(
+    faculty_round_percent($midterm['percentage'] * 30 / 100) + faculty_round_percent($final['percentage'] * 70 / 100)
+);
 assert_grouped_grading(
-    $final['percentage'] === 86.0 && round($overall, 2) === 85.4,
-    'The approved 60/40 component and 30/70 period example produces 84, 86 and 85.4'
+    $final['percentage'] === 86.0 && $overall === 85.0,
+    'The 60/40 component and 30/70 period example produces 84, 86 and a whole-percent course grade of 85'
 );
 
-// The Lecture result rounds to 0.01 for display, but the period combination
-// must use its raw value. Rounding first would incorrectly produce 0.01.
+// Official sheet (spec 2026-10-26): each component rounds to a whole percent
+// before the Lecture/Laboratory combination; the raw value stays in the breakdown.
 $precisionGroup = [
     'componentMode' => 'lecture_laboratory',
     'componentWeights' => ['lecture' => 50.0, 'laboratory' => 50.0],
@@ -174,10 +176,10 @@ $precision = faculty_compute_period_result($pdo, $precisionGroup, 'Midterm', [
     $membership(601, 'Quiz', 100, 'Laboratory'),
 ]);
 assert_grouped_grading(
-    $precision['breakdown']['components']['lecture']['percentage'] === 0.01
-        && $precision['percentage'] === 0.0
-        && abs($precision['unroundedPercentage'] - (0.01 / 101 * 100 / 2)) < 1e-12,
-    'Grouped period weighting uses unrounded component intermediates'
+    $precision['breakdown']['components']['lecture']['percentage'] === 0.0
+        && abs($precision['breakdown']['components']['lecture']['rawPercentage'] - round(0.01 / 101 * 100, 4)) < 1e-9
+        && $precision['percentage'] === 0.0,
+    'Grouped period weighting rounds each component to a whole percent and keeps the raw value'
 );
 
 $missingScore = faculty_compute_period_result($pdo, $periodGroup + [
@@ -280,9 +282,7 @@ assert_grouped_grading(
     'Legacy combined period calculations retain their saved assessment and Attendance math'
 );
 
-// Combined periods expose exact values so the Midterm+Final blend never uses
-// the rounded display percentages: 70/30 of 80.004 and 80.014 is 80.007 (80.01),
-// while the rounded 80.00 and 80.01 would give 80.003 (80.00).
+// Combined periods round to a whole percent (.5 up) and keep the raw value for the hover steps.
 $combinedPeriod = static fn(string $period, float $score): array => faculty_compute_period_result($pdo, [
     'componentMode' => 'combined',
     'assessments' => [$assessment(7100, 1701, $period, $score)],
@@ -294,15 +294,80 @@ $combinedPeriod = static fn(string $period, float $score): array => faculty_comp
     'sort_order' => 1,
     'source_kind' => 'assessment',
 ]]);
-$exactMidterm = $combinedPeriod('Midterm', 80.004);
-$exactFinal = $combinedPeriod('Final', 80.014);
-$exactBlend = round($exactMidterm['unroundedPercentage'] * 70 / 100 + $exactFinal['unroundedPercentage'] * 30 / 100, 2);
-$roundedBlend = round($exactMidterm['percentage'] * 70 / 100 + $exactFinal['percentage'] * 30 / 100, 2);
+$half = $combinedPeriod('Midterm', 74.5);
 assert_grouped_grading(
-    $exactMidterm['percentage'] === 80.0 && $exactFinal['percentage'] === 80.01
-        && abs($exactMidterm['unroundedPercentage'] - 80.004) < 1e-9
-        && $exactBlend === 80.01 && $roundedBlend === 80.0,
-    'Combined periods expose exact percentages whose blend differs from the rounded-period blend'
+    $half['percentage'] === 75.0 && faculty_percentage_to_gwa($half['percentage'], 'Midterm') === 3.0,
+    '74.5 rounds up to 75 and converts to 3.0'
+);
+$noisy = $combinedPeriod('Midterm', 74.4999999999);
+assert_grouped_grading($noisy['percentage'] === 75.0, 'Float noise cannot drop a half percent (74.4999999999 -> 75)');
+$low = $combinedPeriod('Midterm', 70.0);
+assert_grouped_grading(
+    $low['percentage'] === 70.0 && faculty_percentage_to_gwa($low['percentage'], 'Midterm') === 5.0,
+    'A Midterm of 70% is 5.0 (the old 3.1-4.0 band is removed)'
+);
+$unscored = faculty_compute_period_result($pdo, [
+    'componentMode' => 'combined',
+    'assessments' => [$assessment(7101, 1701, 'Midterm', 0, 100, false)],
+    'attendanceDateRanges' => ['midterm' => ['startDate' => null, 'endDate' => null]],
+], 'Midterm', [[
+    'category_id' => 1701, 'name' => 'Quiz', 'weight' => 100, 'sort_order' => 1, 'source_kind' => 'assessment',
+]]);
+assert_grouped_grading($unscored['status'] === 'incomplete' && $unscored['percentage'] === null, 'A blank score keeps the grade incomplete');
+
+// Golden example from the Dean's sample workbook. Items are transmuted 50-100%
+// (score/max x 50 + 50); Recitation and Lab Performance are single items, max 100, transmutation off.
+$goldenGroup = $periodGroup;
+$goldenMemberships = static function (int $base): array {
+    $m = static fn(int $c, string $n, float $w, string $comp): array => [
+        'category_id' => $c, 'name' => $n, 'weight' => $w, 'sort_order' => $c, 'source_kind' => 'assessment', 'component' => $comp,
+    ];
+    return [
+        $m($base + 1, 'Recitation', 10, 'Lecture'), $m($base + 2, 'Outputs', 20, 'Lecture'),
+        $m($base + 3, 'Quizzes', 20, 'Lecture'), $m($base + 4, 'Major Exam', 50, 'Lecture'),
+        $m($base + 5, 'Lab Performance', 10, 'Laboratory'), $m($base + 6, 'Lab Exercises', 30, 'Laboratory'),
+        $m($base + 7, 'Quizzes', 10, 'Laboratory'), $m($base + 8, 'Practical Exam', 50, 'Laboratory'),
+    ];
+};
+$goldenItems = static function (string $period, int $base, array $lec, array $lab): array {
+    $id = $base * 100;
+    $rows = [];
+    foreach (array_merge($lec, $lab) as [$cat, $score, $max, $trans]) {
+        $rows[] = [
+            'assessment_id' => ++$id, 'grading_category_id' => $base + $cat, 'grading_period' => $period,
+            'score' => (float) $score, 'max_score' => (float) $max, '_has_score' => true,
+            'transmutation_enabled' => $trans, 'transmutation_minimum_percentage' => 50.0,
+            'transmutation_maximum_percentage' => 100.0, 'linked_attendance_status' => null,
+        ];
+    }
+    return $rows;
+};
+$midLec = [[1, 88, 100, false], [2, 34, 50, true], [3, 14, 20, true], [3, 20, 30, true], [4, 49, 75, true]];
+$midLab = [[5, 0, 100, false], [6, 55, 56, true], [6, 45, 45, true], [6, 44, 50, true], [6, 41, 50, true], [6, 40, 50, true],
+    [6, 22, 35, true], [7, 9, 15, true], [7, 2, 25, true], [8, 40, 50, true]];
+$finLec = [[1, 90, 100, false], [2, 20, 20, true], [3, 8, 10, true], [3, 10, 25, true], [3, 12, 15, true], [4, 51, 60, true]];
+$finLab = [[5, 92, 100, false], [6, 21, 25, true], [6, 20, 25, true], [6, 21, 25, true], [6, 23, 28, true], [6, 36, 44, true],
+    [6, 20, 24, true], [6, 30, 36, true], [6, 17, 20, true], [6, 51, 55, true], [7, 15, 40, true], [8, 68, 115, true]];
+$gMid = faculty_compute_period_result($pdo, $goldenGroup + ['assessments' => $goldenItems('Midterm', 10, $midLec, $midLab)], 'Midterm', $goldenMemberships(10));
+$gFin = faculty_compute_period_result($pdo, $goldenGroup + ['assessments' => $goldenItems('Final', 20, $finLec, $finLab)], 'Final', $goldenMemberships(20));
+$gc = static fn(array $r, string $k): array => $r['breakdown']['components'][$k];
+assert_grouped_grading(
+    $gc($gMid, 'lecture')['percentage'] === 84.0 && abs($gc($gMid, 'lecture')['rawPercentage'] - 83.7667) < 0.0001
+        && $gc($gMid, 'laboratory')['percentage'] === 79.0 && abs($gc($gMid, 'laboratory')['rawPercentage'] - 79.4768) < 0.0001
+        && $gMid['percentage'] === 82.0,
+    'Golden Midterm: Lecture 83.7667 -> 84, Laboratory 79.4768 -> 79, period 82'
+);
+assert_grouped_grading(
+    $gc($gFin, 'lecture')['percentage'] === 92.0 && abs($gc($gFin, 'lecture')['rawPercentage'] - 91.9167) < 0.0001
+        && $gc($gFin, 'laboratory')['percentage'] === 83.0 && abs($gc($gFin, 'laboratory')['rawPercentage'] - 83.4635) < 0.0001
+        && $gFin['percentage'] === 88.0,
+    'Golden Final: Lecture 91.9167 -> 92, Laboratory 83.4635 -> 83, period 88'
+);
+$goldenCourse = faculty_round_percent(faculty_round_percent($gMid['percentage'] * 30 / 100) + faculty_round_percent($gFin['percentage'] * 70 / 100));
+assert_grouped_grading(
+    $goldenCourse === 87.0 && faculty_percentage_to_gwa($goldenCourse) === 2.2
+        && faculty_percentage_to_gwa($gc($gMid, 'lecture')['percentage'], 'Midterm') === 2.5,
+    'Golden course: round(24.6) + round(61.6) = 25 + 62 = 87 -> 2.2; Midterm Lecture 84 -> 2.5'
 );
 
 echo "ALL GROUPED GRADING TESTS PASSED.\n";

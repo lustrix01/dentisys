@@ -26,7 +26,7 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 ## Grading and retention
 
 - Faculty edit grading categories and weights; weights must total exactly 100% and grades stay computed — GRD-002, GRD-003 — implemented, tests passing.
-- Percentages convert to the 1.00–5.00 grade by linear interpolation between the approved benchmarks (provisional until BUCDM confirms). Grades show at two decimals, but the 2.50 remediation trigger and risk levels use the exact grade, and server and screen produce the same value — UI-003 — implemented, tests passing.
+- Grades follow the official BUCDM grade sheet: plain category averages, whole-percent rounding (.5 up), the 2026-10-17 conversion table with below 75% = 5.0, and a hover showing the steps (e.g. "83.77% → 84% → 2.5"); server and screen produce the same value — UI-003, spec amendment 2026-10-26 — implemented, tests passing.
 - Score entry (single assessment and full matrix) saves when Faculty leave a cell while Auto-save is on, keeps a visible Saving / Saved / Failed – Retry bar, asks before clearing a stored score, and saves the matrix all-or-nothing; the matrix pins student ID and name columns — UI-002 — implemented, tests passing.
 - Grade ledgers, retention lists and attendance registers export as CSV or a printable PDF of the open section — GRD-002 — implemented, tests passing for CSV and print content; the open-section-only PDF was checked manually.
 - Midterm Watchlist shows server risk once a student's midterm is complete or Faculty unlock the class; locked classes stay hidden from "At risk only" — UI-003 — implemented, tests passing.
@@ -34,7 +34,8 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 - Remedial is a row action after Finals with Student, Course and Section locked; no separate "Schedule a Remedial" action — UI-003 — implemented, tests passing.
 - Two remedial attempts, each passing at 50% or more; the second only after a failed first; the original course grade never changes — UI-003 — implemented, tests passing.
 - Students get a stored in-app notification when a remedial is assigned — UI-003, NTF-001 — implemented, tests passing.
-- Provisional Student roster import into existing classes, labelled "Official format not confirmed" — IMP-001 — implemented, tests passing.
+- Student roster import into existing classes from the official class list PDF (or the provisional CSV template, still labelled "Official format not confirmed"), with total-count and wrong-class checks — IMP-001 — implemented, tests passing.
+- Official grade sheet workbook (.xlsx) import of raw scores, name matching, ticked create/link/remove and one all-or-nothing save — IMP-001 — implemented, tests passing.
 
 ## Attendance
 

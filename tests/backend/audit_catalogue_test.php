@@ -124,6 +124,13 @@ $entry = audit_build_entry($members, 3, $lookups, true);
 assert_audit_catalogue($entry['id'] === 'b:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' && $entry['batch']['count'] === 3 && count($entry['batch']['members']) === 3, 'A batch is one entry with its members');
 assert_audit_catalogue($entry['what'] === 'Enrolled 3 students' && $entry['record'] === 'DENT 101-A', 'A batch reads as one action on one class');
 assert_audit_catalogue(isset($entry['details']['technical']) && !isset(audit_build_entry($members, 3, $lookups, false)['details']['technical']), 'Technical details are for the Dean only');
+$imp = [];
+foreach (['assessment_created', 'assessment_scores_saved', 'grades_recomputed'] as $i => $c) {
+    $imp[] = $row(['event_id' => 20 + $i, 'action_code' => $c, 'module_code' => 'grading', 'operation_uuid' => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        'endpoint' => '/api/faculty/grade-sheet-import', 'scope_cs_id' => 5, 'target_type' => 'class_section', 'target_id' => '5']);
+}
+assert_audit_catalogue(audit_build_entry($imp, 3, $lookups, false)['what'] === 'Imported grade sheet · 3 changes · DENT 101-A', 'A grade sheet import batch names the import and the class');
+assert_audit_catalogue(audit_build_entry(array_map(static fn(array $r): array => ['endpoint' => '/api/faculty/other'] + $r, $imp), 3, $lookups, false)['what'] === '3 changes', 'Other mixed batches keep the plain count');
 $single = audit_build_entry([$members[0]], 1, $lookups, false);
 assert_audit_catalogue($single['batch'] === null && $single['id'] === 'e:3', 'A single row is a plain entry');
 

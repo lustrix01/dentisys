@@ -1,6 +1,6 @@
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { parsePDFRosterPages, type RosterPDFPage } from './rosterImportHelper';
+import { parsePDFRoster, type RosterPDFPage } from './rosterImportHelper';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -50,7 +50,7 @@ export async function parseRosterPDF(buffer: ArrayBuffer) {
       canvas.height = 0;
       page.cleanup();
     }
-    return parsePDFRosterPages(pages);
+    return parsePDFRoster(pages);
   } finally {
     await task.destroy();
   }

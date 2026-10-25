@@ -369,7 +369,8 @@ $groupedConfigVersion = (int) ($groupedUpdateBody['configuration']['version'] ??
 expect_same(2, $groupedConfigVersion, 'A successful grouped save advances its version exactly once');
 $groupedSavedGradeAfter = $groupedReadGrade($groupedStudentA['enrollmentId']);
 expect_true($groupedSavedGradeBefore !== $groupedSavedGradeAfter, 'Grouped configuration save replaces a stale saved grade');
-expect_same('85.40', (string) ($groupedSavedGradeAfter['final_percentage'] ?? ''), 'Grouped configuration save stores the recomputed percentage');
+// 2026-10-26 amendment: whole period percents combine as round(round(84*.30 = 25.2 -> 25) + round(86*.70 = 60.2 -> 60)) = 85 (was 85.4 unrounded).
+expect_same('85.00', (string) ($groupedSavedGradeAfter['final_percentage'] ?? ''), 'Grouped configuration save stores the recomputed percentage');
 expect_same('2.40', (string) ($groupedSavedGradeAfter['final_gwa'] ?? ''), 'Grouped configuration save stores the recomputed grade');
 
 [$groupedComputeStatus, $groupedComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
@@ -382,7 +383,9 @@ expect_same(84.0, (float) ($groupedCompleteResult['periods']['midterm']['percent
 expect_same(86.0, (float) ($groupedCompleteResult['periods']['final']['percentage'] ?? -1), 'Grouped Finals compute independently to 86');
 expect_same(80.0, (float) ($groupedCompleteResult['periods']['midterm']['components']['lecture']['percentage'] ?? -1), 'Faculty computation exposes the transmuted Lecture result');
 expect_same(90.0, (float) ($groupedCompleteResult['periods']['midterm']['components']['laboratory']['percentage'] ?? -1), 'Faculty computation exposes the separate Laboratory result');
-expect_same(85.4, (float) ($groupedCompleteResult['percentage'] ?? -1), 'The approved grouped example recomputes to 85.4');
+expect_same(85.0, (float) ($groupedCompleteResult['percentage'] ?? -1), 'The approved grouped example recomputes to 85 from whole period percentages');
+expect_same(84.0, (float) ($groupedCompleteResult['periods']['midterm']['rawPercentage'] ?? -1), 'Grouped Midterm rawPercentage is the weighted component sum 80*.6 + 90*.4');
+expect_same(86.0, (float) ($groupedCompleteResult['periods']['final']['rawPercentage'] ?? -1), 'Grouped Final rawPercentage is the weighted component sum');
 $groupedMidtermLectureCategories = $groupedCompleteResult['periods']['midterm']['components']['lecture']['categories'] ?? [];
 $groupedTransmutedQuiz = array_values(array_filter(
     $groupedMidtermLectureCategories,
@@ -397,7 +400,7 @@ expect_same('incomplete_period', $groupedMissingResult['status'] ?? null, 'An ab
 expect_same('incomplete', $groupedMissingResult['periods']['final']['components']['laboratory']['status'] ?? null, 'A missing score marks only its own positively weighted component incomplete');
 expect_same('missing_assessment_score', $groupedMissingResult['periods']['final']['components']['laboratory']['incomplete'][0]['reason'] ?? null, 'Grouped incomplete results name the missing assessment score');
 $groupedPersistedA = $groupedReadGrade($groupedStudentA['enrollmentId']);
-expect_same('85.40', (string) ($groupedPersistedA['final_percentage'] ?? ''), 'Explicit grouped recomputation persists the 85.40 overall result');
+expect_same('85.00', (string) ($groupedPersistedA['final_percentage'] ?? ''), 'Explicit grouped recomputation persists the 85.00 overall result');
 
 // A score save recomputes the class itself and writes exactly one audit row
 // (changed cells plus moved grades); an identical re-save writes none.
@@ -420,7 +423,62 @@ expect_true(($groupedSaveAudit['gradeChanges'] ?? []) !== [], 'The row lists the
 integration_http_json('/api/faculty/scores', $facultyAccessToken, $groupedSavePayload(60.0));
 expect_same($groupedRowsBefore + 1, $groupedScoreRows(), 'Saving identical values writes no audit row');
 integration_http_json('/api/faculty/scores', $facultyAccessToken, $groupedSavePayload(50.0));
-expect_same('85.40', (string) ($groupedReadGrade($groupedStudentA['enrollmentId'])['final_percentage'] ?? ''), 'Restoring the score restores the grade');
+expect_same('85.00', (string) ($groupedReadGrade($groupedStudentA['enrollmentId'])['final_percentage'] ?? ''), 'Restoring the score restores the grade');
+
+// Official grade sheet import: one all-or-nothing save with one shared audit batch id.
+$importClass = (string) $groupedOffering['classId'];
+$importLinked = static fn(): array => ['key' => 'L1', 'period' => 'Midterm', 'component' => 'Lecture',
+    'categoryId' => $groupedIds['Midterm']['Lecture']['Quiz'], 'title' => 'Midterm Lecture Quiz', 'maxScore' => 100,
+    'transmutationEnabled' => true, 'action' => 'link', 'assessmentId' => (string) $groupedAssessments['midtermLectureQuiz']];
+$importNew = ['key' => 'N1', 'period' => 'Midterm', 'component' => 'Lecture', 'categoryId' => $groupedIds['Midterm']['Lecture']['Quiz'],
+    'title' => 'Imported Quiz', 'maxScore' => 20, 'transmutationEnabled' => true, 'action' => 'create'];
+$importCount = static fn(string $title): int => (int) $pdo->query("SELECT COUNT(*) FROM assessments WHERE title = '" . $title . "'")->fetchColumn();
+$importAuditRows = static fn(): int => (int) $pdo->query("SELECT COUNT(*) FROM audit_events WHERE endpoint = '/api/faculty/grade-sheet-import'")->fetchColumn();
+$importA = (string) $groupedStudentA['studentId'];
+$importB = (string) $groupedStudentB['studentId'];
+
+[$importBadStatus] = integration_http_json('/api/faculty/grade-sheet-import', $facultyAccessToken, [
+    'classId' => $importClass, 'items' => [$importNew], 'removeAssessmentIds' => [],
+    'scores' => [['itemKey' => 'N1', 'studentId' => $importA, 'score' => 15], ['itemKey' => 'N1', 'studentId' => $importB, 'score' => 21]],
+]);
+expect_same(422, $importBadStatus, 'A grade sheet import with one score above the maximum is refused');
+expect_same(0, $importCount('Imported Quiz'), 'A refused import creates nothing (all or nothing)');
+
+$importRowsBefore = $importAuditRows();
+[$importStatus, $importBody] = integration_http_json('/api/faculty/grade-sheet-import', $facultyAccessToken, [
+    'classId' => $importClass, 'items' => [$importLinked(), $importNew], 'removeAssessmentIds' => [],
+    'scores' => [
+        ['itemKey' => 'L1', 'studentId' => $importA, 'score' => 50],
+        ['itemKey' => 'N1', 'studentId' => $importA, 'score' => 15], ['itemKey' => 'N1', 'studentId' => $importB, 'score' => 18],
+    ],
+]);
+expect_same(200, $importStatus, 'A valid grade sheet import saves');
+expect_same([1, 1, 0, 0, 2, 1, false], [$importBody['created'] ?? null, $importBody['linked'] ?? null, $importBody['removed'] ?? null,
+    $importBody['maxChanged'] ?? null, $importBody['scoresSaved'] ?? null, $importBody['scoresSkipped'] ?? null, $importBody['recomputeFailed'] ?? null],
+    'The import reports created, linked, saved and skipped counts');
+$importBatch = $pdo->query("SELECT COUNT(*), COUNT(DISTINCT operation_uuid), COUNT(operation_uuid) FROM audit_events WHERE endpoint = '/api/faculty/grade-sheet-import'")->fetch(PDO::FETCH_NUM);
+expect_true((int) $importBatch[0] >= $importRowsBefore + 2, 'The import writes a row per created assessment and per scored assessment');
+expect_same([1, (int) $importBatch[0]], [(int) $importBatch[1], (int) $importBatch[2]], 'Every import audit row carries the same batch id');
+
+$importNewId = (string) $pdo->query("SELECT assessment_id FROM assessments WHERE title = 'Imported Quiz'")->fetchColumn();
+$importRowsBefore = $importAuditRows();
+[$importAgainStatus, $importAgainBody] = integration_http_json('/api/faculty/grade-sheet-import', $facultyAccessToken, [
+    'classId' => $importClass, 'items' => [['action' => 'link', 'assessmentId' => $importNewId] + $importNew], 'removeAssessmentIds' => [],
+    'scores' => [['itemKey' => 'N1', 'studentId' => $importA, 'score' => 15]],
+]);
+expect_same([200, 0, 1], [$importAgainStatus, $importAgainBody['scoresSaved'] ?? null, $importAgainBody['scoresSkipped'] ?? null], 'An equal score is skipped');
+expect_same($importRowsBefore, $importAuditRows(), 'A no-change import writes no audit rows');
+
+[$importRemoveStatus, $importRemoveBody] = integration_http_json('/api/faculty/grade-sheet-import', $facultyAccessToken, [
+    'classId' => $importClass, 'items' => [$importLinked()], 'removeAssessmentIds' => [$importNewId], 'scores' => [],
+]);
+expect_same([200, 1], [$importRemoveStatus, $importRemoveBody['removed'] ?? null], 'The import removes a ticked assessment');
+expect_same(0, $importCount('Imported Quiz'), 'The removed assessment and its scores are gone');
+[$importLowStatus] = integration_http_json('/api/faculty/grade-sheet-import', $facultyAccessToken, [
+    'classId' => $importClass, 'items' => [['newMaxScore' => 10] + $importLinked()], 'removeAssessmentIds' => [], 'scores' => [],
+]);
+expect_same(422, $importLowStatus, 'A new maximum below a saved score is refused');
+echo "PASS: Grade sheet import coverage completed.\n";
 
 // Grouped retention reads must use the same current
 // assessment snapshot when read directly or through the batch cache.
@@ -655,7 +713,7 @@ expect_same([
 ], $convertedAssessmentPeriods, 'Explicit mappings assign each previously NULL legacy assessment to the selected period');
 // Owner ruling 2026-10-22: a successful setup save recomputes the stored grade.
 $conversionGradeAfterSave = $groupedReadGrade($conversionStudent['enrollmentId']);
-expect_same('85.40', (string) ($conversionGradeAfterSave['final_percentage'] ?? ''), 'Saving grouped conversion recomputes the recorded overall grade');
+expect_same('85.00', (string) ($conversionGradeAfterSave['final_percentage'] ?? ''), 'Saving grouped conversion recomputes the recorded overall grade');
 
 // The approved contract rejects every combined period save, including a
 // previously grouped offering. Rejections must preserve the saved grouped
@@ -699,7 +757,7 @@ expect_same($conversionVersion, (int) $conversionConfigVersionStmt->fetchColumn(
 ]);
 expect_same(200, $conversionRecomputeStatus, 'The grouped offering remains computable after rejected conversion attempts');
 $conversionRecomputed = integration_find_enrollment_result($conversionRecomputeBody, $conversionStudent['enrollmentId']);
-expect_same(85.4, (float) ($conversionRecomputed['percentage'] ?? -1), 'Recomputation applies the preserved grouped weights to the preserved scores');
+expect_same(85.0, (float) ($conversionRecomputed['percentage'] ?? -1), 'Recomputation applies the preserved grouped weights to the preserved scores (whole period percents, 2026-10-26 amendment)');
 expect_same($convertedAssessmentValueSnapshot, $groupedAssessmentValues($groupedReadAssessmentSnapshot($conversionAssessmentIds)), 'Rejected conversion attempts never change mapped category IDs or raw scores');
 
 // One valid authoritative Attendance category keeps the grouped period

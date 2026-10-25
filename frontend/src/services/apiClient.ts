@@ -1,3 +1,4 @@
+import type { GradeSheetImportPlan } from '../utils/gradeSheetImport';
 import type { AuditEntry, AuditListResponse, AuditQuery } from './auditService';
 import { auditQueryString } from './auditService.ts';
 import type { EmailAction } from '../components/email/emailHistory';
@@ -871,6 +872,8 @@ export interface FacultyRemedialProgression {
 export interface FacultyRetentionRecord {
   midtermComplete?: boolean;
   midtermPercentage?: number | null;
+  /** Midterm value before the whole-percent rounding, for the grade hover steps. */
+  midtermRawPercentage?: number | null;
   /** Server rule: complete Midterm, no final grade or remedial record, Midterm grade 2.5 or worse. */
   midtermAtRisk?: boolean;
   watchlistUnlocked?: boolean;
@@ -1254,6 +1257,22 @@ export function saveFacultyAssessmentScoresApi(assessmentId: string, scores: Fac
 /** Saves several assessments' scores in one transaction (all or nothing). */
 export function saveFacultyScoreBatchesApi(batches: Array<{ assessmentId: string; scores: FacultyScoreEntry[] }>): Promise<FacultySaveScoresResponse> {
   return request('POST', '/faculty/scores', { batches });
+}
+
+export interface GradeSheetImportResult {
+  status: string;
+  created: number;
+  linked: number;
+  removed: number;
+  maxChanged: number;
+  scoresSaved: number;
+  scoresSkipped: number;
+  recomputeFailed: boolean;
+}
+
+/** Saves an official grade sheet import (create, link, remove, max changes, scores) in one all-or-nothing request. */
+export function importGradeSheet(plan: GradeSheetImportPlan): Promise<GradeSheetImportResult> {
+  return request('POST', '/faculty/grade-sheet-import', plan);
 }
 
 export function computeFacultyGradesApi(classId?: string): Promise<FacultyComputeGradesResponse> {
@@ -1945,6 +1964,8 @@ export interface FacultyPeriodBreakdown {
   period: GradingPeriodEnum;
   status: 'computed' | 'incomplete';
   percentage: number | null;
+  /** Value before the whole-percent rounding, for the grade hover steps. */
+  rawPercentage?: number | null;
   categories: FacultyPeriodCategoryDetail[];
   incomplete: FacultyPeriodIncompleteItem[];
   attendanceDateRange: FacultyAttendanceDateRange;

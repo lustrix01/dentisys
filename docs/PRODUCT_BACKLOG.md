@@ -128,14 +128,6 @@ Testing must never email real or real-looking addresses (spam risk): automated t
 - **Grading setup:** the grading-configuration save and the grading snapshot work per course offering (course and school year), not per class, so they still include assessments of a Cancelled or Created-by-mistake class of the same offering.
 - **Wording:** four client-side messages in Classes & Rosters (add student, edit class, remove student, edit roster student) still say "Past school-year classes are view-only." for archived classes. Archived cards disable those buttons and the server answers "Archived classes are view-only.", so this is wording only.
 
-## 5.10 Import Grade Sheets follow-ups
-
-**Status: Not started.** Found while aligning the destination with the saved Grade Weights (2026-10-22); the Owner will decide each one.
-
-- **Class badge:** the card header badge shows the internal class number ("DENT101 · 33") instead of the section name.
-- **Dark mode:** the destination box and the upload box use `dark:bg-slate-850`, which is not a defined colour, so both render light grey in dark mode.
-- **Lecture/Laboratory check:** the grouped destination list is covered by unit tests only; the seed has no Lecture/Laboratory configuration to check it on screen.
-
 ## 5.11 Client requests waiting on information
 
 **Status: Unclear.** Blocked until the client answers.
@@ -205,7 +197,7 @@ Owner decisions (2026-10-15): both actions get the existing per-user limit used 
 
 ## 9.4 Official Registrar import/export format
 
-**Status: Externally blocked.** The provisional roster import (spec IMP-001) is implemented and labelled "Official format not confirmed"; grade-sheet import is not enabled. Needed from the Registrar: file type, headers, Student identifier, course/section columns, grade encoding and output structure. Do not invent the official format.
+**Status: Not started.** Imports are done: the official class list PDF and grade sheet workbook (IMP-001, 2026-10-26; see docs/official-imports-2026-10.md). Exporting grades in the official grade sheet layout is the next feature; its contract is still to be agreed.
 
 ## 9.5 Live Google verification
 

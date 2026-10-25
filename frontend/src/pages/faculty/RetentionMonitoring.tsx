@@ -973,7 +973,7 @@ export const RetentionMonitoring: React.FC = () => {
                           <div className="font-mono">
                             <span className="font-bold">{record.midtermPercentage.toFixed(2)}%</span>
                             <span className="text-[11px] text-slate-500 dark:text-slate-400 ml-1.5 font-normal">
-                              (Final Midterm Grade: <GradeValue percentage={record.midtermPercentage} period="Midterm">{percentageToGWA(record.midtermPercentage, 'Midterm').toFixed(1)}</GradeValue>)
+                              (Final Midterm Grade: <GradeValue percentage={record.midtermPercentage} raw={record.midtermRawPercentage} period="Midterm">{percentageToGWA(record.midtermPercentage, 'Midterm').toFixed(1)}</GradeValue>)
                             </span>
                           </div>
                         ) : (

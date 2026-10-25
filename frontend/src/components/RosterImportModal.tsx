@@ -21,6 +21,8 @@ import {
   parseCSVText,
   validateRosterStudents,
   getSampleRegistrarCSV,
+  compareRosterHeader,
+  type RosterPDFResult,
 } from '../utils/rosterImportHelper';
 import {
   createStudentApi,
@@ -62,10 +64,13 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
   const runtime = useRuntimeConfig();
   const [targetReviewed, setTargetReviewed] = useState(false);
   const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [pdfInfo, setPdfInfo] = useState<(Omit<RosterPDFResult, 'students'> & { read: number }) | null>(null);
   useEffect(() => () => { parseSequence.current++; }, []);
 
   // Filter out historical classes
   const availableClasses = classes.filter(c => currentSchoolYear && c.schoolYear === currentSchoolYear && c.status.toLowerCase() === 'active');
+  const targetClass = availableClasses.find(cls => cls.csId === selectedClassId);
+  const headerDiffs = pdfInfo && targetClass ? compareRosterHeader(pdfInfo.header, targetClass) : [];
   const validatedStudents = validateRosterStudents(parsedStudents, runtime.allowed_email_domains);
   const readyStudents = validatedStudents.filter(student => student.included && student.reviewed && student.status === 'valid');
 
@@ -75,6 +80,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
     setFile(selectedFile);
     setIsParsing(true);
     setParsedStudents([]);
+    setPdfInfo(null);
     setTargetReviewed(false);
     setImportErrors([]);
 
@@ -84,13 +90,14 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
       if (fileName.endsWith('.pdf')) {
         const buffer = await selectedFile.arrayBuffer();
         const { parseRosterPDF } = await import('../utils/rosterPDF');
-        const parsed = await parseRosterPDF(buffer);
+        const { students: parsed, ...info } = await parseRosterPDF(buffer);
         if (sequence !== parseSequence.current) return;
 
         if (parsed.length === 0) {
           showFeedback('No student records detected. Use a text PDF with the provisional table layout, or CSV.', 'error');
         } else {
           setParsedStudents(parsed);
+          setPdfInfo({ ...info, read: parsed.length });
           showFeedback(`Previewed ${parsed.length} student record(s). Review each PDF row before selecting it.`, 'info');
         }
       } else {
@@ -274,8 +281,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
     >
       <div className="space-y-5 text-xs max-h-[80vh] overflow-y-auto pr-1">
         <fieldset disabled={isImporting} className="space-y-5 min-w-0">
-        <div role="note" className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          <strong>Official format not confirmed.</strong> This provisional importer supports the sample table layout and delimited text files. Review the source, name fields and selected class before saving. The original file stays in this browser; only selected student fields are sent to DentiSys. Invitations are sent separately.
+        <div role="note" className={pdfInfo?.official ? 'p-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200' : 'p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200'}>
+          {pdfInfo?.official ? <strong>Official class list.</strong> : <><strong>Official format not confirmed.</strong> This provisional importer supports the sample table layout and delimited text files.</>} Review the source, name fields and selected class before saving. The original file stays in this browser; only selected student fields are sent to DentiSys. Invitations are sent separately.
           <p className="mt-1">Required for each imported row: complete student number, first name, last name and a valid institutional email. Missing emails must be corrected in preview.</p>
         </div>
         {/* Step 1: Target Class Section */}
@@ -306,7 +313,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Provisional File (.csv, .tsv, .txt, .pdf)
+              File (.csv, .tsv, .txt, .pdf)
             </span>
             <button
               type="button"
@@ -344,7 +351,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                   {file ? file.name : 'Click to select a roster file'}
                 </p>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Text PDFs matching the sample layout, CSV, TSV and TXT. Scans and Excel workbooks are not supported.
+                  Official class list PDFs, or CSV, TSV and TXT. Scans and Excel workbooks are not supported.
                 </p>
               </div>
             </div>
@@ -385,6 +392,15 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
               </div>
             </div>
 
+            {pdfInfo?.total != null && (pdfInfo.total === pdfInfo.read
+              ? <p role="status" className="font-bold text-emerald-700 dark:text-emerald-300">✓ {pdfInfo.read} of {pdfInfo.total} students read</p>
+              : <p role="alert" className="p-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">The file lists {pdfInfo.total} students, but {pdfInfo.read} {pdfInfo.read === 1 ? 'was' : 'were'} read. Check the PDF before saving.</p>)}
+            {headerDiffs.length > 0 && (
+              <div role="alert" className="p-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                <strong>This file may be for a different class. Check you chose the right file.</strong>
+                <ul className="list-disc pl-4">{headerDiffs.map(diff => <li key={diff}>{diff}</li>)}</ul>
+              </div>
+            )}
             <p className="text-amber-700 dark:text-amber-300">Selecting a row confirms you reviewed its source and name split. Possible red strike-throughs are flagged; markings in other colors may not be detected. Check the original PDF for exclusions.</p>
             <div className="max-h-80 overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
               <table className="w-full text-left text-xs border-collapse">

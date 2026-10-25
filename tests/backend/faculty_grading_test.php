@@ -63,55 +63,22 @@ assert_faculty_grading(
 );
 
 foreach ([
-    [100.0, 1.0, 1.0],
-    [99.5, 1.0, 1.0],
-    [99.0, 1.0, 1.0],
-    [98.9, 1.1, 1.1],
-    [97.0, 1.2, 1.2],
-    [96.0, 1.3, 1.3],
-    [95.0, 1.4, 1.4],
-    [94.0, 1.5, 1.5],
-    [93.0, 1.6, 1.6],
-    [92.0, 1.7, 1.7],
-    [91.0, 1.8, 1.8],
-    [90.0, 1.9, 1.9],
-    [89.0, 2.0, 2.0],
-    [88.0, 2.1, 2.1],
-    [87.0, 2.2, 2.2],
-    [86.0, 2.3, 2.3],
-    [85.0, 2.4, 2.4],
-    [84.99, 2.5, 2.5],
-    [84.9, 2.5, 2.5],
-    [84.0, 2.5, 2.5],
-    [83.5, 2.6, 2.6],
-    [82.0, 2.6, 2.6],
-    [81.0, 2.7, 2.7],
-    [80.0, 2.7, 2.7],
-    [79.0, 2.8, 2.8],
-    [78.0, 2.8, 2.8],
-    [77.0, 2.9, 2.9],
-    [76.0, 2.9, 2.9],
-    [75.0, 3.0, 3.0],
-    [74.9, 3.1, 5.0],
-    [74.0, 3.1, 5.0],
-    [73.0, 3.2, 5.0],
-    [70.0, 3.5, 5.0],
-    [66.0, 3.9, 5.0],
-    [65.9, 4.0, 5.0],
-    [65.0, 4.0, 5.0],
-    [10.0, 4.0, 5.0],
-    [0.0, 4.0, 5.0],
-    [NAN, 5.0, 5.0],
-] as [$percentage, $midterm, $final]) {
+    [100.0, 1.0], [99.0, 1.0], [98.0, 1.1], [97.0, 1.2], [96.0, 1.3], [95.0, 1.4], [94.0, 1.5], [93.0, 1.6],
+    [92.0, 1.7], [91.0, 1.8], [90.0, 1.9], [89.0, 2.0], [88.0, 2.1], [87.0, 2.2], [86.0, 2.3], [85.0, 2.4],
+    [84.0, 2.5], [83.0, 2.6], [82.0, 2.6], [81.0, 2.7], [80.0, 2.7], [79.0, 2.8], [78.0, 2.8], [77.0, 2.9],
+    [76.0, 2.9], [75.0, 3.0], [74.0, 5.0], [70.0, 5.0], [65.0, 5.0], [0.0, 5.0], [NAN, 5.0],
+] as [$percentage, $grade]) {
     assert_faculty_grading(
-        faculty_percentage_to_gwa($percentage, 'Midterm') === $midterm && faculty_percentage_to_gwa($percentage) === $final,
-        "BUCDM: {$percentage}% -> Midterm {$midterm}, Final/course {$final}"
+        faculty_percentage_to_gwa($percentage, 'Midterm') === $grade && faculty_percentage_to_gwa($percentage) === $grade,
+        "BUCDM: whole {$percentage}% -> {$grade} for Midterm, Final and course"
     );
 }
+foreach ([[74.5, 75.0], [74.49999999, 74.0], [74.4999999999, 75.0], [84.5, 85.0], [83.7667, 84.0], [0.4, 0.0], [99.5, 100.0]] as [$raw, $whole]) {
+    assert_faculty_grading(faculty_round_percent($raw) === $whole, "Whole-percent rounding: {$raw} -> {$whole}");
+}
 assert_faculty_grading(
-    faculty_course_grade_retention_state(faculty_percentage_to_gwa_exact(84.99), 2.50) === 'remedial'
-        && faculty_course_grade_retention_state(faculty_percentage_to_gwa_exact(84.0), 2.50) === 'remedial',
-    '84.99% and 84.00% (2.5) reach the remediation trigger'
+    faculty_course_grade_retention_state(faculty_percentage_to_gwa_exact(84.0), 2.50) === 'remedial',
+    '84% (2.5) reaches the remediation trigger'
 );
 assert_faculty_grading(
     faculty_course_grade_retention_state(faculty_percentage_to_gwa_exact(85.0), 2.50) === 'active',

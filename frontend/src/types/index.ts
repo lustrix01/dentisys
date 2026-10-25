@@ -396,6 +396,8 @@ export interface StudentAcademicClass {
 export interface MidtermEvaluation {
   complete: boolean;
   percentage: number | null;
+  /** Value before the whole-percent rounding, for the grade hover steps. */
+  rawPercentage?: number | null;
   grade: number | null;
   isAtRisk: boolean;
   /** Midterm assessments graded / total for this Student, for the "waiting" note. */

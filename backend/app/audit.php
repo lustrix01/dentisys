@@ -288,6 +288,7 @@ function audit_record_action(
         'request_id' => $request['request_id'] ?? null,
         'ip_address' => $request['ip_address'] ?? null,
         'user_agent' => $request['user_agent'] ?? null,
+        'operation_uuid' => $extra['operation_uuid'] ?? null,
     ], $macKey, $extra['before'] ?? null, $extra['after'] ?? null);
 }
 

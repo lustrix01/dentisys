@@ -480,6 +480,12 @@ return [
     ],
     [
         'method' => 'POST',
+        'path' => '/api/faculty/grade-sheet-import',
+        'handler' => 'handle_faculty_grade_sheet_import',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
         'path' => '/api/faculty/grades/compute',
         'handler' => 'handle_faculty_grades_compute',
         'has_params' => false,

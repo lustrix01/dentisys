@@ -147,6 +147,7 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
         $midtermEvaluation = [
             'complete' => (bool) $midterm['complete'],
             'percentage' => $midterm['percentage'] !== null ? round((float) $midterm['percentage'], 2) : null,
+            'rawPercentage' => $midterm['percentage'] !== null ? ($midterm['rawPercentage'] ?? null) : null,
             'grade' => $midterm['complete'] && $midterm['percentage'] !== null
                 ? faculty_percentage_to_gwa((float) $midterm['percentage'], 'Midterm') : null,
             'gradedCount' => (int) ($midterm['gradedCount'] ?? 0),

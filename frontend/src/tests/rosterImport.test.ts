@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCSVText, parsePDFRosterPages, validateRosterStudents, type RosterPDFPage } from '../utils/rosterImportHelper.ts';
+import { compareRosterHeader, parseCSVText, parsePDFRoster, parsePDFRosterPages, validateRosterStudents, type RosterPDFPage } from '../utils/rosterImportHelper.ts';
 
 const domains = ['bicol-u.edu.ph', 'example.edu'];
 
@@ -173,4 +173,68 @@ test('PDF student-number fragments form one complete row without inserted spaces
   assert.equal(rows[0].possibleCrossedOut, true);
   const spaced = page.items.map(item => item.text === '56789' && item.x > 300 ? { ...item, x: item.x + 6 } : item);
   assert.equal(parsePDFRosterPages([{ ...page, items: spaced }])[0].contact, '001234 56789');
+});
+
+// Synthetic official-layout fixture: Program column, header block, optional "No University Email".
+function officialPage(page: number, rows: Array<{ id: string; name: string; email: string }>, extra: Array<[string, number, number]> = []): RosterPDFPage {
+  const item = (text: string, x: number, y: number, width = 20) => ({ text, x, y, width, height: 9 });
+  return {
+    page, width: 595, height: 842, redMarkBands: [],
+    items: [
+      item('AY 2026-2027 1st Semester', 200, 20, 120), item('Course Code: DM 100', 30, 40, 80), item('Class Section: DMD-1A', 400, 40, 90),
+      item('Course Title:Fixture Studies', 30, 52, 100),
+      item('#', 31, 100, 5), item('Student No.', 60, 100, 40), item('Program', 130, 100, 30), item('Name', 178, 100, 22),
+      item('Gender', 272, 100, 24), item('Year Level', 305, 100, 31), item('Contact #', 350, 100, 38),
+      ...rows.flatMap((row, i) => {
+        const y = 123 + i * 26;
+        return [item(String(i + 1), 31, y), item(row.id, 43, y, 64), item('DMD', 130, y, 22), item(row.name, 178, y - 7, 80), item(row.email, 178, y + 3, 90),
+          item('Male', 270, y), item('1st Year', 303, y), item('09170000000', 343, y, 48)];
+      }),
+      ...extra.map(([text, x, y]) => item(text, x, y, 100)),
+    ],
+  };
+}
+const fixtureRows = [
+  { id: '2099-01-00001', name: 'Reyes, Ana Maria', email: 'ana.fixture@bicol-u.edu.ph' },
+  { id: '2099-7003-00002', name: 'Santos, Ben', email: 'No University Email' },
+];
+
+test('official Program column is ignored and "No University Email" means a missing email', () => {
+  const rows = validateRosterStudents(parsePDFRosterPages([officialPage(1, fixtureRows)]), domains);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map(row => row.studentId), ['2099-01-00001', '2099-7003-00002']);
+  assert.deepEqual(rows.map(row => row.firstName), ['Ana Maria', 'Ben']);
+  assert.ok(rows.every(row => !/DMD|University/i.test(row.originalName ?? '')));
+  assert.equal(rows[0].email, 'ana.fixture@bicol-u.edu.ph');
+  assert.equal(rows[1].email, '');
+  assert.equal(rows[1].status, 'error');
+  assert.equal(rows[1].yearLevel, 1);
+});
+
+test('a last page with only the total is allowed; other table-less pages still fail', () => {
+  const totalOnly = { page: 2, width: 595, height: 842, redMarkBands: [], items: [{ text: 'Total Number of Students: 2', x: 30, y: 60, width: 120, height: 9 }, { text: '*** NOTHING FOLLOWS ***', x: 30, y: 80, width: 120, height: 9 }] };
+  const result = parsePDFRoster([officialPage(1, fixtureRows), totalOnly]);
+  assert.equal(result.students.length, 2);
+  assert.equal(result.total, 2);
+  assert.equal(result.official, true);
+  const stray = { ...totalOnly, items: [{ text: 'Something else', x: 30, y: 60, width: 60, height: 9 }] };
+  assert.throws(() => parsePDFRoster([officialPage(1, fixtureRows), stray]), /Page 2: unsupported PDF table layout/);
+  // The total may also sit under the table; it is never read as a student row.
+  assert.deepEqual(parsePDFRoster([officialPage(1, fixtureRows, [['Total Number of Students: 3', 30, 300]])]).total, 3);
+  assert.equal(parsePDFRoster([officialPage(1, fixtureRows, [['Total Number of Students: 3', 30, 300]])]).students.length, 2);
+  assert.equal(parsePDFRoster([samplePage(1)]).total, null);
+  assert.equal(parsePDFRoster([samplePage(1)]).official, false);
+});
+
+test('header is parsed and compared with the class ignoring case, spaces and hyphens', () => {
+  const { header } = parsePDFRoster([officialPage(1, fixtureRows)]);
+  assert.deepEqual(header, { courseCode: 'DM 100', section: 'DMD-1A', schoolYear: '2026-2027', semester: '1ST' });
+  const same = { courseCode: 'dm100', block: 'DMD 1A', schoolYear: '2026-2027', semester: '1ST' };
+  assert.deepEqual(compareRosterHeader(header, same), []);
+  assert.deepEqual(compareRosterHeader(header, { courseCode: 'DM 102', block: 'DMD 2', schoolYear: '2025-2026', semester: '2ND' }), [
+    'Course code: file DM 100, class DM 102', 'Section: file DMD-1A, class DMD 2', 'School year: file 2026-2027, class 2025-2026', 'Semester: file 1st Semester, class 2nd Semester',
+  ]);
+  assert.deepEqual(compareRosterHeader({}, same), []);
+  // The section is the class name (e.g. DMD-1A); the block letter alone must not raise a warning.
+  assert.deepEqual(compareRosterHeader(header, { ...same, csName: 'DMD-1A', block: 'A' }), []);
 });

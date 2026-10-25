@@ -162,10 +162,54 @@ export function parseCSVText(text: string): ParsedRosterStudent[] {
 export interface RosterPDFTextItem { text: string; x: number; y: number; width: number; height: number }
 export interface RosterPDFPage { page: number; width: number; height: number; items: RosterPDFTextItem[]; redMarkBands: Array<{ top: number; bottom: number }> }
 
-/** Read the provisional sample table by geometry, never by student-ID regex. */
+export interface RosterPDFHeader { courseCode?: string; section?: string; schoolYear?: string; semester?: '1ST' | '2ND' | 'SUMMER' }
+export interface RosterPDFResult { students: ParsedRosterStudent[]; total: number | null; header: RosterPDFHeader; official: boolean }
+
+const headerStop = String.raw`(?=\s+(?:Course\s*(?:Code|Title)|Class\s*Section|Year\s*Level|Faculty|Schedules?|Academic|Lab|Credit|Units?)\b|$)`;
+const field = (text: string, label: string) => text.match(new RegExp(String.raw`${label}\s*:\s*(.+?)${headerStop}`, 'i'))?.[1].trim();
+
+/** Header facts are read only to warn; nothing is created or changed from them. */
+function parsePDFHeader(text: string): RosterPDFHeader {
+  const ay = text.match(/AY\s*(\d{4})\s*-\s*(\d{4})\s*(1st|2nd|summer)/i);
+  const sem = ay?.[3].toLowerCase();
+  return {
+    courseCode: field(text, String.raw`Course\s*Code`), section: field(text, String.raw`Class\s*Section`),
+    schoolYear: ay ? `${ay[1]}-${ay[2]}` : undefined,
+    semester: sem === '1st' ? '1ST' : sem === '2nd' ? '2ND' : sem ? 'SUMMER' : undefined,
+  };
+}
+
+const squash = (value: string) => value.toLowerCase().replace(/[\s-]+/g, '');
+const semesterCode = (value: string) => /2nd|second/i.test(value) ? '2ND' : /summer/i.test(value) ? 'SUMMER' : '1ST';
+const semesterName = { '1ST': '1st Semester', '2ND': '2nd Semester', SUMMER: 'Summer' };
+
+/** One entry per differing field, e.g. "Course code: file DM 102, class DM 100". Empty = same or unreadable. */
+export function compareRosterHeader(header: RosterPDFHeader, cls: { courseCode: string; csName?: string; block: string; schoolYear: string; semester: string }): string[] {
+  const diffs: string[] = [];
+  const check = (label: string, file: string | undefined, className: string, same: boolean) => { if (file && !same) diffs.push(`${label}: file ${file}, class ${className}`); };
+  check('Course code', header.courseCode, cls.courseCode, squash(header.courseCode ?? '') === squash(cls.courseCode));
+  const section = cls.csName || cls.block;
+  check('Section', header.section, section, squash(header.section ?? '') === squash(section));
+  check('School year', header.schoolYear, cls.schoolYear, header.schoolYear === cls.schoolYear.replace(/\s/g, ''));
+  check('Semester', header.semester && semesterName[header.semester], semesterName[semesterCode(cls.semester)], header.semester === semesterCode(cls.semester));
+  return diffs;
+}
+
+/** Read the table by geometry, never by student-ID regex. */
 export function parsePDFRosterPages(pages: RosterPDFPage[]): ParsedRosterStudent[] {
+  return parsePDFRoster(pages).students;
+}
+
+export function parsePDFRoster(pages: RosterPDFPage[]): RosterPDFResult {
   const students: ParsedRosterStudent[] = [];
+  let total: number | null = null;
+  let headerText = '';
+  let hasProgram = false;
   for (const page of pages) {
+    const pageText = [...page.items].sort((a, b) => a.y - b.y || a.x - b.x).map(item => item.text.trim()).join(' ');
+    const totalMatch = pageText.match(/Total\s+Number\s+of\s+Students\s*:?\s*(\d+)/i);
+    if (totalMatch) total = Number(totalMatch[1]);
+    if (!headerText && /Course\s*Code\s*:/i.test(pageText)) headerText = pageText;
     const lines: Array<{ y: number; items: RosterPDFTextItem[] }> = [];
     for (const item of [...page.items].sort((a, b) => a.y - b.y || a.x - b.x)) {
       let line = lines.find(candidate => Math.abs(candidate.y - item.y) <= 3);
@@ -176,9 +220,14 @@ export function parsePDFRosterPages(pages: RosterPDFPage[]): ParsedRosterStudent
       const text = line.items.map(item => item.text).join(' ');
       return /Student\s*(?:No\.?|Number|ID)/i.test(text) && /Name/i.test(text) && /Year\s*Level/i.test(text);
     });
+    if (!header && /Total\s+Number\s+of\s+Students|NOTHING\s+FOLLOWS/i.test(pageText)) continue;
     if (!header) throw new Error(`Page ${page.page}: unsupported PDF table layout. Use the provisional CSV template instead.`);
-    const labels = ['#', 'Student No.', 'Name', 'Gender', 'Year Level', 'Contact #'];
     const headerItems = header.items.filter(item => item.text.trim());
+    const programItem = headerItems.find(entry => entry.text.trim().toLowerCase() === 'program');
+    // The official Program column is read only to keep it out of the name.
+    const roles = programItem ? ['#', 'id', 'program', 'name', 'sex', 'year', 'contact'] : ['#', 'id', 'name', 'sex', 'year', 'contact'];
+    if (programItem) hasProgram = true;
+    const labels = ['#', 'Student No.', ...(programItem ? ['Program'] : []), 'Name', 'Gender', 'Year Level', 'Contact #'];
     const headers = labels.map(label => {
       const item = headerItems.find(entry => entry.text.trim().toLowerCase() === label.toLowerCase());
       if (!item) throw new Error(`Page ${page.page}: expected ${label} table header.`);
@@ -187,12 +236,12 @@ export function parsePDFRosterPages(pages: RosterPDFPage[]): ParsedRosterStudent
     // Headers are centered in unequal-width cells. Use left text positions,
     // rather than text centers (long names extend into the name column).
     const boundaries = headers.slice(0, -1).map(item => item.x + item.width + 1);
-    const column = (item: RosterPDFTextItem) => { const idx = boundaries.findIndex(boundary => item.x < boundary); return idx < 0 ? 5 : idx; };
+    const column = (item: RosterPDFTextItem) => { const idx = boundaries.findIndex(boundary => item.x < boundary); return roles[idx < 0 ? roles.length - 1 : idx]; };
     const below = page.items.filter(item => item.y > header.y + 3);
     // A single visible identifier can arrive as several PDF.js text items.
     // Join its same-line fragments before deriving one row anchor.
     const numberLines: Array<{ y: number; items: RosterPDFTextItem[] }> = [];
-    for (const item of below.filter(item => column(item) === 1 && item.text.trim()).sort((a, b) => a.y - b.y || a.x - b.x)) {
+    for (const item of below.filter(item => column(item) === 'id' && item.text.trim()).sort((a, b) => a.y - b.y || a.x - b.x)) {
       let line = numberLines.find(candidate => Math.abs(candidate.y - item.y) <= 3);
       if (!line) { line = { y: item.y, items: [] }; numberLines.push(line); }
       line.items.push(item);
@@ -204,7 +253,7 @@ export function parsePDFRosterPages(pages: RosterPDFPage[]): ParsedRosterStudent
       const top = i ? (ids[i - 1].y + anchor.y) / 2 : header.y + 5;
       const bottom = i + 1 < ids.length ? (anchor.y + ids[i + 1].y) / 2 : anchor.y + 16;
       const rowItems = below.filter(item => item.y >= top && item.y < bottom).sort((a, b) => a.y - b.y || a.x - b.x);
-      const cell = (col: number) => {
+      const cell = (col: string) => {
         const cellLines: Array<{ y: number; items: RosterPDFTextItem[] }> = [];
         for (const item of rowItems.filter(item => column(item) === col)) {
           let line = cellLines.find(candidate => Math.abs(candidate.y - item.y) <= 3);
@@ -222,19 +271,20 @@ export function parsePDFRosterPages(pages: RosterPDFPage[]): ParsedRosterStudent
           }).join('');
         }).join(' ').trim();
       };
-      const nameCell = cell(2);
+      const nameCell = cell('name').replace(/No\s+University\s+Email/i, '');
       const email = nameCell.match(/[^\s@]+@[^\s@]+\.[^\s@]+/u)?.[0] ?? '';
       const originalName = nameCell.replace(email, '').trim();
       const possibleCrossedOut = page.redMarkBands.some(band => band.bottom >= top - 8 && band.top < bottom - 8);
       students.push({
         tempKey: `pdf-${page.page}-${i}`, studentId: anchor.studentId, ...splitFullName(originalName),
-        email: email.toLowerCase(), contact: cell(5) || undefined, sex: cell(3) || undefined,
-        yearLevel: parseRosterYear(cell(4)), originalName, sourcePage: page.page, sourceRow: cell(0),
+        email: email.toLowerCase(), contact: cell('contact') || undefined, sex: cell('sex') || undefined,
+        yearLevel: parseRosterYear(cell('year')), originalName, sourcePage: page.page, sourceRow: cell('#'),
         possibleCrossedOut, requiresNameReview: true, reviewed: false, included: false, status: 'warning',
       });
     }
   }
-  return students;
+  const header = parsePDFHeader(headerText);
+  return { students, total, header, official: hasProgram || Boolean(header.courseCode) };
 }
 
 export function getSampleRegistrarCSV(): string {

@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { formatGrade, percentageToGWAExact } from '../utils/gradeHelper.ts';
+import { formatGrade, percentageToGWAExact, roundPercent } from '../utils/gradeHelper.ts';
 
 type Props = {
   /** Percentage the grade equivalent is derived from; without a finite one nothing is wrapped. */
@@ -8,10 +8,12 @@ type Props = {
   /** Rendered text, exactly as the page showed it before. */
   children?: React.ReactNode;
   className?: string;
-  /** Midterm period grades use the 3.1-4.0 band below 75%; default is Final / course grade. */
+  /** Kept for existing callers; the conversion is the same for Midterm, Final and course grades. */
   period?: 'Midterm' | 'Final';
   /** Saved grade shown in the tooltip instead of recomputing it (grades saved under an older scale keep their value). */
   grade?: number | null;
+  /** Value before the whole-percent rounding (e.g. 83.77); without it the percentage itself is the first step. */
+  raw?: number | null;
 };
 
 const BUBBLE =
@@ -19,12 +21,12 @@ const BUBBLE =
 
 // Plain .ts (no JSX) so the node --test runner can import it directly.
 /**
- * Shows a grade as-is; hover, focus or tap reveals the exact grade and percentage (UI-002).
+ * Shows a grade as-is; hover, focus or tap reveals the steps (raw % -> whole % -> grade).
  * The tooltip element (role="tooltip", the aria-describedby target) is always in the DOM as screen-reader-only
  * text; the visible bubble is an aria-hidden copy portalled to <body> with fixed coordinates so scroll
  * containers and overflow:hidden cards cannot clip it.
  */
-export default function GradeValue({ percentage, children, className, period = 'Final', grade }: Props) {
+export default function GradeValue({ percentage, children, className, period = 'Final', grade, raw }: Props) {
   const id = useId();
   const triggerRef = useRef<HTMLSpanElement>(null);
   const bubbleRef = useRef<HTMLSpanElement>(null);
@@ -50,8 +52,11 @@ export default function GradeValue({ percentage, children, className, period = '
   }, [shown]);
 
   if (typeof percentage !== 'number' || !Number.isFinite(percentage)) return React.createElement(React.Fragment, null, children);
-  const exact = typeof grade === 'number' && Number.isFinite(grade) ? grade : percentageToGWAExact(percentage, period);
-  const tip = `Exact: ${formatGrade(exact)} (${percentage.toFixed(2)}%)`;
+  const whole = roundPercent(percentage);
+  const grade2 = typeof grade === 'number' && Number.isFinite(grade) ? grade : percentageToGWAExact(whole, period);
+  const first = typeof raw === 'number' && Number.isFinite(raw) ? raw : percentage;
+  // e.g. "83.77% → 84% → 2.5"; the first step is dropped when nothing was rounded.
+  const tip = `${first === whole ? '' : `${first.toFixed(2)}% → `}${whole}% → ${formatGrade(grade2)}`;
   return React.createElement(
     'span',
     {

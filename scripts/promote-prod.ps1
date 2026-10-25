@@ -97,7 +97,7 @@ try {
     else { Write-Host '  (no production server configured: images only)' }
     Write-Host "  2. Copy ghcr.io/$Namespace/dentisys-{web,frontend,biometric}:sha-$short to dentisys-*-prod:sha-$short and :prod (registry-side, no build)."
     Write-Host '  3. Verify the digests match.'
-    if ($server) { Write-Host "  4. Wait up to 15 minutes for Watchtower to roll production to sha-$short." }
+    if ($server) { Write-Host "  4. Wait up to 15 minutes for Watchtower to roll production to sha-$short."; Write-Host '  5. Recalculate current-term grades once (one audited batch).' }
     if ($DryRun) { Write-Host 'Dry run: nothing was changed.'; return }
 
     # 2. Owner token, kept in a temporary Docker config that is deleted afterwards.
@@ -175,6 +175,14 @@ done
         $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($remote.Replace('@SHA@', $short).Replace("`r`n", "`n")))
         Invoke-Native ssh @('-t', '-i', $sshKey, '-p', "$sshPort", '-o', 'IdentitiesOnly=yes', '-o', 'StrictHostKeyChecking=accept-new', $target, "bash <(echo $encoded | base64 -d)")
         Write-Host "Production now runs sha-$short"
+        # 7. One-time recalculation of current-term grades (official grade sheet rules); idempotent, one audited batch.
+        Write-Host 'Recalculating current-term grades (one audited batch)...'
+        try {
+            Invoke-Native ssh @('-t', '-i', $sshKey, '-p', "$sshPort", '-o', 'IdentitiesOnly=yes', '-o', 'StrictHostKeyChecking=accept-new', $target, 'sudo docker exec dentisys-web-1 php /var/www/html/backend/bin/recompute-current-grades.php apply')
+        }
+        catch {
+            throw "The deploy SUCCEEDED (production runs sha-$short), but the grade recalculation FAILED and was rolled back: $($_.Exception.Message) Tell Claude; it is safe to re-run: ssh to the server and run the same command, or rerun this script."
+        }
     }
     else { Write-Host 'Images promoted to :prod; no production server configured yet' }
 }

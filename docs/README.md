@@ -19,6 +19,7 @@ Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) 
 - [Roadmap](roadmap.md): what's next, in order. [Implemented features](features.md): what works today, with spec IDs.
 - [Local demo on lighthal7](local-demo-lighthal7.md) and [Lecture/Laboratory grading](lecture-laboratory-grading.md).
 - [UI polish, October 2026](ui-polish-2026-10.md): device-audit fixes 1–6 and batches 2A–2H, the Owner's layout rulings, and how they were checked.
+- [Official imports, October 2026](official-imports-2026-10.md): the Dean's class list PDF and grade sheet workbook as import formats, and the grade sheet's grade math.
 - [Owhie's UI changes merged, October 2026](owhie-merge-2026-10.md): what was taken from Owhie's layout branch, what was changed or replaced in the merge, and the Owner's rulings.
 - Approved specification amendment records: [2026-10-01](spec-amendments-2026-10-01.md), [2026-10-03](spec-amendments-2026-10-03.md), [2026-10-04](spec-amendments-2026-10-04.md), [2026-10-09](spec-amendments-2026-10-09.md), [2026-10-09 deployment](spec-amendments-2026-10-09-deployment.md), [2026-10-10 academic terms](spec-amendments-2026-10-10-academic-terms.md); proposals in [proposals/](proposals/).
 
@@ -26,7 +27,7 @@ Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) 
 
 - [Architecture](architecture.md)
 - [Frontend overview](frontend.md)
-- [Backend contracts](contracts/): [academics and roles](contracts/demo-academics.md), [password change](contracts/demo-auth.md).
+- [Backend contracts](contracts/): [academics and roles](contracts/demo-academics.md), [password change](contracts/demo-auth.md), [audit logging](contracts/audit-logging.md), [official imports](contracts/official-imports.md).
 - [BUCDM interview policy proposal](bucdm-policy-proposal.md)
 
 ## Database

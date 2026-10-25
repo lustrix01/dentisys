@@ -459,14 +459,14 @@ test('fresh grouped offering saves in the editor, recomputes from live scores, a
   expect(computedResult?.periods?.final).toEqual(expect.objectContaining({ status: 'computed', percentage: 86 }));
   expect(computedResult?.periods?.final?.components?.lecture?.percentage).toBe(90);
   expect(computedResult?.periods?.final?.components?.laboratory?.percentage).toBe(80);
-  expect(Number(computedResult?.percentage)).toBe(85.4);
+  expect(Number(computedResult?.percentage)).toBe(85);
 
   const facultyRow = main.locator('.no-print tbody').getByRole('row').filter({ hasText: fixtureStudentNumber });
   await expect(facultyRow).toBeVisible();
   for (const displayedResult of ['80.00%', '90.00%', '84.00%', '86.00%']) {
     await expect(facultyRow).toContainText(displayedResult);
   }
-  // 85.40% truncates to 85% = 2.4 on the BUCDM table (spec.md, Owner amendment 2026-10-17).
+  // round(round(84 x 0.3) + round(86 x 0.7)) = 25 + 60 = 85% = 2.4 (spec.md, Owner amendment 2026-10-26).
   await expect(facultyRow.getByRole('cell', { name: '2.4', exact: true })).toBeVisible();
   await expect(main.getByText(/All 1 student grade\(s\) recomputed and persisted successfully\./)).toBeVisible();
 
@@ -480,7 +480,7 @@ test('fresh grouped offering saves in the editor, recomputes from live scores, a
   );
   if (!studentClass) throw new Error('The Student API does not include the isolated grouped class.');
   expect(studentClass.gradingComponentMode).toBe('lecture_laboratory');
-  expect(Number(studentClass.percentage)).toBe(85.4);
+  expect(Number(studentClass.percentage)).toBe(85);
   expect(studentClass.gradeComponents.periods.midterm.components.lecture.percentage).toBe(80);
   expect(studentClass.gradeComponents.periods.midterm.components.laboratory.percentage).toBe(90);
   expect(studentClass.gradeComponents.periods.midterm.percentage).toBe(84);
@@ -496,7 +496,7 @@ test('fresh grouped offering saves in the editor, recomputes from live scores, a
     'Midterm Laboratory: 90.00%',
     'Finals Lecture: 90.00%',
     'Finals Laboratory: 80.00%',
-    '(85.4%)',
+    '(85.0%)',
   ]) {
     await expect(studentMain).toContainText(breakdown);
   }

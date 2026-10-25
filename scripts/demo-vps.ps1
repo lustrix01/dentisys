@@ -4,11 +4,12 @@
 #   ./scripts/demo-vps.ps1 upload <local-file> <remote-path>
 #   ./scripts/demo-vps.ps1 wait-deploy <sha>   (after publish-images.ps1: waits until the VPS runs sha-<sha>)
 #   ./scripts/demo-vps.ps1 migrate   (backs up and applies new database migrations via sync-vps-db.ps1; required before a release that adds migrations)
+#   ./scripts/demo-vps.ps1 recompute-grades preview|apply   (one-time recalculation of current-term grades on the demo; preview writes nothing)
 #   ./scripts/demo-vps.ps1 tunnel-start | tunnel-stop | status
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('run', 'upload', 'wait-deploy', 'migrate', 'tunnel-start', 'tunnel-stop', 'status')]
+    [ValidateSet('run', 'upload', 'wait-deploy', 'migrate', 'recompute-grades', 'tunnel-start', 'tunnel-stop', 'status')]
     [string]$Action,
     [Parameter(Position = 1)]
     [string]$Command,
@@ -124,6 +125,11 @@ done
     }
     'migrate' {
         & (Join-Path $PSScriptRoot 'sync-vps-db.ps1') -Server "$($s['DEMO_SSH_USER'])@$($s['DEMO_SSH_HOST'])" -Port ([int]$s['DEMO_SSH_PORT']) -IdentityFile $s['DEMO_SSH_KEY'] -Apply
+        exit $LASTEXITCODE
+    }
+    'recompute-grades' {
+        if ($Command -notin 'preview', 'apply') { throw 'Usage: demo-vps.ps1 recompute-grades preview|apply' }
+        & ssh @(Get-SshArgs $s) "sudo -n docker exec dentisys-web-1 php /var/www/html/backend/bin/recompute-current-grades.php $Command"
         exit $LASTEXITCODE
     }
     'tunnel-start' {

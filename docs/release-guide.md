@@ -33,7 +33,7 @@ Claude never runs `promote-prod.ps1` and never touches the production server, it
 | 3 | Publish the demo images | Claude | `.\scripts\publish-images.ps1 -Tag demo`. It prints the 12-character sha. |
 | 4 | Database migrations (only if the release adds them) | Claude | `.\scripts\demo-vps.ps1 migrate`. It backs up the database first. Watchtower alone is not enough. |
 | 5 | Wait until the demo runs the new version | Claude | `.\scripts\demo-vps.ps1 wait-deploy <sha>`. It waits up to 15 minutes for every container to run that sha and be healthy. |
-| 6 | Test the demo | Claude | `.\scripts\demo-test.ps1` signs in as each role through the tunnel at `http://localhost:15180`, plus any checks specific to the feature. |
+| 6 | Test the demo | Claude | `.\scripts\demo-test.ps1` signs in as each role through the tunnel at `http://localhost:15180`, plus any checks specific to the feature. For the grade-rules release, Claude first shows you the list of grades that change (`.\scripts\demo-vps.ps1 recompute-grades preview`, writes nothing), then applies it on the demo (`... recompute-grades apply`). |
 | 7 | Report | Claude → Owner | Pass/fail in chat, ending with the approved sha and the exact command: `.\scripts\promote-prod.ps1 -Sha <sha>`. The change doc is updated only when the Owner asks. |
 | 8 | Approve the demo | Owner, then Claude | Both say "approved". Open the demo yourself: `https://52-76-136-13.sslip.io`. |
 | 9 | Promote to production | **Owner** | See below. |
@@ -61,6 +61,7 @@ git checkout lighthal9-responsive
   2. Copy of the exact demo images to `-prod:prod`, with no rebuild.
   3. Fingerprint (digest) check.
   4. Wait until production runs the new version.
+  5. Recalculate current-term grades once with the new grading rules (one audited batch, actor System). Safe to repeat: a second run changes nothing. If it fails, the message says the deploy itself succeeded; tell Claude.
   
   The last line reads `Production now runs sha-<sha>`.
 - A failure before step 2 leaves production untouched. Fix the cause the message names and rerun.
