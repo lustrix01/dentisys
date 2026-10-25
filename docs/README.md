@@ -18,6 +18,7 @@ Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) 
 - [Product backlog](PRODUCT_BACKLOG.md): open work only (Partial, Not started, Unclear), checked against the code on 2026-10-07.
 - [Roadmap](roadmap.md): what's next, in order. [Implemented features](features.md): what works today, with spec IDs.
 - [Local demo on lighthal7](local-demo-lighthal7.md) and [Lecture/Laboratory grading](lecture-laboratory-grading.md).
+- [UI polish, October 2026](ui-polish-2026-10.md): device-audit fixes 1–6 and batches 2A–2H, the Owner's layout rulings, and how they were checked.
 - Approved specification amendment records: [2026-10-01](spec-amendments-2026-10-01.md), [2026-10-03](spec-amendments-2026-10-03.md), [2026-10-04](spec-amendments-2026-10-04.md), [2026-10-09](spec-amendments-2026-10-09.md), [2026-10-09 deployment](spec-amendments-2026-10-09-deployment.md), [2026-10-10 academic terms](spec-amendments-2026-10-10-academic-terms.md); proposals in [proposals/](proposals/).
 
 ## Architecture and design
