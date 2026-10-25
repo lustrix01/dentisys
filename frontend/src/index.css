@@ -126,3 +126,10 @@
     box-shadow: none !important;
   }
 }
+
+/* Recharts: legend text in readable grey (the coloured swatch still marks the series);
+   default tooltip follows dark mode instead of a white box. */
+.recharts-legend-item-text { color: #475569 !important; }
+.dark .recharts-legend-item-text { color: #cbd5e1 !important; }
+.dark .recharts-default-tooltip { background-color: #0f172a !important; border-color: #334155 !important; }
+.dark .recharts-default-tooltip .recharts-tooltip-label { color: #e2e8f0 !important; }

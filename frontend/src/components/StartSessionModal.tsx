@@ -157,7 +157,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   const boxClass = 'rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/50';
   const info = (Tag: 'p' | 'span') => (
     <>
-      <Tag className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Selected class</Tag>
+      <Tag className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Selected class</Tag>
       <Tag className="mt-1 block font-bold text-slate-800 dark:text-slate-100">{summary}</Tag>
       <Tag className="mt-0.5 block text-[11px] text-slate-500">Session date: {sessionDate} · Asia/Manila</Tag>
     </>

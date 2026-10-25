@@ -92,7 +92,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           avatarBg: 'from-accent-500 to-accent-600 dark:from-accent-600 dark:to-accent-700',
           avatarText: 'text-white font-bold font-heading',
           crumbHover: 'hover:text-accent-500',
-          roleLabelText: 'text-accent-500',
+          roleLabelText: 'text-accent-600 dark:text-accent-500',
           hoverBg: 'hover:bg-accent-50/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white',
           sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
@@ -106,7 +106,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           avatarBg: 'from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-700',
           avatarText: 'text-white font-bold font-heading',
           crumbHover: 'hover:text-blue-500',
-          roleLabelText: 'text-blue-500',
+          roleLabelText: 'text-blue-600 dark:text-blue-500',
           hoverBg: 'hover:bg-blue-50/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white',
           sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
@@ -120,7 +120,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           avatarBg: 'from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-700',
           avatarText: 'text-white font-bold font-heading',
           crumbHover: 'hover:text-blue-500',
-          roleLabelText: 'text-blue-500',
+          roleLabelText: 'text-blue-600 dark:text-blue-500',
           hoverBg: 'hover:bg-blue-50/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white',
           sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
@@ -135,7 +135,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           avatarBg: 'from-clinical-500 to-accent-600 dark:from-clinical-600 dark:to-accent-700',
           avatarText: 'text-white font-bold font-heading',
           crumbHover: 'hover:text-clinical-500',
-          roleLabelText: 'text-emerald-500',
+          roleLabelText: 'text-emerald-700 dark:text-emerald-500',
           hoverBg: 'hover:bg-slate-100/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white',
           sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
@@ -679,8 +679,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                 isSidebarCollapsed ? 'w-10 h-10' : 'flex-1 px-2 py-2 gap-1.5 text-[11px]'
               } font-bold ${
                 !linkedStudentView
-                  ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-300 shadow-xs'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
               }`}
             >
               <UserCheck className="w-4 h-4 shrink-0" />
@@ -705,8 +705,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                 isSidebarCollapsed ? 'w-10 h-10' : 'flex-1 px-2 py-2 gap-1.5 text-[11px]'
               } font-bold disabled:opacity-40 disabled:cursor-not-allowed ${
                 linkedStudentView
-                  ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-300 shadow-xs'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
               }`}
             >
               <User className="w-4 h-4 shrink-0" />
