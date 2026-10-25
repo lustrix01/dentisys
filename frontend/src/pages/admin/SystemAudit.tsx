@@ -451,8 +451,8 @@ export const DeanReports: React.FC = () => {
         {activeTab === 'students' && selectedClassId === null && (
           <div className="space-y-4">
             {/* Class Section Filter Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
-              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
+              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto sm:shrink-0">
                 <button
                   type="button"
                   onClick={() => setClassSectionTab('active')}
@@ -760,8 +760,8 @@ export const DeanReports: React.FC = () => {
         {activeTab === 'retention' && selectedClassId === null && (
           <div className="space-y-4">
             {/* Class Section Filter Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
-              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
+              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto sm:shrink-0">
                 <button
                   type="button"
                   onClick={() => setClassSectionTab('active')}
@@ -1092,8 +1092,8 @@ export const DeanReports: React.FC = () => {
         {activeTab === 'attendance' && selectedClassId === null && (
           <div className="space-y-4">
             {/* Class Section Filter Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
-              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
+              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto sm:shrink-0">
                 <button
                   type="button"
                   onClick={() => setClassSectionTab('active')}

@@ -3118,7 +3118,7 @@ export const GradeComputation: React.FC = () => {
                 setSelectedClassId('');
               }
             }}
-            className="w-full px-2 sm:px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+            className="w-full px-2 pr-8 sm:px-4 sm:pr-8 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
           >
             {activeCourses.length === 0 ? (
               <option value="">No active courses for current school year</option>
@@ -4265,12 +4265,12 @@ export const GradeComputation: React.FC = () => {
                       )}
                     </div>
                   ) : (
-                    <div className="p-3 sm:p-3.5 rounded-2xl bg-clinical-50/70 dark:bg-clinical-950/30 border border-clinical-200/80 dark:border-clinical-800/50 flex items-center justify-between gap-3 text-xs">
-                      <div className="flex items-center gap-2 text-clinical-800 dark:text-clinical-200 font-semibold">
+                    <div className="p-3 sm:p-3.5 rounded-2xl bg-clinical-50/70 dark:bg-clinical-950/30 border border-clinical-200/80 dark:border-clinical-800/50 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex-1 basis-48 min-w-0 flex items-center gap-2 text-clinical-800 dark:text-clinical-200 font-semibold">
                         <CheckCircle className="w-4 h-4 text-clinical-600 dark:text-clinical-400 shrink-0" />
                         <span>BU Dental Medicine {loadedConfig ? 'Schema Active' : 'Default Grade Weights'}: Lecture {componentWeights.lecture}% / Lab {componentWeights.laboratory}% • Midterm {termRatio.midterm}% / Final {termRatio.final}%</span>
                       </div>
-                      <span className="text-[11px] font-bold text-clinical-600 dark:text-clinical-400 shrink-0">
+                      <span className="text-[11px] font-bold text-clinical-600 dark:text-clinical-400 shrink-0 whitespace-nowrap">
                         Directly editable
                       </span>
                     </div>
