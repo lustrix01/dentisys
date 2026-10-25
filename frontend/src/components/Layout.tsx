@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  Users,
-  Calculator,
-  AlertTriangle,
-  CalendarDays,
-  FileSpreadsheet,
+import { 
+  LayoutDashboard, 
+  Users, 
+  Calculator, 
+  AlertTriangle, 
+  CalendarDays, 
+  FileSpreadsheet, 
   Settings as SettingsIcon,
   Menu,
   X,
   Bell,
   Sun,
   Moon,
+  ChevronLeft,
+  ChevronRight,
   ChevronDown,
   LogOut,
   User,
@@ -143,7 +145,37 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const { settings } = useApp();
   const config = useRuntimeConfig();
   const studentPrototypeEnabled = isStudentPrototypeAllowed(user, config, 'dashboard');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [savedSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    // Owner decision: upright tablets (768-1023px) start collapsed unless the user has chosen before.
+    const tabletDefault = typeof window !== 'undefined' && window.innerWidth >= 768 && window.innerWidth < 1024;
+    try {
+      const saved = localStorage.getItem('dentisys_sidebar_collapsed');
+      return saved === null ? tabletDefault : saved === 'true';
+    } catch {
+      return tabletDefault;
+    }
+  });
+
+  // Below 768px the drawer always shows full labels; the saved fold only applies from 768px up.
+  const [isPhone, setIsPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const onChange = () => setIsPhone(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  const isSidebarCollapsed = savedSidebarCollapsed && !isPhone;
+
+  const handleToggleCollapse = () => {
+    setIsSidebarCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('dentisys_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   // Faculty sidebar badge: server-computed at-risk and remedial counts for the
@@ -189,7 +221,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Audit Trail', path: '/admin/audit-trail', icon: ListChecks },
       ];
     }
-
+    
     if (currentUser.role === 'secretary') {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -220,7 +252,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       }
       return items;
     }
-
+    
     // Faculty (default)
     return [
       { name: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -319,20 +351,22 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           <button
             type="button"
             onClick={() => setNotificationFilter('all')}
-            className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${notificationFilter === 'all'
+            className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${
+              notificationFilter === 'all'
                 ? 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100'
                 : 'text-slate-400 hover:text-slate-600'
-              }`}
+            }`}
           >
             All ({notifications.length})
           </button>
           <button
             type="button"
             onClick={() => setNotificationFilter('unread')}
-            className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${notificationFilter === 'unread'
+            className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${
+              notificationFilter === 'unread'
                 ? 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100'
                 : 'text-slate-400 hover:text-slate-600'
-              }`}
+            }`}
           >
             Unread ({unreadCount})
           </button>
@@ -360,10 +394,11 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                   onClick={() => {
                     if (isUnread) void handleMarkAsRead(item.id);
                   }}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${isUnread
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    isUnread
                       ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200/60 dark:border-blue-900/40 hover:bg-blue-50 dark:hover:bg-blue-950/30'
                       : 'bg-slate-50/50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800 hover:bg-slate-100/50 dark:hover:bg-slate-800/50'
-                    }`}
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className={`text-xs font-bold ${isUnread ? 'text-blue-900 dark:text-blue-100' : 'text-slate-700 dark:text-slate-200'}`}>
@@ -466,112 +501,337 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen print:min-h-0 print:bg-white bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col relative overflow-clip print:overflow-visible font-sans">
-
+      
       {/* Background Subtle Gradient Blobs */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] aspect-square rounded-full bg-accent-200/25 dark:bg-accent-950/30 blur-[120px] pointer-events-none z-0 print:hidden" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] aspect-square rounded-full bg-clinical-200/25 dark:bg-clinical-950/20 blur-[120px] pointer-events-none z-0 print:hidden" />
-      {/* Unified Responsive Top Navbar */}
-      <header className="print:hidden sticky top-0 z-40 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 transition-colors shadow-xs">
-        <div className="max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-          
-          {/* Left: Brand Identity & Secretary Switcher */}
-          <div className="flex items-center gap-3 shrink-0">
-            <Link to="/" className="flex items-center gap-3 group">
-              <img
-                src="/bu-cdm-logo.png"
-                alt="BU CDM Logo"
-                className={`w-9 h-9 rounded-full object-cover shadow-sm ${colors.logoRing} transition-transform duration-200 group-hover:scale-105`}
-              />
-              <div className="min-w-0">
-                <span className="font-heading font-extrabold text-lg tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-1.5 leading-tight">
-                  DentiSYS
+
+      {/* Mobile Header */}
+      <header className="print:hidden md:hidden flex items-center justify-between px-6 max-[359px]:px-3 py-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-40 relative z-10">
+        <div className="flex items-center space-x-2">
+          <img src="/bu-cdm-logo.png" alt="BU CDM Logo" className="w-9 h-9 rounded-full object-cover" />
+          <span className="font-heading font-bold text-xl tracking-tight bg-gradient-to-r from-clinical-600 to-accent-600 dark:from-clinical-400 dark:to-accent-400 bg-clip-text text-transparent">
+            DentiSYS
+          </span>
+        </div>
+
+        <div className="flex items-center space-x-2.5 max-[359px]:space-x-0">
+          {/* Mobile Notification Bell */}
+          <div className="relative max-md:static">
+            <button
+              type="button"
+              onClick={() => {
+                const willOpen = !isNotificationsOpen;
+                setIsNotificationsOpen(willOpen);
+                setIsProfileOpen(false);
+                if (willOpen) void fetchNotifications();
+              }}
+              className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 relative cursor-pointer"
+              title="Notifications"
+              aria-label="Notifications"
+            >
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[1rem] h-[1rem] px-0.5 rounded-full bg-rose-500 text-white text-[9px] font-extrabold flex items-center justify-center border-2 border-white dark:border-slate-900">
+                  {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
-                <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase hidden sm:block leading-none">
+              )}
+            </button>
+            {isNotificationsOpen && renderNotificationsDropdown()}
+          </div>
+
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400"
+            title={settings.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+            aria-label={settings.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+          >
+            {settings.theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+          </button>
+
+          {/* Mobile User Profile Avatar Trigger */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setIsProfileOpen(!isProfileOpen);
+                setIsNotificationsOpen(false);
+              }}
+              className={`w-8 h-8 rounded-xl bg-gradient-to-tr ${colors.avatarBg} ${colors.avatarText} text-xs font-extrabold flex items-center justify-center shadow-xs cursor-pointer`}
+              title="Profile menu"
+            >
+              {initials}
+            </button>
+
+            {isProfileOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsProfileOpen(false)} />
+                <div className="absolute right-0 mt-3 w-56 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-2.5 z-50 space-y-1">
+                  
+                  <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 pb-2 mb-1.5">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Signed in as</p>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5">{currentUser.email}</p>
+                  </div>
+
+                  <Link
+                    to={currentUser.role === 'admin' ? '/admin/profile' : user?.role === 'secretary' ? '/secretary/profile' : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
+                    onClick={() => setIsProfileOpen(false)}
+                    className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
+                  >
+                    <User className="w-4 h-4 text-slate-400" />
+                    <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? 'My Secretary Profile' : currentUser.role === 'student' ? 'My Profile' : 'My Faculty Profile'}</span>
+                  </Link>
+
+                  {currentUser.role !== 'student' && (
+                    <Link
+                      to={currentUser.role === 'admin' ? '/admin/settings' : currentUser.role === 'secretary' ? '/secretary/settings' : '/faculty/settings'}
+                      onClick={() => setIsProfileOpen(false)}
+                      className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
+                    >
+                      <SettingsIcon className="w-4 h-4 text-slate-400" />
+                      <span>{currentUser.role === 'admin' ? 'System Settings' : 'My Settings'}</span>
+                    </Link>
+                  )}
+
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 text-xs font-bold transition-all border-t border-slate-100 dark:border-slate-800 pt-2 cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4 text-rose-500" />
+                    <span>Sign Out</span>
+                  </button>
+
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Hamburger Menu Toggle */}
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+          >
+            {isSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+        </div>
+      </header>
+
+      {/* Sidebar Navigation — fixed on desktop, drawer on mobile */}
+      <aside
+        className={`print:hidden fixed inset-y-0 left-0 z-50 bg-gradient-to-b ${colors.sidebarGradient} border-r border-slate-200/80 dark:border-slate-800 flex flex-col transition-all duration-300 ease-out ${
+          isSidebarCollapsed ? 'px-3 py-5 md:w-20 overflow-visible' : 'p-5 md:w-72 overflow-y-auto'
+        } ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
+      >
+        {/* Brand Logo & Desktop Collapse Toggle */}
+        <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center mb-6' : 'justify-between mb-8'} px-1 relative`}>
+          <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'space-x-3'} min-w-0`}>
+            <img
+              src="/bu-cdm-logo.png"
+              alt="BU CDM Logo"
+              className={`w-10 h-10 rounded-full object-cover shadow-lg ${colors.logoRing} flex-shrink-0 transition-transform duration-300`}
+            />
+            {!isSidebarCollapsed && (
+              <div className="transition-opacity duration-300 min-w-0">
+                <h1 className="font-heading font-extrabold text-xl tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-1.5 truncate">
+                  DentiSYS
+                </h1>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase truncate">
                   BU College of Dental Medicine
                 </p>
-              </div>
-            </Link>
-
-            {/* Secretary / Student Role Switcher */}
-            {user?.role === 'secretary' && (
-              <div
-                className="hidden md:flex ml-2 rounded-xl bg-slate-200/60 dark:bg-slate-800/80 p-0.5 gap-0.5"
-                aria-label="Account view"
-              >
-                <Link
-                  to="/secretary/attendance"
-                  aria-current={!linkedStudentView ? 'page' : undefined}
-                  className={`flex items-center px-2 py-1 gap-1 text-[11px] font-bold rounded-lg transition-all ${
-                    !linkedStudentView
-                      ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-xs'
-                      : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                  }`}
-                >
-                  <UserCheck className="w-3.5 h-3.5" />
-                  <span>Secretary</span>
-                </Link>
-
-                <button
-                  type="button"
-                  disabled={!user.student}
-                  aria-pressed={linkedStudentView}
-                  onClick={() => navigate('/student/dashboard')}
-                  className={`flex items-center px-2 py-1 gap-1 text-[11px] font-bold rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                    linkedStudentView
-                      ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-xs'
-                      : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                  }`}
-                >
-                  <User className="w-3.5 h-3.5" />
-                  <span>Student</span>
-                </button>
               </div>
             )}
           </div>
 
-          {/* Center: Desktop Horizontal Navigation Items */}
-          <nav className="hidden xl:flex items-center gap-1 flex-1 justify-center max-w-4xl min-w-0 overflow-x-auto no-scrollbar py-1">
-            {navItems.map((item, idx) => {
-              const isActive = location.pathname === item.path;
-              const Icon = item.icon;
-              const badgeValue = item.badge ? getBadgeValue(item.badge) : undefined;
+          {/* Cleanly Docked Desktop Collapse Toggle Button */}
+          <button
+            type="button"
+            onClick={handleToggleCollapse}
+            className="hidden md:flex absolute -right-6 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 shadow-md items-center justify-center hover:scale-110 active:scale-95 transition-all z-50 cursor-pointer"
+            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {isSidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+          </button>
+        </div>
 
-              return (
+        {/* Secretary / Student Role Switcher */}
+        {user?.role === 'secretary' && (
+          <div
+            className={`mb-4 rounded-xl bg-slate-200/60 dark:bg-slate-800/80 p-1 flex ${
+              isSidebarCollapsed ? 'flex-col items-center gap-1' : 'gap-1'
+            }`}
+            aria-label="Account view"
+          >
+            <Link
+              to="/secretary/attendance"
+              onClick={() => setIsSidebarOpen(false)}
+              aria-current={!linkedStudentView ? 'page' : undefined}
+              className={`group relative flex items-center justify-center rounded-lg transition-all ${
+                isSidebarCollapsed ? 'w-10 h-10' : 'flex-1 px-2 py-2 gap-1.5 text-[11px]'
+              } font-bold ${
+                !linkedStudentView
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <UserCheck className="w-4 h-4 shrink-0" />
+              {!isSidebarCollapsed && <span>Secretary</span>}
+              {isSidebarCollapsed && (
+                <div className="pointer-events-none absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 text-white text-xs font-bold rounded-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap shadow-xl border border-slate-700/50 flex items-center">
+                  Secretary View
+                  <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
+                </div>
+              )}
+            </Link>
+
+            <button
+              type="button"
+              disabled={!user.student}
+              aria-pressed={linkedStudentView}
+              onClick={() => {
+                setIsSidebarOpen(false);
+                navigate('/student/dashboard');
+              }}
+              className={`group relative flex items-center justify-center rounded-lg transition-all ${
+                isSidebarCollapsed ? 'w-10 h-10' : 'flex-1 px-2 py-2 gap-1.5 text-[11px]'
+              } font-bold disabled:opacity-40 disabled:cursor-not-allowed ${
+                linkedStudentView
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <User className="w-4 h-4 shrink-0" />
+              {!isSidebarCollapsed && <span>Student</span>}
+              {isSidebarCollapsed && (
+                <div className="pointer-events-none absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 text-white text-xs font-bold rounded-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap shadow-xl border border-slate-700/50 flex items-center">
+                  Student View
+                  <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
+                </div>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Navigation Items */}
+        <nav className={`flex-1 space-y-1 ${isSidebarCollapsed ? 'overflow-visible' : 'overflow-y-auto overflow-x-hidden'}`}>
+          {navItems.map((item, idx) => {
+            const isActive = location.pathname === item.path;
+            const Icon = item.icon;
+            const badgeValue = item.badge ? getBadgeValue(item.badge) : undefined;
+
+            return (
+              <React.Fragment key={item.name + idx}>
+                {item.sectionHeader && (
+                  <div className={`${isSidebarCollapsed ? 'py-2 px-1' : 'px-3 pt-3 pb-1.5'}`}>
+                    {!isSidebarCollapsed ? (
+                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-600 dark:text-blue-400 opacity-90 block">
+                        {item.sectionHeader}
+                      </span>
+                    ) : (
+                      <div className="w-8 mx-auto border-t border-slate-200/80 dark:border-slate-800" />
+                    )}
+                  </div>
+                )}
                 <Link
-                  key={item.name + idx}
                   to={item.path}
-                  className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150 shrink-0 ${
+                  onClick={() => setIsSidebarOpen(false)}
+                  className={`relative group flex items-center transition-all duration-200 ${
+                    isSidebarCollapsed
+                      ? 'w-11 h-11 mx-auto justify-center rounded-2xl'
+                      : 'justify-between px-3 py-3 rounded-2xl'
+                  } ${
                     isActive
-                      ? `bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 shadow-xs font-bold`
-                      : `text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/70 dark:hover:bg-slate-800/70`
+                      ? `bg-gradient-to-r ${colors.bgGradient} ${colors.textActive} shadow-xs`
+                      : `text-slate-600 dark:text-slate-300 ${colors.hoverBg}`
                   }`}
+                  title={!isSidebarCollapsed && item.badge === 'retention' ? `${retentionBadgeCount ?? 0} students needing attention in the current school year` : undefined}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-purple-600 dark:text-purple-400' : 'text-slate-400'}`} />
-                  <span>{item.name}</span>
-                  {badgeValue !== undefined && (
-                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-rose-500 text-white leading-none">
+                  <div className={`flex items-center min-w-0 ${isSidebarCollapsed ? 'justify-center' : 'space-x-3'}`}>
+                    <Icon className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110 ${
+                      isActive ? colors.iconActive : `text-slate-400 dark:text-slate-400 ${colors.iconHover}`
+                    }`} />
+                    {!isSidebarCollapsed && (
+                      <span className="text-sm font-medium truncate transition-opacity duration-300">{item.name}</span>
+                    )}
+                  </div>
+
+                  {/* Normal badge when expanded */}
+                  {badgeValue !== undefined && !isSidebarCollapsed && (
+                    <span aria-label={item.badge === 'retention' ? `${badgeValue} students needing attention in the current school year` : undefined} className="px-2 py-0.5 text-xs font-bold rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400">
                       {badgeValue}
                     </span>
                   )}
-                </Link>
-              );
-            })}
-          </nav>
 
-          {/* Right: Actions, Notifications, Theme, Profile & Mobile Hamburger */}
-          <div className="flex items-center space-x-2.5 shrink-0">
-            
+                  {/* Alert badge dot when collapsed */}
+                  {badgeValue !== undefined && isSidebarCollapsed && (
+                    <span
+                      aria-label={item.badge === 'retention' ? `${badgeValue} students needing attention in the current school year` : undefined}
+                      className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900 animate-pulse"
+                    />
+                  )}
+
+                  {/* Instant Floating Flyout Tooltip when collapsed (Raycast/Linear style) */}
+                  {isSidebarCollapsed && (
+                    <div className="pointer-events-none absolute left-full ml-3 px-3 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white text-xs font-bold rounded-xl shadow-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap flex items-center gap-2 border border-slate-700/50">
+                      <span>{item.name}</span>
+                      {badgeValue !== undefined && (
+                        <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-rose-500 text-white">
+                          {badgeValue}
+                        </span>
+                      )}
+                      <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
+                    </div>
+                  )}
+                </Link>
+              </React.Fragment>
+            );
+          })}
+        </nav>
+      </aside>
+
+      {/* Main Container — offset by sidebar width, fills remaining height, scrolls independently */}
+      <div className={`print:!ml-0 flex-1 flex flex-col min-w-0 min-h-screen overflow-clip print:overflow-visible print:min-h-0 relative z-10 transition-all duration-300 ${
+        isSidebarCollapsed ? 'md:ml-20' : 'md:ml-72'
+      }`}>
+        
+        {/* Desktop Header */}
+        <header className="print:!hidden hidden md:flex items-center justify-between px-8 py-4 border-b border-slate-200/40 dark:border-slate-900/40 bg-white/30 dark:bg-slate-950/20 backdrop-blur-md sticky top-0 z-30">
+          
+          {/* Dynamic Breadcrumbs Area */}
+          <div className="flex flex-col space-y-1">
+            <nav className="flex items-center space-x-1.5 text-xs text-slate-400 font-medium">
+              {breadcrumbs.map((crumb, idx) => (
+                <React.Fragment key={crumb.path + idx}>
+                  {idx > 0 && <span className="text-slate-300 dark:text-slate-700">/</span>}
+                  {idx === breadcrumbs.length - 1 ? (
+                    <span className="text-slate-500 dark:text-slate-400 font-semibold">{crumb.name}</span>
+                  ) : (
+                    <Link to={crumb.path} className={`${colors.crumbHover} transition-colors`}>
+                      {crumb.name}
+                    </Link>
+                  )}
+                </React.Fragment>
+              ))}
+            </nav>
+            <h2 className="text-xl font-bold font-heading text-slate-800 dark:text-slate-100">
+              {navItems.find(x => x.path === location.pathname)?.name || breadcrumbs[breadcrumbs.length - 1]?.name || 'DentiSYS Portal'}
+            </h2>
+          </div>
+
+          {/* Right Header Navigation Panel */}
+          <div className="flex items-center space-x-3">
+
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+              className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 transition-colors"
               title={settings.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
               aria-label={settings.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
             >
-              {settings.theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+              {settings.theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
             </button>
 
-            {/* Notification Bell */}
+            {/* Notification bell dropdown */}
             <div className="relative">
               <button
                 type="button"
@@ -581,43 +841,45 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                   setIsProfileOpen(false);
                   if (willOpen) void fetchNotifications();
                 }}
-                className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 relative transition-colors cursor-pointer"
+                className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 transition-colors relative cursor-pointer"
                 title="Notifications"
                 aria-label="Notifications"
               >
-                <Bell className="w-4 h-4" />
+                <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 min-w-[0.95rem] h-[0.95rem] px-0.5 rounded-full bg-rose-500 text-white text-[9px] font-extrabold flex items-center justify-center border-2 border-white dark:border-slate-900">
+                  <span className="absolute top-1.5 right-1.5 min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-rose-500 text-white text-[10px] font-extrabold flex items-center justify-center border-2 border-white dark:border-slate-950">
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}
               </button>
+
               {isNotificationsOpen && renderNotificationsDropdown()}
             </div>
 
-            {/* User Profile Dropdown Trigger */}
+            {/* Interactive User profile dropdown menu */}
             <div className="relative">
               <button
                 onClick={() => {
                   setIsProfileOpen(!isProfileOpen);
                   setIsNotificationsOpen(false);
                 }}
-                className="flex items-center space-x-2 pl-2 py-1 pr-1.5 rounded-xl hover:bg-slate-100/70 dark:hover:bg-slate-800/70 transition-colors border-l border-slate-200 dark:border-slate-800 cursor-pointer"
+                className="flex items-center space-x-3 pl-3 py-1.5 pr-2 rounded-xl hover:bg-slate-100/60 dark:hover:bg-slate-900/60 transition-colors border-l border-slate-200 dark:border-slate-850"
               >
-                <div className={`w-8 h-8 rounded-xl bg-gradient-to-tr ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} text-xs font-extrabold shadow-sm`}>
+                <div className={`w-8 h-8 rounded-xl bg-gradient-to-tr ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} text-sm shadow-md`}>
                   {initials}
                 </div>
-                <div className="text-left hidden md:block max-w-[130px]">
-                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-tight truncate">{currentUser.name}</div>
-                  <span className={`text-[9px] font-semibold ${colors.roleLabelText} block leading-none truncate`}>{ROLE_TITLES[currentUser.role] || ''}</span>
+                  <div className="text-left hidden lg:block">
+                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-none">{currentUser.name}</div>
+                  <span className={`text-[9px] font-semibold ${colors.roleLabelText}`}>{ROLE_TITLES[currentUser.role] || ''}</span>
                 </div>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                <ChevronDown className="w-4 h-4 text-slate-400" />
               </button>
 
               {isProfileOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setIsProfileOpen(false)} />
                   <div className="absolute right-0 mt-3 w-56 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-2.5 z-50 space-y-1">
+                    
                     <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 pb-2 mb-1.5">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Signed in as</p>
                       <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5">{currentUser.email}</p>
@@ -650,157 +912,17 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                       <LogOut className="w-4 h-4 text-rose-500" />
                       <span>Sign Out</span>
                     </button>
+
                   </div>
                 </>
               )}
             </div>
 
-            {/* Mobile Hamburger Menu Toggle */}
-            <button
-              type="button"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="xl:hidden p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer"
-              aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
-            >
-              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
           </div>
-        </div>
-
-        {/* Mobile / Tablet Drawer & Backdrop */}
-        {isMobileMenuOpen && (
-          <div className="xl:hidden fixed inset-0 z-50 flex">
-            {/* Backdrop */}
-            <div
-              className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity"
-              onClick={() => setIsMobileMenuOpen(false)}
-            />
-
-            {/* Slide-out Menu Panel */}
-            <div className="relative w-full max-w-xs bg-white dark:bg-slate-900 shadow-2xl flex flex-col p-5 z-10 overflow-y-auto">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
-                <div className="flex items-center space-x-2.5">
-                  <img src="/bu-cdm-logo.png" alt="BU CDM Logo" className="w-8 h-8 rounded-full object-cover" />
-                  <span className="font-heading font-extrabold text-base tracking-tight text-slate-800 dark:text-slate-100">
-                    DentiSYS
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Secretary / Student Role Switcher in Mobile Drawer */}
-              {user?.role === 'secretary' && (
-                <div className="my-4 rounded-xl bg-slate-100 dark:bg-slate-800 p-1 flex gap-1">
-                  <Link
-                    to="/secretary/attendance"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 ${
-                      !linkedStudentView
-                        ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-xs'
-                        : 'text-slate-500'
-                    }`}
-                  >
-                    <UserCheck className="w-3.5 h-3.5" />
-                    <span>Secretary</span>
-                  </Link>
-                  <button
-                    type="button"
-                    disabled={!user.student}
-                    onClick={() => {
-                      setIsMobileMenuOpen(false);
-                      navigate('/student/dashboard');
-                    }}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 disabled:opacity-40 ${
-                      linkedStudentView
-                        ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-xs'
-                        : 'text-slate-500'
-                    }`}
-                  >
-                    <User className="w-3.5 h-3.5" />
-                    <span>Student</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Navigation Links in Mobile Drawer */}
-              <nav className="space-y-1.5 mt-4 flex-1">
-                {navItems.map((item, idx) => {
-                  const isActive = location.pathname === item.path;
-                  const Icon = item.icon;
-                  const badgeValue = item.badge ? getBadgeValue(item.badge) : undefined;
-
-                  return (
-                    <Link
-                      key={item.name + idx}
-                      to={item.path}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                        isActive
-                          ? `bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-bold`
-                          : `text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800`
-                      }`}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <Icon className={`w-4 h-4 ${isActive ? 'text-purple-600 dark:text-purple-400' : 'text-slate-400'}`} />
-                        <span>{item.name}</span>
-                      </div>
-                      {badgeValue !== undefined && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500 text-white">
-                          {badgeValue}
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </nav>
-
-              {/* Mobile Drawer Footer User Card */}
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 mt-4 flex items-center space-x-3">
-                <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} text-xs font-extrabold shadow-sm`}>
-                  {initials}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{currentUser.name}</p>
-                  <p className="text-[10px] text-slate-400 truncate">{ROLE_TITLES[currentUser.role] || ''}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </header>
-
-      {/* Main Container — full width, no sidebar offset */}
-      <div className="flex-1 flex flex-col min-w-0 w-full relative z-10">
-        
-        {/* Dynamic Breadcrumbs & Page Title Area */}
-        <div className="px-4 sm:px-6 lg:px-8 pt-5 pb-1 max-w-[1680px] w-full mx-auto print:hidden">
-          <nav className="flex items-center space-x-1.5 text-xs text-slate-400 font-medium">
-            {breadcrumbs.map((crumb, idx) => (
-              <React.Fragment key={crumb.path + idx}>
-                {idx > 0 && <span className="text-slate-300 dark:text-slate-700">/</span>}
-                {idx === breadcrumbs.length - 1 ? (
-                  <span className="text-slate-500 dark:text-slate-400 font-semibold">{crumb.name}</span>
-                ) : (
-                  <Link to={crumb.path} className={`${colors.crumbHover} transition-colors`}>
-                    {crumb.name}
-                  </Link>
-                )}
-              </React.Fragment>
-            ))}
-          </nav>
-          <h1 className="text-xl sm:text-2xl font-bold font-heading text-slate-800 dark:text-slate-100 mt-1">
-            {navItems.find(x => x.path === location.pathname)?.name || breadcrumbs[breadcrumbs.length - 1]?.name || 'DentiSYS Portal'}
-          </h1>
-        </div>
+        </header>
 
         {/* Scrollable Content Body */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1680px] w-full mx-auto print:!p-0 print:!max-w-none">
+        <main className="flex-1 p-6 md:p-8 print:!p-0">
           {currentUser.role === 'student' && isDevelopmentMockStudent(user, config) && !studentPrototypeEnabled && (
             <div className="mb-6 p-4 rounded-2xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
               Student attendance and biometric workflows are development-only browser prototypes. No authoritative attendance record or facial template is written while the explicit P02 providers are disabled.
@@ -809,6 +931,14 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           {children}
         </main>
       </div>
+
+      {/* Backdrop overlay for mobile drawer */}
+      {isSidebarOpen && (
+        <div
+          onClick={() => setIsSidebarOpen(false)}
+          className="print:hidden fixed inset-0 bg-slate-900/20 backdrop-blur-xs z-40 md:hidden"
+        />
+      )}
     </div>
   );
 };
