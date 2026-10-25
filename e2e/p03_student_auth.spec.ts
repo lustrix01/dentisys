@@ -212,7 +212,7 @@ test.describe('P03 Student identity and authentication', () => {
     await page.goto('/login');
     await page.locator('input[inputmode="email"]').fill('real.student@bicol-u.edu.ph');
     await page.locator('input[type="password"]').fill('Student123!');
-    await page.getByRole('button', { name: 'Log In' }).click();
+    await page.getByRole('button', { name: 'Login', exact: true }).click();
     await expect(page).toHaveURL('/student/dashboard');
 
     await expect(page.getByRole('main').getByRole('heading', { name: /Welcome back, Real Student!/i })).toBeVisible();
@@ -227,22 +227,22 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(page.getByRole('link', { name: 'Retention Monitoring' })).toHaveCount(1);
 
     await page.goto('/student/profile');
-    await expect(page.getByRole('main').getByRole('heading', { name: 'My Profile' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'My Profile', exact: true })).toBeVisible();
     await expect(page.getByText('Two-factor authentication')).toBeVisible();
     for (const value of fabricatedValues) {
       await expect(page.locator('body')).not.toContainText(value);
     }
 
     const authoritativeRoutes: Array<[string, string]> = [
-      ['/student/attendance', 'Daily Class Check-In'],
-      ['/student/attendance-logs', 'My Session Attendance Logs'],
-      ['/student/face-registration', 'Facial Recognition Registration'],
-      ['/student/classes', 'My Enrolled Classes & Schedule'],
-      ['/student/retention', 'Retention Risk Monitoring'],
+      ['/student/attendance', 'Daily Attendance'],
+      ['/student/attendance-logs', 'Attendance Logs'],
+      ['/student/face-registration', 'Face Registration'],
+      ['/student/classes', 'My Classes'],
+      ['/student/retention', 'Retention Monitoring'],
     ];
     for (const [path, title] of authoritativeRoutes) {
       await page.goto(path);
-      await expect(page.getByText(title)).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
       for (const value of fabricatedValues) {
         await expect(page.locator('body')).not.toContainText(value);
       }
@@ -355,7 +355,7 @@ test.describe('P03 Student identity and authentication', () => {
 
     await page.goto('/student/attendance');
     const main = page.getByRole('main');
-    await expect(main.getByText('Daily Class Check-In')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Daily Attendance' })).toBeVisible();
     await expect(main.getByText('Upcoming sessions')).toBeVisible();
     await expect(main.getByText('Open · Present until 10:30')).toBeVisible();
     await expect(main.getByText('Opens in 3h 30m')).toBeVisible();
@@ -609,7 +609,7 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(page.getByRole('link', { name: 'Face Registration' })).toHaveCount(1);
     await page.getByRole('link', { name: 'Daily Attendance' }).click();
     await expect(page).toHaveURL('/student/attendance');
-    await expect(page.getByText('Daily Class Check-In')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Daily Attendance' })).toBeVisible();
     await expect(page.getByText('Step 1: Select Enrolled Subject')).toBeVisible();
   });
 
@@ -690,7 +690,7 @@ test.describe('P03 Student identity and authentication', () => {
       }) });
     });
     await page.goto('/student/profile');
-    await expect(page.getByRole('main').getByRole('heading', { name: 'My Profile' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'My Profile' })).toBeVisible();
     await expect(page.getByText('Biometric Registration & Privacy Audit')).toHaveCount(0);
     await expect(page.getByText('Biometric Face')).toHaveCount(0);
     await page.goto('/student/face-registration');

@@ -3077,18 +3077,6 @@ export const GradeComputation: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
 
-      {/* Top Header */}
-      <div className="no-print flex flex-col sm:flex-row sm:items-center sm:justify-between border-b dark:border-slate-800 pb-4">
-        <div>
-          <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <Calculator className="w-6 h-6" />
-            Grade Management Portal
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
-            Perform assessment tracking, grading components editing, grade calculations, and CSV score sheet imports
-          </p>
-        </div>
-      </div>
 
       {/* Unified Class and Course Selector Bar for All Tabs */}
       <Card className="no-print p-4 flex flex-col xl:flex-row gap-4 xl:items-center">

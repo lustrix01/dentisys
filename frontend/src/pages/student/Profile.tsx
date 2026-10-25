@@ -52,20 +52,11 @@ export const Profile: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
       
-      {/* 1. Clean Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            My Profile
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
-            View your academic standing, personal enrollment record, biometric facial verification status, and security settings.
-          </p>
-        </div>
-
-        <div className="text-right hidden sm:block">
-          <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400 block">STUDENT ID</span>
-          <span className="whitespace-nowrap text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
+      {/* Top Header */}
+      <div className="flex items-center justify-end pb-2">
+        <div className="text-right">
+          <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 block leading-none">STUDENT ID</span>
+          <span className="whitespace-nowrap text-xs font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
         </div>
       </div>
 

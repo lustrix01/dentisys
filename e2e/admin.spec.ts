@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openAccountMenu } from './fixtures';
 import type { Page } from '@playwright/test';
 
 const deanReportStudents = [
@@ -115,7 +115,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
       else { saves++; terms = terms.map(term => term.schoolYear === data.schoolYear && term.semester === data.semester ? { ...term, id: 1, startDate: data.startDate, endDate: data.endDate } : term); body = { status: 'ok', confirmationRequired: false, id: 1 }; }
       await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
     });
-    await page.click('a[href="/admin/settings"]');
+    await page.click('a[href="/admin/terms"]');
     const section = page.locator('#academic-terms');
     const row = section.getByTestId('2026-2027-1ST');
     await expect(row).toContainText('Dates not set');
@@ -162,13 +162,14 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(copied).toHaveCount(0);
   });
 
-  test('Academic-term dashboard reminder links to Settings', async ({ page }) => {
+  test('Academic-term dashboard reminder links to the Academic Terms page', async ({ page }) => {
     await page.route('**/api/admin/dashboard/kpis**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', kpis: {}, academicTermReminder: { semester: '2ND', schoolYear: '2026-2027', endDate: '2026-10-20' } }) }));
     await page.reload();
     await expect(page.getByRole('status')).toContainText('Add dates for 2ND 2026-2027');
     await page.getByRole('button', { name: 'Open Academic terms' }).click();
-    await expect(page).toHaveURL('/admin/settings#academic-terms');
-    await expect(page.getByText('Academic terms', { exact: true })).toBeVisible();
+    await expect(page).toHaveURL('/admin/terms');
+    await expect(page.getByRole('heading', { level: 1, name: 'Academic Terms' })).toBeVisible();
+    await expect(page.locator('#academic-terms')).toBeVisible();
   });
 
   test('admin dashboard renders user info and role panel', async ({ page }) => {
@@ -304,12 +305,14 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
   });
 
   test('admin can view Profile page', async ({ page }) => {
+    await openAccountMenu(page);
     await page.click('a[href="/admin/profile"]');
     await expect(page).toHaveURL('/admin/profile');
     await expect(page.locator('body')).toContainText(/Profile|Dean/i);
   });
 
   test('admin can view Settings page', async ({ page }) => {
+    await openAccountMenu(page);
     await page.click('a[href="/admin/settings"]');
     await expect(page).toHaveURL('/admin/settings');
     await expect(page.locator('body')).toContainText(/Settings/i);

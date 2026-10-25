@@ -1,5 +1,5 @@
 import { Page } from '@playwright/test';
-import { test, expect } from './fixtures';
+import { test, expect, openAccountMenu } from './fixtures';
 
 async function login(page: Page, role: 'admin' | 'faculty') {
   await page.route('**/api/auth/login', async (route) => {
@@ -210,6 +210,8 @@ test.describe('Assessment transmutation UI coverage', () => {
       postedSettings = route.request().postDataJSON();
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Saved' }) });
     });
+
+    await openAccountMenu(page);
 
     await page.click('a[href="/admin/settings"]');
     await expect(page).toHaveURL('/admin/settings');

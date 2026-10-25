@@ -17,7 +17,7 @@ test('provisional roster creates real records and repeat import preserves their 
   const csv = Buffer.from(`Student ID,First Name,Middle Name,Last Name,Email,Year Level,Gender,Contact #\n${number},Ana,Reyes,Peña,provisional.${suffix}@bicol-u.edu.ph,3,Female,00123456789`);
   await page.locator('a[href="/classes"]').click();
   const importFile = async () => {
-    await page.getByRole('button', { name: 'Import Roster (Provisional)' }).click();
+    await page.getByRole('button', { name: 'Import Roster', exact: true }).click();
     await expect(page.getByText('Official format not confirmed.', { exact: true })).toBeVisible();
     await page.getByLabel('Target class section').selectOption(String(target.csId));
     await page.getByLabel('Provisional roster file').setInputFiles({ name: 'fictional-live.csv', mimeType: 'text/csv', buffer: csv });

@@ -1,5 +1,5 @@
 import type { Page, Route } from '@playwright/test';
-import { test, expect, openSecretaryWorksheet } from './fixtures';
+import { test, expect, openSecretaryWorksheet, openAccountMenu } from './fixtures';
 
 test.describe('Class Secretary Module E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
@@ -111,10 +111,13 @@ test.describe('Class Secretary Module E2E Tests', () => {
   });
 
   test('secretary can view Profile and Settings', async ({ page }) => {
+    await openAccountMenu(page);
     await page.click('a[href="/secretary/profile"]');
     await expect(page).toHaveURL('/secretary/profile');
     await expect(page.locator('body')).toContainText(/Profile|Alex Smith/i);
     await expect(page.getByText('Two-factor authentication', { exact: true })).toBeVisible();
+
+    await openAccountMenu(page);
 
     await page.click('a[href="/secretary/settings"]');
     await expect(page).toHaveURL('/secretary/settings');
@@ -140,6 +143,7 @@ test.describe('Class Secretary Module E2E Tests', () => {
         }),
       });
     });
+    await openAccountMenu(page);
     await page.click('a[href="/secretary/profile"]');
     await expect(page).toHaveURL('/secretary/profile');
 

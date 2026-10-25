@@ -8,7 +8,6 @@ import {
   ShieldAlert,
   SlidersHorizontal,
   Sun,
-  Trash2,
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 import {
@@ -22,13 +21,6 @@ import { useThemePreference } from "../../hooks/useThemePreference";
 import {
   getAdminSettingsApi,
   updateAdminSettingsApi,
-  ApiError,
-  getAcademicTermsApi,
-  saveAcademicTermApi,
-  deleteAcademicTermApi,
-  copyAcademicTermsApi,
-  type AcademicTerm,
-  type AcademicTermInput,
 } from "../../services/apiClient";
 
 export const Settings: React.FC = () => {
@@ -84,15 +76,7 @@ export const Settings: React.FC = () => {
   };
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-        <div>
-          <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            My Settings
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Appearance, assessment transmutation defaults, and local cache controls.
-          </p>
-        </div>
+      <div className="flex justify-end pb-2">
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-accent-700 dark:text-accent-400 bg-accent-50 dark:bg-accent-950/30 px-3 py-2 rounded-xl">
           <CheckCircle2 className="w-3.5 h-3.5" />
           System administration
@@ -106,7 +90,6 @@ export const Settings: React.FC = () => {
           {error}
         </div>
       )}
-      <AcademicTermsSettings />
       <form onSubmit={save} className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <div className="lg:col-span-4 space-y-5">
           <Card>
@@ -265,173 +248,3 @@ export const Settings: React.FC = () => {
     </div>
   );
 };
-
-const termInputClass = "mt-1 min-w-0 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100";
-const termButtonClass = "rounded-xl px-4 py-2 text-xs font-bold bg-accent-600 hover:bg-accent-700 text-white disabled:opacity-40";
-
-function AcademicTermsSettings() {
-  const [terms, setTerms] = useState<AcademicTerm[]>([]);
-  const [currentYear, setCurrentYear] = useState('');
-  const [today, setToday] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
-  const [draft, setDraft] = useState<AcademicTermInput | null>(null);
-  const [fields, setFields] = useState<Record<string, string>>({});
-  const [confirmation, setConfirmation] = useState<number | null>(null);
-  const [deleteTerm, setDeleteTerm] = useState<AcademicTerm | null>(null);
-  const [copying, setCopying] = useState(false);
-  const load = async () => {
-    const result = await getAcademicTermsApi();
-    setTerms(result.terms);
-    setCurrentYear(result.currentSchoolYear);
-    setToday(result.today);
-  };
-  useEffect(() => {
-    let ignore = false;
-    getAcademicTermsApi().then(result => {
-      if (ignore) return;
-      setTerms(result.terms);
-      setCurrentYear(result.currentSchoolYear);
-      setToday(result.today);
-    }).catch(err => { if (!ignore) setError(err instanceof Error ? err.message : 'Unable to load academic terms.'); })
-      .finally(() => { if (!ignore) setLoading(false); });
-    return () => { ignore = true; };
-  }, []);
-  const reportError = (err: unknown) => {
-    setError(err instanceof Error ? err.message : 'Unable to save academic terms.');
-    if (err instanceof ApiError && Array.isArray(err.errors)) {
-      setFields(Object.fromEntries(err.errors.map((field: { field: string; message: string }) => [field.field, field.message])));
-    }
-  };
-  const open = (term?: AcademicTerm) => {
-    setError(''); setFields({}); setConfirmation(null);
-    setDraft({ ...(term?.id ? { id: term.id } : {}), schoolYear: term?.schoolYear ?? currentYear,
-      semester: term?.semester ?? '1ST', startDate: term?.startDate ?? '', endDate: term?.endDate ?? '' });
-  };
-  const saveTerm = async (confirmed = false) => {
-    if (!draft) return;
-    setBusy(true); setError(''); setFields({});
-    try {
-      if (!confirmed) {
-        const preview = await saveAcademicTermApi(draft, true);
-        if (preview.confirmationRequired) { setConfirmation(preview.expiringEnrollments ?? 0); return; }
-      }
-      const result = await saveAcademicTermApi({ ...draft, ...(confirmed ? { confirmedExpiringEnrollments: confirmation ?? 0 } : {}) });
-      if (result.confirmationRequired) { setConfirmation(result.expiringEnrollments ?? 0); return; }
-      setDraft(null); setConfirmation(null);
-      setMessage('Academic term saved.');
-      await load();
-    } catch (err) { reportError(err); } finally { setBusy(false); }
-  };
-  const years = [...new Set(terms.map(term => term.schoolYear))];
-  const latestYear = terms.find(term => term.id !== null)?.schoolYear;
-  const outlineButtonClass = "rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40";
-  const cancelButtonClass = "px-4 py-2 text-xs font-bold text-slate-500";
-  const formatDates = (startDate: string | null, endDate: string | null) => {
-    if (!startDate || !endDate) return 'Dates not set';
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const [startYear, startMonth, startDay] = startDate.split('-');
-    const [endYear, endMonth, endDay] = endDate.split('-');
-    const start = months[Number(startMonth) - 1] + ' ' + Number(startDay);
-    const end = months[Number(endMonth) - 1] + ' ' + Number(endDay) + ', ' + endYear;
-    return start + (startYear === endYear ? '' : ', ' + startYear) + ' – ' + end;
-  };
-  const termStatus = (term: AcademicTerm) => {
-    if (!term.startDate || !term.endDate) return { label: 'Not set', className: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' };
-    if (!today) return null;
-    if (today < term.startDate) return { label: 'Upcoming', className: 'bg-accent-50 text-accent-700 dark:bg-accent-950/40 dark:text-accent-300' };
-    if (today > term.endDate) return { label: 'Ended', className: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' };
-    return { label: 'Current', className: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' };
-  };
-  return <section id="academic-terms" className="scroll-mt-6">
-    <Card>
-      <CardHeader><CardTitle>Academic terms</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <p className="min-w-0 text-xs text-slate-500 dark:text-slate-400">Set the dates Faculty use for classes and Student face enrollment. Dates use Asia/Manila; each term ends at the end of its end date.</p>
-          <div className="flex flex-wrap justify-end gap-2 lg:shrink-0">
-            <button type="button" disabled={loading || busy || !currentYear} className={termButtonClass} onClick={() => open()}>Add term</button>
-            <button type="button" disabled={loading || busy || !latestYear} className={outlineButtonClass} onClick={() => { setError(''); setCopying(true); }}>Copy previous school year</button>
-          </div>
-        </div>
-        {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
-        {message && <p role="status" className="text-sm text-emerald-700 dark:text-emerald-400">{message}</p>}
-        {loading ? <p role="status" className="text-sm text-slate-500">Loading academic terms…</p> : years.length === 0 ? <p className="text-sm text-slate-500">No academic terms defined. Add the terms for {currentYear}.</p> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{years.map(year => <div key={year} className="min-w-0 space-y-2 rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
-          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">{year}</h3>
-          <ul className="divide-y divide-slate-200 dark:divide-slate-800">
-            {terms.filter(term => term.schoolYear === year).map(term => {
-              const status = termStatus(term);
-              return <li key={term.semester} className="space-y-2 py-3" data-testid={year + '-' + term.semester}>
-              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                <strong>{term.semester}</strong>
-                {status && <span className={'rounded-full px-2 py-0.5 text-[10px] font-bold ' + status.className}>{status.label}</span>}
-              </div>
-              <div className="flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                <span>{formatDates(term.startDate, term.endDate)}</span>
-                <span>{term.classCount} {term.classCount === 1 ? 'class' : 'classes'}</span>
-              </div>
-              <div className="flex flex-wrap justify-end gap-2">
-                <button type="button" className={term.id === null ? termButtonClass.replace('px-4 py-2', 'px-3 py-1.5') : outlineButtonClass} disabled={busy} onClick={() => open(term)}>{term.id === null ? 'Set dates' : 'Edit dates'}</button>
-                {term.id !== null && <button type="button" aria-label="Delete" className="flex h-8 w-8 items-center justify-center rounded-xl text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 disabled:opacity-40" disabled={busy || term.classCount > 0} title={term.classCount > 0 ? 'A term used by a class cannot be deleted.' : 'Delete unused term'} onClick={() => { setError(''); setDeleteTerm(term); }}><Trash2 className="w-4 h-4" aria-hidden="true" /></button>}
-              </div>
-            </li>; })}
-          </ul>
-        </div>)}</div>}
-      </CardContent>
-    </Card>
-    <Modal isOpen={draft !== null} onClose={() => { if (!busy) { setDraft(null); setConfirmation(null); } }} title={draft?.id ? 'Edit academic term' : 'Set academic term dates'}>
-      {draft && <form role="dialog" aria-modal="true" aria-label={draft.id ? "Edit academic term" : "Set academic term dates"} className="space-y-4" onSubmit={event => { event.preventDefault(); void saveTerm(confirmation !== null); }}>
-        {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
-        {confirmation !== null ? <div className="space-y-3">
-          <p className="text-sm text-slate-700 dark:text-slate-200">{confirmation} unexpired biometric {confirmation === 1 ? 'enrollment will' : 'enrollments will'} expire with this change. A term ending today remains valid through today; past dates expire at the next expiry run. Biometric material is removed by the expiry run.</p>
-          <p className="text-sm font-bold">Save end date {draft.endDate} for {draft.semester} {draft.schoolYear}?</p>
-        </div> : <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">School year
-            <input required pattern="[0-9]{4}-[0-9]{4}" placeholder="2026-2027" readOnly={draft.id !== undefined} className={termInputClass} value={draft.schoolYear} onChange={event => setDraft({ ...draft, schoolYear: event.target.value })} aria-invalid={!!fields.schoolYear} />
-            {fields.schoolYear && <span className="text-rose-600">{fields.schoolYear}</span>}
-          </label>
-          <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">Semester
-            <select disabled={draft.id !== undefined} className={termInputClass} value={draft.semester} onChange={event => setDraft({ ...draft, semester: event.target.value as AcademicTerm['semester'] })} aria-invalid={!!fields.semester}>
-              <option value="1ST">1ST</option><option value="2ND">2ND</option><option value="Summer">Summer</option>
-            </select>{fields.semester && <span className="text-rose-600">{fields.semester}</span>}
-          </label>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {(['startDate', 'endDate'] as const).map(field => <label key={field} className="block text-xs font-bold text-slate-600 dark:text-slate-300">{field === 'startDate' ? 'Start date' : 'End date'}
-            <input type="date" required className={termInputClass} value={draft[field]} onChange={event => setDraft({ ...draft, [field]: event.target.value })} aria-invalid={!!fields[field]} />
-            {fields[field] && <span className="text-rose-600">{fields[field]}</span>}
-          </label>)}
-          </div>
-        </>}
-        <div className="flex justify-end gap-2">
-          <button type="button" disabled={busy} className="px-4 py-2 text-xs font-bold text-slate-500" onClick={() => { if (confirmation !== null) setConfirmation(null); else setDraft(null); }}>Cancel</button>
-          <button type="submit" disabled={busy} className={termButtonClass}>{busy ? 'Saving…' : confirmation !== null ? 'Confirm and save' : 'Save term'}</button>
-        </div>
-      </form>}
-    </Modal>
-    <Modal isOpen={deleteTerm !== null} onClose={() => { if (!busy) setDeleteTerm(null); }} title="Delete unused academic term">
-      <div role="dialog" aria-modal="true" aria-label="Delete unused academic term">
-      <p className="text-sm text-slate-700 dark:text-slate-200">Delete {deleteTerm?.semester} {deleteTerm?.schoolYear}?</p>
-      <div className="mt-4 flex justify-end gap-2"><button type="button" disabled={busy} className={cancelButtonClass} onClick={() => setDeleteTerm(null)}>Cancel</button><button type="button" disabled={busy} className={termButtonClass} onClick={async () => {
-        if (!deleteTerm?.id) return;
-        setBusy(true);
-        try { await deleteAcademicTermApi(deleteTerm.id); setDeleteTerm(null); setMessage('Unused academic term deleted.'); await load(); }
-        catch (err) { reportError(err); setDeleteTerm(null); } finally { setBusy(false); }
-      }}>Delete term</button></div>
-      </div>
-    </Modal>
-    <Modal isOpen={copying} onClose={() => { if (!busy) setCopying(false); }} title="Copy previous school year">
-      <div role="dialog" aria-modal="true" aria-label="Copy previous school year">
-      <p className="text-sm text-slate-700 dark:text-slate-200">Copy the latest defined school year ({latestYear}) into the next school year, shifting dates by one year? February 29 becomes February 28. Existing terms are kept. Review and adjust the copied dates afterwards.</p>
-      <div className="mt-4 flex justify-end gap-2"><button type="button" disabled={busy} className={cancelButtonClass} onClick={() => setCopying(false)}>Cancel</button><button type="button" disabled={busy} className={termButtonClass} onClick={async () => {
-        setBusy(true);
-        try { const result = await copyAcademicTermsApi(); setCopying(false); setMessage('Created ' + result.created + ' terms for ' + result.schoolYear + '. Review and adjust their dates.'); await load(); }
-        catch (err) { reportError(err); setCopying(false); } finally { setBusy(false); }
-      }}>Copy terms</button></div>
-      </div>
-    </Modal>
-  </section>;
-}

@@ -424,11 +424,7 @@ export const RealStudentProfile: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
-      <div className="border-b border-slate-200/80 dark:border-slate-800 pb-5">
-        <h1 className="font-heading font-extrabold text-2xl text-slate-900 dark:text-slate-100">My Profile</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          View your personal enrollment record and account security settings.
-        </p>
+      <div className="flex justify-end pb-2">
         {profile && <ChangeNameDialog
           currentParts={{
             prefix: profile.prefix || '',

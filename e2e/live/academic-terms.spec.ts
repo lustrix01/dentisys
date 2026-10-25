@@ -6,7 +6,7 @@ test('Dean term dates persist and Faculty selects only current-year Dean terms',
   await page.locator('input[type="password"]').fill('Admin123!');
   await page.locator('button[type="submit"]').click();
   await expect(page).toHaveURL('/');
-  await page.locator('a[href="/admin/settings"]').click();
+  await page.locator('a[href="/admin/terms"]').click();
   const section = page.locator('#academic-terms');
   await section.getByRole('button', { name: 'Add term', exact: true }).click();
   let dialog = page.getByRole('dialog');

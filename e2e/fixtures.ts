@@ -265,3 +265,10 @@ export async function openSecretaryWorksheet(page: Page, date?: string) {
   await page.getByRole('button', { name: 'View Attendance', exact: true }).first().click();
   if (date) await page.locator('input[type="date"]').fill(date);
 }
+
+// Profile and Settings live in the header avatar menu (phone avatar or desktop name button), not the sidebar.
+export async function openAccountMenu(page: Page) {
+  const phoneAvatar = page.getByTitle('Profile menu');
+  if (await phoneAvatar.isVisible()) await phoneAvatar.click();
+  else await page.locator('header button:has(.lucide-chevron-down)').click();
+}

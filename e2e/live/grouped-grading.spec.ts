@@ -490,13 +490,13 @@ test('fresh grouped offering saves in the editor, recomputes from live scores, a
 
   await page.goto('/student/classes');
   const studentMain = page.getByRole('main');
-  await expect(studentMain.getByRole('heading', { name: 'My Enrolled Classes & Schedule' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'My Classes', exact: true })).toBeVisible();
   for (const breakdown of [
     'Midterm Lecture: 80.00%',
     'Midterm Laboratory: 90.00%',
     'Finals Lecture: 90.00%',
     'Finals Laboratory: 80.00%',
-    'Score %: 85.40%',
+    '(85.4%)',
   ]) {
     await expect(studentMain).toContainText(breakdown);
   }

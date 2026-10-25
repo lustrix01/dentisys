@@ -7,7 +7,6 @@ import {
   AlertTriangle, 
   CalendarDays, 
   FileSpreadsheet, 
-  UserCircle, 
   Settings as SettingsIcon,
   Menu,
   X,
@@ -84,8 +83,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     switch (role) {
       case 'admin':
         return {
-          bgGradient: 'from-accent-500/20 to-accent-600/20 dark:from-accent-500/25 dark:to-accent-600/25',
-          textActive: 'text-accent-600 dark:text-accent-300 font-bold border-l-4 border-accent-500 bg-accent-500/10 dark:bg-accent-500/20',
+          pillActive: 'text-accent-600 dark:text-accent-400 font-bold hover:bg-slate-100/60 dark:hover:bg-slate-800/40',
           iconActive: 'text-accent-600 dark:text-accent-400',
           iconHover: 'group-hover:text-accent-600 dark:group-hover:text-accent-300',
           logoRing: 'shadow-accent-500/20',
@@ -93,27 +91,13 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           avatarText: 'text-white font-bold font-heading',
           crumbHover: 'hover:text-accent-500',
           roleLabelText: 'text-accent-600 dark:text-accent-500',
-          hoverBg: 'hover:bg-accent-50/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white',
+          hoverBg: 'hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white',
           sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
       case 'secretary':
-        return {
-          bgGradient: 'from-blue-500/20 to-blue-600/20 dark:from-blue-500/25 dark:to-blue-600/25',
-          textActive: 'text-blue-600 dark:text-blue-300 font-bold border-l-4 border-blue-500 bg-blue-500/10 dark:bg-blue-500/20',
-          iconActive: 'text-blue-600 dark:text-blue-400',
-          iconHover: 'group-hover:text-blue-600 dark:group-hover:text-blue-300',
-          logoRing: 'shadow-blue-500/20',
-          avatarBg: 'from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-700',
-          avatarText: 'text-white font-bold font-heading',
-          crumbHover: 'hover:text-blue-500',
-          roleLabelText: 'text-blue-600 dark:text-blue-500',
-          hoverBg: 'hover:bg-blue-50/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white',
-          sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
-        };
       case 'student':
         return {
-          bgGradient: 'from-blue-500/20 to-blue-600/20 dark:from-blue-500/25 dark:to-blue-600/25',
-          textActive: 'text-blue-600 dark:text-blue-300 font-bold border-l-4 border-blue-500 bg-blue-500/10 dark:bg-blue-500/20',
+          pillActive: 'text-blue-600 dark:text-blue-400 font-bold hover:bg-slate-100/60 dark:hover:bg-slate-800/40',
           iconActive: 'text-blue-600 dark:text-blue-400',
           iconHover: 'group-hover:text-blue-600 dark:group-hover:text-blue-300',
           logoRing: 'shadow-blue-500/20',
@@ -121,14 +105,13 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           avatarText: 'text-white font-bold font-heading',
           crumbHover: 'hover:text-blue-500',
           roleLabelText: 'text-blue-600 dark:text-blue-500',
-          hoverBg: 'hover:bg-blue-50/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white',
+          hoverBg: 'hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white',
           sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
       case 'faculty':
       default:
         return {
-          bgGradient: 'from-clinical-500/20 to-accent-500/20 dark:from-clinical-500/25 dark:to-accent-500/25',
-          textActive: 'text-clinical-600 dark:text-clinical-300 font-bold border-l-4 border-clinical-500 bg-clinical-500/10 dark:bg-clinical-500/20',
+          pillActive: 'text-clinical-600 dark:text-clinical-400 font-bold hover:bg-slate-100/60 dark:hover:bg-slate-800/40',
           iconActive: 'text-clinical-600 dark:text-clinical-400',
           iconHover: 'group-hover:text-clinical-600 dark:group-hover:text-clinical-300',
           logoRing: 'shadow-clinical-500/20',
@@ -136,7 +119,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           avatarText: 'text-white font-bold font-heading',
           crumbHover: 'hover:text-clinical-500',
           roleLabelText: 'text-emerald-700 dark:text-emerald-500',
-          hoverBg: 'hover:bg-slate-100/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white',
+          hoverBg: 'hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white',
           sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
     }
@@ -217,11 +200,10 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     if (currentUser.role === 'admin') {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+        { name: 'Academic Terms', path: '/admin/terms', icon: CalendarDays },
         { name: 'Faculty Invitations', path: '/admin/faculty-invite', icon: UserPlus },
         { name: 'Reports & Analytics', path: '/admin/reports', icon: FileSpreadsheet },
         { name: 'Audit Trail', path: '/admin/audit-trail', icon: ListChecks },
-        { name: 'Dean Profile', path: '/admin/profile', icon: UserCircle },
-        { name: 'Dean Settings', path: '/admin/settings', icon: SettingsIcon },
       ];
     }
     
@@ -230,8 +212,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
         { name: 'Attendance Monitoring', path: '/secretary/attendance', icon: CalendarDays },
         { name: 'My Activity Log', path: '/secretary/audit-trail', icon: ListChecks },
-        { name: 'Secretary Profile', path: '/secretary/profile', icon: UserCircle },
-        { name: 'Settings', path: '/secretary/settings', icon: SettingsIcon },
       ];
     }
 
@@ -253,7 +233,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         items.push(
           { name: 'My Classes', path: '/student/classes', icon: BookOpen },
           { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
-          { name: 'My Profile', path: user?.role === 'secretary' ? '/secretary/profile' : '/student/profile', icon: UserCircle },
         );
       }
       return items;
@@ -269,9 +248,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       { name: 'Reports & Export', path: '/reports', icon: FileSpreadsheet },
       { name: 'Email Management', path: '/email-management', icon: Mail },
       { name: 'My Activity Log', path: '/faculty/audit-trail', icon: ListChecks },
-
-      { name: 'My Profile', path: '/faculty/profile', icon: UserCircle },
-      { name: 'Faculty Settings', path: '/faculty/settings', icon: SettingsIcon },
     ];
   };
 
@@ -473,6 +449,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'My Profile', path: '/secretary/profile' });
     } else if (path === '/secretary/settings') {
       crumbs.push({ name: 'Settings', path: '/secretary/settings' });
+    } else if (path === '/admin/terms') {
+      crumbs.push({ name: 'Academic Terms', path: '/admin/terms' });
     } else if (path === '/admin/faculty-invite') {
       crumbs.push({ name: 'Faculty Invitations', path: '/admin/faculty-invite' });
     } else if (path === '/admin/reports') {
@@ -644,24 +622,53 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                 <h1 className="font-heading font-extrabold text-xl tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-1.5 truncate">
                   DentiSYS
                 </h1>
-                <p className="text-[10px] font-bold text-slate-500 dark:text-slate-500 tracking-wider uppercase truncate">
+                <p className="text-[9px] font-bold text-slate-500 dark:text-slate-500 tracking-wide uppercase whitespace-nowrap">
                   BU College of Dental Medicine
                 </p>
               </div>
             )}
           </div>
 
-          {/* Cleanly Docked Desktop Collapse Toggle Button */}
+          {/* Desktop Collapse Button (Expanded State) */}
+          {!isSidebarCollapsed && (
+            <button
+              type="button"
+              onClick={handleToggleCollapse}
+              className="hidden md:flex absolute right-0 top-1.5 w-7 h-7 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 border border-slate-200/60 dark:border-slate-700/60 items-center justify-center hover:scale-105 active:scale-95 transition-all cursor-pointer group flex-shrink-0 ml-2 shadow-xs"
+              title="Collapse sidebar"
+              aria-label="Collapse sidebar"
+            >
+              <ChevronLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+            </button>
+          )}
+
+          {/* Mobile Drawer Close Button */}
+          {!isSidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(false)}
+              className="md:hidden w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 border border-slate-200/60 dark:border-slate-700/60 items-center justify-center hover:scale-105 active:scale-95 transition-all cursor-pointer flex-shrink-0 ml-2"
+              title="Close menu"
+              aria-label="Close menu"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+
+        </div>
+
+        {/* Desktop Expand Button (Collapsed State) - Docked cleanly on aside border */}
+        {isSidebarCollapsed && (
           <button
             type="button"
             onClick={handleToggleCollapse}
-            className="hidden md:flex absolute -right-6 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 shadow-md items-center justify-center hover:scale-110 active:scale-95 transition-all z-50 cursor-pointer"
-            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="hidden md:flex absolute -right-3.5 top-6 w-7 h-7 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-clinical-600 dark:hover:text-clinical-400 shadow-md hover:shadow-lg items-center justify-center hover:scale-110 active:scale-95 transition-all z-50 cursor-pointer"
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
           >
-            {isSidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+            <ChevronRight className="w-4 h-4" />
           </button>
-        </div>
+        )}
 
         {/* Secretary / Student Role Switcher */}
         {user?.role === 'secretary' && (
@@ -744,14 +751,14 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                 <Link
                   to={item.path}
                   onClick={() => setIsSidebarOpen(false)}
-                  className={`relative group flex items-center transition-all duration-200 ${
+                  className={`relative group flex items-center transition-all duration-150 ${
                     isSidebarCollapsed
-                      ? 'w-11 h-11 mx-auto justify-center rounded-2xl'
-                      : 'justify-between px-3 py-3 rounded-2xl'
+                      ? 'w-10 h-10 mx-auto justify-center rounded-xl'
+                      : 'justify-between px-3.5 py-2.5 rounded-xl'
                   } ${
                     isActive
-                      ? `bg-gradient-to-r ${colors.bgGradient} ${colors.textActive} shadow-xs`
-                      : `text-slate-600 dark:text-slate-300 ${colors.hoverBg}`
+                      ? colors.pillActive
+                      : `text-slate-600 dark:text-slate-400 ${colors.hoverBg}`
                   }`}
                   title={!isSidebarCollapsed && item.badge === 'retention' ? `${retentionBadgeCount ?? 0} students needing attention in the current school year` : undefined}
                 >
@@ -760,7 +767,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                       isActive ? colors.iconActive : `text-slate-500 dark:text-slate-400 ${colors.iconHover}`
                     }`} />
                     {!isSidebarCollapsed && (
-                      <span className="text-sm font-medium truncate transition-opacity duration-300">{item.name}</span>
+                      <span className={`text-sm truncate transition-opacity duration-300 ${isActive ? 'font-bold' : 'font-medium'}`}>{item.name}</span>
                     )}
                   </div>
 
@@ -796,30 +803,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             );
           })}
         </nav>
-
-        {/* Sidebar Footer / User Profile Summary */}
-        <div className={`pt-4 mt-auto border-t border-slate-200/80 dark:border-slate-800/80 flex items-center ${
-          isSidebarCollapsed ? 'justify-center px-0' : 'space-x-3 px-1.5'
-        } min-w-0`}>
-          <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} flex-shrink-0 shadow-sm group relative cursor-pointer`}>
-            <span className="font-extrabold text-xs">{initials}</span>
-            {isSidebarCollapsed && (
-              <div className="pointer-events-none absolute left-full ml-3 px-3 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white text-xs font-bold rounded-xl shadow-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap border border-slate-700/50">
-                <div>{currentUser.name}</div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">{ROLE_TITLES[currentUser.role] || ''}</div>
-                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
-              </div>
-            )}
-          </div>
-          {!isSidebarCollapsed && (
-            <div className="flex-1 min-w-0 transition-opacity duration-300">
-              <h2 className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
-                {currentUser.name}
-              </h2>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{ROLE_TITLES[currentUser.role] || ''}</p>
-            </div>
-          )}
-        </div>
       </aside>
 
       {/* Main Container — offset by sidebar width, fills remaining height, scrolls independently */}
@@ -846,9 +829,9 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                 </React.Fragment>
               ))}
             </nav>
-            <h2 className="text-xl font-bold font-heading text-slate-800 dark:text-slate-100">
-              {navItems.find(x => x.path === location.pathname)?.name || 'DentiSYS Portal'}
-            </h2>
+            <h1 className="text-xl font-bold font-heading text-slate-800 dark:text-slate-100">
+              {navItems.find(x => x.path === location.pathname)?.name || breadcrumbs[breadcrumbs.length - 1]?.name || 'DentiSYS Portal'}
+            </h1>
           </div>
 
           {/* Right Header Navigation Panel */}

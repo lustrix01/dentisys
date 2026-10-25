@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openAccountMenu } from './fixtures';
 
 test.describe('Workflow Characterization (mocked UI only)', () => {
 
@@ -41,9 +41,12 @@ test.describe('Workflow Characterization (mocked UI only)', () => {
     });
 
     test('Workflow: Admin/Dean User Account Details & Settings', async ({ page }) => {
+      await openAccountMenu(page);
       await page.click('a[href="/admin/profile"]');
       await expect(page).toHaveURL('/admin/profile');
       await expect(page.locator('body')).toContainText(/Profile|Dean|Dr. Dean Admin/i);
+
+      await openAccountMenu(page);
 
       await page.click('a[href="/admin/settings"]');
       await expect(page).toHaveURL('/admin/settings');

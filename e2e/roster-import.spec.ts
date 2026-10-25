@@ -29,7 +29,7 @@ async function setup(page: Page, failEmail = '') {
   await page.locator('button[type="submit"]').click();
   await expect(page).toHaveURL('/');
   await page.locator('a[href="/classes"]').click();
-  await page.getByRole('button', { name: 'Import Roster (Provisional)' }).click();
+  await page.getByRole('button', { name: 'Import Roster', exact: true }).click();
   await expect(page.getByText('Official format not confirmed.', { exact: true })).toBeVisible();
   return { creates, enrolls };
 }

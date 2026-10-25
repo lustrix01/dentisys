@@ -121,17 +121,17 @@ test('Student class ledger reads saved grouped components and labels old combine
   await page.goto('/login');
   await page.locator('input[inputmode="email"]').fill(studentUser.login_email);
   await page.locator('input[type="password"]').fill('Student123!');
-  await page.getByRole('button', { name: 'Log In' }).click();
+  await page.getByRole('button', { name: 'Login', exact: true }).click();
   await expect(page).toHaveURL('/student/dashboard');
   await page.goto('/student/classes');
 
   const main = page.getByRole('main');
-  await expect(main.getByRole('heading', { name: 'My Enrolled Classes & Schedule' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'My Classes' })).toBeVisible();
   await expect(main).toContainText('Midterm Lecture: 80.00%');
   await expect(main).toContainText('Midterm Laboratory: 90.00%');
   await expect(main).toContainText('Finals Lecture: 90.00%');
   await expect(main).toContainText('Finals Laboratory: 80.00%');
-  await expect(main).toContainText('Score %: 85.40%');
+  await expect(main).toContainText('(85.4%)'); // card shows the score beside the grade (was "Score %: 85.40%")
   await expect(main.getByText('Unavailable (recompute required)', { exact: true })).toHaveCount(4);
   await expect(main.getByLabel('Lecture and Laboratory grade components')).toHaveCount(3);
   await expect(main.getByLabel('Lecture and Laboratory grade components').filter({ hasText: 'Midterm Lecture: 77.00%' })).toHaveCount(1);

@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openAccountMenu } from './fixtures';
 import type { Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
@@ -81,7 +81,7 @@ test.describe('Faculty Module E2E Tests', () => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
     await expect(page).toHaveURL('/students');
-    await expect(page.locator('body')).toContainText(/Student|Enrolled|List/i);
+    await expect(page.getByRole('heading', { level: 1, name: /Classes|Roster|Student/i })).toBeVisible();
   });
 
   test('faculty can navigate to Grade Computation', async ({ page }) => {
@@ -467,9 +467,12 @@ test.describe('Faculty Module E2E Tests', () => {
   });
 
   test('faculty can view Profile and Settings', async ({ page }) => {
+    await openAccountMenu(page);
     await page.click('a[href="/faculty/profile"]');
     await expect(page).toHaveURL('/faculty/profile');
     await expect(page.locator('body')).toContainText(/Profile|Jane Doe/i);
+
+    await openAccountMenu(page);
 
     await page.click('a[href="/faculty/settings"]');
     await expect(page).toHaveURL('/faculty/settings');
@@ -592,6 +595,7 @@ test.describe('Faculty Module E2E Tests', () => {
       status: 200, contentType: 'application/json',
       body: JSON.stringify({ status: 'ok', two_factor: { enabled: true, authenticator_enabled: true, recovery_code_count: 8 } }),
     }));
+    await openAccountMenu(page);
     await page.click('a[href="/faculty/profile"]');
     const emailInput = page.locator('input[readonly]').first();
     await expect(emailInput).toHaveValue('faculty@bicol-u.edu.ph');
@@ -619,6 +623,8 @@ test.describe('Faculty Module E2E Tests', () => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', theme: 'dark' }) });
     });
 
+    await openAccountMenu(page);
+
     await page.click('a[href="/faculty/settings"]');
     await expect(page).toHaveURL('/faculty/settings');
     const light = page.getByRole('button', { name: /Clean light mode/i });
@@ -639,6 +645,8 @@ test.describe('Faculty Module E2E Tests', () => {
       body: JSON.stringify({ status: 'error', message: 'Unable to save theme.' }),
     }));
 
+    await openAccountMenu(page);
+
     await page.click('a[href="/faculty/settings"]');
     const dark = page.getByRole('button', { name: /Clinical dark mode/i });
     await dark.click();
@@ -652,6 +660,7 @@ test.describe('Faculty Module E2E Tests', () => {
       changeRequests.push(route.request().postDataJSON());
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sign_in_again: true, message: 'Password changed successfully. Please sign in again.' }) });
     });
+    await openAccountMenu(page);
     await page.click('a[href="/faculty/profile"]');
     await expect(page).toHaveURL('/faculty/profile');
     const requirements = page.locator('#new-password-requirements');
@@ -891,7 +900,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
   test('hierarchy: courses derive from classes, section list filters by course, course change clears section', async ({ page }) => {
     await page.goto('/attendance');
-    await expect(page.getByRole('main').getByRole('heading', { name: 'Attendance Monitoring' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Attendance Monitoring' })).toBeVisible();
 
     // Verify course options are derived and deduplicated
     const courseSelect = page.getByLabel('Assigned course', { exact: true });

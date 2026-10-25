@@ -45,8 +45,8 @@ test.describe('Auth Module E2E Tests', () => {
   test('login page renders correctly with brand title and form elements', async ({ page }) => {
     await page.goto('/login');
     await expect(page).toHaveTitle(/DentiSys/i);
-    await expect(page.locator('h1')).toContainText('DentiSYS');
-    await expect(page.locator('h2')).toContainText('Login to Your Account');
+    await expect(page.locator('h1')).toHaveText('Login');
+    await expect(page.getByText('DentiSYS').first()).toBeVisible();
 
     const emailInput = page.locator('input[inputmode="email"]');
     const passwordInput = page.locator('input[type="password"]');
@@ -168,7 +168,7 @@ test.describe('Auth Module E2E Tests', () => {
       await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', delivery_status: 'Sent', invitation: existing }) });
     });
     await page.goto('/admin/faculty-invite');
-    await expect(page.getByRole('main').getByRole('heading', { name: 'Faculty Invitations' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Faculty Invitations' })).toBeVisible();
     await page.getByLabel('First name *').fill('Maria,');
     await expect(page.getByLabel('First name *')).toHaveValue('Maria');
     await page.getByLabel('Last name *').fill('Invalid');
@@ -217,7 +217,7 @@ test.describe('Auth Module E2E Tests', () => {
       await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Student invitation issued and sent.' }) });
     });
     await page.goto('/classes');
-    await page.getByRole('button', { name: /Enrolled Student Roster/i }).click();
+    await page.getByRole('button', { name: 'View Roster' }).click();
     await page.getByRole('button', { name: 'Actions for Test Student' }).click();
     await page.getByRole('button', { name: 'Send Invite', exact: true }).click();
     await expect(page.getByRole('main').getByText('Student invitation issued and sent.')).toBeVisible();
@@ -514,7 +514,7 @@ test('mocked Google direct login completes normal authentication', async ({ page
 
     // Assert redirection to /login or navigate to /login and verify logging in with new password
     await page.waitForURL('**/login');
-    await expect(page.locator('h2')).toContainText('Login to Your Account');
+    await expect(page.getByRole('heading', { level: 1, name: 'Login' })).toBeVisible();
     await page.fill('input[inputmode="email"]', testEmail);
     await page.fill('input[type="password"]', testPassword);
     await page.click('button[type="submit"]');

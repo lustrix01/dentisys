@@ -1,4 +1,4 @@
-import { test, expect, openSecretaryWorksheet } from './fixtures';
+import { test, expect, openSecretaryWorksheet, openAccountMenu } from './fixtures';
 import type { Page } from '@playwright/test';
 
 const course = {
@@ -45,7 +45,7 @@ test('Student Classes reads canonical meetings including Sunday and avoids fabri
   }] } }));
   await page.goto('/student/classes');
   await expect(page.getByRole('button', { name: /Current Classes \(2027-2028\)/ })).toBeVisible();
-  await expect(page.getByText(/Sun 13:00 - 14:00 \(New clinic\).*Tue 09:00 - 10:00/)).toBeVisible();
+  await expect(page.getByText(/Sun 13:00 - 14:00 · New clinic; Tue 09:00 - 10:00 · Clinic 2/)).toBeVisible();
   await expect(page.getByRole('main')).not.toContainText('Mon 08:00 AM');
   await expect(page.getByRole('main')).not.toContainText('2023-2689-70869');
 });
@@ -54,31 +54,27 @@ test('Student profile route and sidebar remain within Student self-service', asy
   await studentIdentity(page);
   await page.goto('/student/profile');
   await expect(page).toHaveURL('/student/profile');
-  await expect(page.getByRole('main').getByRole('heading', { name: 'My Profile' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'My Profile' })).toBeVisible();
+  await expect(page.locator('aside').getByRole('link', { name: /profile/i })).toHaveCount(0);
+  await openAccountMenu(page);
   await expect(page.getByRole('link', { name: 'My Profile', exact: true }).first()).toHaveAttribute('href', '/student/profile');
 });
 
 for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 'phone', width: 390, height: 844 }]) {
   const phone = viewport.name === 'phone';
 
-  test(`Student sidebar and profile menu open their own profile on ${viewport.name}`, async ({ page }) => {
+  test(`Student profile menu opens their own profile and the sidebar has no Profile link on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await studentIdentity(page);
     await page.goto('/student/classes');
-    if (phone) await page.locator('header').first().getByRole('button').last().click();
-    const sidebarProfile = page.locator('aside').getByRole('link', { name: 'My Profile', exact: true });
-    await expect(sidebarProfile).toHaveAttribute('href', '/student/profile');
-    await sidebarProfile.click();
-    await expect(page).toHaveURL('/student/profile');
-    await expect(page.getByRole('main').getByRole('heading', { name: 'My Profile', exact: true })).toBeVisible();
-    await page.goto('/student/classes');
+    await expect(page.locator('aside').getByRole('link', { name: /profile/i })).toHaveCount(0);
     const header = page.locator('header').nth(phone ? 0 : 1);
     await (phone ? header.getByTitle('Profile menu') : header.getByRole('button', { name: /Real Student/ })).click();
     const menuProfile = header.getByRole('link', { name: 'My Profile', exact: true });
     await expect(menuProfile).toHaveAttribute('href', '/student/profile');
     await menuProfile.click();
     await expect(page).toHaveURL('/student/profile');
-    await expect(page.getByRole('main').getByRole('heading', { name: 'My Profile', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'My Profile', exact: true })).toBeVisible();
   });
 
   test(`linked Secretary switches to Student Dashboard and back with the same account on ${viewport.name}`, async ({ page }) => {
@@ -394,8 +390,9 @@ test('Student academic details remain available in Classes and Dashboard', async
   await page.route('**/api/student/classes', route => route.fulfill({ json: { status: 'ok', currentSchoolYear: '2026-2027', classes: [gradedCourse] } }));
   await page.route('**/api/student/dashboard**', route => route.fulfill({ json: { status: 'ok', currentSchoolYear: '2026-2027', student: { name: 'Real Student', studentNumber: 'REAL-26' }, summary: { classCount: 1, gwa: 2.8, attendanceRate: null, clinicalHoursCompleted: 14, retentionAlerts: 1 }, classes: [gradedCourse] } }));
   await page.goto('/student/classes');
-  await expect(page.getByText('Course Grade:', { exact: false })).toContainText('2.8');
-  await expect(page.getByText('Clinical Hours Completed:', { exact: false })).toContainText('14 hrs');
+  await expect(page.getByText('Grade:', { exact: true }).locator('..')).toContainText('2.8');
+  await expect(page.getByText('14 hrs', { exact: true })).toBeVisible();
+  await expect(page.getByText('Remedial', { exact: true })).toBeVisible();
   await expect(page.getByRole('main')).toContainText('Retention Standing Warning');
   await page.goto('/student/dashboard');
   await expect(page.getByText('Overall Grade', { exact: true })).toBeVisible();

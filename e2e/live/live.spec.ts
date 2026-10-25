@@ -520,7 +520,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   await page.goto('/attendance');
 
   // Verify header and the Assigned Classes grid (the roll call opens from a class card)
-  await expect(page.getByRole('main').getByRole('heading', { name: /Attendance Monitoring/i })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole('heading', { level: 1, name: /Attendance Monitoring/i })).toBeVisible({ timeout: 15000 });
   await expect(page.getByText('My Assigned Classes')).toBeVisible();
   const openWorksheet = async () => {
     const card = page.locator('div.group').filter({ hasText: String(targetClass.courseCode) }).first();
