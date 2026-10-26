@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   AlertCircle,
   RefreshCw,
-  History,
   Clock,
   Building,
   User,
@@ -242,7 +241,6 @@ export const Attendance: React.FC = () => {
     s => s.email.toLowerCase() === user?.login_email.toLowerCase() || s.id === '1'
   ) || students[0];
 
-  const studentIdNum = user?.student?.student_number || currentStudent?.studentId || '—';
 
   // --- AUTHORITATIVE STATE ---
   const [initialLoading, setInitialLoading] = useState(isAuthoritative);
@@ -992,23 +990,7 @@ export const Attendance: React.FC = () => {
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-12 animate-fade-in">
 
-      {/* 1. Top Header */}
-      <div className="flex items-center justify-end gap-3 pb-2">
-        <div className="text-right hidden sm:block">
-          <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 block leading-none">STUDENT ID</span>
-          <span className="whitespace-nowrap text-xs font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
-        </div>
-
-        <button
-          onClick={() => navigate('/student/attendance-logs')}
-          className="flex items-center gap-1.5 whitespace-nowrap px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors cursor-pointer"
-        >
-          <History className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-          <span>Attendance Logs</span>
-        </button>
-      </div>
-
-      {/* 2. FACE REGISTRATION WARNING / ENROLLMENT CHECK */}
+      {/* FACE REGISTRATION WARNING / ENROLLMENT CHECK */}
       {isAuthoritative ? (
         !isAuthoritativeActiveEnrolled(profile?.enrollmentStatus) && (
           <div className="bg-amber-50 dark:bg-amber-950/40 rounded-2xl p-4 border border-amber-200 dark:border-amber-900 flex items-center justify-between gap-3 text-xs">

@@ -15,7 +15,8 @@ import {
   TrendingUp,
   Layers,
   FileText,
-  AlertCircle
+  AlertCircle,
+  Filter
 } from 'lucide-react';
 import { 
   AreaChart,
@@ -656,15 +657,13 @@ export const Reports: React.FC = () => {
       {/* Unified Course, Class, and School Year Selector Bar */}
       <Card className="p-4 flex flex-col xl:flex-row gap-4 xl:items-center no-print">
         {/* School Year Filter */}
-        <div className="w-full xl:w-52">
-          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-            <CalendarDays className="w-3 h-3 text-clinical-600" />
-            School Year
-          </label>
+        <div className="w-full xl:w-56 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+          <CalendarDays className="w-4 h-4 shrink-0 text-clinical-600 dark:text-clinical-400" aria-hidden="true" />
           <select
             value={selectedSchoolYear}
             onChange={(e) => setSelectedSchoolYear(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 cursor-pointer"
+            aria-label="School year"
+            className="min-w-0 flex-1 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
           >
             <option value="all">All School Years</option>
             {availableSchoolYears.map(sy => (
@@ -676,8 +675,8 @@ export const Reports: React.FC = () => {
         </div>
 
         {/* Active Class & Section (Unified Course and Section Filter) */}
-        <div className="w-full xl:flex-1">
-          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 block">Active Class & Section</label>
+        <div className="w-full xl:flex-1 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+          <Filter className="w-4 h-4 shrink-0 text-clinical-600 dark:text-clinical-400" aria-hidden="true" />
           <select
             value={selectedClassId}
             onChange={(e) => {
@@ -688,27 +687,18 @@ export const Reports: React.FC = () => {
                 setSelectedSubjectCode(found.courseCode);
               }
             }}
-            className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 cursor-pointer"
+            aria-label="Class: course code, course title, and section"
+            className="min-w-0 flex-1 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
           >
             {classesForSchoolYear.length === 0 ? (
               <option value="">No active classes for selected year</option>
             ) : (
-              activeCourses.map(course => {
-                const courseClasses = classesForSchoolYear.filter(c => c.courseCode === course.code);
-                if (courseClasses.length === 0) return null;
-                return (
-                  <optgroup key={course.code} label={`${course.code} — ${course.name}`}>
-                    {courseClasses.map(classItem => {
-                      const cid = String(classItem.csId || classItem.id);
-                      const blockLabel = classItem.csName || classItem.block || `Section ${classItem.id}`;
-                      return (
-                        <option key={cid} value={cid}>
-                          {course.code} ({blockLabel})
-                        </option>
-                      );
-                    })}
-                  </optgroup>
-                );
+              classesForSchoolYear.map(classItem => {
+                const classId = String(classItem.csId || classItem.id);
+                const code = classItem.courseCode || 'Course';
+                const title = classItem.courseTitle || classItem.courseName || code;
+                const section = classItem.csName || classItem.block || `Section ${classItem.id}`;
+                return <option key={classId} value={classId}>{code} - {title} - {section}</option>;
               })
             )}
           </select>

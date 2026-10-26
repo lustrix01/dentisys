@@ -1746,7 +1746,7 @@ export const AttendanceMonitoring: React.FC = () => {
               <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
                 New Attendance Status <span className="text-rose-500">*</span>
               </label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
                 {STATUS_ORDER.map(st => (
                   <button
                     key={st}

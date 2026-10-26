@@ -52,14 +52,6 @@ export const Profile: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
       
-      {/* Top Header */}
-      <div className="flex items-center justify-end pb-2">
-        <div className="text-right">
-          <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 block leading-none">STUDENT ID</span>
-          <span className="whitespace-nowrap text-xs font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
-        </div>
-      </div>
-
       {/* 2. Main Profile Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         

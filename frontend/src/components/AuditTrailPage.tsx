@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Download, FileText, Filter, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldOff, SlidersHorizontal, UserX } from 'lucide-react';
+import { AlertCircle, Download, FileText, Filter, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldOff, UserX } from 'lucide-react';
 import type { AuditEntry, AuditListResponse, AuditQuery, AuditStatus, DatePreset } from '../services/auditService';
 import {
   auditCsv, auditCsvRows, auditDateRange, auditWho, currentTerm, formatManilaWhen, groupByDay,
@@ -29,7 +29,6 @@ const EXPORT_PAGE_CAP = 40; // 40 pages x 50 rows; larger exports say so
 const CHANGES_PREVIEW = 10;
 // Old look at xl (>= 1280 px); taller touch targets below it.
 const control = 'min-h-[44px] xl:min-h-0 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500';
-const tapButton = 'flex items-center gap-1.5 min-h-[44px] xl:min-h-0 px-3.5 py-2.5 rounded-xl text-xs font-bold';
 const pagerButton = 'min-h-[44px] xl:min-h-0 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 font-bold disabled:opacity-40';
 const ROLE_OPTIONS: Array<[string, string]> = [['', 'All roles'], ['admin', 'Dean'], ['faculty', 'Faculty'], ['secretary', 'Secretary'], ['student', 'Student'], ['system', 'System']];
 
@@ -106,7 +105,7 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, 
   </div>
 );
 
-export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent }) => {
+export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
   const theme = themes[accent];
   const { user } = useAuth();
   const [printRows, setPrintRows] = useState<string[][] | null>(null);
@@ -120,7 +119,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
   const [card, setCard] = useState('');
   const [cls, setCls] = useState('');
   const [signins, setSignins] = useState(false);
-  const [sort, setSort] = useState<'newest' | 'oldest'>('newest');
+  const sort = 'newest' as const;
   const [preset, setPreset] = useState<DatePreset>('all');
   const [custom, setCustom] = useState({ from: '', to: '' });
   const [page, setPage] = useState(1);
@@ -184,12 +183,12 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
   const pageSize = data?.pageSize || 50;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const groups = useMemo(() => groupByDay(entries), [entries]);
-  const filtersActive = Boolean(q || area || status || roleFilter || card || cls || signins || preset !== 'all' || sort !== 'newest');
+  const filtersActive = Boolean(q || area || status || roleFilter || card || cls || signins || preset !== 'all');
 
   const change = (fn: () => void) => { fn(); setPage(1); };
   const clearFilters = () => {
     setQInput(''); setQ(''); setArea(''); setStatus(''); setRoleFilter(''); setCard(''); setCls(''); setSignins(false);
-    setSort('newest'); setPreset('all'); setCustom({ from: '', to: '' }); setPage(1);
+    setPreset('all'); setCustom({ from: '', to: '' }); setPage(1);
   };
   // A card shows exactly the rows it counts; other filters except the date are reset.
   const applyCard = (key: string) => {
@@ -254,24 +253,6 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto min-w-0">
-      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4 no-print">
-        <div className="sm:flex-1 sm:basis-64">
-          <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">{title}</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{subtitle}</p>
-          {role === 'admin' && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Class work (grades, attendance, retention) is not shown here; it stays recorded.</p>}
-        </div>
-        <div className="flex gap-2 whitespace-nowrap no-print">
-          <button onClick={exportCsv} disabled={working} className={`${tapButton} border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900 disabled:opacity-50`}>
-            <Download className="w-4 h-4" />
-            Export CSV
-          </button>
-          <button onClick={handlePrint} disabled={working} className={`${tapButton} text-white disabled:opacity-50 ${theme.button}`}>
-            <FileText className="w-4 h-4" />
-            Print PDF
-          </button>
-        </div>
-      </div>
-
       {note && <div role="status" className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 no-print">{note}</div>}
 
       {role === 'faculty' && (
@@ -316,18 +297,14 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
 
       <Card className="no-print">
         <CardContent className="p-4">
-          <div className="flex flex-wrap gap-3 items-center">
-            <Filter className={`w-4 h-4 ${theme.icon}`} />
-            <div className="relative">
+          <div className="grid min-w-0 grid-cols-2 sm:grid-cols-3 xl:flex xl:flex-wrap items-center gap-2 pb-1">
+            <Filter className={`hidden xl:block w-4 h-4 ${theme.icon} shrink-0`} />
+            <div className="relative col-span-2 min-w-0 sm:col-span-1 xl:shrink-0">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input type="search" value={qInput} onChange={e => setQInput(e.target.value)} maxLength={100} aria-label="Search" placeholder="Search who, what, record, student"
-                className={`${control} pl-8 w-48`} />
+                className={`${control} w-full pl-8 xl:w-36`} />
             </div>
-            <select aria-label="Area" value={area} onChange={e => change(() => setArea(e.target.value))} className={control}>
-              <option value="">All areas</option>
-              {(data?.areas ?? []).map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-            <select aria-label="Date" value={preset} onChange={e => change(() => setPreset(e.target.value as DatePreset))} className={control}>
+            <select aria-label="Date" value={preset} onChange={e => change(() => setPreset(e.target.value as DatePreset))} className={`${control} w-full xl:w-auto`}>
               <option value="all">All dates</option>
               <option value="today">Today</option>
               <option value="7">Last 7 days</option>
@@ -336,40 +313,53 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
             </select>
             {preset === 'custom' && (
               <>
-                <input type="date" aria-label="From date" value={custom.from} max={custom.to || undefined} onChange={e => change(() => setCustom(c => ({ ...c, from: e.target.value })))} className={control} />
-                <input type="date" aria-label="To date" value={custom.to} min={custom.from || undefined} onChange={e => change(() => setCustom(c => ({ ...c, to: e.target.value })))} className={control} />
+                <input type="date" aria-label="From date" value={custom.from} max={custom.to || undefined} onChange={e => change(() => setCustom(c => ({ ...c, from: e.target.value })))} className={`${control} w-full xl:w-32`} />
+                <input type="date" aria-label="To date" value={custom.to} min={custom.from || undefined} onChange={e => change(() => setCustom(c => ({ ...c, to: e.target.value })))} className={`${control} w-full xl:w-32`} />
               </>
             )}
-            <select aria-label="Status" value={status} onChange={e => change(() => setStatus(e.target.value))} className={control}>
+            <select aria-label="Area" value={area} onChange={e => change(() => setArea(e.target.value))} className={`${control} w-full xl:w-auto`}>
+              <option value="">All areas</option>
+              {(data?.areas ?? []).map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+            <select aria-label="Status" value={status} onChange={e => change(() => setStatus(e.target.value))} className={`${control} w-full xl:w-auto`}>
               <option value="">All statuses</option>
               {['Success', 'Warning', 'Failed'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             {role === 'admin' && (
-              <select aria-label="Role" value={roleFilter} onChange={e => change(() => setRoleFilter(e.target.value))} className={control}>
+              <select aria-label="Role" value={roleFilter} onChange={e => change(() => setRoleFilter(e.target.value))} className={`${control} w-full xl:w-auto`}>
                 {ROLE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             )}
             {role === 'faculty' && (
-              <select aria-label="Class" value={cls} onChange={e => change(() => setCls(e.target.value))} className={control}>
+              <select aria-label="Class" value={cls} onChange={e => change(() => setCls(e.target.value))} className={`${control} w-full xl:w-36`}>
                 <option value="">All classes</option>
                 {classes.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             )}
             <button type="button" aria-pressed={signins} onClick={() => change(() => setSignins(v => !v))}
-              className={`flex items-center gap-1.5 px-3 py-2 min-h-[44px] xl:min-h-0 rounded-xl border text-xs font-bold ${signins ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300' : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}>
+              className={`flex w-full xl:w-auto justify-center items-center gap-1.5 px-3 py-2 min-h-[44px] xl:min-h-0 rounded-xl border text-xs font-bold ${signins ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300' : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}>
               Sign-ins
             </button>
-            <button type="button" onClick={() => change(() => setSort(sort === 'newest' ? 'oldest' : 'newest'))} className={`flex items-center gap-1.5 min-h-[44px] xl:min-h-0 px-3 py-2 rounded-xl border text-xs font-bold ${theme.surface}`}>
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              {sort === 'newest' ? 'Newest first' : 'Oldest first'}
-            </button>
             {filtersActive && (
-              <button type="button" onClick={clearFilters} className="flex items-center gap-1 min-h-[44px] xl:min-h-0 text-xs font-bold underline hover:opacity-80">Clear filters</button>
+              <button type="button" onClick={clearFilters} className="flex justify-center items-center gap-1 min-h-[44px] xl:min-h-0 text-xs font-bold underline hover:opacity-80">Clear filters</button>
             )}
-            <span className="ml-auto text-[10px] text-slate-500 dark:text-slate-400 font-semibold">{total} logs</span>
+            <span className="col-span-2 sm:col-span-1 xl:ml-auto text-center sm:text-left xl:text-right whitespace-nowrap text-[10px] text-slate-500 dark:text-slate-400 font-semibold">{total} logs</span>
+            <div className="col-span-2 sm:col-span-3 xl:col-span-1 flex w-full xl:w-auto items-center justify-center xl:justify-start bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+                <button onClick={exportCsv} disabled={working} className="flex flex-1 xl:flex-initial items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer disabled:opacity-50">
+                  <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  Export CSV
+                </button>
+                <div className="w-px h-4 bg-slate-200 dark:bg-slate-800 mx-0.5" />
+                <button onClick={handlePrint} disabled={working} className="flex flex-1 xl:flex-initial items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer disabled:opacity-50">
+                  <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                  Print PDF
+                </button>
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      {role === 'admin' && <p className="text-xs text-slate-500 dark:text-slate-400 no-print">Class work (grades, attendance, retention) is not shown here; it stays recorded.</p>}
 
       <Card className="p-0 overflow-hidden no-print">
         <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">

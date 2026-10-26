@@ -252,6 +252,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   const navItems = getNavItems();
+  const currentPageItem = navItems.find(item => location.pathname === item.path);
+  const CurrentPageIcon = currentPageItem?.icon ?? User;
 
   // Persistent notifications state and actions
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -485,6 +487,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   const breadcrumbs = getBreadcrumbs();
+  const currentPageTitle = currentPageItem?.name || breadcrumbs[breadcrumbs.length - 1]?.name || 'DentiSYS Portal';
 
   return (
     <div className="min-h-screen print:min-h-0 print:bg-white bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col relative overflow-clip print:overflow-visible font-sans">
@@ -938,7 +941,19 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         </header>
 
         {/* Scrollable Content Body */}
-        <main className="flex-1 p-6 md:p-8 print:!p-0">
+        <main className={`flex-1 min-w-0 p-4 sm:p-5 xl:p-8 print:!p-0 ${currentUser.role === 'student' ? 'pt-3 sm:pt-4 xl:pt-8' : ''}`}>
+          <div className={`md:hidden flex items-center gap-3 ${currentUser.role === 'student' ? 'mb-3' : 'mb-5'}`} aria-label="Current page">
+            <span className={`w-9 h-9 shrink-0 rounded-xl border flex items-center justify-center ${
+              currentUser.role === 'admin'
+                ? 'bg-accent-50 dark:bg-accent-950/40 border-accent-200/70 dark:border-accent-900/60 text-accent-600 dark:text-accent-400'
+                : currentUser.role === 'faculty'
+                  ? 'bg-clinical-50 dark:bg-clinical-950/40 border-clinical-200/70 dark:border-clinical-900/60 text-clinical-600 dark:text-clinical-400'
+                  : 'bg-blue-50 dark:bg-blue-950/40 border-blue-200/70 dark:border-blue-900/60 text-blue-600 dark:text-blue-400'
+            }`}>
+              <CurrentPageIcon className="w-4 h-4" aria-hidden="true" />
+            </span>
+            <h1 className="text-base sm:text-lg font-semibold font-heading tracking-tight text-slate-800 dark:text-slate-100">{currentPageTitle}</h1>
+          </div>
           {currentUser.role === 'student' && isDevelopmentMockStudent(user, config) && !studentPrototypeEnabled && (
             <div className="mb-6 p-4 rounded-2xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
               Student attendance and biometric workflows are development-only browser prototypes. No authoritative attendance record or facial template is written while the explicit P02 providers are disabled.
