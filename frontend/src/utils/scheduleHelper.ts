@@ -1,4 +1,4 @@
-import { ClassMeeting, FacultyClassItem } from '../services/apiClient';
+import type { ClassMeeting, FacultyClassItem } from '../services/apiClient';
 
 export interface ClassSessionSlot {
   id: string;
@@ -160,6 +160,7 @@ export const checkScheduleConflicts = (
     if (currentSchoolYear && cls.schoolYear && cls.schoolYear !== currentSchoolYear) {
       continue;
     }
+    if (cls.archiveReason) continue; // archived classes no longer meet (CLS-003)
 
     const existingSessions: Array<{ room: string; days: string[]; start: number; end: number; raw: string }> = [];
 
