@@ -5,11 +5,13 @@ import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
 import {
   getFacultyRetentionApi,
+  getFacultyClassesApi,
   saveFacultyRemedialApi,
   saveFacultyCostRecoveryApi,
 } from '../../services/apiClient';
 import { formatGrade, percentageToGWA } from '../../utils/gradeHelper';
 import type {
+  FacultyClassItem,
   FacultyRetentionRecord,
   FacultyRetentionState,
 } from '../../services/apiClient';
@@ -268,6 +270,7 @@ const statusBadgeClasses = (state: FacultyRetentionState): string => {
 
 export const RetentionMonitoring: React.FC = () => {
   const [retentionRecords, setRetentionRecords] = useState<FacultyRetentionRecord[]>([]);
+  const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notification, setNotificationState] = useState<Notification | null>(null);
@@ -335,6 +338,9 @@ export const RetentionMonitoring: React.FC = () => {
 
   useEffect(() => {
     void refreshRetention();
+    void getFacultyClassesApi().then(response => {
+      setFacultyClasses(Array.isArray(response.classes) ? response.classes : []);
+    }).catch(() => setFacultyClasses([]));
   }, [refreshRetention]);
 
   const usableRecords = useMemo(
@@ -358,6 +364,23 @@ export const RetentionMonitoring: React.FC = () => {
     return usableRecords.filter(record => record.schoolYear === selectedSchoolYear);
   }, [usableRecords, selectedSchoolYear]);
 
+  const classesById = useMemo(() => {
+    const map = new Map<string, FacultyClassItem>();
+    facultyClasses.forEach(classItem => {
+      map.set(String(classItem.id), classItem);
+      map.set(String(classItem.csId), classItem);
+    });
+    return map;
+  }, [facultyClasses]);
+
+  const classFilterLabel = useCallback((record: FacultyRetentionRecord) => {
+    const classItem = classesById.get(String(record.classId));
+    const courseCode = isPersistedText(record.subjectCode) ? record.subjectCode : classItem?.courseCode || 'Course';
+    const courseTitle = classItem?.courseTitle || classItem?.courseName || courseCode;
+    const section = classItem?.csName || classItem?.block || (isPersistedText(record.className) ? record.className : `Class (${record.classId})`);
+    return `${courseCode} · ${section} · ${courseTitle}`;
+  }, [classesById]);
+
   const subjectOptions = useMemo(() => (
     Array.from(new Set(
       recordsForSchoolYear
@@ -372,17 +395,15 @@ export const RetentionMonitoring: React.FC = () => {
       if (!labels.has(record.classId)) {
         labels.set(
           record.classId,
-          isPersistedText(record.className)
-            ? record.className
-            : `Class name unavailable (${record.classId})`,
+          classFilterLabel(record),
         );
       }
     });
     return Array.from(labels.entries()).sort(([left], [right]) => left.localeCompare(right));
-  }, [recordsForSchoolYear]);
+  }, [classFilterLabel, recordsForSchoolYear]);
 
   const subjectGroupedClasses = useMemo(() => {
-    const groups = new Map<string, Array<{ classId: string; label: string }>>();
+    const groups = new Map<string, { courseTitle: string; classes: Array<{ classId: string; label: string }> }>();
     const seenClasses = new Set<string>();
 
     recordsForSchoolYear.forEach(record => {
@@ -391,21 +412,21 @@ export const RetentionMonitoring: React.FC = () => {
 
       const subj = isPersistedText(record.subjectCode) ? record.subjectCode : 'Other Subjects';
       if (!groups.has(subj)) {
-        groups.set(subj, []);
+        const classItem = classesById.get(String(record.classId));
+        groups.set(subj, { courseTitle: classItem?.courseTitle || classItem?.courseName || subj, classes: [] });
       }
-      const label = isPersistedText(record.className)
-        ? record.className
-        : `Class (${record.classId})`;
-      groups.get(subj)!.push({ classId: record.classId, label });
+      const label = classFilterLabel(record);
+      groups.get(subj)!.classes.push({ classId: record.classId, label });
     });
 
     return Array.from(groups.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([subjectCode, classes]) => ({
+      .map(([subjectCode, group]) => ({
         subjectCode,
-        classes: classes.sort((a, b) => a.label.localeCompare(b.label)),
+        courseTitle: group.courseTitle,
+        classes: group.classes.sort((a, b) => a.label.localeCompare(b.label)),
       }));
-  }, [recordsForSchoolYear]);
+  }, [classFilterLabel, classesById, recordsForSchoolYear]);
 
   const mixedFilterValue = useMemo(() => {
     if (selectedClassId !== 'all') return `class:${selectedClassId}`;
@@ -765,7 +786,7 @@ export const RetentionMonitoring: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
 
       {notification && (
         <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in">
@@ -785,20 +806,20 @@ export const RetentionMonitoring: React.FC = () => {
         <div className="p-4 rounded-2xl bg-slate-500/10 border border-slate-500/20 text-slate-700 dark:text-slate-300 text-xs font-semibold">{unavailableRecordCount} retention record(s) are unavailable because the server did not provide all persisted identifiers required for actions.</div>
       )}
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
-        <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl">
+      <div className="flex flex-col gap-4">
+        <div className="order-2 flex flex-wrap max-w-full items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm no-print">
           <button
             type="button"
             onClick={() => { setActiveTab('watchlist'); setSearchQuery(''); }}
-            className={`flex flex-auto md:flex-none justify-center md:justify-start items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex flex-1 min-w-max justify-center items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'watchlist'
-                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
           >
             <span>Watchlist</span>
             <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-              activeTab === 'watchlist' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+              activeTab === 'watchlist' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
             }`}>
               {watchlistRecords.length}
             </span>
@@ -806,16 +827,16 @@ export const RetentionMonitoring: React.FC = () => {
           <button
             type="button"
             onClick={() => { setActiveTab('remedials'); setSearchQuery(''); }}
-            className={`flex flex-auto md:flex-none justify-center md:justify-start items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex flex-1 min-w-max justify-center items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'remedials'
-                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
           >
             <span>Remedials</span>
             {pendingExams > 0 && (
               <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === 'remedials' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+                activeTab === 'remedials' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
               }`}>
                 {pendingExams}
               </span>
@@ -824,16 +845,16 @@ export const RetentionMonitoring: React.FC = () => {
           <button
             type="button"
             onClick={() => { setActiveTab('midterm'); setSearchQuery(''); }}
-            className={`flex flex-auto md:flex-none justify-center md:justify-start items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex flex-1 min-w-max justify-center items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'midterm'
-                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
           >
             <span>Midterm Watchlist</span>
             {atRiskMidtermCount > 0 && (
               <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === 'midterm' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+                activeTab === 'midterm' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
               }`}>
                 {atRiskMidtermCount}
               </span>
@@ -841,14 +862,15 @@ export const RetentionMonitoring: React.FC = () => {
           </button>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:flex-wrap xl:flex-nowrap items-stretch sm:items-center gap-2.5 w-full md:w-auto min-w-0 xl:min-w-[auto]">
+        <Card className="order-1 no-print p-4 flex flex-col xl:flex-row gap-4 xl:items-center">
           {/* School Year Selector Filter Pill (Defaults to Current School Year) */}
-          <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
-            <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <div className="w-full xl:w-56 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+            <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
             <select
               value={selectedSchoolYear}
               onChange={(event) => setSelectedSchoolYear(event.target.value)}
-              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1"
+              aria-label="School year"
+              className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
               <option value="all">All School Years</option>
               {availableSchoolYears.map(sy => (
@@ -859,33 +881,32 @@ export const RetentionMonitoring: React.FC = () => {
             </select>
           </div>
 
-          <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
-            <Filter className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <div className="w-full xl:flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+            <Filter className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
             <select
               value={mixedFilterValue}
               onChange={(event) => handleMixedFilterChange(event.target.value)}
-              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1"
+              aria-label="Class: course code, section, and course title"
+              className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
-              <option value="all">All Subjects & Sections</option>
-              {subjectGroupedClasses.map(group => (
-                <optgroup key={group.subjectCode} label={group.subjectCode}>
-                  {group.classes.length > 1 && (
-                    <option value={`subject:${group.subjectCode}`}>All {group.subjectCode} Sections</option>
-                  )}
-                  {group.classes.map(cls => (
+              <option value="all">All Classes</option>
+              {subjectGroupedClasses.flatMap(group => [
+                ...(group.classes.length > 1 ? [
+                  <option key={`subject:${group.subjectCode}`} value={`subject:${group.subjectCode}`}>All {group.subjectCode} Sections</option>,
+                ] : []),
+                ...group.classes.map(cls => (
                     <option key={cls.classId} value={`class:${cls.classId}`}>
                       {cls.label}
                     </option>
-                  ))}
-                </optgroup>
-              ))}
+                )),
+              ])}
             </select>
           </div>
-          <div className="relative w-full sm:w-56 sm:min-w-[10rem] xl:min-w-[auto]">
+          <div className="relative w-full xl:w-56">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input type="text" placeholder="Search..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-xs" />
           </div>
-        </div>
+        </Card>
       </div>
 
       {selectedSchoolYear !== currentSchoolYear && currentSchoolYear && selectedSchoolYear !== 'all' && (

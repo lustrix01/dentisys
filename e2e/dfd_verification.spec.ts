@@ -42,13 +42,13 @@ test.describe('Workflow Characterization (mocked UI only)', () => {
 
     test('Workflow: Admin/Dean User Account Details & Settings', async ({ page }) => {
       await openAccountMenu(page);
-      await page.click('a[href="/admin/profile"]');
+      await page.click('a[href="/admin/profile"] >> visible=true');
       await expect(page).toHaveURL('/admin/profile');
       await expect(page.locator('body')).toContainText(/Profile|Dean|Dr. Dean Admin/i);
 
       await openAccountMenu(page);
 
-      await page.click('a[href="/admin/settings"]');
+      await page.click('a[href="/admin/settings"] >> visible=true');
       await expect(page).toHaveURL('/admin/settings');
       await expect(page.locator('body')).toContainText(/Settings/i);
     });

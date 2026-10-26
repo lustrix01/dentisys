@@ -306,14 +306,14 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
 
   test('admin can view Profile page', async ({ page }) => {
     await openAccountMenu(page);
-    await page.click('a[href="/admin/profile"]');
+    await page.click('a[href="/admin/profile"] >> visible=true');
     await expect(page).toHaveURL('/admin/profile');
     await expect(page.locator('body')).toContainText(/Profile|Dean/i);
   });
 
   test('admin can view Settings page', async ({ page }) => {
     await openAccountMenu(page);
-    await page.click('a[href="/admin/settings"]');
+    await page.click('a[href="/admin/settings"] >> visible=true');
     await expect(page).toHaveURL('/admin/settings');
     await expect(page.locator('body')).toContainText(/Settings/i);
   });

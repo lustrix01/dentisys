@@ -112,14 +112,14 @@ test.describe('Class Secretary Module E2E Tests', () => {
 
   test('secretary can view Profile and Settings', async ({ page }) => {
     await openAccountMenu(page);
-    await page.click('a[href="/secretary/profile"]');
+    await page.click('a[href="/secretary/profile"] >> visible=true');
     await expect(page).toHaveURL('/secretary/profile');
     await expect(page.locator('body')).toContainText(/Profile|Alex Smith/i);
     await expect(page.getByText('Two-factor authentication', { exact: true })).toBeVisible();
 
     await openAccountMenu(page);
 
-    await page.click('a[href="/secretary/settings"]');
+    await page.click('a[href="/secretary/settings"] >> visible=true');
     await expect(page).toHaveURL('/secretary/settings');
     await expect(page.locator('body')).toContainText(/Settings/i);
   });
@@ -144,7 +144,7 @@ test.describe('Class Secretary Module E2E Tests', () => {
       });
     });
     await openAccountMenu(page);
-    await page.click('a[href="/secretary/profile"]');
+    await page.click('a[href="/secretary/profile"] >> visible=true');
     await expect(page).toHaveURL('/secretary/profile');
 
     await expect(page.getByText('Two-factor authentication', { exact: true })).toBeVisible();
@@ -522,6 +522,8 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     const map = page.getByRole('application', { name: 'Session location map' });
     await expect(map).toBeVisible();
     await expect(page.getByText('OpenStreetMap')).toBeVisible();
+    await map.scrollIntoViewIfNeeded(); // the map starts half below the modal fold; click only after it has scrolled fully into view
+    await expect.poll(async () => (await map.boundingBox())!.y + 256 <= page.viewportSize()!.height).toBe(true);
     await map.click({ position: { x: 60, y: 60 } });
     await expect(page.getByText(/Location acquired: /)).toBeVisible();
     await form.getByRole('button', { name: 'Start Session', exact: true }).click();

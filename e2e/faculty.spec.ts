@@ -468,13 +468,13 @@ test.describe('Faculty Module E2E Tests', () => {
 
   test('faculty can view Profile and Settings', async ({ page }) => {
     await openAccountMenu(page);
-    await page.click('a[href="/faculty/profile"]');
+    await page.click('a[href="/faculty/profile"] >> visible=true');
     await expect(page).toHaveURL('/faculty/profile');
     await expect(page.locator('body')).toContainText(/Profile|Jane Doe/i);
 
     await openAccountMenu(page);
 
-    await page.click('a[href="/faculty/settings"]');
+    await page.click('a[href="/faculty/settings"] >> visible=true');
     await expect(page).toHaveURL('/faculty/settings');
     await expect(page.locator('body')).toContainText(/Settings/i);
   });
@@ -596,7 +596,7 @@ test.describe('Faculty Module E2E Tests', () => {
       body: JSON.stringify({ status: 'ok', two_factor: { enabled: true, authenticator_enabled: true, recovery_code_count: 8 } }),
     }));
     await openAccountMenu(page);
-    await page.click('a[href="/faculty/profile"]');
+    await page.click('a[href="/faculty/profile"] >> visible=true');
     const emailInput = page.locator('input[readonly]').first();
     await expect(emailInput).toHaveValue('faculty@bicol-u.edu.ph');
     await expect(page.getByText('Your login email cannot be changed.')).toBeVisible();
@@ -625,7 +625,7 @@ test.describe('Faculty Module E2E Tests', () => {
 
     await openAccountMenu(page);
 
-    await page.click('a[href="/faculty/settings"]');
+    await page.click('a[href="/faculty/settings"] >> visible=true');
     await expect(page).toHaveURL('/faculty/settings');
     const light = page.getByRole('button', { name: /Clean light mode/i });
     const dark = page.getByRole('button', { name: /Clinical dark mode/i });
@@ -647,7 +647,7 @@ test.describe('Faculty Module E2E Tests', () => {
 
     await openAccountMenu(page);
 
-    await page.click('a[href="/faculty/settings"]');
+    await page.click('a[href="/faculty/settings"] >> visible=true');
     const dark = page.getByRole('button', { name: /Clinical dark mode/i });
     await dark.click();
     await expect(page.locator('html')).toHaveClass(/dark/);
@@ -661,7 +661,7 @@ test.describe('Faculty Module E2E Tests', () => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sign_in_again: true, message: 'Password changed successfully. Please sign in again.' }) });
     });
     await openAccountMenu(page);
-    await page.click('a[href="/faculty/profile"]');
+    await page.click('a[href="/faculty/profile"] >> visible=true');
     await expect(page).toHaveURL('/faculty/profile');
     const requirements = page.locator('#new-password-requirements');
     await expect(requirements).toContainText('At least 8 characters');
@@ -887,7 +887,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.goto('/attendance');
     await page.getByLabel('Assigned course').selectOption('101');
     await page.getByLabel('Class section').selectOption('1');
-    await page.getByRole('button', { name: 'New attendance session', exact: true }).click();
+    await page.getByRole('button', { name: 'Start Session', exact: true }).click();
     const date = page.getByLabel('Session date (Asia/Manila)');
     expect(await date.getAttribute('min')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await date.fill('2099-10-02');
@@ -1305,7 +1305,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
     await page.getByRole('button', { name: 'Save Override', exact: true }).click();
     await expect.poll(() => writing).toBe(true);
-    await page.getByRole('region', { name: 'Excused requests' }).getByRole('button', { name: 'Approve', exact: true }).click();
+    await page.getByRole('region', { name: 'Excused requests' }).getByRole('button', { name: 'Approve', exact: true }).dispatchEvent('click'); // the Save Override modal overlay now really covers the page (styles on)
     await expect(page.getByText('Bob approval saved.', { exact: true })).toBeVisible();
     expect(reads).toBe(1);
     releaseWrite();
@@ -1767,11 +1767,11 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       await page.goto('/grades?tab=components');
 
-      // The shared course bar lists each course once; its two sections share one set of weights
-      const courseSelect = page.getByRole('main').locator('select').first();
-      await expect(courseSelect.locator('option')).toHaveCount(2);
-      await expect(courseSelect.locator('option').first()).toContainText('CLIN401 - Clinical Dentistry I');
-      await expect(courseSelect.locator('option').nth(1)).toContainText('CLIN402 - Clinical Dentistry II');
+      // The class selector lists each class (CODE · SECTION · TITLE); the two CLIN401 sections share one set of weights
+      const classSelect = page.getByRole('main').getByLabel(/^Class:/);
+      await expect(classSelect.locator('option')).toHaveCount(3);
+      await expect(classSelect.locator('option').first()).toContainText('CLIN401 · CLIN401-A · Clinical Dentistry I');
+      await expect(classSelect.locator('option').nth(2)).toContainText('CLIN402 · CLIN402-A · Clinical Dentistry II');
       await expect(page.getByTestId('weights-sections-note')).toContainText('2 sections of this course (CLIN401-A, CLIN401-B)');
 
       // Suggested starting preset indicator
@@ -2296,7 +2296,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=components');
-      const offeringSelect = page.getByRole('main').locator('select').first();
+      const offeringSelect = page.getByRole('main').getByLabel(/^Class:/);
       await expect(page.getByText(/^\s*Suggested starting preset.*unsaved\s*$/i).first()).toBeVisible();
 
       // Edit a category name to make it dirty
@@ -2304,7 +2304,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await nameInputs.nth(0).fill('Dirty Category');
 
       // Attempt to switch the shared course bar to CLIN402
-      await offeringSelect.selectOption({ index: 1 });
+      await offeringSelect.selectOption('3');
 
       // Confirmation modal should appear
       await expect(page.getByText(/Discard unsaved changes?/i)).toBeVisible();
@@ -2314,16 +2314,16 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: 'Cancel' }).click();
 
       // Selection must remain CLIN401 and dirty edits preserved
-      await expect(offeringSelect).toHaveValue('CLIN401');
+      await expect(offeringSelect).toHaveValue('1');
       await expect(nameInputs.nth(0)).toHaveValue('Dirty Category');
 
       // Attempt switch again and Confirm
-      await offeringSelect.selectOption({ index: 1 });
+      await offeringSelect.selectOption('3');
       await expect(page.getByText(/Discard unsaved changes?/i)).toBeVisible();
       await page.getByRole('button', { name: 'Confirm' }).click();
 
       // Now switched to CLIN402
-      await expect(offeringSelect).toHaveValue('CLIN402');
+      await expect(offeringSelect).toHaveValue('3');
       await expect.poll(() => loadedCourseId).toBe('102');
     });
 
@@ -3392,6 +3392,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       await page.goto('/grades?tab=assessments');
       // The page has one class selector; the modal has none of its own.
+      await expect(page.locator('select').nth(1)).toHaveValue('1'); // wait for the first class to be chosen before choosing another
       await page.locator('select').nth(1).selectOption('2');
       await page.getByRole('button', { name: 'Add Assessment' }).click();
 
@@ -3698,6 +3699,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.goto('/grades?tab=assessments');
       // Choose Section 4 (2nd Sem, a different offering) with the page-level
       // selector, then open the modal: it loads that offering's categories.
+      await expect(page.locator('select').nth(1)).toHaveValue('1'); // wait for the first class to be chosen before choosing another
       await page.locator('select').nth(1).selectOption('4');
       await page.getByRole('button', { name: 'Add Assessment' }).click();
 
@@ -4084,10 +4086,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(legacyOverallRow).toContainText('PENDING');
 
       const printTable = page.locator('.print-only table').first();
-      await expect(printTable.getByRole('columnheader', { name: 'Midterm Lecture %', exact: true })).toBeAttached();
-      await expect(printTable.getByRole('columnheader', { name: 'Finals Laboratory %', exact: true })).toBeAttached();
-      await expect(printTable.getByRole('row').filter({ hasText: 'Bea Santos' })).toContainText('Unavailable (recompute required)');
-      await expect(printTable.getByRole('row').filter({ hasText: 'Caleb Reyes' })).toContainText('Prior: 2.5 (Historical)');
+      await expect(printTable.getByRole('columnheader', { name: 'Midterm Lecture %', exact: true, includeHidden: true })).toBeAttached();
+      await expect(printTable.getByRole('columnheader', { name: 'Finals Laboratory %', exact: true, includeHidden: true })).toBeAttached();
+      await expect(printTable.getByRole('row', { includeHidden: true }).filter({ hasText: 'Bea Santos' })).toContainText('Unavailable (recompute required)');
+      await expect(printTable.getByRole('row', { includeHidden: true }).filter({ hasText: 'Caleb Reyes' })).toContainText('Prior: 2.5 (Historical)');
 
       const downloadPromise = page.waitForEvent('download');
       await page.getByRole('button', { name: 'Export CSV' }).click();

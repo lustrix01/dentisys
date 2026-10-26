@@ -48,8 +48,11 @@ export function LandingPage() {
   return (
     <div className="min-h-screen min-h-[100dvh] w-full md:h-screen md:max-h-screen md:overflow-hidden flex flex-col justify-between bg-slate-50 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 relative select-none">
 
-      {/* Background: Original Clean Dot Grid */}
-      <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1.2px,transparent_1.2px)] dark:bg-[radial-gradient(#334155_1.2px,transparent_1.2px)] [background-size:24px_24px] opacity-75 pointer-events-none" />
+      {/* Soft purple hero wash with the existing dot pattern */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_48%,rgba(139,92,246,0.15)_0%,rgba(139,92,246,0.06)_36%,transparent_72%)] dark:bg-[radial-gradient(ellipse_at_50%_48%,rgba(139,92,246,0.18)_0%,rgba(139,92,246,0.07)_38%,transparent_74%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1.2px,transparent_1.2px)] dark:bg-[radial-gradient(#334155_1.2px,transparent_1.2px)] [background-size:24px_24px] opacity-40" />
+      </div>
 
       {/* 1. Header Navigation Bar */}
       <header className="w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-xs px-4 sm:px-6 md:px-12 py-3 sm:py-3.5 flex-shrink-0 z-50">
@@ -92,7 +95,7 @@ export function LandingPage() {
                 onClick={() => setIsFeaturesModalOpen(true)}
                 className="whitespace-nowrap text-xs lg:text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors cursor-pointer"
               >
-                Clinical Features
+                Features
               </button>
               <button
                 type="button"
@@ -158,7 +161,7 @@ export function LandingPage() {
               className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-2"
             >
               <Layers className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-              <span>Clinical Features</span>
+              <span>Features</span>
             </button>
             <button
               type="button"
@@ -188,9 +191,7 @@ export function LandingPage() {
 
       {/* 2. Main Hero Section */}
       <main className="flex-1 flex items-center justify-center px-6 sm:px-12 py-4 relative min-h-0">
-        <div className="max-w-5xl mx-auto w-full text-center space-y-5 sm:space-y-6 my-auto flex flex-col items-center">
-
-          {/* Headline - Poppins Bold (College of Dental Medicine on one line) */}
+        <div className="relative z-10 max-w-5xl mx-auto w-full text-center space-y-5 sm:space-y-6 my-auto flex flex-col items-center">
           <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-[4rem] font-poppins font-bold tracking-tight text-slate-900 dark:text-slate-100 leading-[1.15]">
             Bicol University
             <span className="block text-purple-600 dark:text-purple-400 mt-1.5 sm:mt-2.5 font-poppins font-bold whitespace-nowrap">
@@ -198,11 +199,9 @@ export function LandingPage() {
             </span>
           </h1>
 
-          {/* Description */}
           <p className="text-sm sm:text-base md:text-lg text-slate-600 dark:text-slate-300 leading-relaxed font-normal max-w-2xl mx-auto">
             Official internal portal for student facial recognition check-in, live clinic geofencing, clinical grade computation, and automated student retention monitoring.
           </p>
-
         </div>
       </main>
 
@@ -292,7 +291,7 @@ export function LandingPage() {
         </div>
       )}
 
-      {/* 5. Clinical Features Modal */}
+      {/* 5. Features Modal */}
       {isFeaturesModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 select-text">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl relative text-left space-y-4 max-h-[90dvh] overflow-y-auto">
@@ -308,7 +307,7 @@ export function LandingPage() {
               <span>Core System Capabilities</span>
             </div>
             <h3 className="text-xl font-bold text-slate-900 dark:text-white">
-              DentiSys Clinical Features
+              Features
             </h3>
 
             <div className="space-y-3 pt-1">

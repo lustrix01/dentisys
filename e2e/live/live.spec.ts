@@ -656,7 +656,7 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
     && response.url().includes(`courseId=${activeClass.courseId}&`)
     && response.request().method() === 'GET';
   const selectOfferingCourse = async () => {
-    await page.getByRole('main').locator('select').first().selectOption(String(activeClass.courseCode));
+    await page.getByRole('main').getByLabel(/^Class:/).selectOption(String(activeClass.id));
     await expect(page.getByText('Editing schema for:')).toContainText(String(activeClass.courseCode));
   };
 
@@ -1091,8 +1091,7 @@ test('authoritative faculty assessment manager: create and edit assessments with
   // 4. Navigate to Assessments Tab
   await page.goto('/grades?tab=assessments');
   await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeVisible({ timeout: 15000 });
-  await page.getByRole('main').locator('select').first().selectOption(String(activeClass.courseCode));
-  await page.getByRole('main').locator('select').nth(1).selectOption(String(activeClass.id));
+  await page.getByRole('main').getByLabel(/^Class:/).selectOption(String(activeClass.id));
   await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeEnabled();
 
   // 5. Open Create Assessment Modal

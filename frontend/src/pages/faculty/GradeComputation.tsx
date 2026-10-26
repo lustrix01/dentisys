@@ -28,7 +28,9 @@ import {
   List,
   Grid,
   Zap,
-  RotateCcw
+  RotateCcw,
+  CalendarDays,
+  Filter
 } from 'lucide-react';
 import { flushSync } from 'react-dom';
 import { PrintStyle, PrintHeader, PrintLegend, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
@@ -164,6 +166,7 @@ export const GradeComputation: React.FC = () => {
   const location = useLocation();
 
   const [currentSchoolYear, setCurrentSchoolYear] = useState<string>('');
+  const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('');
   const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>('');
   const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -187,9 +190,33 @@ export const GradeComputation: React.FC = () => {
     });
   }, [facultyClasses, isClassCurrentSchoolYear]);
 
+  const availableSchoolYears = useMemo(() => Array.from(new Set([
+    currentSchoolYear,
+    ...facultyClasses.map(classItem => classItem.schoolYear || ''),
+  ].filter(Boolean))).sort((a, b) => b.localeCompare(a)), [currentSchoolYear, facultyClasses]);
+
+  const selectedYearClasses = useMemo(() => {
+    if (!selectedSchoolYear) return currentYearActiveClasses;
+    const isCurrentYear = currentSchoolYear
+      ? selectedSchoolYear.trim().toLowerCase() === currentSchoolYear.trim().toLowerCase()
+      : true;
+    if (isCurrentYear) return currentYearActiveClasses;
+    return facultyClasses.filter(classItem =>
+      (classItem.schoolYear || '').trim().toLowerCase() === selectedSchoolYear.trim().toLowerCase()
+      && (classItem.isHistorical === true || classItem.isCurrentSchoolYear === false)
+      && classItem.archiveReason !== 'cancelled'
+      && classItem.archiveReason !== 'mistake'
+    );
+  }, [currentSchoolYear, currentYearActiveClasses, facultyClasses, selectedSchoolYear]);
+
+  const selectedClassIsHistorical = useMemo(() => {
+    const classItem = facultyClasses.find(item => item.id === selectedClassId);
+    return Boolean(classItem && !isClassCurrentSchoolYear(classItem));
+  }, [facultyClasses, isClassCurrentSchoolYear, selectedClassId]);
+
   const activeCourses = useMemo(() => {
     const map = new Map<string, { code: string; name: string }>();
-    for (const c of currentYearActiveClasses) {
+    for (const c of selectedYearClasses) {
       if (c.courseCode && !map.has(c.courseCode)) {
         map.set(c.courseCode, {
           code: c.courseCode,
@@ -198,13 +225,13 @@ export const GradeComputation: React.FC = () => {
       }
     }
     return Array.from(map.values());
-  }, [currentYearActiveClasses]);
+  }, [selectedYearClasses]);
 
   const availableClasses = useMemo(
-    () => currentYearActiveClasses.filter(classItem =>
+    () => selectedYearClasses.filter(classItem =>
       classItem.courseCode === selectedSubjectCode
     ),
-    [currentYearActiveClasses, selectedSubjectCode],
+    [selectedYearClasses, selectedSubjectCode],
   );
 
   useEffect(() => {
@@ -215,6 +242,7 @@ export const GradeComputation: React.FC = () => {
           const classesResponse = classesResult.value;
           const loadedClasses = Array.isArray(classesResponse.classes) ? classesResponse.classes : [];
           setCurrentSchoolYear(classesResponse.currentSchoolYear || '');
+          setSelectedSchoolYear(classesResponse.currentSchoolYear || '');
           setFacultyClasses(loadedClasses);
         }
         if (settingsResult.status === 'fulfilled' && settingsResult.value.settings?.transmutationDefaults) {
@@ -304,6 +332,12 @@ export const GradeComputation: React.FC = () => {
   useEffect(() => {
     setActiveSubTab(getInitialTab());
   }, [location]);
+
+  useEffect(() => {
+    if (selectedClassIsHistorical && activeSubTab !== 'summaries') {
+      setActiveSubTab('summaries');
+    }
+  }, [activeSubTab, selectedClassIsHistorical]);
 
   // General Filter Selectors
   useEffect(() => {
@@ -2150,17 +2184,6 @@ export const GradeComputation: React.FC = () => {
     }
   };
 
-  const handleStartLectureLaboratoryConversion = () => {
-    if (!isLegacyCombinedPeriodConfig) return;
-    setComponentMode('lecture_laboratory');
-    setActiveComponentEditorTab('Lecture');
-    // Existing category records keep their names, IDs, and weights; component mapping is explicit.
-    setMidtermCategories(rows => rows.map(row => ({ ...row, component: undefined })));
-    setFinalCategories(rows => rows.map(row => ({ ...row, component: undefined })));
-    setComponentMappingError(null);
-    setAssessmentAssignments({});
-  };
-
   const handleUpdateDateRange = (period: 'midterm' | 'final', field: 'startDate' | 'endDate', val: string) => {
     setAttendanceDateRanges(prev => ({
       ...prev,
@@ -2222,6 +2245,17 @@ export const GradeComputation: React.FC = () => {
     });
     if (period === 'Midterm') setMidtermCategories(updateList);
     else setFinalCategories(updateList);
+  };
+
+  const handleStartLectureLaboratoryConversion = () => {
+    if (!isLegacyCombinedPeriodConfig) return;
+    setComponentMode('lecture_laboratory');
+    setActiveComponentEditorTab('Lecture');
+    // Existing category records keep their names, IDs, and weights; component mapping is explicit.
+    setMidtermCategories(rows => rows.map(row => ({ ...row, component: undefined })));
+    setFinalCategories(rows => rows.map(row => ({ ...row, component: undefined })));
+    setComponentMappingError(null);
+    setAssessmentAssignments({});
   };
 
   const handleUpdatePeriodCategorySourceKind = (period: 'Midterm' | 'Final', compositeKey: string, sourceKind: GradingSourceKindEnum) => {
@@ -2808,7 +2842,7 @@ export const GradeComputation: React.FC = () => {
   }, [activeStudents, summarySearch, sortField, sortAsc, selectedSubjectCode, computeResultsByEnrollment, isPeriodMode]);
 
   const handleRecomputeGrades = async () => {
-    if (!selectedClassId) return;
+    if (!selectedClassId || selectedClassIsHistorical) return;
     setIsRecomputing(true);
     setRecomputeAlert(null);
     try {
@@ -2988,102 +3022,121 @@ export const GradeComputation: React.FC = () => {
 
       {/* Unified Class and Course Selector Bar for All Tabs */}
       <Card className="no-print p-4 flex flex-col xl:flex-row gap-4 xl:items-center">
-        <div className="w-full xl:flex-1">
-          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
+        <div className="w-full xl:w-56 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+          <CalendarDays className="w-4 h-4 shrink-0 text-clinical-600 dark:text-clinical-400" aria-hidden="true" />
           <select
-            value={selectedSubjectCode}
-            onChange={async (e) => {
-              const newCode = e.target.value;
+            value={selectedSchoolYear}
+            onChange={async event => {
+              const nextSchoolYear = event.target.value;
               if (!await confirmDiscardUnsavedScores()) return;
               flushAllAutoSave();
-              const matchOffering = facultyOfferings.find(o => o.courseCode === newCode);
+              const isCurrentYear = nextSchoolYear.trim().toLowerCase() === currentSchoolYear.trim().toLowerCase();
+              const nextClasses = isCurrentYear
+                ? currentYearActiveClasses
+                : facultyClasses.filter(classItem =>
+                  (classItem.schoolYear || '').trim().toLowerCase() === nextSchoolYear.trim().toLowerCase()
+                  && (classItem.isHistorical === true || classItem.isCurrentSchoolYear === false)
+                  && classItem.archiveReason !== 'cancelled'
+                  && classItem.archiveReason !== 'mistake'
+                );
+              const nextClass = nextClasses.find(classItem => classItem.courseCode === selectedSubjectCode) || nextClasses[0];
+              const nextOffering = nextClass && isCurrentYear
+                ? facultyOfferings.find(offering => offering.sections.some(section => section.id === nextClass.id))
+                : undefined;
+              if (nextOffering && nextOffering.key !== selectedOfferingKey) {
+                const switched = await handleSelectOffering(nextOffering.key);
+                if (!switched) return;
+              }
+              setSelectedSchoolYear(nextSchoolYear);
+              setSelectedSubjectCode(nextClass?.courseCode || '');
+              setSelectedClassId(nextClass?.id || '');
+              if (nextOffering) {
+                setSelectedOfferingKey(nextOffering.key);
+                setSelectedAssessmentOfferingKey(nextOffering.key);
+              }
+            }}
+            aria-label="School year"
+            className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
+          >
+            {availableSchoolYears.length === 0
+              ? <option value="">No school years available</option>
+              : availableSchoolYears.map(year => <option key={year} value={year}>{year}</option>)}
+          </select>
+        </div>
+
+        <div className="w-full xl:flex-1 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+          <Filter className="w-4 h-4 shrink-0 text-clinical-600 dark:text-clinical-400" aria-hidden="true" />
+          <select
+            value={selectedClassId}
+            onChange={async (e) => {
+              const classItem = selectedYearClasses.find(c => c.id === e.target.value);
+              if (!classItem) return;
+              if (!await confirmDiscardUnsavedScores()) return;
+              flushAllAutoSave();
+              const matchOffering = facultyOfferings.find(o => o.sections.some(section => section.id === classItem.id));
               if (matchOffering && matchOffering.key !== selectedOfferingKey) {
                 // Asks before discarding unsaved grade weights and clears the previous course's draft.
                 const switched = await handleSelectOffering(matchOffering.key);
                 if (!switched) return;
               }
-              setSelectedSubjectCode(newCode);
+              setSelectedSubjectCode(classItem.courseCode || '');
+              setSelectedClassId(classItem.id);
               if (matchOffering) {
                 setSelectedOfferingKey(matchOffering.key);
                 setSelectedAssessmentOfferingKey(matchOffering.key);
               }
-              const matchingClasses = currentYearActiveClasses.filter(c => c.courseCode === newCode);
-              if (matchingClasses.length > 0) {
-                setSelectedClassId(matchingClasses[0].id);
-              } else {
-                setSelectedClassId('');
+              if (classItem.isHistorical === true || classItem.isCurrentSchoolYear === false) {
+                setActiveSubTab('summaries');
               }
             }}
-            className="w-full px-2 pr-8 sm:px-4 sm:pr-8 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+            aria-label={`Class: course code, section, and course title${selectedClassIsHistorical ? ', view only' : ''}`}
+            className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
           >
-            {activeCourses.length === 0 ? (
-              <option value="">No active courses for current school year</option>
+            {selectedYearClasses.length === 0 ? (
+              <option value="">{selectedSchoolYear && selectedSchoolYear !== currentSchoolYear ? 'No completed classes available' : 'No active classes available'}</option>
             ) : (
-              activeCourses.map(course => (
-                <option key={course.code} value={course.code}>
-                  {course.code} - {course.name}
+              selectedYearClasses.map(classItem => (
+                <option key={classItem.id} value={classItem.id}>
+                  {classItem.courseCode || 'Course'} · {classItem.csName || 'Section'} · {classItem.courseTitle || classItem.courseName || classItem.courseCode || 'Course'}
                 </option>
               ))
             )}
           </select>
         </div>
-
-        <div className="w-full xl:w-56">
-          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
-          <select
-            value={selectedClassId}
-            onChange={async (e) => {
-              const newClassId = e.target.value;
-              if (!await confirmDiscardUnsavedScores()) return;
-              flushAllAutoSave();
-              setSelectedClassId(newClassId);
-              const classItem = currentYearActiveClasses.find(c => c.id === newClassId);
-              if (classItem && classItem.courseCode && classItem.courseCode !== selectedSubjectCode) {
-                setSelectedSubjectCode(classItem.courseCode);
-                const matchOffering = facultyOfferings.find(o => o.courseCode === classItem.courseCode);
-                if (matchOffering) {
-                  setSelectedOfferingKey(matchOffering.key);
-                  setSelectedAssessmentOfferingKey(matchOffering.key);
-                }
-              }
-            }}
-            className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
-          >
-            {availableClasses.length === 0
-              ? <option value="">No active sections assigned</option>
-              : availableClasses.map(classItem => (
-                <option key={classItem.id} value={classItem.id}>{classItem.csName}</option>
-              ))}
-          </select>
-        </div>
       </Card>
+
+      {selectedClassIsHistorical && (
+        <div role="status" className="no-print rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+          Past school-year classes are view-only. Saved grade summaries can be viewed and exported, but grades and grading settings cannot be changed.
+        </div>
+      )}
 
       {/* Navigation Sub-Tabs */}
       <div className="no-print flex flex-wrap xl:flex-nowrap bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
-        <button
+        {!selectedClassIsHistorical && <button
           onClick={() => setActiveSubTab('scores')}
           className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'scores' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <ClipboardCheck className="w-4 h-4" />
           Student Scores Entry
-        </button>
-        <button
+        </button>}
+        {!selectedClassIsHistorical && <button
           onClick={() => setActiveSubTab('assessments')}
           className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'assessments' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <FileText className="w-4 h-4" />
           Assessments Manager
-        </button>
-        <button
+        </button>}
+        {!selectedClassIsHistorical && <button
           onClick={() => setActiveSubTab('components')}
           className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'components' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <Settings className="w-4 h-4" />
           Grade Weights Editor
-        </button>
+        </button>}
         <button
           onClick={() => setActiveSubTab('summaries')}
           className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'summaries' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
@@ -3092,14 +3145,14 @@ export const GradeComputation: React.FC = () => {
           <Printer className="w-4 h-4" />
           Summaries & Export
         </button>
-        <button
+        {!selectedClassIsHistorical && <button
           onClick={() => setActiveSubTab('import')}
           className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'import' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <Upload className="w-4 h-4" />
           Import Grade Sheets
-        </button>
+        </button>}
       </div>
 
       {/* ----------------------------------------------------
@@ -3238,7 +3291,7 @@ export const GradeComputation: React.FC = () => {
                         </div>
 
                         {/* Search & Category Row */}
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-2">
                           <div className="relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                             <input
@@ -3262,7 +3315,7 @@ export const GradeComputation: React.FC = () => {
                           <select
                             value={activityFilterType}
                             onChange={(e) => changeActivityFilter(activityFilterPeriod, e.target.value)}
-                            className="w-full px-2 py-1.5 rounded-lg border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                            className="w-full pl-2 pr-7 py-1.5 rounded-lg border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-clinical-500"
                           >
                             <option value="all">All Categories</option>
                             {availableActivityTypes.map((t) => (
@@ -4534,7 +4587,6 @@ export const GradeComputation: React.FC = () => {
                               </div>
                             </div>
 
-
                             {/* Weight (%) */}
                             <div className="w-full sm:w-28 shrink-0">
                               <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
@@ -4906,7 +4958,7 @@ export const GradeComputation: React.FC = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
-              <button
+              {!selectedClassIsHistorical && <button
                 type="button"
                 onClick={() => setIsRecomputeConfirmOpen(true)}
                 disabled={isRecomputing || !selectedClassId}
@@ -4914,7 +4966,7 @@ export const GradeComputation: React.FC = () => {
               >
                 <Zap className={`w-3.5 h-3.5 ${isRecomputing ? 'animate-spin' : 'text-amber-400'}`} />
                 <span>{isRecomputing ? 'Recomputing...' : 'Recompute Grades'}</span>
-              </button>
+              </button>}
 
               {/* Clean Export Group (CSV & PDF) */}
               <div className="flex items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">

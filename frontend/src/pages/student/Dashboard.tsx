@@ -70,7 +70,6 @@ export const Dashboard: React.FC = () => {
   ) || students[0];
 
   const studentName = user?.display_name || currentStudent?.name || 'Dental Student';
-  const studentId = user?.student?.student_number || currentStudent?.studentId || '—';
   const retentionThreshold = settings?.retentionThreshold || 2.5;
 
   const isFaceRegistered = localStorage.getItem(`dentisys_face_registered_${currentStudent?.id || '1'}`) === 'true';
@@ -121,21 +120,6 @@ export const Dashboard: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="text-right hidden sm:block">
-            <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400 block">STUDENT ID</span>
-            <span className="whitespace-nowrap text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentId}</span>
-          </div>
-
-          <button
-            onClick={() => navigate('/student/attendance')}
-            className="flex items-center justify-center gap-2 whitespace-nowrap px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
-          >
-            <Camera className="w-4 h-4" />
-            <span>Daily Check-In</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
       </div>
 
       {/* RETENTION WARNING ALERT */}

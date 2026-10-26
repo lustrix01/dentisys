@@ -36,9 +36,8 @@ function fixtureConfigGet(page: Page, courseId: string) {
 }
 
 async function selectFixtureOffering(page: Page, courseCode: string, classId: string) {
-  const selects = page.getByRole('main').locator('select');
-  await selects.first().selectOption(courseCode);
-  await selects.nth(1).selectOption(classId);
+  // One Class select (value = class id) replaced the course and section selects; the course follows the class.
+  await page.getByRole('main').getByLabel(/^Class:/).selectOption(classId);
 }
 
 async function assignDraftCategoriesToLecture(editor: Locator) {

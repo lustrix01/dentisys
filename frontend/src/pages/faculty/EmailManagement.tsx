@@ -11,7 +11,9 @@ import {
   XCircle,
   Search,
   BookMarked,
-  UserPlus
+  UserPlus,
+  CalendarDays,
+  Filter
 } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { showFeedback } from '../../components/FeedbackCenter';
@@ -97,21 +99,26 @@ export const EmailManagement: React.FC = () => {
     const filtered = selectedSchoolYear === 'all'
       ? classes
       : classes.filter(c => c.schoolYear === selectedSchoolYear);
-    const list = Array.from(new Set(filtered.map(c => c.block || c.csName).filter(Boolean)));
-    return list;
+    return filtered;
   }, [classes, selectedSchoolYear]);
+
+  const classIdOf = (classItem: any) => String(classItem.csId || classItem.id || '');
 
   const [tab, setTab] = useState<Tab>('student_invites');
   const [selected, setSelected] = useState<string[]>([]);
   
   // Filter Dropdown States
   const [selectedClassId, setSelectedClassId] = useState<string>('all');
+  const selectedClass = useMemo(
+    () => classes.find(classItem => classIdOf(classItem) === selectedClassId) ?? null,
+    [classes, selectedClassId],
+  );
   // Email History has its own type filter; it is not the class selector.
   const [historyTypeFilter, setHistoryTypeFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    if (selectedClassId !== 'all' && !assignedClasses.includes(selectedClassId)) {
+    if (selectedClassId !== 'all' && !assignedClasses.some(classItem => classIdOf(classItem) === selectedClassId)) {
       setSelectedClassId('all');
     }
   }, [assignedClasses, selectedClassId]);
@@ -180,23 +187,25 @@ export const EmailManagement: React.FC = () => {
         (s.classSections && s.classSections.some(sec => classSchoolYearMap.get(String(sec.classId)) === selectedSchoolYear || classSchoolYearMap.get(sec.className || '') === selectedSchoolYear)) ||
         (s.classId && classSchoolYearMap.get(String(s.classId)) === selectedSchoolYear);
 
-      const matchesClass = selectedClassId === 'all' || 
-        s.classSections?.some(cs => cs.classId === selectedClassId || cs.className === selectedClassId || cs.className?.includes(selectedClassId));
+      const matchesClass = selectedClassId === 'all'
+        || s.classSections?.some(cs => String(cs.classId) === selectedClassId
+          || cs.className === selectedClass?.csName
+          || cs.className === selectedClass?.block);
       const matchesSearch = (s.name || '').toLowerCase().includes(search.toLowerCase()) ||
                             (s.studentId || '').toLowerCase().includes(search.toLowerCase()) ||
                             (s.email || '').toLowerCase().includes(search.toLowerCase());
       return matchesSchoolYear && matchesClass && matchesSearch;
     });
-  }, [safeStudents, selectedClassId, selectedSchoolYear, search, classSchoolYearMap]);
+  }, [safeStudents, selectedClassId, selectedClass, selectedSchoolYear, search, classSchoolYearMap]);
 
   // REG-006: Secretary tab lists one row per (student, section) so a Student can hold several appointments.
   const secretaryRows = useMemo(() => filteredStudents.flatMap((student) =>
     (student.classSections ?? [])
       .filter((sec) =>
-        (selectedClassId === 'all' || sec.classId === selectedClassId || sec.className === selectedClassId || sec.className?.includes(selectedClassId)) &&
+        (selectedClassId === 'all' || String(sec.classId) === selectedClassId || sec.className === selectedClass?.csName || sec.className === selectedClass?.block) &&
         (selectedSchoolYear === 'all' || classSchoolYearMap.get(String(sec.classId)) === selectedSchoolYear || classSchoolYearMap.get(sec.className || '') === selectedSchoolYear))
       .map((section) => ({ key: `${student.id}|${section.classId}`, student, section }))
-  ), [filteredStudents, selectedClassId, selectedSchoolYear, classSchoolYearMap]);
+  ), [filteredStudents, selectedClassId, selectedClass, selectedSchoolYear, classSchoolYearMap]);
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -215,7 +224,7 @@ export const EmailManagement: React.FC = () => {
     const sections = student.classSections ?? [];
     const target = selectedClassId === 'all'
       ? sections[0]
-      : sections.find(section => section.classId === selectedClassId || section.className?.includes(selectedClassId));
+      : sections.find(section => String(section.classId) === selectedClassId || section.className === selectedClass?.csName || section.className === selectedClass?.block);
     return target && /^\d+$/.test(target.classId) ? target.classId : null;
   };
 
@@ -357,7 +366,7 @@ export const EmailManagement: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
       {notice && (
         <div
           className={`p-4 rounded-2xl border text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in ${
@@ -381,15 +390,15 @@ export const EmailManagement: React.FC = () => {
       )}
 
       {/* 2. Control Bar: Tabs & Pill Filter Dropdowns Below */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+      <div className="flex flex-col gap-4">
         {/* Tabs Navigation */}
-        <div className="flex flex-wrap xl:flex-nowrap items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full xl:w-fit max-w-full overflow-x-auto">
+        <div className="order-2 flex flex-wrap min-w-0 max-w-full items-stretch gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm w-full no-print">
           <button
             onClick={() => { setTab('student_invites'); setSelected([]); }}
-            className={`flex-auto xl:flex-initial text-center px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex-auto min-w-max text-center px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               tab === 'student_invites'
-                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
           >
             Student Class Invitations
@@ -397,10 +406,10 @@ export const EmailManagement: React.FC = () => {
 
           <button
             onClick={() => { setTab('secretary'); setSelected([]); }}
-            className={`flex-auto xl:flex-initial text-center px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex-auto min-w-max text-center px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               tab === 'secretary'
-                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
           >
             Class Secretary Invitations
@@ -409,10 +418,10 @@ export const EmailManagement: React.FC = () => {
 
           <button
             onClick={() => { setTab('history'); setSelected([]); }}
-            className={`flex-auto xl:flex-initial text-center px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex-auto min-w-max text-center px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               tab === 'history'
-                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
           >
             Email History Log ({logs.length})
@@ -420,27 +429,35 @@ export const EmailManagement: React.FC = () => {
         </div>
 
         {/* Filters & Search Bar Positioned Below */}
-        <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-2.5 w-full xl:w-auto">
+        <Card className="order-1 no-print p-4 flex flex-col xl:flex-row gap-4 xl:items-center">
           {/* Class Section Filter Dropdown */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
+          <div className="w-full xl:flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+            <Filter className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
             <select
               value={selectedClassId}
               onChange={(e) => setSelectedClassId(e.target.value)}
-              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1"
+              aria-label="Class: course code, section, and course title"
+              className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
               <option value="all">All Class Sections</option>
-              {assignedClasses.map((clsLabel: string) => (
-                <option key={clsLabel} value={clsLabel}>{clsLabel}</option>
-              ))}
+              {assignedClasses.map((classItem: any) => {
+                const classId = classIdOf(classItem);
+                const courseCode = classItem.courseCode || 'Course';
+                const courseTitle = classItem.courseTitle || classItem.courseName || courseCode;
+                const section = classItem.csName || classItem.block || 'Section';
+                return <option key={classId} value={classId}>{courseCode} · {section} · {courseTitle}</option>;
+              })}
             </select>
           </div>
 
           {/* School Year Selector Filter Dropdown */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
+          <div className="w-full xl:w-56 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+            <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
             <select
               value={selectedSchoolYear}
               onChange={(e) => setSelectedSchoolYear(e.target.value)}
-              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1"
+              aria-label="School year"
+              className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
               <option value="all">All School Years</option>
               {availableSchoolYears.map(sy => (
@@ -462,7 +479,7 @@ export const EmailManagement: React.FC = () => {
               className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-xs"
             />
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* ----------------------------------------------------

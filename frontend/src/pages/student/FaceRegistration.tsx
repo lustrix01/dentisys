@@ -711,14 +711,6 @@ export const FaceRegistration: React.FC = () => {
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-fade-in">
 
-      {/* 1. Header */}
-      <div className="flex items-center justify-end pb-2">
-        <div className="text-right">
-          <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 block leading-none">STUDENT ID</span>
-          <span className="whitespace-nowrap text-xs font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
-        </div>
-      </div>
-
       {/* Expired Status Banner */}
       {isAuthoritative && profile?.enrollmentStatus === 'expired' && currentStep === 1 && (
         <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3">
@@ -734,7 +726,7 @@ export const FaceRegistration: React.FC = () => {
 
       {/* 3-Step Visual Progress Bar (hidden once registered) */}
       {currentStep !== 3 && (
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className={`p-3 rounded-2xl border text-center transition-all ${currentStep === 1
           ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20'
           : currentStep > 1

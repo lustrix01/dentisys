@@ -25,12 +25,10 @@ $exitCode = 1
 try {
     $server = Start-Process -FilePath 'node' -ArgumentList @(
         $frontendVite,
-        '--config', 'frontend/vite.config.ts',
-        'frontend',
         '--host', '127.0.0.1',
         '--port', '15174',
         '--strictPort'
-    ) -WorkingDirectory $root -WindowStyle Hidden -PassThru
+    ) -WorkingDirectory (Join-Path $root 'frontend') -WindowStyle Hidden -PassThru
 
     $ready = $false
     for ($attempt = 0; $attempt -lt 60; $attempt++) {

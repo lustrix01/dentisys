@@ -177,6 +177,20 @@ function inPageCheck(): Finding[] {
       add('clipped-text', 'medium', e, e.getBoundingClientRect());
   }
 
+  // 8b. dropdown text running under the native arrow (Chrome draws the arrow inside the right padding,
+  // so text reaches it when padding-right is small). "-option" = only when a longer option is chosen.
+  const ARROW = 20, ctx = document.createElement('canvas').getContext('2d')!;
+  for (const e of Array.from(document.querySelectorAll('select')) as HTMLSelectElement[]) {
+    if (!visible(e)) continue;
+    const s = css(e), r = e.getBoundingClientRect();
+    ctx.font = `${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
+    const start = r.left + parseFloat(s.borderLeftWidth) + parseFloat(s.paddingLeft);
+    const end = r.right - parseFloat(s.borderRightWidth) - parseFloat(s.paddingRight);
+    const reach = (t: string) => Math.min(start + ctx.measureText(t).width, end) > r.right - parseFloat(s.borderRightWidth) - ARROW;
+    if (reach(e.selectedOptions[0]?.text ?? '')) add('select-arrow-overlap', 'high', e, r);
+    else if (Array.from(e.options).some(o => reach(o.text))) add('select-arrow-overlap-option', 'low', e, r);
+  }
+
   // 9. text leaves drawn on top of each other
   const texts = leaves.filter(e => !e.matches('img, svg, input, select, textarea') && css(e).opacity !== '0')
     .map(e => ({ e, r: e.getBoundingClientRect() })).filter(t => t.r.bottom > 0 && t.r.top < H).slice(0, 700);

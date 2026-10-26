@@ -88,10 +88,13 @@ Row wording for special cases: Who = **System** for automatic jobs; **Unknown ac
 | Part | Phone (~375 px) | Tablet (768–1279 px) | Desktop (≥1280 px) |
 |---|---|---|---|
 | List table | Same columns, same order. The table scrolls sideways inside its own box; the When column stays pinned; text wraps inside cells. The page itself never scrolls sideways. | Same; usually no scrolling needed. | As designed. |
-| Filters | Each control full width, stacked; Clear filters last. | Wrap onto two rows. | One row. |
+| Filters | Search full width; the other controls two per row; Clear filters last. | Three per row. | One row. |
 | Attention cards (Dean) | Stacked, one per row. | Three in a row. | Three in a row. |
 | Details panel | Fills the screen and scrolls inside; the Changes table keeps Field / Before / After and scrolls sideways inside its own box. | Centred dialog. | Centred dialog. |
-| Export / Print, paging | Under the title; wrap. | Same. | Top right. |
+| Export / Print | Last item in the filter card, full width. | Same. | In the filter row, after the log count. |
+| Paging | Below the list; wraps. | Same. | Below the list. |
+
+Owner-approved amendment (2026-10-26, Owhie responsive merge): the page shows no title block of its own; the title is the top-bar heading (on phones, the page-name line under the top bar). Filters and Export / Print sit in one filter card as in the table above; the Newest / oldest sort stays in that card.
 
 Everywhere: tap targets at least 44 px; long names and emails wrap and are never cut off; the sidebar follows the existing rule (collapsed by default at 768–1023 px). Checked at 375, 768, 1024 and 1280 px wide, in light and dark.
 

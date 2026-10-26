@@ -216,7 +216,6 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(page).toHaveURL('/student/dashboard');
 
     await expect(page.getByRole('main').getByRole('heading', { name: /Welcome back, Real Student!/i })).toBeVisible();
-    await expect(page.getByRole('main').getByText(realStudent.student.student_number, { exact: true })).toBeVisible();
     for (const value of fabricatedValues) {
       await expect(page.locator('body')).not.toContainText(value);
     }
@@ -229,6 +228,7 @@ test.describe('P03 Student identity and authentication', () => {
     await page.goto('/student/profile');
     await expect(page.getByRole('heading', { level: 1, name: 'My Profile', exact: true })).toBeVisible();
     await expect(page.getByText('Two-factor authentication')).toBeVisible();
+    await expect(page.getByRole('main').getByText(realStudent.student.student_number, { exact: true })).toBeVisible();
     for (const value of fabricatedValues) {
       await expect(page.locator('body')).not.toContainText(value);
     }

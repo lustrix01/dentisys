@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  History,
   Search,
   Clock,
-  Camera,
   MapPin,
   Filter,
   UserCheck,
@@ -13,6 +10,7 @@ import {
   AlertCircle,
   RefreshCw,
   Loader2,
+  History,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -40,7 +38,6 @@ function formatVerificationMethod(method: AttendanceVerificationMethod): { label
 }
 
 export const AttendanceLogs: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const { students, attendanceRecords } = useApp();
   const runtimeConfig = useRuntimeConfig();
@@ -144,23 +141,6 @@ export const AttendanceLogs: React.FC = () => {
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12 animate-fade-in">
 
-      {/* 1. Header */}
-      <div className="flex items-center justify-end gap-3 pb-2">
-        <div className="text-right hidden sm:block">
-          <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 block leading-none">STUDENT ID</span>
-          <span className="whitespace-nowrap text-xs font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
-          <span className="text-xs text-slate-500 dark:text-slate-400 block">{studentName}</span>
-        </div>
-
-        <button
-          onClick={() => navigate('/student/attendance')}
-          className="flex items-center gap-1.5 whitespace-nowrap px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
-        >
-          <Camera className="w-4 h-4" />
-          <span>Daily Check-In</span>
-        </button>
-      </div>
-
       {/* Error Banner */}
       {authError && (
         <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-3">
@@ -202,8 +182,8 @@ export const AttendanceLogs: React.FC = () => {
       </div>
 
       {/* Search & Filter Controls */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row gap-3 lg:items-center justify-between">
-        <div className="relative w-full lg:w-80">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs grid min-w-0 grid-cols-2 gap-3 lg:flex lg:items-center lg:justify-between">
+        <div className="relative col-span-2 min-w-0 lg:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -214,8 +194,8 @@ export const AttendanceLogs: React.FC = () => {
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
-          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+        <div className="col-span-2 grid min-w-0 grid-cols-2 items-center gap-2.5 lg:flex lg:w-auto">
+          <div className="hidden items-center gap-1.5 text-xs text-slate-500 lg:flex">
             <Filter className="w-3.5 h-3.5" />
             <span className="text-[11px] font-bold uppercase tracking-wider">Filter:</span>
           </div>
@@ -224,7 +204,7 @@ export const AttendanceLogs: React.FC = () => {
           <select
             value={selectedSubject}
             onChange={(e) => setSelectedSubject(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
+            className="w-full min-w-0 pl-3 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
           >
             <option value="all">All Courses</option>
             {uniqueSubjects.map(sub => (
@@ -236,7 +216,7 @@ export const AttendanceLogs: React.FC = () => {
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
+            className="w-full min-w-0 pl-3 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
           >
             <option value="all">All Statuses</option>
             <option value="present">Present</option>
@@ -249,7 +229,7 @@ export const AttendanceLogs: React.FC = () => {
           {isAuthoritative && (
             <button
               onClick={() => { void loadAuthoritativeLogs(); }}
-              className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
+              className="col-span-2 justify-self-end p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer lg:col-span-1"
               title="Refresh logs"
             >
               <RefreshCw className="w-3.5 h-3.5" />

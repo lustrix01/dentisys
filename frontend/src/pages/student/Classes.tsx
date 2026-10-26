@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   BookOpen,
-  CalendarDays,
   Clock,
   User,
   RefreshCw,
@@ -137,7 +136,6 @@ const StudentComponentGradeSummary: React.FC<{ cls: StudentAcademicClass }> = ({
 };
 
 export const Classes: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
 
   const config = useRuntimeConfig();
@@ -166,7 +164,6 @@ export const Classes: React.FC = () => {
       });
   }, [isAuthoritative]);
 
-  const studentNumber = user?.student?.student_number || 'Unavailable';
 
   // Partition classes into current school year vs past/archived
   const { currentClasses, archivedClasses, otherClasses } = useMemo(() => {
@@ -247,22 +244,8 @@ export const Classes: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto animate-fade-in pb-12">
       {/* 1. Top Header */}
-      <div className="flex items-center justify-end gap-3 pb-2">
-        <div className="text-right hidden sm:block">
-          <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 block leading-none">STUDENT ID</span>
-          <span className="whitespace-nowrap text-xs font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentNumber}</span>
-        </div>
-
-        <button
-          onClick={() => navigate('/student/attendance')}
-          className="flex items-center gap-2 whitespace-nowrap px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
-        >
-          <CalendarDays className="w-4 h-4" />
-          <span>Daily Check-In</span>
-        </button>
-      </div>
-
       <p className="text-xs text-slate-500 dark:text-slate-400">Course grades and retention status come from official academic records. Missing grades remain pending.</p>
+
       {currentClasses.some(cls => cls.retentionState?.toLowerCase() === 'remedial') && (
         <div role="status" className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs font-semibold">Retention Standing Warning: review your flagged courses with Faculty.</div>
       )}

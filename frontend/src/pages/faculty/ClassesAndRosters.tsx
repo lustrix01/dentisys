@@ -1262,6 +1262,19 @@ export const ClassesAndRosters: React.FC = () => {
   // One class card, shared by Assigned Classes and Archived Classes.
   const renderClassCard = (cls: FacultyClassItem) => {
     const historicalClass = isHistoricalClass(cls);
+    const hasLecture = Number(cls.lectureUnits ?? 0) > 0
+      || Boolean(cls.lecRoom)
+      || cls.meetings?.some(meeting => meeting.component === 'Lecture') === true;
+    const hasLaboratory = Number(cls.labUnits ?? 0) > 0
+      || Boolean(cls.labRoom)
+      || cls.meetings?.some(meeting => meeting.component === 'Laboratory') === true;
+    const componentsLabel = hasLecture && hasLaboratory
+      ? 'Lecture & Laboratory'
+      : hasLecture
+        ? 'Lecture'
+        : hasLaboratory
+          ? 'Laboratory'
+          : null;
                 const archivedClass = historicalClass;
                 const reason = cls.archiveReason ?? (historicalClass ? 'finished' : null);
                 const canRestore = Boolean(cls.archiveReason) && !cls.isHistorical && cls.isCurrentSchoolYear !== false;
@@ -1307,6 +1320,11 @@ export const ClassesAndRosters: React.FC = () => {
                     <h3 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
                       {cls.courseName}
                     </h3>
+                    {componentsLabel && (
+                      <span className="inline-flex px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-300 text-[10px] font-bold" data-testid="class-course-components">
+                        {componentsLabel}
+                      </span>
+                    )}
 
                       <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
                         <div className="flex items-center gap-2">
@@ -1474,21 +1492,21 @@ export const ClassesAndRosters: React.FC = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-shrink-0 sm:items-center">
               <button
                 onClick={handleOpenCreateClassModal}
                 disabled={!newSchoolYear}
-                className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer whitespace-nowrap"
+                className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-2.5 py-2 text-[11px] font-bold text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-700 active:scale-[0.99] cursor-pointer whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:w-auto sm:px-3.5 sm:text-xs"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 shrink-0" />
                 <span>Create Class</span>
               </button>
 
               <button
                 onClick={() => setIsImportRosterOpen(true)}
-                className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-700/20 transition-all cursor-pointer whitespace-nowrap"
+                className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-700 px-2.5 py-2 text-[11px] font-bold text-white shadow-md shadow-emerald-700/20 transition-all hover:bg-emerald-800 active:scale-[0.99] cursor-pointer whitespace-nowrap sm:min-h-0 sm:w-auto sm:px-3.5 sm:text-xs"
               >
-                <Upload className="w-4 h-4" />
+                <Upload className="w-4 h-4 shrink-0" />
                 <span>Import Roster</span>
               </button>
             </div>

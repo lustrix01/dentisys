@@ -31,7 +31,7 @@ export const Card: React.FC<CardProps> = ({
   return (
     <div
       onClick={onClick}
-      className={`glass rounded-2xl p-6 border ${glowClasses[glow]} ${interactiveClasses} ${className}`}
+      className={`glass min-w-0 max-w-full rounded-2xl p-6 border ${glowClasses[glow]} ${interactiveClasses} ${className}`}
     >
       {children}
     </div>

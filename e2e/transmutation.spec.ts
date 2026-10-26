@@ -213,7 +213,7 @@ test.describe('Assessment transmutation UI coverage', () => {
 
     await openAccountMenu(page);
 
-    await page.click('a[href="/admin/settings"]');
+    await page.click('a[href="/admin/settings"] >> visible=true');
     await expect(page).toHaveURL('/admin/settings');
     const minimum = page.locator('label').filter({ hasText: 'Minimum percentage' }).locator('input');
     const maximum = page.locator('label').filter({ hasText: 'Maximum percentage' }).locator('input');
@@ -377,8 +377,8 @@ test.describe('Assessment transmutation UI coverage', () => {
     await page.getByRole('button', { name: 'Student Scores Entry' }).click();
     await expect(page.locator('select').last().locator('option[value="ui-assessment-7"]')).toHaveText(/Unlinked assessment survives refresh/);
 
-    await page.locator('select').first().selectOption('CLIN402');
-    await expect(page.locator('select').nth(1)).toHaveValue('8');
+    await page.getByLabel(/^Class:/).selectOption('8');
+    await expect(page.getByLabel(/^Class:/)).toHaveValue('8');
     await page.getByRole('button', { name: 'Assessments Manager' }).click();
     await page.getByRole('button', { name: 'Add Assessment' }).click();
     await expect(page.locator('form').last().getByText('CLINIC-4B', { exact: true })).toBeVisible();
