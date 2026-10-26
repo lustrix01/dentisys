@@ -162,20 +162,61 @@ export function parseCSVText(text: string): ParsedRosterStudent[] {
 export interface RosterPDFTextItem { text: string; x: number; y: number; width: number; height: number }
 export interface RosterPDFPage { page: number; width: number; height: number; items: RosterPDFTextItem[]; redMarkBands: Array<{ top: number; bottom: number }> }
 
-export interface RosterPDFHeader { courseCode?: string; section?: string; schoolYear?: string; semester?: '1ST' | '2ND' | 'SUMMER' }
+/** One meeting per day; times are 24-hour HH:MM and an empty room means the file said "---". */
+export interface RosterPDFMeeting { component: 'Lecture' | 'Laboratory'; day: string; startTime: string; endTime: string; room: string }
+export interface RosterPDFHeader {
+  courseCode?: string; section?: string; schoolYear?: string; semester?: '1ST' | '2ND' | 'SUMMER';
+  courseTitle?: string; yearLevel?: number; lectureUnits?: number; labUnits?: number;
+  meetings?: RosterPDFMeeting[]; notRead?: string[];
+}
 export interface RosterPDFResult { students: ParsedRosterStudent[]; total: number | null; header: RosterPDFHeader; official: boolean }
 
 const headerStop = String.raw`(?=\s+(?:Course\s*(?:Code|Title)|Class\s*Section|Year\s*Level|Faculty|Schedules?|Academic|Lab|Credit|Units?)\b|$)`;
 const field = (text: string, label: string) => text.match(new RegExp(String.raw`${label}\s*:\s*(.+?)${headerStop}`, 'i'))?.[1].trim();
+const titleStop = String.raw`(?=\s+(?:Year\s*Level|Academic\s*Units|Lab\s*Units|Credit\s*Units|Faculty\s*:|Schedules?\s*:|#\s|Student\s*No)|$)`;
+const unitsField = (text: string, label: string) => { const value = text.match(new RegExp(String.raw`${label}\s*:\s*(\d+(?:\.\d+)?)`, 'i'))?.[1]; return value === undefined ? undefined : Number(value); };
 
-/** Header facts are read only to warn; nothing is created or changed from them. */
-function parsePDFHeader(text: string): RosterPDFHeader {
+const DAY = 'Mon|Tue|Wed|Thu|Fri|Sat|Sun';
+const scheduleLine = new RegExp(String.raw`^((?:${DAY})(?:\s*,\s*(?:${DAY}))*)\s*\(\s*(\d{1,2}):(\d{2})\s*(AM|PM)\s*-\s*(\d{1,2}):(\d{2})\s*(AM|PM)\s*\)\s*\|\s*(Lecture|Laboratory)\s*\|\s*(.*)$`, 'i');
+const clock24 = (hour: string, minute: string, meridiem: string) => `${String(Number(hour) % 12 + (/pm/i.test(meridiem) ? 12 : 0)).padStart(2, '0')}:${minute}`;
+const cap = (word: string) => word[0].toUpperCase() + word.slice(1).toLowerCase();
+
+/** "Thu, Fri (12:00 PM - 05:00 PM) | Laboratory | CDM2" becomes one meeting per day; lines that do not fit go to notRead. */
+export function parseScheduleLines(lines: string[]): { meetings: RosterPDFMeeting[]; notRead: string[] } {
+  const meetings: RosterPDFMeeting[] = [], notRead: string[] = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    const m = line.match(scheduleLine);
+    const startTime = m && clock24(m[2], m[3], m[4]), endTime = m && clock24(m[5], m[6], m[7]);
+    if (!m || Number(m[2]) > 12 || Number(m[5]) > 12 || startTime! >= endTime!) { if (line) notRead.push(line); continue; }
+    const room = /^-*$/.test(m[9].trim()) ? '' : m[9].trim();
+    for (const day of m[1].split(',')) meetings.push({ component: cap(m[8]) as 'Lecture' | 'Laboratory', day: cap(day.trim()), startTime: startTime!, endTime: endTime!, room });
+  }
+  return { meetings, notRead };
+}
+
+/** Header facts warn for an existing class and prefill a new one. The Faculty name is ignored. */
+function parsePDFHeader(rawText: string, rawLines: string[]): RosterPDFHeader {
+  const text = rawText.replace(/\s+/g, ' '), lines = rawLines.map(line => line.replace(/\s+/g, ' '));
   const ay = text.match(/AY\s*(\d{4})\s*-\s*(\d{4})\s*(1st|2nd|summer)/i);
   const sem = ay?.[3].toLowerCase();
+  const title = text.match(new RegExp(String.raw`Course\s*Title\s*:\s*(.+?)${titleStop}`, 'i'))?.[1].trim();
+  const year = parseRosterYear(field(text, String.raw`Year\s*Level`) ?? '');
+  const start = lines.findIndex(line => /^\s*Schedules?\s*:/i.test(line));
+  const rest: string[] = [];
+  if (start >= 0) {
+    rest.push(lines[start].replace(/^\s*Schedules?\s*:/i, ''));
+    for (const line of lines.slice(start + 1)) { if (/TO\s+FACULTY|Student\s*(?:No|Number|ID)|^\s*#|Total\s+Number/i.test(line)) break; rest.push(line); }
+  }
+  const lectureUnits = unitsField(text, String.raw`Academic\s*Units`), labUnits = unitsField(text, String.raw`Lab\s*Units`);
   return {
     courseCode: field(text, String.raw`Course\s*Code`), section: field(text, String.raw`Class\s*Section`),
     schoolYear: ay ? `${ay[1]}-${ay[2]}` : undefined,
     semester: sem === '1st' ? '1ST' : sem === '2nd' ? '2ND' : sem ? 'SUMMER' : undefined,
+    ...(title ? { courseTitle: title } : {}),
+    ...(year !== null && Number.isFinite(year) ? { yearLevel: year } : {}),
+    ...(lectureUnits !== undefined ? { lectureUnits } : {}), ...(labUnits !== undefined ? { labUnits } : {}),
+    ...(start >= 0 ? (({ meetings, notRead }) => ({ meetings, notRead }))(parseScheduleLines(rest)) : {}),
   };
 }
 
@@ -189,10 +230,56 @@ export function compareRosterHeader(header: RosterPDFHeader, cls: { courseCode: 
   const check = (label: string, file: string | undefined, className: string, same: boolean) => { if (file && !same) diffs.push(`${label}: file ${file}, class ${className}`); };
   check('Course code', header.courseCode, cls.courseCode, squash(header.courseCode ?? '') === squash(cls.courseCode));
   const section = cls.csName || cls.block;
-  check('Section', header.section, section, squash(header.section ?? '') === squash(section));
+  // A class made by Create Class is named "<course code>-<section>" and keeps the section in block.
+  const names = [section, cls.block, section.slice(0, cls.courseCode.length + 1).toLowerCase() === `${cls.courseCode}-`.toLowerCase() ? section.slice(cls.courseCode.length + 1) : ''].filter(Boolean);
+  check('Section', header.section, section, names.some(name => squash(header.section ?? '') === squash(name)));
   check('School year', header.schoolYear, cls.schoolYear, header.schoolYear === cls.schoolYear.replace(/\s/g, ''));
   check('Semester', header.semester && semesterName[header.semester], semesterName[semesterCode(cls.semester)], header.semester === semesterCode(cls.semester));
   return diffs;
+}
+
+type ClassLike = { courseCode: string; csName?: string; block: string; schoolYear: string; semester: string };
+
+/** N2: the first class (the list holds only the signed-in Faculty's own) with the file's course code, section, school year and semester. */
+export function findClassMatchingHeader<T extends ClassLike>(header: RosterPDFHeader, classes: T[]): T | undefined {
+  if (!header.courseCode || !header.section || !header.schoolYear || !header.semester) return undefined;
+  return classes.find(cls => compareRosterHeader(header, cls).length === 0);
+}
+
+/** N5: the Dean term for the file's semester, or the reason a new class cannot be made. */
+export function termForHeader(header: RosterPDFHeader, currentSchoolYear: string, terms: Array<{ id: number | null; schoolYear: string; semester: string }>): { termId: string; pastYear?: string; noTerm?: string } {
+  if (header.schoolYear && header.schoolYear !== currentSchoolYear.replace(/\s/g, '')) {
+    return { termId: '', pastYear: `This file is for AY ${header.schoolYear}. New classes can only be made for the current school year.` };
+  }
+  const term = header.semester && terms.find(item => item.id !== null && item.schoolYear === currentSchoolYear && semesterCode(item.semester) === header.semester);
+  return term ? { termId: String(term.id) } : { termId: '', noTerm: `No term for AY ${header.schoolYear ?? ''} ${header.semester ? semesterName[header.semester] : ''}`.replace(/\s+/g, ' ').trim() + '. Ask the Dean to add it.' };
+}
+
+/** N3a: DentiSys keeps the units it has recorded for a course; say so when the file disagrees. */
+export function catalogUnitsNote(code: string, file: { lectureUnits?: number; labUnits?: number }, catalog?: { lectureUnits?: number | null; labUnits?: number | null }): string | null {
+  const lecture = Number(catalog?.lectureUnits ?? 0), lab = Number(catalog?.labUnits ?? 0);
+  if (!catalog || !(lecture > 0 || lab > 0) || file.lectureUnits === undefined || file.labUnits === undefined) return null;
+  if (file.lectureUnits === lecture && file.labUnits === lab) return null;
+  return `This file says Lecture ${file.lectureUnits} · Laboratory ${file.labUnits}; DentiSys has Lecture ${lecture} · Laboratory ${lab} for ${code}. Ask the course's creator to change them in Classes & Rosters.`;
+}
+
+const unitsValid = (value: string) => { const n = Number(value); return value.trim() !== '' && Number.isFinite(n) && (n === 0 || (n >= 0.5 && n <= 20)); };
+
+/** Why "Create class and add N students" is blocked; empty = the class form is acceptable (Create Class's checks). */
+export function newClassBlockers(input: {
+  code: string; title: string; section: string; lectureUnits: string; labUnits: string; termId: string;
+  pastYear?: string; noTerm?: string; rooms: string[]; scheduleError: string | null;
+}): string[] {
+  const out: string[] = [];
+  if (input.pastYear) out.push(input.pastYear);
+  else if (!input.termId) out.push(input.noTerm ?? 'Choose an academic term.');
+  if (!input.code.trim()) out.push('Enter a course code.');
+  if (!input.title.trim()) out.push('Enter the course title.');
+  if (!unitsValid(input.lectureUnits) || !unitsValid(input.labUnits) || !(Number(input.lectureUnits) > 0 || Number(input.labUnits) > 0)) out.push('Enter units between 0.5 and 20.');
+  if (!input.section.trim()) out.push('Enter the section or block.');
+  if (input.rooms.some(room => !room.trim())) out.push('Every meeting needs a room.');
+  else if (input.scheduleError) out.push(input.scheduleError);
+  return out;
 }
 
 /** Read the table by geometry, never by student-ID regex. */
@@ -204,17 +291,21 @@ export function parsePDFRoster(pages: RosterPDFPage[]): RosterPDFResult {
   const students: ParsedRosterStudent[] = [];
   let total: number | null = null;
   let headerText = '';
+  let headerLines: string[] = [];
   let hasProgram = false;
   for (const page of pages) {
     const pageText = [...page.items].sort((a, b) => a.y - b.y || a.x - b.x).map(item => item.text.trim()).join(' ');
     const totalMatch = pageText.match(/Total\s+Number\s+of\s+Students\s*:?\s*(\d+)/i);
     if (totalMatch) total = Number(totalMatch[1]);
-    if (!headerText && /Course\s*Code\s*:/i.test(pageText)) headerText = pageText;
     const lines: Array<{ y: number; items: RosterPDFTextItem[] }> = [];
     for (const item of [...page.items].sort((a, b) => a.y - b.y || a.x - b.x)) {
       let line = lines.find(candidate => Math.abs(candidate.y - item.y) <= 3);
       if (!line) { line = { y: item.y, items: [] }; lines.push(line); }
       line.items.push(item);
+    }
+    if (!headerText && /Course\s*Code\s*:/i.test(pageText)) {
+      headerText = pageText;
+      headerLines = lines.map(line => line.items.sort((a, b) => a.x - b.x).map(item => item.text.trim()).filter(Boolean).join(' '));
     }
     const header = lines.find(line => {
       const text = line.items.map(item => item.text).join(' ');
@@ -283,7 +374,7 @@ export function parsePDFRoster(pages: RosterPDFPage[]): RosterPDFResult {
       });
     }
   }
-  const header = parsePDFHeader(headerText);
+  const header = parsePDFHeader(headerText, headerLines);
   return { students, total, header, official: hasProgram || Boolean(header.courseCode) };
 }
 

@@ -2898,6 +2898,8 @@ export const ClassesAndRosters: React.FC = () => {
           defaultClassId={selectedClassFilterId !== 'all' ? Number(selectedClassFilterId) : (classes.find(c => !isHistoricalClass(c))?.csId || 0)}
           currentSchoolYear={newSchoolYear}
           existingStudents={studentsList}
+          courses={courses}
+          academicTerms={academicTerms}
           onSuccess={fetchData}
         />
       )}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { compareRosterHeader, parseCSVText, parsePDFRoster, parsePDFRosterPages, validateRosterStudents, type RosterPDFPage } from '../utils/rosterImportHelper.ts';
+import { catalogUnitsNote, compareRosterHeader, findClassMatchingHeader, newClassBlockers, parseCSVText, parsePDFRoster, parseScheduleLines, termForHeader, parsePDFRosterPages, validateRosterStudents, type RosterPDFPage } from '../utils/rosterImportHelper.ts';
 
 const domains = ['bicol-u.edu.ph', 'example.edu'];
 
@@ -228,7 +228,7 @@ test('a last page with only the total is allowed; other table-less pages still f
 
 test('header is parsed and compared with the class ignoring case, spaces and hyphens', () => {
   const { header } = parsePDFRoster([officialPage(1, fixtureRows)]);
-  assert.deepEqual(header, { courseCode: 'DM 100', section: 'DMD-1A', schoolYear: '2026-2027', semester: '1ST' });
+  assert.deepEqual(header, { courseCode: 'DM 100', section: 'DMD-1A', schoolYear: '2026-2027', semester: '1ST', courseTitle: 'Fixture Studies' });
   const same = { courseCode: 'dm100', block: 'DMD 1A', schoolYear: '2026-2027', semester: '1ST' };
   assert.deepEqual(compareRosterHeader(header, same), []);
   assert.deepEqual(compareRosterHeader(header, { courseCode: 'DM 102', block: 'DMD 2', schoolYear: '2025-2026', semester: '2ND' }), [
@@ -237,4 +237,56 @@ test('header is parsed and compared with the class ignoring case, spaces and hyp
   assert.deepEqual(compareRosterHeader({}, same), []);
   // The section is the class name (e.g. DMD-1A); the block letter alone must not raise a warning.
   assert.deepEqual(compareRosterHeader(header, { ...same, csName: 'DMD-1A', block: 'A' }), []);
+});
+
+const officialHeader: Array<[string, number, number]> = [
+  ['Year Level: 1st Year', 250, 52], ['Academic Units: 2.0', 30, 58], ['Lab Units: 0.0', 250, 58], ['Faculty: Someone Else', 30, 64], ['Schedules:', 30, 70],
+  ['Mon (09:00 AM - 11:00 AM) | Lecture | CDM 1', 30, 76], ['Thu, Fri (12:00 PM - 05:00 PM) | Laboratory | CDM2', 30, 82],
+  ['Wed (12:00 PM - 06:00 PM) | Laboratory | ---', 30, 88], ['Sat (TBA) | Laboratory | CDM 4', 30, 94],
+];
+
+test('header also gives title, year level, units and one meeting per day; unreadable lines are kept apart', () => {
+  const { header } = parsePDFRoster([officialPage(1, fixtureRows, officialHeader)]);
+  assert.equal(header.courseTitle, 'Fixture Studies');
+  assert.equal(header.yearLevel, 1);
+  assert.equal(header.lectureUnits, 2);
+  assert.equal(header.labUnits, 0);
+  assert.deepEqual(header.meetings, [
+    { component: 'Lecture', day: 'Mon', startTime: '09:00', endTime: '11:00', room: 'CDM 1' },
+    { component: 'Laboratory', day: 'Thu', startTime: '12:00', endTime: '17:00', room: 'CDM2' },
+    { component: 'Laboratory', day: 'Fri', startTime: '12:00', endTime: '17:00', room: 'CDM2' },
+    { component: 'Laboratory', day: 'Wed', startTime: '12:00', endTime: '18:00', room: '' },
+  ]);
+  assert.deepEqual(header.notRead, ['Sat (TBA) | Laboratory | CDM 4']);
+  assert.equal(parsePDFRoster([officialPage(1, fixtureRows)]).header.meetings, undefined);
+});
+
+test('schedule lines: 12:00 PM is noon, 12:00 AM is midnight, backwards or odd lines are not read', () => {
+  const { meetings, notRead } = parseScheduleLines(['Tue (12:00 PM - 01:30 PM) | Lecture | Room 1', 'Mon (12:00 AM - 01:00 AM) | Lecture | ---', 'Mon (05:00 PM - 04:00 PM) | Lecture | X', 'nonsense']);
+  assert.deepEqual(meetings.map(m => [m.day, m.startTime, m.endTime, m.room]), [['Tue', '12:00', '13:30', 'Room 1'], ['Mon', '00:00', '01:00', '']]);
+  assert.deepEqual(notRead, ['Mon (05:00 PM - 04:00 PM) | Lecture | X', 'nonsense']);
+});
+
+test('new class decisions: own matching class, Dean term, past year, DentiSys units and blockers', () => {
+  const header = { courseCode: 'DM 100', section: 'DMD-1A', schoolYear: '2026-2027', semester: '1ST' as const, lectureUnits: 2, labUnits: 0 };
+  const mine = { courseCode: 'DM 100', csName: 'DM 100-DMD-1A', block: 'DMD-1A', schoolYear: '2026-2027', semester: '1ST' };
+  assert.equal(findClassMatchingHeader(header, [{ ...mine, block: 'X', csName: 'DM 100-X' }, mine]), mine);
+  assert.equal(findClassMatchingHeader(header, [{ ...mine, semester: '2ND' }, { ...mine, schoolYear: '2025-2026' }, { ...mine, courseCode: 'DM 102' }]), undefined);
+  assert.equal(findClassMatchingHeader({ ...header, section: undefined }, [mine]), undefined);
+  // A class made by Create Class or from a file keeps the section in block, so it raises no false warning.
+  assert.deepEqual(compareRosterHeader(header, mine), []);
+  const terms = [{ id: 7, schoolYear: '2026-2027', semester: '1ST' }];
+  assert.deepEqual(termForHeader(header, '2026-2027', terms), { termId: '7' });
+  assert.equal(termForHeader({ ...header, semester: '2ND' }, '2026-2027', terms).noTerm, 'No term for AY 2026-2027 2nd Semester. Ask the Dean to add it.');
+  assert.equal(termForHeader({ ...header, schoolYear: '2025-2026' }, '2026-2027', terms).pastYear, 'This file is for AY 2025-2026. New classes can only be made for the current school year.');
+  assert.equal(catalogUnitsNote('DM 100', header, { lectureUnits: 2, labUnits: 2 }), "This file says Lecture 2 · Laboratory 0; DentiSys has Lecture 2 · Laboratory 2 for DM 100. Ask the course's creator to change them in Classes & Rosters.");
+  assert.equal(catalogUnitsNote('DM 100', header, { lectureUnits: 2, labUnits: 0 }), null);
+  assert.equal(catalogUnitsNote('DM 100', header, { lectureUnits: null, labUnits: null }), null);
+  assert.equal(catalogUnitsNote('DM 100', header, undefined), null);
+  const ok = { code: 'DM 100', title: 'Perspectives', section: 'DMD-1A', lectureUnits: '2', labUnits: '0', termId: '7', rooms: ['CDM 1'], scheduleError: null };
+  assert.deepEqual(newClassBlockers(ok), []);
+  assert.deepEqual(newClassBlockers({ ...ok, rooms: ['CDM 1', ' '], scheduleError: 'Internal Conflict' }), ['Every meeting needs a room.']);
+  assert.deepEqual(newClassBlockers({ ...ok, scheduleError: 'Internal Conflict: x' }), ['Internal Conflict: x']);
+  assert.deepEqual(newClassBlockers({ ...ok, ...termForHeader({ ...header, semester: '2ND' }, '2026-2027', terms) }), ['No term for AY 2026-2027 2nd Semester. Ask the Dean to add it.']);
+  assert.deepEqual(newClassBlockers({ ...ok, lectureUnits: '0', labUnits: '0', code: ' ', section: '' }), ['Enter a course code.', 'Enter units between 0.5 and 20.', 'Enter the section or block.']);
 });
