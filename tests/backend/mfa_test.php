@@ -79,4 +79,8 @@ $normalized = mfa_normalize_recovery_code($recovery['codes'][0]);
 assert_same(true, password_verify($normalized, $recovery['hashes'][0]), 'Recovery code hashes verify');
 assert_throws(static fn() => mfa_normalize_recovery_code('too-short'), 'exactly 32', 'Malformed recovery code rejected');
 
+$runtime = (string) file_get_contents(__DIR__ . '/../../backend/app/mfa_runtime.php');
+assert_same(true, str_contains($runtime, "'exp' => time() + 600,") && str_contains($runtime, "'enrollment_confirm', 5, 600)"), 'Enrollment confirm token and challenge last 600 seconds');
+assert_same(false, str_contains($runtime, 'time() + 300') || str_contains($runtime, "5, 300)"), 'No 300-second enrollment window remains');
+
 echo "=== ALL VENDOR-BACKED AUTHENTICATOR TESTS PASSED ===\n";

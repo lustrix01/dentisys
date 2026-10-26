@@ -1,14 +1,17 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, KeyRound, RefreshCw, Smartphone } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './Card';
 import { Modal } from './Modal';
 import {
+  ApiError,
   confirmEnrollment,
   getMfaSettingsApi,
   regenerateMfaRecoveryCodesApi,
   revokeMfaApi,
   startEnrollment,
 } from '../services/apiClient';
+
+const SETUP_EXPIRED = 'This setup expired. Click Set up again to get a new QR code.';
 
 interface Enrollment {
   confirmationToken: string;
@@ -32,6 +35,8 @@ export const MfaSettingsCard: React.FC<{
   const [statusAvailable, setStatusAvailable] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  const startingRef = useRef(false);
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -63,6 +68,8 @@ export const MfaSettingsCard: React.FC<{
   useEffect(() => { void loadStatus(); }, [loadStatus]);
 
   const beginAuthenticator = async () => {
+    if (startingRef.current) return;
+    startingRef.current = true;
     setWorking(true); setError(''); setSuccess('');
     try {
       const response = await startEnrollment();
@@ -75,7 +82,7 @@ export const MfaSettingsCard: React.FC<{
       setCode('');
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to begin authenticator setup.');
-    } finally { setWorking(false); }
+    } finally { startingRef.current = false; setWorking(false); }
   };
 
   const confirmAuthenticator = async () => {
@@ -90,7 +97,12 @@ export const MfaSettingsCard: React.FC<{
       setEnrollment(null); setCode('');
       setSuccess('Authenticator 2FA enabled.');
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to confirm authenticator.');
+      if (requestError instanceof ApiError && requestError.status === 401) {
+        setEnrollment(null); setCode('');
+        setError(SETUP_EXPIRED);
+      } else {
+        setError(requestError instanceof Error ? requestError.message : 'Unable to confirm authenticator.');
+      }
     } finally { setWorking(false); }
   };
 

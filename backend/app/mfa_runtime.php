@@ -105,10 +105,10 @@ function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, a
             'enrollment_stage' => 'confirm',
             'session_id' => $tokenClaims['session_id'] ?? null,
             'iat' => time(),
-            'exp' => time() + 300,
+            'exp' => time() + 600,
         ], $jwtKey);
 
-        challenge_state_init($rateStorage, $confirmJti, 'mfa_enrollment', 'enrollment_confirm', 5, 300);
+        challenge_state_init($rateStorage, $confirmJti, 'mfa_enrollment', 'enrollment_confirm', 5, 600);
 
         $metadata = json_encode(['confirm_jti' => $confirmJti]);
 
