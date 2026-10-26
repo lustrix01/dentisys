@@ -3,6 +3,7 @@ import { AlertCircle, ChevronDown, MapPin, Navigation, Play } from 'lucide-react
 import { LocationPicker } from './LocationPicker';
 import { Modal } from './Modal';
 
+import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../utils/geofenceRadius';
 const RADIUS_HINT = 'Indoors, use 150 m or more; phone GPS is often off by 50–100 m inside buildings.';
 
 const manilaToday = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
@@ -74,7 +75,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   const [classEndTime, setClassEndTime] = useState('13:00');
   const [biometricRequired, setBiometricRequired] = useState(true);
   const [geofenceEnabled, setGeofenceEnabled] = useState(false);
-  const [geofenceRadius, setGeofenceRadius] = useState(100);
+  const [geofenceRadius, setGeofenceRadius] = useState('100');
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(initialLocation ?? null);
   const [locating, setLocating] = useState(false);
   const [showMap, setShowMap] = useState(false);
@@ -137,12 +138,16 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
       setError('Acquire the session location before starting a geofenced session.');
       return;
     }
+    if (geofenceEnabled && parseRadius(geofenceRadius) === null) {
+      setError(RADIUS_RANGE_ERROR);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       await onSubmit({
         sessionDate, room: room.trim(), openingTime, presentCutoff, lateCutoff, classEndTime,
-        biometricRequired, geofenceEnabled, geofenceRadiusMeters: geofenceRadius, location,
+        biometricRequired, geofenceEnabled, geofenceRadiusMeters: parseRadius(geofenceRadius) ?? 100, location,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to start the attendance session.');
@@ -243,13 +248,13 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
         {geofenceEnabled && (
           <div className={`rounded-xl border p-3 ${a.box}`}>
             <div className="flex items-center justify-between gap-3">
-              <label className="block flex-1"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Allowed radius (meters)</span><input type="number" min={50} max={2000} value={geofenceRadius} onChange={(event) => setGeofenceRadius(Number(event.target.value))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /><small className="mt-1 block text-[10px] text-slate-500 dark:text-slate-400">{RADIUS_HINT}</small></label>
+              <label className="block flex-1"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Allowed radius (meters)</span><input type="number" min={50} max={2000} value={geofenceRadius} onChange={(event) => setGeofenceRadius(cleanRadiusText(event.target.value))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /><small className="mt-1 block text-[10px] text-slate-500 dark:text-slate-400">{RADIUS_HINT}</small></label>
               <button type="button" onClick={handleAcquireLocation} disabled={locating} className={`mt-5 inline-flex items-center gap-1.5 rounded-xl ${a.solid} px-3 py-2.5 text-[11px] font-bold text-white disabled:opacity-50`}><Navigation className="w-3.5 h-3.5" />{locating ? 'Locating…' : 'Use device location'}</button>
               <button type="button" onClick={() => setShowMap(shown => !shown)} className={`mt-5 inline-flex items-center gap-1.5 rounded-xl border ${a.outline} px-3 py-2.5 text-[11px] font-bold`}><MapPin className="w-3.5 h-3.5" />{showMap ? 'Hide map' : 'Pick on map'}</button>
             </div>
             {showMap && (
               <div className="mt-3">
-                <LocationPicker value={location} radiusMeters={geofenceRadius} onChange={setLocation} />
+                <LocationPicker value={location} radiusMeters={parseRadius(geofenceRadius) ?? 100} onChange={setLocation} />
               </div>
             )}
             <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-400">{location ? `Location acquired: ${location.latitude}, ${location.longitude}` : 'The server stores the configured session location and radius; Student coordinates remain temporary.'}</p>

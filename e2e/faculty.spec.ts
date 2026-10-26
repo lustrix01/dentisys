@@ -1683,6 +1683,21 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       expect(payloads).toEqual([{ sessionId: '710', geofenceRadiusMeters: 300 }]);
     });
 
+    test('radius keeps typed text without leading zeros and blocks empty or out-of-range', async ({ page }) => {
+      const payloads = await openEdit(page, { ...baseSession, geofenceEnabled: true, geofenceLatitude: 13.15, geofenceLongitude: 123.75 });
+      const radius = page.getByLabel('Allowed radius (meters)');
+      await radius.fill('01000');
+      await expect(radius).toHaveValue('1000');
+      await radius.fill('');
+      await expect(radius).toHaveValue('');
+      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await expect(page.getByText('Allowed radius must be between 50 and 2000 meters.')).toBeVisible();
+      await radius.fill('2001');
+      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await expect(page.getByText('Allowed radius must be between 50 and 2000 meters.')).toBeVisible();
+      expect(payloads).toEqual([]);
+    });
+
     test('saving with no change sends no request and closes the form', async ({ page }) => {
       const payloads = await openEdit(page, baseSession);
       await page.getByRole('button', { name: 'Save Changes', exact: true }).click();

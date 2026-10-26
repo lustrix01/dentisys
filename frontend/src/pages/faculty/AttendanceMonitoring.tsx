@@ -44,6 +44,7 @@ import {
   FacultyManagedAttendanceSession,
 } from '../../services/apiClient';
 
+import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../../utils/geofenceRadius';
 const RADIUS_HINT = 'Indoors, use 150 m or more; phone GPS is often off by 50–100 m inside buildings.';
 
 type SupportedStatus = 'present' | 'absent' | 'late' | 'excused';
@@ -331,7 +332,7 @@ export const AttendanceMonitoring: React.FC = () => {
     room: string; openingTime: string; presentCutoff: string; lateCutoff: string; classEndTime: string;
     biometricRequired: boolean; geofenceEnabled: boolean; radius: number; location: { latitude: number; longitude: number } | null;
   } | null>(null);
-  const [editGeofenceRadius, setEditGeofenceRadius] = useState(100);
+  const [editGeofenceRadius, setEditGeofenceRadius] = useState('100');
   const [editLocation, setEditLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [showEditMap, setShowEditMap] = useState(false);
   const [locatingEdit, setLocatingEdit] = useState(false);
@@ -640,7 +641,7 @@ export const AttendanceMonitoring: React.FC = () => {
     setEditClassEndTime(original.classEndTime);
     setEditBiometricRequired(original.biometricRequired);
     setEditGeofenceEnabled(original.geofenceEnabled);
-    setEditGeofenceRadius(original.radius);
+    setEditGeofenceRadius(String(original.radius));
     setEditLocation(location);
     setShowEditMap(false);
     setEditError(null);
@@ -652,6 +653,11 @@ export const AttendanceMonitoring: React.FC = () => {
     e.preventDefault();
     if (!editingSession || !editOriginal) return;
 
+    const editRadius = parseRadius(editGeofenceRadius);
+    if (editGeofenceEnabled && editRadius === null) {
+      setEditError(RADIUS_RANGE_ERROR);
+      return;
+    }
     const changes: Omit<Parameters<typeof updateFacultyAttendanceSessionApi>[0], 'sessionId'> = {};
     if (editRoom.trim() !== editOriginal.room.trim()) changes.room = editRoom.trim();
     if (editOpeningTime !== editOriginal.openingTime) changes.openingTime = editOpeningTime;
@@ -662,12 +668,12 @@ export const AttendanceMonitoring: React.FC = () => {
     if (editGeofenceEnabled !== editOriginal.geofenceEnabled) {
       changes.geofenceEnabled = editGeofenceEnabled;
       if (editGeofenceEnabled) {
-        changes.geofenceRadiusMeters = editGeofenceRadius;
+        changes.geofenceRadiusMeters = editRadius ?? undefined;
         changes.geofenceLatitude = editLocation?.latitude;
         changes.geofenceLongitude = editLocation?.longitude;
       }
     } else if (editGeofenceEnabled) {
-      if (editGeofenceRadius !== editOriginal.radius) changes.geofenceRadiusMeters = editGeofenceRadius;
+      if (editRadius !== editOriginal.radius) changes.geofenceRadiusMeters = editRadius ?? undefined;
       if (editLocation?.latitude !== editOriginal.location?.latitude || editLocation?.longitude !== editOriginal.location?.longitude) {
         changes.geofenceLatitude = editLocation?.latitude;
         changes.geofenceLongitude = editLocation?.longitude;
@@ -2055,7 +2061,7 @@ export const AttendanceMonitoring: React.FC = () => {
                       min={50}
                       max={2000}
                       value={editGeofenceRadius}
-                      onChange={(event) => setEditGeofenceRadius(Number(event.target.value))}
+                      onChange={(event) => setEditGeofenceRadius(cleanRadiusText(event.target.value))}
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     />
                     <small className="mt-1 block text-[10px] text-slate-500 dark:text-slate-400">{RADIUS_HINT}</small>
@@ -2080,7 +2086,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 </div>
                 {showEditMap && (
                   <div className="mt-3">
-                    <LocationPicker value={editLocation} radiusMeters={editGeofenceRadius} onChange={setEditLocation} />
+                    <LocationPicker value={editLocation} radiusMeters={parseRadius(editGeofenceRadius) ?? 100} onChange={setEditLocation} />
                   </div>
                 )}
                 <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-400">
