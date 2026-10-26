@@ -754,6 +754,30 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     expect((startApiPayload as Record<string, unknown>).room).toBe('Dental Clinic Lab 3');
   });
 
+  test('Start Session pop-up shows the class meetings as chips and prefills from the schedule', async ({ page }) => {
+    const meetings = [{ component: 'Lecture', day: 'Mon', startTime: '09:00', endTime: '11:00', room: 'CDM 1' }];
+    await page.route('**/api/secretary/dashboard/kpis**', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'ok',
+        kpis: { assignedStudents: 24, attendanceRate: 95, todayRecords: 0, overriddenCount: 0 },
+        recentActivity: [],
+        assignedClass: { classId: '8', className: 'CLINIC-4B', classroomName: 'Dental Clinic Lab 2', meetings },
+        assignedClasses: [{ classId: '8', className: 'CLINIC-4B', classroomName: 'Dental Clinic Lab 2', meetings }],
+      }),
+    }));
+    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', activeSession: null }) }));
+    await page.clock.setFixedTime(new Date('2026-10-26T00:40:00Z')); // Monday 08:40 in Asia/Manila
+    await openStartPopup(page);
+    const form = startForm(page);
+    const chip = form.getByRole('button', { name: 'Mon · Lecture · 09:00–11:00 · CDM 1' });
+    await expect(chip).toHaveAttribute('aria-pressed', 'true');
+    await expect(form.getByLabel('Opening', { exact: true })).toHaveValue('08:45');
+    await expect(form.getByLabel('Class end time', { exact: true })).toHaveValue('11:00');
+    await expect(form.getByPlaceholder('e.g. Dental Clinic Room 101')).toHaveValue('CDM 1');
+  });
+
   test('the old /secretary/start-session address opens the Start Session pop-up on Attendance Monitoring', async ({ page }) => {
     await page.goto('/secretary/start-session');
     await expect(page).toHaveURL(/\/secretary\/attendance$/);

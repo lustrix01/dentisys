@@ -21,3 +21,12 @@ export function archiveGroup(c: ArchivableClass): 'completed' | 'removed' | null
   if (c.archiveReason === 'cancelled' || c.archiveReason === 'mistake') return 'removed';
   return c.isArchived ? 'completed' : null;
 }
+
+// A2/A3: current-year classes for Faculty lists: active first, then Finished-archived; Cancelled/Created-by-mistake dropped.
+export function orderCurrentYearClasses<T extends ArchivableClass>(classes: T[]): T[] {
+  const isActive = (c: T) => !isViewOnlyClass(c);
+  const isFinished = (c: T) => !isPastYearClass(c) && archiveGroup(c) === 'completed';
+  return [...classes.filter(isActive), ...classes.filter(isFinished)];
+}
+export const isArchivedCurrentYear = (c: ArchivableClass | null | undefined) =>
+  Boolean(c) && !isPastYearClass(c) && isViewOnlyClass(c);

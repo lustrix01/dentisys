@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronDown, MapPin, Navigation, Play } from 'lucide-react';
 import { LocationPicker } from './LocationPicker';
 import { Modal } from './Modal';
 
 import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../utils/geofenceRadius';
+import type { ClassMeeting } from '../services/apiClient';
+import { FIXED_TIMES, manilaNow, meetingTimes, pickMeeting, sortMeetings } from '../utils/sessionDefaults';
 const RADIUS_HINT = 'Indoors, use 150 m or more; phone GPS is often off by 50–100 m inside buildings.';
 
 const manilaToday = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
@@ -60,11 +62,13 @@ interface StartSessionModalProps {
   /** Development mode: prefilled location, also returned by "Use device location". */
   initialLocation?: { latitude: number; longitude: number } | null;
   note?: React.ReactNode;
+  /** The selected class's meetings; they prefill the times and show as chips. */
+  meetings?: ClassMeeting[];
 }
 
 export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   isOpen, onClose, accent, summary, precheck, onSubmit, sections, selectedSectionId, onSelectSection,
-  initialRoom, initialLocation, note,
+  initialRoom, initialLocation, note, meetings,
 }) => {
   const a = ACCENTS[accent];
   const [sessionDate, setSessionDate] = useState(() => manilaToday());
@@ -91,6 +95,24 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
     setLocation(current => (fixtureLat !== undefined && fixtureLng !== undefined ? current ?? { latitude: fixtureLat, longitude: fixtureLng } : null));
   }, [fixtureLat, fixtureLng]);
   useEffect(() => { if (isOpen) { setError(null); setPickerOpen(false); } }, [isOpen]);
+
+  const sortedMeetings = useMemo(() => sortMeetings(meetings ?? []), [meetings]);
+  const meetingsKey = JSON.stringify(sortedMeetings);
+  const [chosen, setChosen] = useState<number | null>(null);
+  const applyMeeting = (index: number | null) => {
+    setChosen(index);
+    const times = index === null ? { ...FIXED_TIMES, room: null } : meetingTimes(sortedMeetings[index]);
+    setOpeningTime(times.openingTime); setPresentCutoff(times.presentCutoff); setLateCutoff(times.lateCutoff); setClassEndTime(times.classEndTime);
+    if (times.room !== null) setRoom(times.room);
+  };
+  // Prefill when the pop-up opens or the class changes, never while typing (S1, S2, S4).
+  useEffect(() => {
+    if (!isOpen || sortedMeetings.length === 0) { setChosen(null); return; }
+    const now = manilaNow();
+    const picked = pickMeeting(sortedMeetings, now.day, now.minutes);
+    applyMeeting(picked ? sortedMeetings.indexOf(picked) : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, meetingsKey]);
 
   const handleAcquireLocation = () => {
     if (fixtureLat !== undefined && fixtureLng !== undefined) {
@@ -223,6 +245,30 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
           <input value={room} onChange={(event) => setRoom(event.target.value)} placeholder="e.g. Dental Clinic Room 101" className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-800 outline-none ${a.focus} dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100`} />
         </label>
 
+        {sortedMeetings.length > 0 && (
+          <div>
+            <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Class meetings</span>
+            <div className="flex flex-wrap gap-2">
+              {sortedMeetings.map((meeting, index) => (
+                <button
+                  key={`${meeting.day}-${meeting.component}-${meeting.startTime}-${index}`}
+                  type="button"
+                  aria-pressed={chosen === index}
+                  onClick={() => applyMeeting(index)}
+                  className={`rounded-xl border px-3 py-2 text-left font-bold ${chosen === index ? a.outline : 'border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-200'}`}
+                >
+                  {meeting.day} · {meeting.component} · {meeting.startTime}–{meeting.endTime} · {meeting.room}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-slate-500 dark:text-slate-400">
+              {chosen === null
+                ? 'No class meeting today. Pick a meeting or edit the times.'
+                : `Times from ${sortedMeetings[chosen].day} · ${sortedMeetings[chosen].component} · ${sortedMeetings[chosen].startTime}–${sortedMeetings[chosen].endTime}. Pick another meeting or edit the times.`}
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <label className="block"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Opening</span><input type="time" value={openingTime} onChange={(event) => setOpeningTime(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
           <label className="block"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Present cutoff</span><input type="time" value={presentCutoff} onChange={(event) => setPresentCutoff(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
@@ -237,7 +283,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
             <input type="checkbox" checked={biometricRequired} onChange={(event) => setBiometricRequired(event.target.checked)} className={a.check} />
-            <span><strong className="block text-slate-700 dark:text-slate-200">Face biometric</strong><small className="text-slate-500 dark:text-slate-400">Require verified attendance</small></span>
+            <span><strong className="block text-slate-700 dark:text-slate-200">Face biometric</strong><small className="text-slate-500 dark:text-slate-400">On: students check in with their face. Off: you mark attendance in the roll call.</small></span>
           </label>
           <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
             <input type="checkbox" checked={geofenceEnabled} onChange={(event) => setGeofenceEnabled(event.target.checked)} className={a.check} />

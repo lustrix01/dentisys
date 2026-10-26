@@ -36,6 +36,7 @@ academic_contract_assert(str_contains($faculty, 'handle_faculty_student_update')
 academic_contract_assert(str_contains($faculty, 'notification_create_idempotent'), 'Remedial updates use the persistent notification helper');
 
 academic_contract_assert(str_contains($secretary, 'assignedClasses'), 'Secretary dashboard returns every assigned class');
+academic_contract_assert(str_contains($secretary, "'meetings' => class_meetings_read(\$pdo, \$row)") && str_contains($secretary, 'cs.meetings_recorded'), 'Secretary assigned classes carry meetings from the shared class_meetings loader');
 academic_contract_assert(!str_contains($secretary, ': 96'), 'Secretary dashboard has no fabricated empty attendance rate');
 academic_contract_assert(str_contains($secretary, 'sessionId') && str_contains($secretary, 'sessions'), 'Secretary attendance supports date/session selection');
 academic_contract_assert(str_contains($secretary, 'secretary_activity_rows'), 'Secretary activity reads are scoped to Secretary audit ownership');

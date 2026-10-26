@@ -93,6 +93,7 @@ import type {
   PeriodComponentEvaluation
 } from '../../utils/periodGradingHelper';
 import GradeValue from '../../components/GradeValue';
+import { isViewOnlyClass, isArchivedCurrentYear, orderCurrentYearClasses } from '../../utils/classArchiving';
 
 export interface EditorCategoryRow {
   tempId: string;
@@ -187,9 +188,15 @@ export const GradeComputation: React.FC = () => {
   const currentYearActiveClasses = useMemo(() => {
     return facultyClasses.filter(c => {
       const isActive = (c.status || '').trim().toLowerCase() === 'active';
-      return isActive && isClassCurrentSchoolYear(c);
+      return isActive && isClassCurrentSchoolYear(c) && !isViewOnlyClass(c);
     });
   }, [facultyClasses, isClassCurrentSchoolYear]);
+
+  // A2: active classes first, then classes archived as Finished (view-only).
+  const currentYearListedClasses = useMemo(
+    () => orderCurrentYearClasses(facultyClasses.filter(c => isClassCurrentSchoolYear(c) && (c.status || '').trim().toLowerCase() === 'active')),
+    [facultyClasses, isClassCurrentSchoolYear],
+  );
 
   const availableSchoolYears = useMemo(() => Array.from(new Set([
     currentSchoolYear,
@@ -197,23 +204,28 @@ export const GradeComputation: React.FC = () => {
   ].filter(Boolean))).sort((a, b) => b.localeCompare(a)), [currentSchoolYear, facultyClasses]);
 
   const selectedYearClasses = useMemo(() => {
-    if (!selectedSchoolYear) return currentYearActiveClasses;
+    if (!selectedSchoolYear) return currentYearListedClasses;
     const isCurrentYear = currentSchoolYear
       ? selectedSchoolYear.trim().toLowerCase() === currentSchoolYear.trim().toLowerCase()
       : true;
-    if (isCurrentYear) return currentYearActiveClasses;
+    if (isCurrentYear) return currentYearListedClasses;
     return facultyClasses.filter(classItem =>
       (classItem.schoolYear || '').trim().toLowerCase() === selectedSchoolYear.trim().toLowerCase()
       && (classItem.isHistorical === true || classItem.isCurrentSchoolYear === false)
       && classItem.archiveReason !== 'cancelled'
       && classItem.archiveReason !== 'mistake'
     );
-  }, [currentSchoolYear, currentYearActiveClasses, facultyClasses, selectedSchoolYear]);
+  }, [currentSchoolYear, currentYearListedClasses, facultyClasses, selectedSchoolYear]);
 
   const selectedClassIsHistorical = useMemo(() => {
     const classItem = facultyClasses.find(item => item.id === selectedClassId);
-    return Boolean(classItem && !isClassCurrentSchoolYear(classItem));
+    return Boolean(classItem && (!isClassCurrentSchoolYear(classItem) || isViewOnlyClass(classItem)));
   }, [facultyClasses, isClassCurrentSchoolYear, selectedClassId]);
+
+  const selectedClassIsArchived = useMemo(
+    () => isArchivedCurrentYear(facultyClasses.find(item => item.id === selectedClassId)),
+    [facultyClasses, selectedClassId],
+  );
 
   const activeCourses = useMemo(() => {
     const map = new Map<string, { code: string; name: string }>();
@@ -3083,7 +3095,7 @@ export const GradeComputation: React.FC = () => {
               flushAllAutoSave();
               const isCurrentYear = nextSchoolYear.trim().toLowerCase() === currentSchoolYear.trim().toLowerCase();
               const nextClasses = isCurrentYear
-                ? currentYearActiveClasses
+                ? currentYearListedClasses
                 : facultyClasses.filter(classItem =>
                   (classItem.schoolYear || '').trim().toLowerCase() === nextSchoolYear.trim().toLowerCase()
                   && (classItem.isHistorical === true || classItem.isCurrentSchoolYear === false)
@@ -3136,7 +3148,7 @@ export const GradeComputation: React.FC = () => {
                 setSelectedOfferingKey(matchOffering.key);
                 setSelectedAssessmentOfferingKey(matchOffering.key);
               }
-              if (classItem.isHistorical === true || classItem.isCurrentSchoolYear === false) {
+              if (isViewOnlyClass(classItem)) {
                 setActiveSubTab('summaries');
               }
             }}
@@ -3148,7 +3160,7 @@ export const GradeComputation: React.FC = () => {
             ) : (
               selectedYearClasses.map(classItem => (
                 <option key={classItem.id} value={classItem.id}>
-                  {classItem.courseCode || 'Course'} · {classItem.csName || 'Section'} · {classItem.courseTitle || classItem.courseName || classItem.courseCode || 'Course'}
+                  {classItem.courseCode || 'Course'} · {classItem.csName || 'Section'} · {classItem.courseTitle || classItem.courseName || classItem.courseCode || 'Course'}{isArchivedCurrentYear(classItem) ? ' (Archived · view only)' : ''}
                 </option>
               ))
             )}
@@ -3158,7 +3170,7 @@ export const GradeComputation: React.FC = () => {
 
       {selectedClassIsHistorical && (
         <div role="status" className="no-print rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
-          Past school-year classes are view-only. Saved grade summaries can be viewed and exported, but grades and grading settings cannot be changed.
+          {selectedClassIsArchived ? 'Archived classes are view-only.' : 'Past school-year classes are view-only.'} Saved grade summaries can be viewed and exported, but grades and grading settings cannot be changed.
         </div>
       )}
 

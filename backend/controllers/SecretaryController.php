@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/app/attendance_sessions.php';
+require_once dirname(__DIR__) . '/app/class_meetings.php';
 
 if (!function_exists('sanitize_for_log')) {
     function sanitize_for_log(\Throwable $e): string
@@ -885,7 +886,7 @@ function handle_secretary_dashboard_kpis(): void
         attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
 
         $csStmt = $pdo->prepare(
-            "SELECT cs.cs_id, cs.cs_name, cs.lab_room, cs.lec_room,
+            "SELECT cs.cs_id, cs.cs_name, cs.lab_room, cs.lec_room, cs.meetings_recorded,
                     cs.semester, cs.school_year, c.course_code, c.name AS course_name
                FROM class_sections cs
                JOIN courses c ON c.course_id = cs.course_id
@@ -1005,7 +1006,7 @@ function handle_secretary_dashboard_kpis(): void
         $totalRecords = count($attRecords);
         $attendanceRate = $totalRecords > 0 ? (int) round(($presentOrLate / $totalRecords) * 100) : null;
 
-        $assignedClasses = array_map(static fn(array $row): array => [
+        $assignedClasses = array_map(fn(array $row): array => [
             'classId' => (string) $row['cs_id'],
             'className' => $row['cs_name'],
             'courseCode' => $row['course_code'],
@@ -1013,6 +1014,7 @@ function handle_secretary_dashboard_kpis(): void
             'semester' => $row['semester'],
             'schoolYear' => $row['school_year'],
             'classroomName' => $row['lab_room'] ?: ($row['lec_room'] ?: null),
+            'meetings' => class_meetings_read($pdo, $row),
         ], $assignedClassRows);
 
         json_response($schoolYearScope + [

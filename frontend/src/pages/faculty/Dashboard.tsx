@@ -18,6 +18,7 @@ import {
 } from '../../services/apiClient';
 import type { AuditEntry } from '../../services/auditService';
 import { AuditCompactList } from '../../components/AuditTrailPage';
+import { isViewOnlyClass } from '../../utils/classArchiving';
 
 export const Dashboard: React.FC = () => {
   const { students } = useApp();
@@ -521,7 +522,7 @@ export const Dashboard: React.FC = () => {
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 bg-clinical-100 text-clinical-700 dark:bg-clinical-950 dark:text-clinical-300 rounded-md max-xl:self-start max-xl:ml-10">
                     {(() => {
-                      const match = facultyClasses.find(c => c.courseCode === subj.code && c.isCurrentSchoolYear !== false)
+                      const match = facultyClasses.find(c => c.courseCode === subj.code && !isViewOnlyClass(c))
                         ?? facultyClasses.find(c => c.courseCode === subj.code);
                       return match?.lecRoom || match?.labRoom || 'Room not set';
                     })()}

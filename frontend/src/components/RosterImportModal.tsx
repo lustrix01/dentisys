@@ -110,7 +110,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
   useEffect(() => () => { parseSequence.current++; }, []);
 
   // Filter out historical classes
-  const availableClasses = classes.filter(c => currentSchoolYear && c.schoolYear === currentSchoolYear && c.status.toLowerCase() === 'active');
+  // Archived classes are view-only (CLS-003), so they cannot receive students.
+  const availableClasses = classes.filter(c => currentSchoolYear && c.schoolYear === currentSchoolYear && c.status.toLowerCase() === 'active' && !c.archiveReason);
   const targetClass = availableClasses.find(cls => cls.csId === selectedClassId);
   const headerDiffs = pdfInfo && targetClass ? compareRosterHeader(pdfInfo.header, targetClass) : [];
   const validatedStudents = validateRosterStudents(parsedStudents, runtime.allowed_email_domains);

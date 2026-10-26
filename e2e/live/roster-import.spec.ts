@@ -10,7 +10,7 @@ test('provisional roster creates real records and repeat import preserves their 
   await expect(page).toHaveURL('/');
   const auth = { Authorization: `Bearer ${credentials.access_token}` };
   const classes = await (await page.request.get('/api/faculty/classes', { headers: auth })).json();
-  const target = classes.classes.find((candidate: Record<string, unknown>) => candidate.schoolYear === classes.currentSchoolYear && String(candidate.status).toLowerCase() === 'active');
+  const target = classes.classes.find((candidate: Record<string, unknown>) => candidate.schoolYear === classes.currentSchoolYear && String(candidate.status).toLowerCase() === 'active' && !candidate.archivedAt);
   expect(target).toBeTruthy();
   const suffix = Date.now().toString(36);
   const number = `PROVISIONAL-${suffix}`;

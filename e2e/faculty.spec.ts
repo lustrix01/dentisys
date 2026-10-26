@@ -877,6 +877,21 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByText('Alice Green')).toHaveCount(0);
   });
 
+  test('attendance hides Cancelled classes and shows Finished-archived ones view-only with an Archived badge', async ({ page }) => {
+    await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2025-2026', classes: [
+      { ...mockClasses[0], id: '5', csId: 5, courseId: 104, courseCode: 'FIN501', isArchived: true, archiveReason: 'finished', archivedAt: '2026-10-20' },
+      { ...mockClasses[0], id: '6', csId: 6, courseId: 105, courseCode: 'CAN601', isArchived: true, archiveReason: 'cancelled', archivedAt: '2026-10-20' },
+      ...mockClasses,
+    ] }) }));
+    await page.goto('/attendance');
+    await expect(page.getByText('CAN601')).toHaveCount(0);
+    const cards = page.locator('div.group');
+    await expect(cards.last()).toContainText('FIN501');
+    await expect(cards.last().getByText('Archived', { exact: true })).toBeVisible();
+    await expect(cards.last().getByRole('button', { name: 'View Session', exact: true })).toHaveCount(0);
+    await expect(cards.first().getByRole('button', { name: 'View Session', exact: true })).toBeVisible();
+  });
+
   test('Faculty can choose a future session date and sees creator details for overlapping bookings', async ({ page }) => {
     let payload: Record<string, unknown> | null = null;
     await page.route('**/api/faculty/attendance?*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', worksheet: mockWorksheetSectionA }) }));
@@ -896,6 +911,38 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.locator('form').getByRole('button', { name: 'Schedule Session', exact: true }).click();
     await expect.poll(() => payload?.sessionDate).toBe('2099-10-02');
     await expect(page.getByText(/created by Secretary Bea Alonzo/)).toBeVisible();
+  });
+
+  test('Start Session prefills from the class schedule and a meeting chip replaces hand-edited times', async ({ page }) => {
+    const meetings = [
+      { component: 'Laboratory', day: 'Thu', startTime: '12:00', endTime: '17:00', room: 'CDM 2' },
+      { component: 'Laboratory', day: 'Mon', startTime: '13:00', endTime: '16:00', room: 'CDM 2' },
+      { component: 'Lecture', day: 'Mon', startTime: '09:00', endTime: '11:00', room: 'CDM 1' },
+    ];
+    await page.route('**/api/faculty/classes', route => route.fulfill({ json: { status: 'ok', currentSchoolYear: '2025-2026', classes: [{ ...mockClasses[0], meetings }, ...mockClasses.slice(1)] } }));
+    await page.route('**/api/faculty/attendance?*', route => route.fulfill({ json: { status: 'ok', worksheet: mockWorksheetSectionA } }));
+    await page.clock.setFixedTime(new Date('2026-10-26T00:40:00Z')); // Monday 08:40 in Asia/Manila
+    await page.goto('/attendance');
+    await page.getByLabel('Assigned course').selectOption('101');
+    await page.getByLabel('Class section').selectOption('1');
+    await page.getByRole('button', { name: 'Start Session', exact: true }).click();
+    const expectTimes = async (times: string[], room: string) => {
+      for (const [label, value] of [['Opening', times[0]], ['Present cutoff', times[1]], ['Late cutoff', times[2]], ['Class end time', times[3]]]) await expect(page.getByLabel(label, { exact: true })).toHaveValue(value);
+      await expect(page.getByLabel('Room or session location')).toHaveValue(room);
+    };
+    const chips = page.getByRole('button', { name: /^(Mon|Thu) · / });
+    await expect(chips).toHaveText(['Mon · Lecture · 09:00–11:00 · CDM 1', 'Mon · Laboratory · 13:00–16:00 · CDM 2', 'Thu · Laboratory · 12:00–17:00 · CDM 2']);
+    await expect(chips.nth(0)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByText('Times from Mon · Lecture · 09:00–11:00. Pick another meeting or edit the times.')).toBeVisible();
+    await expectTimes(['08:45', '09:15', '09:30', '11:00'], 'CDM 1');
+    await expect(page.getByText('On: students check in with their face. Off: you mark attendance in the roll call.')).toBeVisible();
+    await page.getByLabel('Present cutoff', { exact: true }).fill('10:00');
+    await page.getByLabel('Room or session location').fill('Hand room');
+    await chips.nth(2).click();
+    await expect(chips.nth(2)).toHaveAttribute('aria-pressed', 'true');
+    await expect(chips.nth(0)).toHaveAttribute('aria-pressed', 'false');
+    await expectTimes(['11:45', '12:15', '12:30', '17:00'], 'CDM 2');
+    await expect(page.getByLabel('Session date (Asia/Manila)')).toHaveValue('2026-10-26');
   });
 
   test('hierarchy: courses derive from classes, section list filters by course, course change clears section', async ({ page }) => {

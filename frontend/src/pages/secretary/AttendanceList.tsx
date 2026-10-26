@@ -42,6 +42,7 @@ import {
   createSecretaryExcusedRequestApi,
   endSecretaryAttendanceSessionApi,
   revokeSecretaryAttendanceSessionApi,
+  type ClassMeeting,
 } from '../../services/apiClient';
 
 type AttendanceItem = Awaited<ReturnType<typeof getSecretaryAttendanceApi>>['records'][number];
@@ -218,7 +219,7 @@ export const AttendanceList: React.FC = () => {
 
   // Start Session pop-up: current-school-year sections only (REG-006); a past-year section can never start a session.
   const [isStartOpen, setIsStartOpen] = useState(false);
-  const [startSections, setStartSections] = useState<Array<{ classId: string; className: string; classroomName: string; courseCode?: string }>>([]);
+  const [startSections, setStartSections] = useState<Array<{ classId: string; className: string; classroomName: string; courseCode?: string; meetings?: ClassMeeting[] }>>([]);
   const [startCsId, setStartCsId] = useState('');
   const [otherLiveName, setOtherLiveName] = useState<string | null>(null);
   const startCsIdRef = useRef('');
@@ -239,7 +240,7 @@ export const AttendanceList: React.FC = () => {
     try {
       const kpis = await getSecretaryDashboardKpisApi('current');
       const fromServer = kpis?.assignedClasses?.length ? kpis.assignedClasses : kpis?.assignedClass?.classId ? [kpis.assignedClass] : [];
-      const list = fromServer.map(sec => ({ classId: sec.classId, className: sec.className, classroomName: sec.classroomName ?? '', courseCode: 'courseCode' in sec ? (sec.courseCode as string) : undefined }));
+      const list = fromServer.map(sec => ({ classId: sec.classId, className: sec.className, classroomName: sec.classroomName ?? '', courseCode: 'courseCode' in sec ? (sec.courseCode as string) : undefined, meetings: 'meetings' in sec ? sec.meetings : undefined }));
       const chosen = list.find(sec => sec.classId === (startCsIdRef.current || String(kpis?.assignedClass?.classId ?? ''))) ?? list[0] ?? null;
       setStartSections(list);
       setStartCsId(chosen?.classId ?? '');
@@ -1805,6 +1806,7 @@ export const AttendanceList: React.FC = () => {
         onSelectSection={id => void selectStartSection(id)}
         initialRoom={startSections.find(sec => sec.classId === startCsId)?.classroomName ?? ''}
         initialLocation={startLocation}
+        meetings={startSections.find(sec => sec.classId === startCsId)?.meetings}
         note={otherLiveName ? <p className="text-xs text-slate-500 dark:text-slate-500">{otherLiveName} has a live session.</p> : null}
       />
     </div>

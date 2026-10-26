@@ -313,3 +313,22 @@ test('lecture/laboratory config still shows weighted component headers and the C
   await expect(table.getByRole('columnheader', { name: 'Laboratory (40%)' })).toBeVisible();
   await expect(page.getByText('Component:')).toBeVisible();
 });
+
+test('an archived newest class is listed last as view-only and never the default', async ({ page }) => {
+  const cls = (id: number, code: string, extra: object) => ({ id: String(id), csId: id, csName: `CLINIC-${id}`, courseId: id, courseCode: code, courseName: code, semester: '1ST', schoolYear: '2026-2027', isCurrentSchoolYear: true, isHistorical: false, status: 'Active', ...extra });
+  await mockMatrixClass(page, {}, { setup: async () => {
+    await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [
+      cls(9, 'ARCH901', { isArchived: true, archiveReason: 'finished', archivedAt: '2026-10-20' }),
+      cls(8, 'GONE801', { isArchived: true, archiveReason: 'cancelled', archivedAt: '2026-10-20' }),
+      cls(7, 'CLIN401', {}),
+    ] }) }));
+  } });
+  const classSelect = page.getByLabel(/^Class: course code/);
+  await expect(classSelect).toHaveValue('7');
+  await expect(classSelect.locator('option')).toHaveCount(2);
+  await expect(classSelect.locator('option').nth(1)).toContainText('ARCH901');
+  await expect(classSelect.locator('option').nth(1)).toContainText('(Archived · view only)');
+  await expect(page.getByText('Archived classes are view-only.')).toHaveCount(0);
+  await classSelect.selectOption('9');
+  await expect(page.getByText('Archived classes are view-only. Saved grade summaries can be viewed and exported, but grades and grading settings cannot be changed.')).toBeVisible();
+});

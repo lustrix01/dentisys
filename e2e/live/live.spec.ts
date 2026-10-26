@@ -64,6 +64,7 @@ function currentAssignedClass(classesPayload: {
   const currentClass = (classesPayload.classes ?? []).find(candidate =>
     String(candidate.schoolYear ?? '').trim().toLowerCase() === currentSchoolYear.toLowerCase()
     && String(candidate.status ?? '').trim().toLowerCase() === 'active'
+    && !candidate.archivedAt // archived classes are view-only
   );
   expect(currentSchoolYear).not.toBe('');
   expect(currentClass, `No active assigned class found for ${currentSchoolYear}`).toBeTruthy();

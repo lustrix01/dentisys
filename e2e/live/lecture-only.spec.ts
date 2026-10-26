@@ -13,6 +13,13 @@ async function json(response: Awaited<ReturnType<Page['request']['get']>>) {
   return JSON.parse(body) as JsonRecord;
 }
 
+// Archive the test class afterwards, pass or fail, so later live specs see the class list as before.
+let cleanup: { csId: string; headers: Record<string, string> } | null = null;
+test.afterEach(async ({ request }) => {
+  if (cleanup) await request.post('/api/faculty/classes/archive', { headers: cleanup.headers, data: { csId: Number(cleanup.csId), reason: 'cancelled' } });
+  cleanup = null;
+});
+
 test('a lecture-only course is graded as Lecture only, end to end', async ({ page }) => {
   test.setTimeout(180_000);
   const login = await json(await page.request.post('/api/auth/login', { data: { email: facultyEmail, password: facultyPassword } }));
@@ -32,6 +39,7 @@ test('a lecture-only course is graded as Lecture only, end to end', async ({ pag
   const createdBody = await json(created);
   expect(created.status(), JSON.stringify(createdBody)).toBe(201);
   const csId = String(createdBody.csId);
+  cleanup = { csId, headers };
   const classes = await json(await page.request.get('/api/faculty/classes', { headers }));
   const cls = classes.classes.find((c: JsonRecord) => String(c.csId ?? c.id) === csId);
   const configQuery = new URLSearchParams({ courseId: String(cls.courseId), semester: cls.semester, schoolYear: cls.schoolYear });

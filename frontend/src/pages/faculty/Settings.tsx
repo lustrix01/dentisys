@@ -3,6 +3,7 @@ import { BookOpen, CheckCircle2, Moon, Sun } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { useThemePreference, type ThemeMode } from '../../hooks/useThemePreference';
 import { getFacultyClassesApi } from '../../services/apiClient';
+import { isViewOnlyClass } from '../../utils/classArchiving';
 
 export const Settings: React.FC = () => {
   const { theme, changeTheme } = useThemePreference();
@@ -16,7 +17,7 @@ export const Settings: React.FC = () => {
     getFacultyClassesApi()
       .then(res => {
         if (cancelled) return;
-        const current = (res.classes || []).filter(cls => cls.isCurrentSchoolYear !== false && cls.isHistorical !== true);
+        const current = (res.classes || []).filter(cls => !isViewOnlyClass(cls));
         setSubjects(Array.from(new Set(current.map(cls => cls.courseCode).filter(Boolean))).sort());
       })
       .catch(() => { if (!cancelled) setSubjects([]); });

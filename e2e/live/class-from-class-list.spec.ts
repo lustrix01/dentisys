@@ -1,7 +1,19 @@
 import { test, expect } from '@playwright/test';
 import { makeClassListPdf } from '../officialClassListPdf';
 
-// Uses a made-up class list in the Dean's layout (never a real file). The class it creates stays as test data.
+// Uses a made-up class list in the Dean's layout (never a real file).
+// The class it creates is archived afterwards, pass or fail, so later live specs see the class list as before.
+let cleanup: { code: string; auth: Record<string, string> } | null = null;
+test.afterEach(async ({ request }) => {
+  if (!cleanup) return;
+  const { code, auth } = cleanup;
+  cleanup = null;
+  const classes = await (await request.get('/api/faculty/classes', { headers: auth })).json();
+  for (const cls of (classes.classes ?? []).filter((candidate: Record<string, unknown>) => candidate.courseCode === code)) {
+    await request.post('/api/faculty/classes/archive', { headers: auth, data: { csId: Number(cls.csId ?? cls.id), reason: 'cancelled' } });
+  }
+});
+
 test('class list for a class that does not exist creates the class and enrolls the students', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto('/login');
@@ -20,6 +32,7 @@ test('class list for a class that does not exist creates the class and enrolls t
 
   const suffix = Date.now().toString(36).toUpperCase();
   const code = `CL-${suffix}`;
+  cleanup = { code, auth };
   const ids = [1, 2, 3].map(n => `CL${suffix}-${n}`);
   const pdf = await makeClassListPdf(page, {
     ay: before.currentSchoolYear, semester: '1st Semester', code, section: 'DMD-1A', title: 'Made Up Perspectives', year: '1st Year',

@@ -22,6 +22,7 @@ Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) 
 - [Official imports, October 2026](official-imports-2026-10.md): the Dean's class list PDF and grade sheet workbook as import formats, and the grade sheet's grade math.
 - [Lecture-only courses, October 2026](lecture-only-2026-10.md): courses with no Laboratory graded as Lecture only, with a provisional one-rounding course grade.
 - [New class from the class list, October 2026](class-from-class-list-2026-10.md): Import Roster creates the class from the Dean's class list PDF when it does not exist yet.
+- [Start Session defaults and small fixes, October 2026](session-default-times-2026-10.md): session times from the class schedule, the geofence radius box and the authenticator setup window.
 - [Owhie's UI changes merged, October 2026](owhie-merge-2026-10.md): what was taken from Owhie's layout branch, what was changed or replaced in the merge, and the Owner's rulings.
 - [Owhie's responsive changes merged, October 2026](owhie-responsive-merge-2026-10.md): the second Owhie merge (phone layouts, Grade Computation school years), its fixes and rulings.
 - Approved specification amendment records: [2026-10-01](spec-amendments-2026-10-01.md), [2026-10-03](spec-amendments-2026-10-03.md), [2026-10-04](spec-amendments-2026-10-04.md), [2026-10-09](spec-amendments-2026-10-09.md), [2026-10-09 deployment](spec-amendments-2026-10-09-deployment.md), [2026-10-10 academic terms](spec-amendments-2026-10-10-academic-terms.md); proposals in [proposals/](proposals/).

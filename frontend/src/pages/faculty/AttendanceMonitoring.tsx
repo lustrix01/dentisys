@@ -44,6 +44,7 @@ import {
   FacultyManagedAttendanceSession,
 } from '../../services/apiClient';
 
+import { isViewOnlyClass, isArchivedCurrentYear, orderCurrentYearClasses } from '../../utils/classArchiving';
 import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../../utils/geofenceRadius';
 const RADIUS_HINT = 'Indoors, use 150 m or more; phone GPS is often off by 50–100 m inside buildings.';
 
@@ -366,9 +367,15 @@ export const AttendanceMonitoring: React.FC = () => {
   const availableSchoolYears = useMemo(() => Array.from(new Set([
     currentSchoolYear, ...classes.map(item => item.schoolYear || ''),
   ].filter(Boolean))).sort().reverse(), [classes, currentSchoolYear]);
-  const scopedClasses = useMemo(() => classes.filter(item => selectedSchoolYear === 'all'
-    || item.schoolYear === (selectedSchoolYear === 'current' ? currentSchoolYear : selectedSchoolYear)), [classes, currentSchoolYear, selectedSchoolYear]);
-  const selectedClassIsPast = Boolean(selectedCsId && currentSchoolYear && classes.find(item => String(item.csId) === selectedCsId)?.schoolYear !== currentSchoolYear);
+  const scopedClasses = useMemo(() => {
+    const inScope = classes.filter(item => selectedSchoolYear === 'all'
+      || item.schoolYear === (selectedSchoolYear === 'current' ? currentSchoolYear : selectedSchoolYear));
+    const isPast = (item: FacultyClassItem) => Boolean(currentSchoolYear && item.schoolYear !== currentSchoolYear);
+    // A3: current-year classes list active first, then Finished-archived; Cancelled/Created-by-mistake are hidden.
+    return [...orderCurrentYearClasses(inScope.filter(item => !isPast(item))), ...inScope.filter(isPast)];
+  }, [classes, currentSchoolYear, selectedSchoolYear]);
+  const selectedClassIsPast = Boolean(selectedCsId && currentSchoolYear && classes.find(item => String(item.csId) === selectedCsId)?.schoolYear !== currentSchoolYear)
+    || isViewOnlyClass(classes.find(item => String(item.csId) === selectedCsId));
   const worksheetIsReadOnly = selectedClassIsPast || selectedDate > manilaDateToday() || worksheet?.attendanceSession?.status === 'scheduled' || (Boolean(worksheet?.attendanceSessions.length) && !worksheet?.attendanceSession);
   const assignedCourses = useMemo(() => {
     const map = new Map<number, { id: number; code: string; name: string }>();
@@ -978,6 +985,7 @@ export const AttendanceMonitoring: React.FC = () => {
               const isSelected = String(c.csId) === selectedCsId;
               const hasActiveSession = isSelected && Boolean(liveCurrentSession);
               const isPastClass = Boolean(currentSchoolYear && c.schoolYear !== currentSchoolYear);
+              const isArchivedClass = !isPastClass && isViewOnlyClass(c);
 
               return (
                 <div
@@ -995,6 +1003,9 @@ export const AttendanceMonitoring: React.FC = () => {
                       <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/50 text-accent-700 dark:text-accent-300 text-[10px] font-extrabold uppercase tracking-wider">
                         {c.courseCode} &bull; Year {c.yearLevel || 1}
                       </span>
+                      {isArchivedClass && (
+                        <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">Archived</span>
+                      )}
 
                       <div className="flex items-center gap-2">
                         <span className="whitespace-nowrap text-xs font-bold text-emerald-600 dark:text-emerald-400">
@@ -1048,7 +1059,7 @@ export const AttendanceMonitoring: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                      <button
+                      {!isArchivedClass && <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1060,7 +1071,7 @@ export const AttendanceMonitoring: React.FC = () => {
                       >
                         <Clock className="w-3.5 h-3.5 text-emerald-600" />
                         <span>View Session</span>
-                      </button>
+                      </button>}
 
                       <button
                         type="button"
@@ -1125,7 +1136,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   </span>
                 ) : null}
 
-                {selectedClass && (
+                {selectedClass && !isArchivedCurrentYear(selectedClass) && (
                   <button
                     type="button"
                     onClick={() => handleOpenClassSessionModal(selectedClass)}
@@ -1396,7 +1407,7 @@ export const AttendanceMonitoring: React.FC = () => {
           {worksheetIsReadOnly && !allSessionsHidden && (
             <p role="status" className="text-xs font-semibold text-amber-700 dark:text-amber-300">
               {selectedClassIsPast
-                ? 'Past school-year attendance is view-only.'
+                ? (isArchivedCurrentYear(selectedClass) ? 'Archived classes are view-only.' : 'Past school-year attendance is view-only.')
                 : selectedDate > manilaDateToday() || worksheet.attendanceSession?.status === 'scheduled'
                 ? 'Scheduled session: attendance opens at its chosen date/time in Asia/Manila.'
                 : 'Choose a session to manage its attendance.'}
@@ -1670,6 +1681,7 @@ export const AttendanceMonitoring: React.FC = () => {
         summary={<>{assignedCourses.find(course => course.id === selectedCourseId)?.code || 'Course'} · {availableSections.find(section => String(section.csId) === selectedCsId)?.csName || 'Class section'}</>}
         precheck={startSessionPrecheck}
         onSubmit={handleStartSession}
+        meetings={availableSections.find(section => String(section.csId) === selectedCsId)?.meetings}
       />
 
       {/* Bulk mark confirmation */}
@@ -2038,7 +2050,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   onChange={(event) => setEditBiometricRequired(event.target.checked)}
                   className="accent-emerald-600"
                 />
-                <span><strong className="block text-slate-700 dark:text-slate-200">Face biometric</strong><small className="text-slate-500 dark:text-slate-400">Require verified attendance</small></span>
+                <span><strong className="block text-slate-700 dark:text-slate-200">Face biometric</strong><small className="text-slate-500 dark:text-slate-400">On: students check in with their face. Off: you mark attendance in the roll call.</small></span>
               </label>
               <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
                 <input
