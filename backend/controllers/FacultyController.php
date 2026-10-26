@@ -1256,9 +1256,9 @@ function faculty_grading_normalize_component_mode(mixed $value): string
     if ($value === null || $value === '') {
         return 'combined';
     }
-    if (!is_string($value) || !in_array($value, ['combined', 'lecture_laboratory'], true)) {
+    if (!is_string($value) || !in_array($value, ['combined', 'lecture_laboratory', 'lecture'], true)) {
         throw new FacultyGradingConfigurationException(
-            'componentMode must be combined or lecture_laboratory.',
+            'componentMode must be combined, lecture_laboratory or lecture.',
             422,
             'GRADING_COMPONENT_CATEGORY_INVALID'
         );
@@ -1308,6 +1308,8 @@ function faculty_grading_normalize_categories(mixed $value, string $componentMod
     $sortOrders = [];
     $totalBasisPoints = 0;
     $componentTotals = ['Lecture' => 0, 'Laboratory' => 0];
+    $grouped = $componentMode !== 'combined';
+    $lectureOnly = $componentMode === 'lecture';
 
     foreach (array_values($value) as $index => $rawCategory) {
         if ($rawCategory instanceof \stdClass) {
@@ -1328,10 +1330,12 @@ function faculty_grading_normalize_categories(mixed $value, string $componentMod
         $name = faculty_grading_required_text($rawCategory['name'] ?? '', 'Category name', 255);
         $nameKey = faculty_grading_category_name_key($name);
         $componentValue = $rawCategory['component'] ?? null;
-        if ($componentMode === 'lecture_laboratory') {
-            if (!is_string($componentValue) || !in_array($componentValue, ['Lecture', 'Laboratory'], true)) {
+        if ($grouped) {
+            if (!is_string($componentValue) || !in_array($componentValue, $lectureOnly ? ['Lecture'] : ['Lecture', 'Laboratory'], true)) {
                 throw new FacultyGradingConfigurationException(
-                    'Each grouped category must identify Lecture or Laboratory.',
+                    $lectureOnly
+                        ? 'Every category of a Lecture-only course must be a Lecture category.'
+                        : 'Each grouped category must identify Lecture or Laboratory.',
                     422,
                     'GRADING_COMPONENT_CATEGORY_INVALID'
                 );
@@ -1347,12 +1351,12 @@ function faculty_grading_normalize_categories(mixed $value, string $componentMod
             }
             $component = 'Combined';
         }
-        $nameScope = $componentMode === 'lecture_laboratory' ? $component . ':' . $nameKey : $nameKey;
+        $nameScope = $grouped ? $component . ':' . $nameKey : $nameKey;
         if (isset($names[$nameScope])) {
             throw new FacultyGradingConfigurationException(
                 'Category names must be unique within their component and grading period.',
                 422,
-                $componentMode === 'lecture_laboratory'
+                $grouped
                     ? 'GRADING_COMPONENT_CATEGORY_INVALID'
                     : 'GRADING_CONFIGURATION_INVALID'
             );
@@ -1364,13 +1368,13 @@ function faculty_grading_normalize_categories(mixed $value, string $componentMod
             throw new FacultyGradingConfigurationException(
                 'Category weights must be positive numbers between 0 and 100.',
                 422,
-                $componentMode === 'lecture_laboratory'
+                $grouped
                     ? 'GRADING_COMPONENT_CATEGORY_INVALID'
                     : 'GRADING_CONFIGURATION_INVALID'
             );
         }
         $totalBasisPoints += $weightBasisPoints;
-        if ($componentMode === 'lecture_laboratory') {
+        if ($grouped) {
             $componentTotals[$component] += $weightBasisPoints;
         }
 
@@ -1381,7 +1385,7 @@ function faculty_grading_normalize_categories(mixed $value, string $componentMod
         if (!is_int($sortOrder) || $sortOrder <= 0) {
             throw new FacultyGradingConfigurationException('Category sortOrder values must be unique positive integers.');
         }
-        $sortScope = $componentMode === 'lecture_laboratory'
+        $sortScope = $grouped
             ? $component . ':' . $sortOrder
             : (string) $sortOrder;
         if (isset($sortOrders[$sortScope])) {
@@ -1403,8 +1407,8 @@ function faculty_grading_normalize_categories(mixed $value, string $componentMod
         ];
     }
 
-    if ($componentMode === 'lecture_laboratory') {
-        if ($componentTotals['Lecture'] !== 1000000 || $componentTotals['Laboratory'] !== 1000000) {
+    if ($grouped) {
+        if ($componentTotals['Lecture'] !== 1000000 || (!$lectureOnly && $componentTotals['Laboratory'] !== 1000000)) {
             throw new FacultyGradingConfigurationException(
                 'Each component category list must total exactly 100%.',
                 422,
@@ -1418,7 +1422,19 @@ function faculty_grading_normalize_categories(mixed $value, string $componentMod
     return $categories;
 }
 
-function faculty_grading_default_period_template(): array
+/**
+ * Lecture-only (lecture > 0, lab = 0), unrecorded (both NULL) or lecture_laboratory
+ * (everything else, including Laboratory-only) from the shared course units.
+ */
+function faculty_course_structure(mixed $lectureUnits, mixed $labUnits): string
+{
+    if ($lectureUnits === null && $labUnits === null) {
+        return 'unrecorded';
+    }
+    return (float) $lectureUnits > 0 && (float) $labUnits == 0 ? 'lecture' : 'lecture_laboratory';
+}
+
+function faculty_grading_default_period_template(string $structure = 'lecture_laboratory'): array
 {
     $categories = [
         ['name' => 'Term Exam', 'weight' => 50, 'sortOrder' => 1, 'sourceKind' => 'assessment', 'component' => 'Lecture'],
@@ -1430,13 +1446,16 @@ function faculty_grading_default_period_template(): array
         ['name' => 'Quiz', 'weight' => 10, 'sortOrder' => 3, 'sourceKind' => 'assessment', 'component' => 'Laboratory'],
         ['name' => 'Recitation', 'weight' => 10, 'sortOrder' => 4, 'sourceKind' => 'assessment', 'component' => 'Laboratory'],
     ];
+    if ($structure === 'lecture') {
+        $categories = array_slice($categories, 0, 4);
+    }
     return [
         'schemaMode' => 'periods',
-        'componentMode' => 'lecture_laboratory',
-        'componentWeights' => [
+        'componentMode' => $structure === 'lecture' ? 'lecture' : 'lecture_laboratory',
+        ...($structure === 'lecture' ? [] : ['componentWeights' => [
             'lecture' => 60,
             'laboratory' => 40,
-        ],
+        ]]),
         'termRatio' => [
             'midterm' => 30,
             'final' => 70,
@@ -1607,7 +1626,7 @@ function faculty_grading_require_offering(PDO $pdo, int $facultyId, mixed $cours
     $semester = faculty_grading_normalize_semester($semesterValue);
     $schoolYear = faculty_grading_normalize_school_year($schoolYearValue);
     $stmt = $pdo->prepare(
-        "SELECT c.course_id, c.course_code, c.name AS course_name
+        "SELECT c.course_id, c.course_code, c.name AS course_name, c.lecture_units, c.lab_units
            FROM class_sections cs
            JOIN courses c ON c.course_id = cs.course_id
           WHERE cs.instructor_user_id = ?
@@ -1634,6 +1653,8 @@ function faculty_grading_require_offering(PDO $pdo, int $facultyId, mixed $cours
         'courseId' => (int) $course['course_id'],
         'courseCode' => $course['course_code'],
         'courseName' => $course['course_name'],
+        'lectureUnits' => $course['lecture_units'] !== null ? (float) $course['lecture_units'] : null,
+        'labUnits' => $course['lab_units'] !== null ? (float) $course['lab_units'] : null,
         'semester' => $semester,
         'schoolYear' => $schoolYear,
     ];
@@ -1754,7 +1775,7 @@ function faculty_grading_snapshot(PDO $pdo, array $offering, array $configRow): 
             'sourceKind' => $row['source_kind'] !== null ? (string) $row['source_kind'] : null,
             'inUse' => filter_var($row['in_use'], FILTER_VALIDATE_BOOLEAN),
         ];
-        if ($componentMode === 'lecture_laboratory') {
+        if ($componentMode !== 'combined') {
             $category['component'] = (string) ($row['component'] ?? 'Combined');
         }
         return $category;
@@ -1779,6 +1800,9 @@ function faculty_grading_snapshot(PDO $pdo, array $offering, array $configRow): 
             'midterm' => (float) $configRow['term_midterm_weight'],
             'final' => (float) $configRow['term_final_weight'],
         ];
+        if ($componentMode === 'lecture') {
+            $snapshot['componentMode'] = $componentMode;
+        }
         if ($componentMode === 'lecture_laboratory') {
             $snapshot['componentMode'] = $componentMode;
             $snapshot['componentWeights'] = [
@@ -2061,12 +2085,21 @@ function handle_faculty_grading_config_get(): void
             $_GET['schoolYear'] ?? null,
         );
         $configRow = faculty_grading_find_config($pdo, $offering);
+        $structure = faculty_course_structure($offering['lectureUnits'], $offering['labUnits']);
+        $courseUnits = ['lecture' => $offering['lectureUnits'], 'laboratory' => $offering['labUnits']];
+        $configuration = $configRow ? faculty_grading_snapshot($pdo, $offering, $configRow) : null;
+        if ($configuration !== null) {
+            $configuration['courseStructure'] = $structure;
+            $configuration['courseUnits'] = $courseUnits;
+        }
         $response = [
             'status' => 'ok',
-            'configuration' => $configRow ? faculty_grading_snapshot($pdo, $offering, $configRow) : null,
+            'configuration' => $configuration,
+            'courseStructure' => $structure,
+            'courseUnits' => $courseUnits,
         ];
         if ($configRow === null) {
-            $response['defaults'] = faculty_grading_default_period_template();
+            $response['defaults'] = faculty_grading_default_period_template($structure === 'lecture' ? 'lecture' : 'lecture_laboratory');
         }
         json_response($response, 200);
     } catch (FacultyGradingConfigurationException $e) {
@@ -2100,23 +2133,35 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
             throw new FacultyGradingConfigurationException('schemaMode must be overall or periods.');
         }
         $componentMode = faculty_grading_normalize_component_mode($data['componentMode'] ?? null);
-        if ($schemaMode === 'periods' && $componentMode !== 'lecture_laboratory') {
+        $isLectureCourse = faculty_course_structure($offering['lectureUnits'], $offering['labUnits']) === 'lecture';
+        if ($isLectureCourse !== ($componentMode === 'lecture')) {
+            throw new FacultyGradingConfigurationException(
+                $isLectureCourse
+                    ? 'This course is Lecture only. Save it without a Laboratory part.'
+                    : 'This course has Laboratory units. Add the Laboratory part before saving.',
+                422,
+                'GRADING_STRUCTURE_MISMATCH'
+            );
+        }
+        if ($schemaMode === 'periods' && $componentMode === 'combined') {
             throw new FacultyGradingConfigurationException(
                 'Period grading requires the separate Lecture/Laboratory structure.',
                 422,
                 'GRADING_COMPONENT_MODE_REQUIRED'
             );
         }
-        if ($componentMode === 'lecture_laboratory' && $schemaMode !== 'periods') {
+        if ($componentMode !== 'combined' && $schemaMode !== 'periods') {
             throw new FacultyGradingConfigurationException(
                 'Lecture/Laboratory grading requires period categories.',
                 422,
                 'GRADING_COMPONENT_CATEGORY_INVALID'
             );
         }
-        $componentWeights = $componentMode === 'lecture_laboratory'
-            ? faculty_grading_normalize_component_weights($data['componentWeights'] ?? null)
-            : null;
+        $componentWeights = match ($componentMode) {
+            'lecture_laboratory' => faculty_grading_normalize_component_weights($data['componentWeights'] ?? null),
+            'lecture' => ['lecture' => '100.0000', 'laboratory' => null], // Lecture-only: Laboratory share stays empty
+            default => null,
+        };
         $termRatio = null;
         if ($schemaMode === 'periods') {
             $termRatio = faculty_grading_normalize_term_ratio($data['termRatio'] ?? null);
@@ -2170,8 +2215,30 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                     );
                 }
             }
-            if ($existingComponentMode !== $componentMode) {
-                if ($existingComponentMode === 'combined' && $componentMode === 'lecture_laboratory') {
+            if ($existingComponentMode === 'lecture_laboratory' && $componentMode === 'lecture') {
+                $labAssessments = $pdo->prepare(
+                    "SELECT 1
+                       FROM assessments a
+                       JOIN class_sections cs ON cs.cs_id = a.cs_id
+                       JOIN grading_category_period_memberships gcp
+                         ON gcp.category_id = a.grading_category_id AND gcp.grading_period = a.grading_period
+                      WHERE gcp.component = 'Laboratory'
+                        AND cs.instructor_user_id = ?
+                        AND cs.course_id = ?
+                        AND UPPER(cs.semester) = ?
+                        AND UPPER(cs.school_year) = ?
+                      LIMIT 1"
+                );
+                $labAssessments->execute([$offering['facultyUserId'], $offering['courseId'], $offering['semester'], $offering['schoolYear']]);
+                if ($labAssessments->fetchColumn()) {
+                    throw new FacultyGradingConfigurationException(
+                        'Laboratory categories still have assessments. Delete them in Grade Computation before removing the Laboratory part.',
+                        422,
+                        'GRADING_LABORATORY_ASSESSMENTS_EXIST'
+                    );
+                }
+            } elseif ($existingComponentMode !== $componentMode) {
+                if ($existingComponentMode === 'combined' && $componentMode !== 'combined') {
                     if (($data['convertToLectureLaboratory'] ?? false) !== true) {
                         throw new FacultyGradingConfigurationException(
                             'Converting combined period categories to Lecture/Laboratory grading requires explicit confirmation.',
@@ -2179,6 +2246,8 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                             'GRADING_COMPONENT_CONVERSION_REQUIRED'
                         );
                     }
+                } elseif ($existingComponentMode === 'lecture' && $componentMode === 'lecture_laboratory') {
+                    // Laboratory units added later: Lecture categories are kept, the Laboratory part is saved now.
                 } elseif ($existingComponentMode === 'lecture_laboratory' && $componentMode === 'combined') {
                     throw new FacultyGradingConfigurationException(
                         'Period grading requires the separate Lecture/Laboratory structure.',
@@ -2221,7 +2290,7 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
 
         $assessmentAssignments = faculty_grading_assessment_assignments($data['assessmentAssignments'] ?? null);
         $legacyAssessmentMappings = ($existing === null
-            || $componentMode === 'lecture_laboratory'
+            || $componentMode !== 'combined'
             || (($existing['component_mode'] ?? 'combined') === 'lecture_laboratory' && $componentMode === 'combined'))
             ? faculty_grading_legacy_assessment_mappings(
                 $pdo,
@@ -2639,7 +2708,7 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                     }
                 }
                 if ($missingAssessmentRefs !== []) {
-                    if ($componentMode === 'lecture_laboratory') {
+                    if ($componentMode !== 'combined') {
                         throw new FacultyGradingConfigurationException(
                             'Every existing assessment must resolve to one Lecture or Laboratory category for its grading period.',
                             422,
@@ -2918,6 +2987,22 @@ function faculty_round_percent(float $value): float
 }
 
 /**
+ * Course grade from the whole-percent Midterm and Final grades. Lecture + Laboratory (official sheet):
+ * round(round(Midterm x share) + round(Final x share)). Lecture-only: round(Midterm x share + Final x share),
+ * rounded ONCE. The lecture-only formula is provisional until confirmed against OA LEC.xlsx (contract L9).
+ */
+function faculty_course_grade_percentage(string $componentMode, float $midterm, float $final, float $midtermShare, float $finalShare): float
+{
+    if ($componentMode === 'lecture') {
+        return faculty_round_percent($midterm * $midtermShare / 100 + $final * $finalShare / 100);
+    }
+    return faculty_round_percent(
+        faculty_round_percent($midterm * $midtermShare / 100)
+        + faculty_round_percent($final * $finalShare / 100)
+    );
+}
+
+/**
  * Whole percent -> one-decimal grade (2026-10-17 table). Below 75 is 5.0 for
  * Midterm, Final and course grades; $period is kept for existing callers.
  */
@@ -3159,7 +3244,7 @@ function faculty_compute_period_result(PDO $pdo, array $group, string $period, ?
         $membershipStmt->execute([(int) $group['configId'], $period]);
         $memberships = $membershipStmt->fetchAll(PDO::FETCH_ASSOC);
     }
-    if (($group['componentMode'] ?? 'combined') === 'lecture_laboratory') {
+    if (($group['componentMode'] ?? 'combined') !== 'combined') {
         return faculty_compute_grouped_period_result($pdo, $group, $period, $memberships, $attendanceSummary);
     }
     $dateKey = strtolower($period);
@@ -3341,10 +3426,13 @@ function faculty_compute_grouped_period_result(
     ?array $attendanceSummary = null
 ): array {
     $componentWeights = $group['componentWeights'] ?? [];
-    $weights = [
-        'lecture' => (float) ($componentWeights['lecture'] ?? 0),
-        'laboratory' => (float) ($componentWeights['laboratory'] ?? 0),
-    ];
+    $lectureOnly = ($group['componentMode'] ?? '') === 'lecture';
+    $weights = $lectureOnly
+        ? ['lecture' => 100.0] // Lecture-only: the period grade is the Lecture period grade; no Laboratory values
+        : [
+            'lecture' => (float) ($componentWeights['lecture'] ?? 0),
+            'laboratory' => (float) ($componentWeights['laboratory'] ?? 0),
+        ];
     $attendanceMemberships = array_values(array_filter(
         $memberships,
         static fn(array $membership): bool => (string) ($membership['source_kind'] ?? 'assessment') === 'attendance'
@@ -3355,7 +3443,7 @@ function faculty_compute_grouped_period_result(
     $periodIncomplete = [];
     $unroundedPercentage = 0.0;
 
-    foreach (['lecture' => 'Lecture', 'laboratory' => 'Laboratory'] as $key => $component) {
+    foreach ($lectureOnly ? ['lecture' => 'Lecture'] : ['lecture' => 'Lecture', 'laboratory' => 'Laboratory'] as $key => $component) {
         $componentMemberships = array_values(array_filter(
             $memberships,
             static fn(array $membership): bool => (string) ($membership['component'] ?? 'Combined') === $component
@@ -3497,7 +3585,7 @@ function handle_faculty_assessments_get(): void
                 'subjectCode' => $row['course_code'],
                 'createdAt' => $row['created_at'],
             ];
-            if (($row['component_mode'] ?? 'combined') === 'lecture_laboratory') {
+            if (($row['component_mode'] ?? 'combined') !== 'combined') {
                 $assessment['component'] = $row['component'] !== null ? (string) $row['component'] : null;
             }
             return $assessment;
@@ -4256,6 +4344,9 @@ function handle_faculty_grade_sheet_import(): void
                 || !in_array($component, ['Lecture', 'Laboratory'], true) || !in_array($action, ['create', 'link'], true)) {
                 $fail('A grade sheet item is invalid.');
             }
+            if ($component === 'Laboratory' && ($gradingConfig['component_mode'] ?? '') === 'lecture') {
+                $fail('This class has no Laboratory, so Laboratory items cannot be imported.');
+            }
             $item['transmutationEnabled'] = filter_var($item['transmutationEnabled'] ?? false, FILTER_VALIDATE_BOOLEAN);
             if ($action === 'create') {
                 if ($title === '' || !is_numeric($maxScore) || !is_finite((float) $maxScore) || (float) $maxScore <= 0) {
@@ -4832,12 +4923,10 @@ function faculty_recompute_class_grades(PDO $pdo, int $facultyId, int $csId, str
                 ];
                 continue;
             }
-            // Official sheet: round(round(Midterm x share) + round(Final x share)) on whole period percents.
             $midtermPercentage = $midterm['percentage'] !== null ? (float) $midterm['percentage'] : 0.0;
             $finalPercentage = $final['percentage'] !== null ? (float) $final['percentage'] : 0.0;
-            $percentage = faculty_round_percent(
-                faculty_round_percent($midtermPercentage * $midtermWeight / 100)
-                + faculty_round_percent($finalPercentage * $finalWeight / 100)
+            $percentage = faculty_course_grade_percentage(
+                $group['componentMode'], $midtermPercentage, $finalPercentage, $midtermWeight, $finalWeight
             );
             $gwa = faculty_percentage_to_gwa($percentage);
             $exactGwa = faculty_percentage_to_gwa_exact($percentage);
@@ -6527,7 +6616,7 @@ function faculty_watchlist_midterm(PDO $pdo, array $enrollment, ?array &$readCac
         'gradedCount' => count(array_filter($rows, static fn(array $assessment): bool => $assessment['_has_score'])),
         'totalCount' => count($rows),
     ];
-    if (($grading['component_mode'] ?? 'combined') === 'lecture_laboratory') {
+    if (($grading['component_mode'] ?? 'combined') !== 'combined') {
         $summary['components'] = $result['breakdown']['components'] ?? [];
     }
     return $summary;
@@ -8172,6 +8261,37 @@ function handle_faculty_class_update(): void
                 }
                 if ($editLectureUnits === null && $editLabUnits === null) {
                     throw new ValidationException(['lectureUnits' => 'Choose lecture units, laboratory units, or both.']);
+                }
+                if ((float) ($unitsCourse['lab_units'] ?? 0) > 0 && (float) ($editLabUnits ?? 0) == 0) {
+                    $labOffering = $pdo->prepare(
+                        "SELECT cs.cs_name, ua.display_name
+                           FROM assessments a
+                           JOIN class_sections cs ON cs.cs_id = a.cs_id
+                           JOIN user_accounts ua ON ua.user_id = cs.instructor_user_id
+                           JOIN grading_category_period_memberships gcp
+                             ON gcp.category_id = a.grading_category_id AND gcp.grading_period = a.grading_period
+                          WHERE gcp.component = 'Laboratory'
+                            AND cs.course_id = ?
+                            AND UPPER(cs.school_year) = UPPER(?)
+                          ORDER BY cs.cs_id, a.assessment_id
+                          LIMIT 1"
+                    );
+                    $labOffering->execute([(int) $before['course_id'], academic_current_school_year($pdo)]);
+                    $labRow = $labOffering->fetch(PDO::FETCH_ASSOC);
+                    if ($labRow) {
+                        $pdo->rollBack();
+                        emit_response(build_json_response([
+                            'status' => 'error',
+                            'code' => 'COURSE_LABORATORY_ASSESSMENTS_EXIST',
+                            'message' => sprintf(
+                                '%s (%s) has Laboratory assessments. Delete them in Grade Computation before removing Laboratory units.',
+                                $labRow['cs_name'],
+                                $labRow['display_name']
+                            ),
+                            'requestId' => function_exists('request_id') ? request_id() : null,
+                        ], 409));
+                        return;
+                    }
                 }
                 $pdo->prepare('UPDATE courses SET lecture_units = ?, lab_units = ?, units = ? WHERE course_id = ?')->execute([
                     $editLectureUnits ?? 0,

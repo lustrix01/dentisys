@@ -3849,6 +3849,61 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       }
     });
 
+    test('lecture-only course shows one Lecture list, no Laboratory part, and saves componentMode lecture', async ({ page }) => {
+      const puts: Array<Record<string, any>> = [];
+      const lectureDefaults = (period: string) => ['Term Exam', 'Quiz', 'Outputs', 'Participation'].map((name, index) => ({
+        name, weight: [50, 20, 20, 10][index], sortOrder: index + 1, sourceKind: 'assessment', component: 'Lecture', gradingPeriod: period,
+      }));
+      await page.route('**/api/faculty/grading-config?*', async route => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+          status: 'ok', configuration: null,
+          defaults: {
+            schemaMode: 'periods', componentMode: 'lecture', courseStructure: 'lecture', courseUnits: { lecture: 3, laboratory: 0 },
+            termRatio: { midterm: 30, final: 70 },
+            midtermCategories: lectureDefaults('Midterm'), finalCategories: lectureDefaults('Final'),
+            attendanceDateRanges: { midterm: { startDate: null, endDate: null }, final: { startDate: null, endDate: null } },
+          },
+        }) });
+      });
+      await page.route('**/api/faculty/grading-config', async route => {
+        if (route.request().method() !== 'PUT') return route.continue();
+        const payload = route.request().postDataJSON() as Record<string, any>;
+        puts.push(payload);
+        const withIds = (rows: Array<Record<string, any>>, period: string, startId: number) => rows.map((row, index) => ({ ...row, id: startId + index, gradingPeriod: period, inUse: false }));
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+          status: 'ok',
+          configuration: {
+            id: 'lecture-only', course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+            semester: '1st Semester', schoolYear: '2026-2027', version: 1,
+            schemaMode: 'periods', componentMode: 'lecture', courseStructure: 'lecture', courseUnits: { lecture: 3, laboratory: 0 },
+            termRatio: payload.termRatio, attendanceDateRanges: payload.attendanceDateRanges,
+            midtermCategories: withIds(payload.midtermCategories, 'Midterm', 100),
+            finalCategories: withIds(payload.finalCategories, 'Final', 200),
+          },
+        }) });
+      });
+
+      await page.goto('/grades?tab=components');
+      await expect(page.getByText('BU Dental Medicine Default Grade Weights: Lecture only • Midterm 30% / Final 70%')).toBeVisible();
+      await expect(page.getByText("Lecture only, from this course's units (Lecture 3 · Laboratory 0). No Laboratory part.")).toBeVisible();
+      await expect(page.getByText(/2\. Midterm Components/)).toBeVisible();
+      await expect(page.getByRole('tab', { name: 'Laboratory Categories' })).toHaveCount(0);
+      await expect(page.locator('#lecture-component-weight')).toHaveCount(0);
+      await expect(page.locator('input[placeholder*="Category name"]')).toHaveCount(4);
+
+      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+      await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
+      expect(puts).toHaveLength(1);
+      expect(puts[0].componentMode).toBe('lecture');
+      expect(puts[0].componentWeights).toBeUndefined();
+      expect(puts[0].convertToLectureLaboratory).toBeUndefined();
+      for (const categories of [puts[0].midtermCategories, puts[0].finalCategories]) {
+        expect(categories).toHaveLength(4);
+        expect(categories.every((category: Record<string, any>) => category.component === 'Lecture')).toBeTruthy();
+      }
+    });
+
     test('grouped grade summaries show four distinct component columns and export all four values', async ({ page }) => {
       const groupedCategories = [
         { id: 101, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', component: 'Lecture', inUse: true },

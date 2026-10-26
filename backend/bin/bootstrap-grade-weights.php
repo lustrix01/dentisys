@@ -55,7 +55,7 @@ function bootstrap_keyword_category(string $type, ?string $period): string
 
 $offerings = $pdo->query(
     "SELECT cs.instructor_user_id, cs.course_id, cs.semester, cs.school_year,
-            c.course_code, c.grading_config::text AS grading_config,
+            c.course_code, c.grading_config::text AS grading_config, c.lecture_units, c.lab_units,
             ua.login_email, ua.role, ua.display_name,
             json_agg(json_build_object('school_year', cs.school_year, 'semester', cs.semester, 'term_start_date', cs.term_start_date, 'term_end_date', cs.term_end_date))::text AS term_classes
        FROM class_sections cs
@@ -69,7 +69,7 @@ $offerings = $pdo->query(
                AND gc.semester = UPPER(cs.semester)
                AND gc.school_year = UPPER(cs.school_year))
       GROUP BY cs.instructor_user_id, cs.course_id, cs.semester, cs.school_year,
-               c.course_code, c.grading_config::text, ua.login_email, ua.role, ua.display_name
+               c.course_code, c.grading_config::text, c.lecture_units, c.lab_units, ua.login_email, ua.role, ua.display_name
       ORDER BY cs.school_year, cs.semester, c.course_code, cs.instructor_user_id"
 )->fetchAll(PDO::FETCH_ASSOC);
 
@@ -100,7 +100,7 @@ foreach ($offerings as $offering) {
         'display_name' => (string) $offering['display_name'],
         'session_id' => null,
     ];
-    $payload = array_merge(faculty_grading_default_period_template(), [
+    $payload = array_merge(faculty_grading_default_period_template(faculty_course_structure($offering["lecture_units"], $offering["lab_units"])), [
         'courseId' => (int) $offering['course_id'],
         'semester' => (string) $offering['semester'],
         'schoolYear' => (string) $offering['school_year'],

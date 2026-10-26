@@ -1813,8 +1813,10 @@ export interface FacultyGradingConfiguration {
   schoolYear: string;
   version: number;
   schemaMode?: 'overall' | 'periods';
-  componentMode?: 'combined' | 'lecture_laboratory';
+  componentMode?: 'combined' | 'lecture_laboratory' | 'lecture';
   componentWeights?: { lecture: number; laboratory: number };
+  courseStructure?: FacultyCourseStructure;
+  courseUnits?: { lecture: number | null; laboratory: number | null };
   termRatio?: FacultyTermRatio;
   attendanceDateRanges?: FacultyAttendanceDateRanges;
   categories: FacultyGradingCategoryItem[];
@@ -1822,10 +1824,14 @@ export interface FacultyGradingConfiguration {
   finalCategories?: FacultyGradingCategoryItem[];
 }
 
+export type FacultyCourseStructure = 'lecture' | 'lecture_laboratory' | 'unrecorded';
+
 export interface FacultyGradingConfigDefaults {
   schemaMode: 'periods';
-  componentMode: 'lecture_laboratory';
-  componentWeights: { lecture: number; laboratory: number };
+  componentMode: 'lecture_laboratory' | 'lecture';
+  componentWeights?: { lecture: number; laboratory: number };
+  courseStructure?: FacultyCourseStructure;
+  courseUnits?: { lecture: number | null; laboratory: number | null };
   termRatio: { midterm: number; final: number };
   midtermCategories: Array<{ name: string; weight: number; sortOrder: number; sourceKind: GradingSourceKindEnum; component: GradingComponentEnum }>;
   finalCategories: Array<{ name: string; weight: number; sortOrder: number; sourceKind: GradingSourceKindEnum; component: GradingComponentEnum }>;
@@ -1836,6 +1842,8 @@ export interface FacultyGradingConfigGetResponse {
   status: string;
   configuration: FacultyGradingConfiguration | null;
   defaults?: FacultyGradingConfigDefaults;
+  courseStructure?: FacultyCourseStructure;
+  courseUnits?: { lecture: number | null; laboratory: number | null };
 }
 
 export interface FacultyGradingCategoryAssignmentRequiredItem {
@@ -1881,7 +1889,7 @@ export interface FacultyGradingConfigSavePayload {
     gradingPeriod?: GradingPeriodEnum;
     component?: GradingComponentEnum;
   }>;
-  componentMode?: 'lecture_laboratory';
+  componentMode?: 'lecture_laboratory' | 'lecture';
   componentWeights?: { lecture: number | string; laboratory: number | string };
   termRatio?: { midterm: number | string; final: number | string };
   attendanceDateRanges?: {

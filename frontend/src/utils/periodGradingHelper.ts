@@ -389,7 +389,7 @@ export function generateGradeSummaryCSV(
   selectedSubjectCode: string,
   isPeriodMode: boolean,
   computeResultsByEnrollment?: Map<string, FacultyGradeComputeResult>,
-  componentMode: 'combined' | 'lecture_laboratory' = 'combined'
+  componentMode: 'combined' | 'lecture_laboratory' | 'lecture' = 'combined'
 ): string {
   const groupedCsvCell = (value: string): string => {
     const formulaSafe = /^[\t\r\n ]*[=+\-@]/.test(value) ? `'${value}` : value;

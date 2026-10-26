@@ -19,7 +19,7 @@ import { useApp } from '../../context/AppContext';
 import { StudentUnavailable } from './RealStudentSurfaces';
 import { getStudentAcademicClassesApi } from '../../services/apiClient';
 import type { StudentAcademicClass } from '../../types';
-import GradeValue from '../../components/GradeValue';
+import GradeValue, { lectureHoverSteps } from '../../components/GradeValue';
 import { formatGrade } from '../../utils/gradeHelper';
 
 interface ParsedSchedule {
@@ -442,7 +442,7 @@ export const Classes: React.FC = () => {
                         <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Grade:</span>
                         {typeof cls.grade === 'number' ? (
                           <span className="font-bold text-slate-700 dark:text-slate-200">
-                            <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue>
+                            <GradeValue percentage={cls.percentage} grade={cls.grade} lecture={cls.gradingComponentMode === 'lecture' ? lectureHoverSteps(cls.gradeComponents) : null}>{formatGrade(cls.grade)}</GradeValue>
                             {typeof cls.percentage === 'number' && (
                               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal ml-1">({cls.percentage.toFixed(1)}%)</span>
                             )}
@@ -555,7 +555,7 @@ export const Classes: React.FC = () => {
                         <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Final Grade:</span>
                         {typeof cls.grade === 'number' ? (
                           <span className="font-bold text-slate-700 dark:text-slate-200">
-                            <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue>
+                            <GradeValue percentage={cls.percentage} grade={cls.grade} lecture={cls.gradingComponentMode === 'lecture' ? lectureHoverSteps(cls.gradeComponents) : null}>{formatGrade(cls.grade)}</GradeValue>
                             {typeof cls.percentage === 'number' && (
                               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal ml-1">({cls.percentage.toFixed(1)}%)</span>
                             )}
@@ -592,7 +592,7 @@ export const Classes: React.FC = () => {
           <tbody>{otherClasses.map(cls => <tr key={cls.enrollmentId}>
             <td className="p-2">{cls.courseCode} · {cls.courseName} · {cls.className}</td>
             <td className="p-2">{cls.schoolYear || 'Unavailable'}</td>
-            <td className="p-2">{cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue>}</td>
+            <td className="p-2">{cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage} grade={cls.grade} lecture={cls.gradingComponentMode === 'lecture' ? lectureHoverSteps(cls.gradeComponents) : null}>{formatGrade(cls.grade)}</GradeValue>}</td>
             <td className="p-2">{cls.percentage === null ? 'Pending' : `${cls.percentage}%`}</td>
             <td className="p-2">{cls.clinicHoursCompleted} hrs</td>
             <td className="p-2">{cls.retentionState || 'Unavailable'}</td>

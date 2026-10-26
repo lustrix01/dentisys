@@ -89,7 +89,7 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
       };
     });
     return {
-      classId, categories: cats, assessments: savedAssessments, saved, cls,
+      classId, categories: cats, assessments: savedAssessments, saved, cls, lectureOnly: config?.componentMode === 'lecture',
       students: students.map(s => ({ id: s.id, name: s.name, firstName: s.firstName, middleName: s.middleName, lastName: s.lastName })),
     };
   }, [classId, config, assessments, scores, students, cls]);
@@ -342,9 +342,14 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
 
         {sheets.length > 0 && !configProblem && (
           <>
-            <div className={note.green}>
-              Found: {preview.sheets.map(s => `${s.component ?? 'a sheet'} ("${s.sheet.name}")`).join(', ')}. Summary and grade-table sheets are not imported, and nothing is saved until you click Import scores. The file never leaves your browser.
-            </div>
+            {preview.sheets.length > 0 && (
+              <div className={note.green}>
+                Found: {preview.sheets.map(s => `${s.component ?? 'a sheet'} ("${s.sheet.name}")`).join(', ')}. Summary and grade-table sheets are not imported, and nothing is saved until you click Import scores. The file never leaves your browser.
+              </div>
+            )}
+            {preview.skippedSheets.length > 0 && (
+              <div className={note.amber}>This class has no Laboratory, so the LAB sheet is skipped.</div>
+            )}
             {preview.sheets.map(s => s.headerWarnings.length > 0 && (
               <div key={`h${s.sheet.index}`} className={note.amber}>
                 <b>This sheet ("{s.sheet.name}") may be for another class.</b> You can still continue.

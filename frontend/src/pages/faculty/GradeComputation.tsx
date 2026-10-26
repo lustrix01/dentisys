@@ -63,6 +63,7 @@ import {
 } from '../../services/apiClient';
 import type {
   FacultyClassItem,
+  FacultyCourseStructure,
   FacultyGradingConfiguration,
   FacultyGradingCategoryAssignmentRequiredItem,
   FacultyGradingCategoryPeriodMappingRequiredItem,
@@ -385,8 +386,11 @@ export const GradeComputation: React.FC = () => {
   const [selectedOfferingKey, setSelectedOfferingKey] = useState<string>('');
   const [loadedConfig, setLoadedConfig] = useState<FacultyGradingConfiguration | null>(null);
   const [schemaMode, setSchemaMode] = useState<'overall' | 'periods'>('periods');
-  const [componentMode, setComponentMode] = useState<'combined' | 'lecture_laboratory'>('lecture_laboratory');
-  const [savedComponentMode, setSavedComponentMode] = useState<'combined' | 'lecture_laboratory'>('lecture_laboratory');
+  const [componentMode, setComponentMode] = useState<'combined' | 'lecture_laboratory' | 'lecture'>('lecture_laboratory');
+  const [savedComponentMode, setSavedComponentMode] = useState<'combined' | 'lecture_laboratory' | 'lecture'>('lecture_laboratory');
+  const [courseStructure, setCourseStructure] = useState<FacultyCourseStructure | null>(null);
+  const [courseUnits, setCourseUnits] = useState<{ lecture: number | null; laboratory: number | null } | null>(null);
+  const [structureNotice, setStructureNotice] = useState<'now-lecture' | 'now-laboratory' | null>(null);
   const [componentWeights, setComponentWeights] = useState<{ lecture: string; laboratory: string }>({ lecture: '60', laboratory: '40' });
   const [savedComponentWeights, setSavedComponentWeights] = useState<{ lecture: string; laboratory: string }>({ lecture: '60', laboratory: '40' });
   const [activeComponentEditorTab, setActiveComponentEditorTab] = useState<GradingComponentEnum>('Lecture');
@@ -1685,8 +1689,8 @@ export const GradeComputation: React.FC = () => {
 
   const handlePrepareOverallPeriodConversion = () => {
     setSchemaMode('periods');
-    setComponentMode('lecture_laboratory');
-    setSavedComponentMode('lecture_laboratory');
+    setComponentMode(courseStructure === 'lecture' ? 'lecture' : 'lecture_laboratory');
+    setSavedComponentMode(courseStructure === 'lecture' ? 'lecture' : 'lecture_laboratory');
     setComponentWeights({ lecture: '60', laboratory: '40' });
     setSavedComponentWeights({ lecture: '60', laboratory: '40' });
     setActiveComponentEditorTab('Lecture');
@@ -1696,13 +1700,16 @@ export const GradeComputation: React.FC = () => {
   };
 
   const handleApplyBuGradingSystem = () => {
+    const lectureOnly = courseStructure === 'lecture';
     setSchemaMode('periods');
-    setComponentMode('lecture_laboratory');
+    setComponentMode(lectureOnly ? 'lecture' : 'lecture_laboratory');
     setComponentWeights({ lecture: '60', laboratory: '40' });
     setTermRatio({ midterm: '30', final: '70' });
-    setMidtermCategories(buildDefaultLectureLaboratoryCategories('Midterm'));
-    setFinalCategories(buildDefaultLectureLaboratoryCategories('Final'));
-    showFeedback('Applied BU Grading System standard (Lecture 60%, Lab 40% | Midterm 30%, Finals 70%). Click Save to apply.', 'success');
+    setMidtermCategories(buildDefaultLectureLaboratoryCategories('Midterm').filter(row => !lectureOnly || row.component === 'Lecture'));
+    setFinalCategories(buildDefaultLectureLaboratoryCategories('Final').filter(row => !lectureOnly || row.component === 'Lecture'));
+    showFeedback(lectureOnly
+      ? 'Applied BU Grading System standard (Lecture only | Midterm 30%, Finals 70%). Click Save to apply.'
+      : 'Applied BU Grading System standard (Lecture 60%, Lab 40% | Midterm 30%, Finals 70%). Click Save to apply.', 'success');
   };
 
   // Keep selected offering key synchronized with the active course filter
@@ -1737,6 +1744,10 @@ export const GradeComputation: React.FC = () => {
         schoolYear: offering.canonicalSchoolYear,
       });
       setLoadedConfig(res.configuration);
+      setStructureNotice(null);
+      const loadedStructure = res.courseStructure ?? (res.configuration ?? res.defaults)?.courseStructure ?? null;
+      setCourseStructure(loadedStructure);
+      setCourseUnits(res.courseUnits ?? (res.configuration ?? res.defaults)?.courseUnits ?? null);
       if (res.configuration === null) {
         // Unconfigured offering: populate editable unsaved starting preset
         setSchemaMode('periods');
@@ -1915,7 +1926,6 @@ export const GradeComputation: React.FC = () => {
             component: c.component ?? undefined,
             inUse: Boolean(c.inUse),
           }));
-          setMidtermCategories(mRows);
           setSavedMidtermCategories(mRows);
 
           const fSource = res.configuration.finalCategories
@@ -1934,8 +1944,28 @@ export const GradeComputation: React.FC = () => {
             component: c.component ?? undefined,
             inUse: Boolean(c.inUse),
           }));
-          setFinalCategories(fRows);
           setSavedFinalCategories(fRows);
+
+          // Units changed since the last save: open a draft in the new structure; nothing changes until Save.
+          let draftMode = loadedComponentMode;
+          let mDraft = mRows;
+          let fDraft = fRows;
+          if (loadedComponentMode === 'lecture_laboratory' && loadedStructure === 'lecture') {
+            draftMode = 'lecture';
+            mDraft = mRows.filter(r => r.component === 'Lecture');
+            fDraft = fRows.filter(r => r.component === 'Lecture');
+            setStructureNotice('now-lecture');
+          } else if (loadedComponentMode === 'lecture' && loadedStructure === 'lecture_laboratory') {
+            draftMode = 'lecture_laboratory';
+            const labRows = (period: 'Midterm' | 'Final') => buildDefaultLectureLaboratoryCategories(period).filter(r => r.component === 'Laboratory');
+            mDraft = [...mRows, ...labRows('Midterm')];
+            fDraft = [...fRows, ...labRows('Final')];
+            setComponentWeights({ lecture: '60', laboratory: '40' });
+            setStructureNotice('now-laboratory');
+          }
+          setComponentMode(draftMode);
+          setMidtermCategories(mDraft);
+          setFinalCategories(fDraft);
 
           setCategoryRows([]);
           setSavedCategoryRows([]);
@@ -2027,6 +2057,9 @@ export const GradeComputation: React.FC = () => {
     setSavedFinalCategories([]);
     setComponentMode('lecture_laboratory');
     setSavedComponentMode('lecture_laboratory');
+    setCourseStructure(null);
+    setCourseUnits(null);
+    setStructureNotice(null);
     setComponentWeights({ lecture: '60', laboratory: '40' });
     setSavedComponentWeights({ lecture: '60', laboratory: '40' });
     setActiveComponentEditorTab('Lecture');
@@ -2317,7 +2350,7 @@ export const GradeComputation: React.FC = () => {
   };
 
   const midtermCalc = useMemo(() => {
-    if (componentMode === 'combined') return calculateCategoryWeightSummary(midtermCategories);
+    if (componentMode !== 'lecture_laboratory') return calculateCategoryWeightSummary(midtermCategories);
     const lecture = calculateCategoryWeightSummary(midtermCategories.filter(row => row.component === 'Lecture'));
     const laboratory = calculateCategoryWeightSummary(midtermCategories.filter(row => row.component === 'Laboratory'));
     const hasUnassigned = midtermCategories.some(row => !row.component);
@@ -2330,7 +2363,7 @@ export const GradeComputation: React.FC = () => {
   }, [componentMode, midtermCategories]);
 
   const finalCalc = useMemo(() => {
-    if (componentMode === 'combined') return calculateCategoryWeightSummary(finalCategories);
+    if (componentMode !== 'lecture_laboratory') return calculateCategoryWeightSummary(finalCategories);
     const lecture = calculateCategoryWeightSummary(finalCategories.filter(row => row.component === 'Lecture'));
     const laboratory = calculateCategoryWeightSummary(finalCategories.filter(row => row.component === 'Laboratory'));
     const hasUnassigned = finalCategories.some(row => !row.component);
@@ -2525,6 +2558,7 @@ export const GradeComputation: React.FC = () => {
 
     const isForwardGroupedConversion = loadedConfig?.schemaMode === 'periods'
       && loadedConfig.componentMode !== 'lecture_laboratory'
+      && loadedConfig.componentMode !== 'lecture'
       && componentMode === 'lecture_laboratory';
     const isOverallConversion = isOverallPeriodConversionDraft;
     const confirmed = await requestConfirmation(
@@ -2584,6 +2618,7 @@ export const GradeComputation: React.FC = () => {
           gradingPeriod: 'Midterm',
           sourceKind: c.sourceKind,
           ...(componentMode === 'lecture_laboratory' && c.component ? { component: c.component } : {}),
+          ...(componentMode === 'lecture' ? { component: 'Lecture' as const } : {}),
         })),
         finalCategories: finalCategories.map((c, idx) => ({
           ...(c.id ? { id: c.id } : {}),
@@ -2595,6 +2630,7 @@ export const GradeComputation: React.FC = () => {
           gradingPeriod: 'Final',
           sourceKind: c.sourceKind,
           ...(componentMode === 'lecture_laboratory' && c.component ? { component: c.component } : {}),
+          ...(componentMode === 'lecture' ? { component: 'Lecture' as const } : {}),
         })),
         attendanceDateRanges: normalizeDateRangesForPayload(attendanceDateRanges),
         ...(componentMode === 'lecture_laboratory' ? {
@@ -2603,7 +2639,7 @@ export const GradeComputation: React.FC = () => {
             lecture: Number(componentWeights.lecture),
             laboratory: Number(componentWeights.laboratory),
           },
-        } : {}),
+        } : componentMode === 'lecture' ? { componentMode } : {}),
       };
       if (loadedConfig?.version !== undefined && loadedConfig.version !== null) {
         payload.version = loadedConfig.version;
@@ -2613,7 +2649,7 @@ export const GradeComputation: React.FC = () => {
       }
       if (componentMode === 'lecture_laboratory' && (
         loadedConfig?.schemaMode === 'overall'
-        || (loadedConfig?.schemaMode === 'periods' && loadedConfig.componentMode !== 'lecture_laboratory')
+        || (loadedConfig?.schemaMode === 'periods' && loadedConfig.componentMode !== 'lecture_laboratory' && loadedConfig.componentMode !== 'lecture')
       )) {
         payload.convertToLectureLaboratory = true;
       }
@@ -2627,7 +2663,12 @@ export const GradeComputation: React.FC = () => {
       setLoadedConfig(res.configuration);
       setIsPresetDraft(false);
       setSchemaMode(res.configuration.schemaMode ?? 'periods');
-      const persistedComponentMode = res.configuration.schemaMode === 'periods' ? 'lecture_laboratory' : 'combined';
+      const persistedComponentMode = res.configuration.schemaMode === 'periods'
+        ? (res.configuration.componentMode === 'lecture' ? 'lecture' : 'lecture_laboratory')
+        : 'combined';
+      setStructureNotice(null);
+      if (res.configuration.courseStructure) setCourseStructure(res.configuration.courseStructure);
+      if (res.configuration.courseUnits) setCourseUnits(res.configuration.courseUnits);
       setComponentMode(persistedComponentMode);
       setSavedComponentMode(persistedComponentMode);
       const persistedComponentWeights = {
@@ -2812,6 +2853,16 @@ export const GradeComputation: React.FC = () => {
       return Boolean(midterm?.components || final?.components);
     });
   }, [loadedConfig, assessmentConfig, computeResultsByEnrollment, activeStudents, selectedSubjectCode]);
+
+  // Lecture-only courses show the single-rounding formula in the course-grade hover (rule L5).
+  const lectureOnlyTermRatio = (loadedConfig ?? assessmentConfig)?.componentMode === 'lecture'
+    ? (loadedConfig ?? assessmentConfig)?.termRatio ?? null
+    : null;
+  const lectureHoverFor = (midterm: number | null, final: number | null) => (
+    lectureOnlyTermRatio && midterm !== null && final !== null
+      ? { midterm, final, midtermShare: Number(lectureOnlyTermRatio.midterm), finalShare: Number(lectureOnlyTermRatio.final) }
+      : null
+  );
 
   const sortedSummaryStudents = useMemo(() => {
     const filtered = activeStudents.filter(s =>
@@ -4217,12 +4268,29 @@ export const GradeComputation: React.FC = () => {
                     <div className="p-3 sm:p-3.5 rounded-2xl bg-clinical-50/70 dark:bg-clinical-950/30 border border-clinical-200/80 dark:border-clinical-800/50 flex flex-wrap items-center justify-between gap-3 text-xs">
                       <div className="flex-1 basis-48 min-w-0 flex items-center gap-2 text-clinical-800 dark:text-clinical-200 font-semibold">
                         <CheckCircle className="w-4 h-4 text-clinical-600 dark:text-clinical-400 shrink-0" />
-                        <span>BU Dental Medicine {loadedConfig ? 'Schema Active' : 'Default Grade Weights'}: Lecture {componentWeights.lecture}% / Lab {componentWeights.laboratory}% • Midterm {termRatio.midterm}% / Final {termRatio.final}%</span>
+                        <span>BU Dental Medicine {loadedConfig ? 'Schema Active' : 'Default Grade Weights'}: {componentMode === 'lecture' ? 'Lecture only' : `Lecture ${componentWeights.lecture}% / Lab ${componentWeights.laboratory}%`} • Midterm {termRatio.midterm}% / Final {termRatio.final}%</span>
                       </div>
                       <span className="text-[11px] font-bold text-clinical-600 dark:text-clinical-400 shrink-0 whitespace-nowrap">
                         Directly editable
                       </span>
                     </div>
+                  )}
+
+                  {/* COURSE STRUCTURE CHANGED SINCE LAST SAVE */}
+                  {structureNotice && (
+                    <div className="rounded-2xl border border-amber-300/70 dark:border-amber-800/70 bg-amber-50/60 dark:bg-amber-950/20 p-4 text-xs">
+                      <h3 className="font-bold text-amber-900 dark:text-amber-200">
+                        {structureNotice === 'now-lecture'
+                          ? 'This course is now Lecture only. Save to remove the Laboratory part.'
+                          : 'This course now has Laboratory units. Save to add the Laboratory part.'}
+                      </h3>
+                    </div>
+                  )}
+
+                  {courseStructure === 'unrecorded' && (
+                    <p role="note" className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
+                      Set this course's Lecture and Laboratory units in Classes &amp; Rosters to use a Lecture-only grade structure.
+                    </p>
                   )}
 
                   {/* LEGACY COMBINED NOTIFICATION (IF APPLICABLE) */}
@@ -4351,6 +4419,23 @@ export const GradeComputation: React.FC = () => {
                       </div>
                     </div>
                   </div>
+
+                  {/* LEVEL 2 (LECTURE ONLY): ONE NON-INTERACTIVE LINE */}
+                  {componentMode === 'lecture' && (
+                    <div className="space-y-2">
+                      <div className="px-1">
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wider">
+                          2. {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'} Components
+                        </span>
+                      </div>
+                      <div className="p-3 sm:p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 flex items-center gap-2.5">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-emerald-500 ring-3 ring-emerald-200 dark:ring-emerald-900" />
+                        <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
+                          Lecture only, from this course's units (Lecture {courseUnits?.lecture ?? '—'} · Laboratory 0). No Laboratory part.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* LEVEL 2: COMPONENT SUB-TABS (LECTURE & LABORATORY WITH INLINE CONTRIBUTION EDITING) */}
                   {componentMode === 'lecture_laboratory' && (
@@ -4712,9 +4797,11 @@ export const GradeComputation: React.FC = () => {
                       <span className="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800">
                         Term Split: <strong className={termRatioCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{termRatio.midterm}% / {termRatio.final}%</strong>
                       </span>
-                      <span className="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800">
-                        Components: <strong className="text-slate-700 dark:text-slate-300">{componentWeights.lecture}% / {componentWeights.laboratory}%</strong>
-                      </span>
+                      {componentMode !== 'lecture' && (
+                        <span className="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+                          Components: <strong className="text-slate-700 dark:text-slate-300">{componentWeights.lecture}% / {componentWeights.laboratory}%</strong>
+                        </span>
+                      )}
                       <span className={`px-2.5 py-1 rounded-xl ${activeComponentCategoryCalc.isExact100 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'}`}>
                         {activeComponentEditorTab} Total: <strong>{activeComponentCategoryCalc.displayPercent}</strong>
                       </span>
@@ -5153,7 +5240,7 @@ export const GradeComputation: React.FC = () => {
                           </td>
                           <td className="px-5 py-3 text-center font-extrabold text-sm dark:text-slate-100">
                             {evalResult.overallGwa !== null ? (
-                              <GradeValue percentage={evalResult.overallPercentage} grade={evalResult.overallGwa}>{formatGrade(evalResult.overallGwa)}</GradeValue>
+                              <GradeValue percentage={evalResult.overallPercentage} grade={evalResult.overallGwa} lecture={lectureHoverFor(evalResult.midtermPercentage, evalResult.finalPercentage)}>{formatGrade(evalResult.overallGwa)}</GradeValue>
                             ) : evalResult.historicalGwa !== null ? (
                               <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium" title="Prior persisted grade; current recomputation is incomplete">
                                 Prior: {formatGrade(evalResult.historicalGwa)} (Historical)
@@ -5200,7 +5287,7 @@ export const GradeComputation: React.FC = () => {
                         <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—'}</td>
                         <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—'}</td>
                         <td className="px-5 py-3 text-center font-extrabold text-sm dark:text-slate-100">
-                          {hasGrade ? <GradeValue percentage={evalResult.overallPercentage} grade={subj.grade}>{formatGrade(subj.grade)}</GradeValue> : '—'}
+                          {hasGrade ? <GradeValue percentage={evalResult.overallPercentage} grade={subj.grade} lecture={lectureHoverFor(evalResult.midtermPercentage, evalResult.finalPercentage)}>{formatGrade(subj.grade)}</GradeValue> : '—'}
                         </td>
                         <td className="px-5 py-3">
                           <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${!hasGrade

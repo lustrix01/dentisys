@@ -14,7 +14,23 @@ type Props = {
   grade?: number | null;
   /** Value before the whole-percent rounding (e.g. 83.77); without it the percentage itself is the first step. */
   raw?: number | null;
+  /** Lecture-only courses: shows the single-rounding formula (rule L5) instead of the period steps. */
+  lecture?: LectureHoverSteps | null;
 };
+
+export type LectureHoverSteps = { midterm: number; final: number; midtermShare: number; finalShare: number };
+
+/** Midterm/Final whole percents and shares from a saved breakdown; null when anything is missing. */
+export function lectureHoverSteps(
+  components: Record<string, unknown> | null | undefined,
+  fallbackRatio?: { midterm?: number | string | null; final?: number | string | null } | null,
+): LectureHoverSteps | null {
+  const periods = components?.periods as Record<string, { percentage?: unknown } | undefined> | undefined;
+  const ratio = (components?.termRatio ?? fallbackRatio) as { midterm?: unknown; final?: unknown } | null | undefined;
+  const nums = [periods?.midterm?.percentage, periods?.final?.percentage, ratio?.midterm, ratio?.final].map(v => (v === null || v === undefined || v === '' ? NaN : Number(v)));
+  if (nums.some(v => !Number.isFinite(v))) return null;
+  return { midterm: nums[0], final: nums[1], midtermShare: nums[2], finalShare: nums[3] };
+}
 
 const BUBBLE =
   'pointer-events-none fixed left-0 top-0 z-[1000] whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[11px] font-medium normal-case text-white shadow-lg dark:bg-slate-100 dark:text-slate-900 print:hidden';
@@ -26,7 +42,7 @@ const BUBBLE =
  * text; the visible bubble is an aria-hidden copy portalled to <body> with fixed coordinates so scroll
  * containers and overflow:hidden cards cannot clip it.
  */
-export default function GradeValue({ percentage, children, className, period = 'Final', grade, raw }: Props) {
+export default function GradeValue({ percentage, children, className, period = 'Final', grade, raw, lecture }: Props) {
   const id = useId();
   const triggerRef = useRef<HTMLSpanElement>(null);
   const bubbleRef = useRef<HTMLSpanElement>(null);
@@ -56,7 +72,9 @@ export default function GradeValue({ percentage, children, className, period = '
   const grade2 = typeof grade === 'number' && Number.isFinite(grade) ? grade : percentageToGWAExact(whole, period);
   const first = typeof raw === 'number' && Number.isFinite(raw) ? raw : percentage;
   // e.g. "83.77% → 84% → 2.5"; the first step is dropped when nothing was rounded.
-  const tip = `${first === whole ? '' : `${first.toFixed(2)}% → `}${whole}% → ${formatGrade(grade2)}`;
+  const lectureRaw = lecture ? (lecture.midterm * lecture.midtermShare + lecture.final * lecture.finalShare) / 100 : null;
+  const lectureFirst = lectureRaw === null ? '' : `${lecture!.midterm}% × ${lecture!.midtermShare}% + ${lecture!.final}% × ${lecture!.finalShare}% = ${lectureRaw === whole ? whole : Number(lectureRaw.toFixed(2))}% → `;
+  const tip = lecture ? `${lectureFirst}${lectureRaw === whole ? '' : `${whole}% → `}${formatGrade(grade2)}` : `${first === whole ? '' : `${first.toFixed(2)}% → `}${whole}% → ${formatGrade(grade2)}`;
   return React.createElement(
     'span',
     {

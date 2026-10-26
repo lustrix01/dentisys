@@ -197,8 +197,8 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
             'isPast' => academic_school_year_is_past($pdo, (string) $row['school_year']),
             'archiveReason' => $row['archive_reason'] === 'finished' ? 'finished' : null,
         ];
-        if (($row['grading_component_mode'] ?? 'combined') === 'lecture_laboratory') {
-            $classRow['gradingComponentMode'] = 'lecture_laboratory';
+        if (in_array($row['grading_component_mode'] ?? 'combined', ['lecture_laboratory', 'lecture'], true)) {
+            $classRow['gradingComponentMode'] = $row['grading_component_mode'];
         }
         $rows[] = $classRow;
     }

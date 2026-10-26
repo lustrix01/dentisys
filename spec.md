@@ -448,12 +448,12 @@ Faculty grading configurations remain scoped to the Faculty member, course, seme
 New, unconfigured offerings present an editable, unsaved Lecture/Laboratory
 period grading preset defined in GRD-003. Preset values become authoritative
 only after a successful server save; Faculty may customize all weights and
-categories within the required separate Lecture/Laboratory structure.
+categories within the structure required for the course (GRD-003).
 
 Faculty may customize each component's categories and weights for each period.
-All new or updated period grading configurations must use the separate
-Lecture/Laboratory structure defined in GRD-003. Each component-period category
-list, the Lecture/Laboratory contributions, and the Midterm/Finals contributions
+All new or updated period grading configurations must use the structure
+required for the course in GRD-003. Each component-period category list, the
+Lecture/Laboratory contributions where both exist, and the Midterm/Finals contributions
 must each total exactly 100%, using the existing supported decimal precision.
 
 Preset values become authoritative only after a successful server save. Existing saved configurations must never be replaced automatically by preset values.
@@ -487,7 +487,8 @@ Grade displays and exports must distinguish authoritative Midterm, Finals, and o
 **Status: APPROVED**
 
 Separate Lecture/Laboratory grading is mandatory for all new or updated period
-grading configurations on authorized current-year offerings. Grade Weights must
+grading configurations on authorized current-year offerings, except lecture-only
+courses. Grade Weights must
 not offer a combined/split structure selector or conversion back to combined
 period lists. The configuration remains shared by its sections and scoped to the
 Faculty member, course, semester and school year.
@@ -555,6 +556,24 @@ Faculty may edit these values while preserving the separate component structure
 and all three 100% totals. Defaults are shown automatically without an Apply
 syllabus example action. Existing saved configurations and recorded grades must
 never be replaced automatically by default values.
+
+Owner-approved amendment (2026-10-26): Lecture-only courses. A course with
+Lecture units above 0 and Laboratory units of 0 is lecture-only; course units
+are the only source. Courses without recorded units keep Lecture/Laboratory
+grading, and Grade Weights points the Faculty to Classes & Rosters to set them.
+Laboratory-only courses keep Lecture/Laboratory grading. A lecture-only
+configuration has one Lecture category list per period and no component
+contributions; its default is the Lecture category list above with Midterm 30%
+and Finals 70%. Its period grade is the Lecture period grade, and its course
+grade is round(Midterm × Midterm share + Final × Final share), rounded once.
+This course-grade rule is provisional until confirmed against the official
+lecture-only grade sheet. Removing Laboratory units is blocked while any
+current-term offering of the course has Laboratory assessments; otherwise, and
+when Laboratory units are added, the saved configuration keeps its calculation
+until the Faculty's next Grade Weights save, which must use the new structure.
+Past school years are not affected. Saved scores are never deleted or
+rescaled, and grades change only through authorized recomputation. Detailed
+rules: docs/contracts/lecture-only-grading.md.
 
 
 ---

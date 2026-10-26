@@ -29,13 +29,15 @@ test('Grade Weights banner shows the current schema and the saved or unsaved bad
     fileName: 'banner.tsx',
     compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const render = (loadedConfig: object | null, midterm: string, final: string) => renderToStaticMarkup(
-    new Function('React', 'loadedConfig', 'componentWeights', 'termRatio', compiled)(
-      React, loadedConfig, { lecture: '60', laboratory: '40' }, { midterm, final }
+  const render = (loadedConfig: object | null, midterm: string, final: string, componentMode = 'lecture_laboratory') => renderToStaticMarkup(
+    new Function('React', 'loadedConfig', 'componentWeights', 'termRatio', 'componentMode', compiled)(
+      React, loadedConfig, { lecture: '60', laboratory: '40' }, { midterm, final }, componentMode
     )
   );
   assert.equal(render({ version: 1 }, '35', '65'), '<span>BU Dental Medicine Schema Active: Lecture 60% / Lab 40% • Midterm 35% / Final 65%</span>');
   assert.equal(render(null, '35', '65'), '<span>BU Dental Medicine Default Grade Weights: Lecture 60% / Lab 40% • Midterm 35% / Final 65%</span>');
+  assert.equal(render({ version: 1 }, '30', '70', 'lecture'), '<span>BU Dental Medicine Schema Active: Lecture only • Midterm 30% / Final 70%</span>');
+  assert.equal(render(null, '30', '70', 'lecture'), '<span>BU Dental Medicine Default Grade Weights: Lecture only • Midterm 30% / Final 70%</span>');
   // Unsaved edits replace the banner; saved versus unsaved presets are badges.
   assert.match(source, /\{isDirty \? \(/);
   assert.match(source, /You have unsaved changes\. Adjust weights or categories directly below, then click Save Grade Weights\./);
@@ -1477,4 +1479,42 @@ test('Evaluation Extraction: legacy results expose server retention state and ex
   const fallback = extractPeriodEvaluation(null, olderResult as FacultyLegacyComputedResult, 'overall');
   assert.equal(fallback.overallPercentage, 80.01);
   assert.equal(fallback.retentionState, null);
+});
+
+test('Lecture-only courses: editor, save payload and notices follow the contract wording', () => {
+  const dir = path.dirname(fileURLToPath(import.meta.url));
+  const source = fs.readFileSync(path.join(dir, '../pages/faculty/GradeComputation.tsx'), 'utf8');
+  // Step 2 is one non-interactive line; the Lecture/Laboratory contribution boxes stay for Lecture + Laboratory.
+  assert.match(source, /Lecture only, from this course's units \(Lecture \{courseUnits\?\.lecture \?\? '—'\} · Laboratory 0\)\. No Laboratory part\./);
+  assert.match(source, /\{activePeriodEditorTab === 'Midterm' \? 'Midterm' : 'Finals'\} Components/);
+  // Units not recorded: today's editor plus the blue note.
+  assert.match(source, /courseStructure === 'unrecorded'/);
+  assert.match(source, /Set this course's Lecture and Laboratory units in Classes &amp; Rosters to use a Lecture-only grade structure\./);
+  // A unit change since the last save opens a draft with an amber banner; nothing is saved by itself.
+  assert.match(source, /loadedComponentMode === 'lecture_laboratory' && loadedStructure === 'lecture'/);
+  assert.match(source, /loadedComponentMode === 'lecture' && loadedStructure === 'lecture_laboratory'/);
+  assert.match(source, /This course is now Lecture only\. Save to remove the Laboratory part\./);
+  assert.match(source, /This course now has Laboratory units\. Save to add the Laboratory part\./);
+  // Save payload: componentMode 'lecture', Lecture categories only, no componentWeights, no conversion flag.
+  assert.match(source, /componentMode === 'lecture' \? \{ componentMode \} : \{\}/);
+  assert.match(source, /componentMode === 'lecture' \? \{ component: 'Lecture' as const \}/);
+  assert.match(source, /loadedConfig\.componentMode !== 'lecture_laboratory' && loadedConfig\.componentMode !== 'lecture'/);
+  // Lecture + Laboratory defaults are unchanged.
+  const draft = buildDefaultPeriodDraft();
+  assert.deepEqual(draft.componentWeights, { lecture: '60', laboratory: '40' });
+  assert.equal(draft.midtermCategories.filter(row => row.component === 'Laboratory').length, 4);
+});
+
+test('Lecture-only gradebook has one Lecture header without a percentage and no Laboratory columns', () => {
+  const matrix = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../components/GradebookMatrix.tsx'), 'utf8');
+  assert.match(matrix, /const lectureCats = lectureOnly \? allCategories/);
+  assert.match(matrix, /weight: lectureOnly \? undefined : lectureWeight/);
+  assert.match(matrix, /config\.componentMode === 'lecture'/);
+});
+
+test('Lecture-only CSV uses the existing three-column period header and no Laboratory columns', () => {
+  const csv = generateGradeSummaryCSV([], 'CLIN401', true, undefined, 'lecture');
+  assert.equal(csv, 'Student Number,Student Name,Midterm %,Final %,Overall Grade,Status\n');
+  assert.doesNotMatch(csv, /Laboratory/);
+  assert.equal(generateGradeSummaryCSV([], 'CLIN401', true), csv);
 });

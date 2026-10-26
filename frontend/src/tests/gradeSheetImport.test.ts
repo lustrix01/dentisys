@@ -206,3 +206,32 @@ test('a full name without separate fields still matches a two-word first name wi
   // Two students who both fit stay undecided for the Faculty (G5).
   assert.deepEqual(matchStudentName('Agustin, Mark', index).sort(), ['x', 'y']);
 });
+
+test('lecture-only class: LAB sheets are skipped, an unlabeled sheet is Lecture, weight warning is Lecture only', () => {
+  const lectureOnly = { ...ctx(), lectureOnly: true };
+  const lec = parseSheet('LEC', lecture, 0)!;
+  const lab = parseSheet('LAB', makeSheet('X (LAB)', [[1, 'Alonzo, Bea S.', { C: 80 }]]), 1)!;
+  const plain = parseSheet('plain', makeSheet('X', [[1, 'Alonzo, Bea S.', { C: 80 }]]), 2)!;
+  assert.equal(plain.component, null);
+
+  const withLab = buildPreview([lec, lab], lectureOnly, emptyDecisions());
+  assert.deepEqual(withLab.sheets.map(s => s.sheet.name), ['LEC']);
+  assert.deepEqual(withLab.skippedSheets.map(s => s.name), ['LAB']);
+  assert.ok(!withLab.blockers.some(b => /Choose Lecture or Laboratory/.test(b)));
+
+  const unlabeled = buildPreview([plain], lectureOnly, emptyDecisions());
+  assert.equal(unlabeled.sheets[0].component, 'Lecture');
+  assert.equal(unlabeled.sheets[0].needsComponent, false);
+  assert.deepEqual(unlabeled.skippedSheets, []);
+
+  // saved Laboratory categories never produce weight warnings in a lecture-only class
+  const labCat: SavedCategory = { id: 9, name: 'Quiz', weight: 99, period: 'Midterm', component: 'Laboratory', attendance: false };
+  const mixed = { ...lectureOnly, categories: [...lectureOnly.categories, labCat] };
+  assert.deepEqual(buildPreview([lec], mixed, emptyDecisions()).weightWarnings.sort(), withLab.weightWarnings.sort());
+  assert.ok(!buildPreview([lec], mixed, emptyDecisions()).weightWarnings.some(w => /Laboratory/.test(w)));
+
+  // a Lecture + Laboratory class keeps asking for the component and never skips
+  const normal = buildPreview([lec, lab], ctx(), emptyDecisions());
+  assert.deepEqual(normal.skippedSheets, []);
+  assert.equal(normal.sheets.length, 2);
+});

@@ -386,7 +386,7 @@ export interface StudentAcademicClass {
   grade: number | null;
   percentage: number | null;
   gradeComponents: Record<string, unknown> | null;
-  gradingComponentMode?: 'lecture_laboratory';
+  gradingComponentMode?: 'lecture_laboratory' | 'lecture';
   retentionState: string;
   remedial: Record<string, unknown> | null;
   remedialProgression?: RemedialProgression;

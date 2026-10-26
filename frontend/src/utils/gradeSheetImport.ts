@@ -292,6 +292,8 @@ export interface ImportContext {
   students: RosterStudent[];
   saved: Record<string, number>; // `${assessmentId}|${studentId}` -> saved score
   cls: { courseName: string; semester: string; schoolYear: string };
+  /** Lecture-only class: LAB sheets are skipped and every other sheet is Lecture (rule L8). */
+  lectureOnly?: boolean;
 }
 
 export interface Decisions {
@@ -355,6 +357,7 @@ export interface NotInSheet { assessment: SavedAssessment; component: Component 
 
 export interface Preview {
   sheets: SheetView[];
+  skippedSheets: ParsedSheet[]; // LAB sheets of a lecture-only class
   notInSheet: NotInSheet[];
   weightWarnings: string[];
   blockers: string[];
@@ -364,7 +367,9 @@ export interface Preview {
 const compMatches = (a: Component | null, comp: Component | null) => a === null || comp === null || a === comp;
 
 /** Combines the parsed sheets, the saved data and the Faculty's choices into what the preview shows. */
-export function buildPreview(sheets: ParsedSheet[], ctx: ImportContext, dec: Decisions): Preview {
+export function buildPreview(allSheets: ParsedSheet[], ctx: ImportContext, dec: Decisions): Preview {
+  const skippedSheets = ctx.lectureOnly ? allSheets.filter(s => s.component === 'Laboratory') : [];
+  const sheets = ctx.lectureOnly ? allSheets.filter(s => s.component !== 'Laboratory') : allSheets;
   const index = buildNameIndex(ctx.students);
   const byId = new Map(ctx.assessments.map(a => [a.id, a]));
   const savedCount = new Map<string, number>();
@@ -378,7 +383,7 @@ export function buildPreview(sheets: ParsedSheet[], ctx: ImportContext, dec: Dec
   const views: SheetView[] = [];
   const claimed = new Set<string>();
 
-  const compOf = (s: ParsedSheet): Component | null => dec.sheetComponent[s.index] ?? s.component;
+  const compOf = (s: ParsedSheet): Component | null => ctx.lectureOnly ? 'Lecture' : dec.sheetComponent[s.index] ?? s.component;
   // Explicit "Use existing" choices claim their assessment first so a title match cannot take it.
   for (const s of sheets) for (const it of s.items) if (isUsed(it) && dec.link[it.key] && byId.has(dec.link[it.key])) claimed.add(dec.link[it.key]);
   const comps = sheets.map(compOf).filter((c): c is Component => !!c);
@@ -502,7 +507,7 @@ export function buildPreview(sheets: ParsedSheet[], ctx: ImportContext, dec: Dec
     }
   }
   const itemsToCreate = views.reduce((n, v) => n + v.items.filter(i => !i.assessment && i.included).length, 0);
-  return { sheets: views, notInSheet, weightWarnings, blockers, counts: { toSave, blanks, held, changedUnticked, itemsToCreate, toRemove: notInSheet.filter(n => n.removing).length } };
+  return { sheets: views, skippedSheets, notInSheet, weightWarnings, blockers, counts: { toSave, blanks, held, changedUnticked, itemsToCreate, toRemove: notInSheet.filter(n => n.removing).length } };
 }
 
 // ---------- the plan handed to the save endpoint (G13) ----------

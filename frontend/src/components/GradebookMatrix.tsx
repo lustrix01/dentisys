@@ -146,7 +146,8 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
 
       // Single-list configs have no Lecture/Laboratory split: leave every group empty so they fall into 'all'.
       const split = config.componentMode === 'lecture_laboratory';
-      const lectureCats = !split ? [] : allCategories.filter(c => (c.component ?? 'Lecture').toLowerCase() === 'lecture');
+      const lectureOnly = config.componentMode === 'lecture';
+      const lectureCats = lectureOnly ? allCategories : !split ? [] : allCategories.filter(c => (c.component ?? 'Lecture').toLowerCase() === 'lecture');
       const labCats = !split ? [] : allCategories.filter(c => {
         const comp = (c.component ?? '').toLowerCase();
         return comp === 'laboratory' || comp === 'lab';
@@ -161,7 +162,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
         comps.push({
           componentKey: 'lecture',
           label: 'Lecture',
-          weight: lectureWeight,
+          weight: lectureOnly ? undefined : lectureWeight,
           categories: lectureCats.map(toGroup),
         });
       }
@@ -282,6 +283,13 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
   const periodBreakdown = (studentId: string, key: PeriodKey): FacultyPeriodBreakdown | null => {
     const result = results[studentId] as { periods?: Record<PeriodKey, FacultyPeriodBreakdown> } | undefined;
     return result?.periods?.[key] ?? null;
+  };
+
+  const lectureHover = (studentId: string) => {
+    const mid = periodBreakdown(studentId, 'midterm')?.percentage;
+    const fin = periodBreakdown(studentId, 'final')?.percentage;
+    if (config?.componentMode !== 'lecture' || !config.termRatio || typeof mid !== 'number' || typeof fin !== 'number') return null;
+    return { midterm: mid, final: fin, midtermShare: Number(config.termRatio.midterm), finalShare: Number(config.termRatio.final) };
   };
 
   const categoryCells = (studentId: string, key: PeriodKey, categoryId: number | null | undefined) => {
@@ -699,7 +707,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                         {computed ? format(result?.percentage) : '—'}
                       </td>
                       <td className={`${totalCell} bg-emerald-50 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-100 font-extrabold`}>
-                        {computed ? <GradeValue percentage={result?.percentage}>{format(result?.gwa)}</GradeValue> : '—'}
+                        {computed ? <GradeValue percentage={result?.percentage} lecture={lectureHover(student.id)}>{format(result?.gwa)}</GradeValue> : '—'}
                       </td>
                     </>
                   )}

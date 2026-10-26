@@ -288,6 +288,7 @@ $expectedMigrations = [
     '048_computed_retention_only.sql',
     '049_audit_chain_baseline.sql',
     '050_class_archiving.sql',
+    '051_lecture_only_grading.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -7385,6 +7386,7 @@ $endedAuditStmt->execute();
 expect_true((int) $endedAuditStmt->fetchColumn() >= 4, 'Appointments and their end are audited');
 
 require __DIR__ . '/grouped_grading_integration.php';
+require __DIR__ . '/lecture_only_grading_integration.php';
 require __DIR__ . '/audit_read_integration.php';
 require __DIR__ . '/audit_chain_integration.php';
 

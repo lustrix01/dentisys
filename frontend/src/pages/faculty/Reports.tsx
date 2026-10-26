@@ -829,7 +829,7 @@ export const Reports: React.FC = () => {
                         {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus)}</td>}
                         <td className="px-5 py-3.5 text-center font-mono">{formatPercent(evaluation.finalPercentage)}</td>
                         <td className="px-5 py-3.5 text-center font-extrabold text-sm dark:text-slate-100">
-                          {evaluation.overallGwa !== null ? <GradeValue percentage={evaluation.overallPercentage} grade={evaluation.overallGwa}>{formatCourseGrade(evaluation)}</GradeValue> : formatCourseGrade(evaluation)}
+                          {evaluation.overallGwa !== null ? <GradeValue percentage={evaluation.overallPercentage} grade={evaluation.overallGwa} lecture={selectedGradingConfiguration?.componentMode === 'lecture' && selectedGradingConfiguration.termRatio && evaluation.midtermPercentage !== null && evaluation.finalPercentage !== null ? { midterm: evaluation.midtermPercentage, final: evaluation.finalPercentage, midtermShare: Number(selectedGradingConfiguration.termRatio.midterm), finalShare: Number(selectedGradingConfiguration.termRatio.final) } : null}>{formatCourseGrade(evaluation)}</GradeValue> : formatCourseGrade(evaluation)}
                         </td>
                         <td className="px-5 py-3.5">
                           <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
