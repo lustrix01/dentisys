@@ -64,3 +64,4 @@ $check(substr_count($faculty, $visible) >= 10, 'Faculty dashboard, students, att
 $check(str_contains($year, 'Archived classes are view-only.') && str_contains($year, 'function academic_view_only_message('), 'one helper picks the archived or past-year refusal text');
 $check(substr_count($faculty . $read('backend/controllers/SecretaryController.php') . $read('backend/app/attendance_sessions.php'), 'academic_view_only_message(') >= 20, 'view-only refusals use the helper');
 $check(str_contains($list, "'scheduledSessionCount'") && str_contains($list, "'secretaryName'"), 'class list returns scheduledSessionCount and secretaryName');
+$check(str_contains($fn($read('backend/app/class_meetings.php'), 'class_meetings_conflict'), 'archived_at IS NULL'), 'archived classes no longer block rooms or times in the schedule conflict check');

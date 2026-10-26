@@ -98,7 +98,7 @@ function class_meetings_conflict(PDO $pdo, string $schoolYear, int $instructorId
     if ($proposed === []) return null;
     // Serialize schedule writes for the year, including other Faculty using the same room.
     $pdo->prepare('SELECT pg_advisory_xact_lock(hashtext(?))')->execute(['class-meetings:' . $schoolYear]);
-    $stmt = $pdo->prepare("SELECT cs_id, cs_name, instructor_user_id, lec_room, lab_room, meetings_recorded FROM class_sections WHERE school_year = ? AND status = 'Active' AND cs_id <> ?");
+    $stmt = $pdo->prepare("SELECT cs_id, cs_name, instructor_user_id, lec_room, lab_room, meetings_recorded FROM class_sections WHERE school_year = ? AND status = 'Active' AND archived_at IS NULL AND cs_id <> ?"); // archived classes no longer meet (CLS-003)
     $stmt->execute([$schoolYear, $excludeCsId]);
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $class) {
         foreach (class_meetings_read($pdo, $class) as $existing) {
