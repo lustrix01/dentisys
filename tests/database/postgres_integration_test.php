@@ -7252,8 +7252,8 @@ $bootstrapSyllabusConfig = $bootstrapSyllabusConfigStmt->fetch(PDO::FETCH_ASSOC)
 expect_true(is_array($bootstrapSyllabusConfig), 'Bootstrap creates the grouped default when the new offering has no assessments');
 expect_same('periods', $bootstrapSyllabusConfig['schema_mode'] ?? null, 'Bootstrap stores period defaults');
 expect_same('lecture_laboratory', $bootstrapSyllabusConfig['component_mode'] ?? null, 'Bootstrap never creates a new combined period configuration');
-expect_same(30.0, (float) ($bootstrapSyllabusConfig['term_midterm_weight'] ?? 0), 'Bootstrap stores the default Midterm contribution');
-expect_same(70.0, (float) ($bootstrapSyllabusConfig['term_final_weight'] ?? 0), 'Bootstrap stores the default Finals contribution');
+expect_same(50.0, (float) ($bootstrapSyllabusConfig['term_midterm_weight'] ?? 0), 'Bootstrap stores the default Midterm contribution');
+expect_same(50.0, (float) ($bootstrapSyllabusConfig['term_final_weight'] ?? 0), 'Bootstrap stores the default Finals contribution');
 expect_same(60.0, (float) ($bootstrapSyllabusConfig['component_lecture_weight'] ?? 0), 'Bootstrap stores the default Lecture contribution');
 expect_same(40.0, (float) ($bootstrapSyllabusConfig['component_laboratory_weight'] ?? 0), 'Bootstrap stores the default Laboratory contribution');
 $bootstrapMembershipStmt = $pdo->prepare(

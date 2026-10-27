@@ -34,7 +34,8 @@ expect_true(!array_key_exists('componentWeights', $loGet['defaults'] ?? []), 'Th
 expect_same(4, count($loGet['defaults']['midtermCategories'] ?? []), 'The lecture-only default has four Midterm categories');
 
 // 2. Save validation.
-$loPayload = $loGet['defaults'] + [
+// A saved 30/70 split (the default is 50/50) keeps the worked example in section 4 non-integer: 89.6 -> 90.
+$loPayload = ['termRatio' => ['midterm' => 30, 'final' => 70]] + $loGet['defaults'] + [
     'courseId' => $loOnly['courseId'], 'semester' => '1st', 'schoolYear' => $loOnly['schoolYear'],
 ];
 $loMismatch = $loPayload;

@@ -62,6 +62,9 @@ test('a lecture-only course is graded as Lecture only, end to end', async ({ pag
   await expect(main.getByText('BU Dental Medicine Default Grade Weights: Lecture only • Midterm 50% / Final 50%')).toBeVisible();
   await expect(main.getByText("Lecture only, from this course's units (Lecture 3 · Laboratory 0). No Laboratory part.")).toBeVisible();
   await expect(main.getByRole('tab', { name: 'Laboratory Categories' })).toHaveCount(0);
+  // Save 30/70 (the default is 50/50) so the worked example below still needs its one rounding: 89.6 -> 90.
+  await main.locator('#midterm-ratio-input').fill('30');
+  await expect(main.locator('#final-ratio-input')).toHaveValue('70');
   const saved = page.waitForResponse(r => r.url().includes('/api/faculty/grading-config') && r.request().method() === 'PUT');
   await main.getByRole('button', { name: /Save Initial Schema/ }).click();
   await page.getByRole('button', { name: 'Confirm', exact: true }).click();
