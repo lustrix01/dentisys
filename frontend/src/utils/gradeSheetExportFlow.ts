@@ -24,14 +24,22 @@ export async function exportGradeWorkbook(a: {
   const { cls } = a;
   const classKey = String(cls.csId || cls.id);
   const course = { code: cls.courseCode, title: cls.courseName, section: cls.csName, semester: cls.semester, schoolYear: cls.schoolYear };
-  const { configuration } = await getFacultyGradingConfigApi({ courseId: cls.courseId, semester: cls.semester, schoolYear: cls.schoolYear });
+  // Grade Weights are read only for Active (or finished) offerings; any other class exports the plain summary, as the CSV did.
+  const refused = (err: unknown, statuses: number[]) => err instanceof ApiError && statuses.includes(err.status);
+  let configuration: Awaited<ReturnType<typeof getFacultyGradingConfigApi>>['configuration'] | null = null;
+  try {
+    ({ configuration } = await getFacultyGradingConfigApi({ courseId: cls.courseId, semester: cls.semester, schoolYear: cls.schoolYear }));
+  } catch (err) {
+    if (!refused(err, [403, 404])) throw err;
+  }
 
-  // The preview refuses past classes (409): they use the breakdown saved with each grade.
+  // The preview refuses past classes (409) and classes outside the Faculty's live offerings (403):
+  // they use the breakdown saved with each grade.
   let live: Record<string, FacultyGradeComputeResult> | null = {};
   try {
     for (const res of (await previewFacultyGradesApi(classKey)).results ?? []) live[String(res.studentId)] = res;
   } catch (err) {
-    if (!(err instanceof ApiError && err.status === 409)) throw err;
+    if (!refused(err, [403, 409])) throw err;
     live = null;
   }
   const subjectOf = (student: Student) =>
