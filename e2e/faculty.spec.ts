@@ -878,7 +878,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await oldCard.getByRole('button', { name: 'View Attendance', exact: true }).click();
     await expect(page.getByText('Past school-year attendance is view-only.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Start Session', exact: true })).toBeDisabled();
-    await expect(page.locator('tbody tr').filter({ hasText: 'Alice Green' }).getByRole('button', { name: 'Override', exact: true })).toBeDisabled();
+    await expect(page.locator('tbody tr').filter({ hasText: 'Alice Green' }).getByRole('button', { name: 'Mark', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'Back to Assigned Classes' }).click();
     await page.getByLabel('Attendance school year').selectOption('current');
     await expect(page.getByText('OLD401')).toHaveCount(0);
@@ -1165,9 +1165,9 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(upcoming.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
     const aliceRow = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
-    const overrideButton = aliceRow.getByRole('button', { name: 'Override', exact: true });
+    const overrideButton = aliceRow.getByRole('button', { name: 'Mark', exact: true });
     const bulkButton = page.getByRole('button', { name: 'Mark all unrecorded as Present', exact: true });
-    const overrideButtons = page.locator('tbody tr').getByRole('button', { name: 'Override', exact: true });
+    const overrideButtons = page.locator('tbody tr').getByRole('button', { name: /^(Mark|Override)$/ });
     await expect(overrideButtons).toHaveCount(mockWorksheetSectionA.roster.length);
     for (const button of await overrideButtons.all()) await expect(button).toBeDisabled();
     await expect(bulkButton).toBeDisabled();
@@ -1208,7 +1208,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
         await page.getByRole('button', { name: 'Mark all unrecorded as Present' }).click();
         await page.getByRole('button', { name: 'Mark Present', exact: true }).click();
       } else {
-        await row.getByRole('button', { name: 'Override', exact: true }).click();
+        await row.getByRole('button', { name: operation === 'correction' ? 'Override' : 'Mark', exact: true }).click();
         await page.locator('form').getByRole('button', { name: operation === 'correction' ? 'absent' : 'present', exact: true }).click();
         if (operation === 'correction') {
           await page.locator('textarea').fill('Student was absent due to illness');
@@ -1230,12 +1230,15 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     test(`Faculty ${newerRead} during a write keeps the target fixed and avoids stale results`, async ({ page }) => {
       let reads = 0;
       let writing = false;
+      let saved = false;
       let releaseWrite: () => void = () => {};
       const writeGate = new Promise<void>(resolve => { releaseWrite = resolve; });
       await page.route('**/api/faculty/attendance?*csId=1*', async route => {
         const date = new URL(route.request().url()).searchParams.get('date');
         ++reads;
-        let result = mockWorksheetSectionA;
+        let result = saved
+          ? { ...mockWorksheetSectionA, roster: mockWorksheetSectionA.roster.map(r => r.studentName === 'Alice Green' ? { ...r, status: 'present' as const } : r) }
+          : mockWorksheetSectionA;
         if (newerRead === 'same session') result = { ...result, date,
           attendanceSession: { sessionId: '42', sessionDate: date, sessionCode: 'SAME-SESSION', status: 'active', openingTime: '08:00', classEndTime: '23:59', room: 'Room 101' },
           attendanceSessions: [{ sessionId: '42', sessionDate: date, sessionCode: 'SAME-SESSION', status: 'active' }, { sessionId: '43', sessionDate: date, sessionCode: 'OTHER-SESSION', status: 'ended' }],
@@ -1246,12 +1249,13 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.route('**/api/faculty/attendance/override', async route => {
         writing = true;
         await writeGate;
+        saved = true;
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', operation: 'created', recordId: '999' }) });
       });
       await page.goto('/attendance');
       await openWorksheet(page, 'CLIN401 - Section A');
       const alice = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
-      await alice.getByRole('button', { name: 'Override', exact: true }).click();
+      await alice.getByRole('button', { name: 'Mark', exact: true }).click();
     await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
     await page.getByRole('button', { name: 'Save Override', exact: true }).click();
       await expect.poll(() => writing).toBe(true);
@@ -1262,7 +1266,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
         await expect(page.getByRole('main').getByText('Attendance updated for Alice Green (present).', { exact: true })).toBeVisible();
         await expect(alice.getByTestId('attendance-status')).toHaveText(/Present$/);
         await expect(page.locator('input[type="date"]')).toBeEnabled();
-        expect(reads).toBe(1);
+        await expect.poll(() => reads).toBe(2); // the saved row is reloaded once
         return;
       }
       await expect(page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true })).toBeDisabled();
@@ -1270,7 +1274,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByRole('main').getByText('Attendance updated for Alice Green (present).', { exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true })).toBeEnabled();
       await expect(alice.getByTestId('attendance-status')).toHaveText(/Present$/);
-      expect(reads).toBe(1);
+      await expect.poll(() => reads).toBe(2); // the saved row is reloaded once
     });
   }
 
@@ -1326,7 +1330,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     for (const student of roster) {
       await expect(page.locator('tbody tr').filter({ hasText: student.studentName }).getByTestId('attendance-status')).toHaveText(/Present$/);
     }
-    await expect.poll(() => reads).toBe(action === 'session revocation' ? 2 : 1);
+    await expect.poll(() => reads).toBe(2); // one deferred reload after the batch, never one per row
   });
   }
 
@@ -1356,7 +1360,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.goto('/attendance');
     await openWorksheet(page, 'CLIN401 - Section A');
     const alice = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
-    await alice.getByRole('button', { name: 'Override', exact: true }).click();
+    await alice.getByRole('button', { name: 'Mark', exact: true }).click();
     await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
     await page.getByRole('button', { name: 'Save Override', exact: true }).click();
     await expect.poll(() => writing).toBe(true);
@@ -1405,7 +1409,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
     // Alice Green has status null. Click 'Present'
     const aliceRow = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
-    await aliceRow.getByRole('button', { name: 'Override', exact: true }).click();
+    await aliceRow.getByRole('button', { name: 'Mark', exact: true }).click();
     await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
     await page.getByRole('button', { name: 'Save Override', exact: true }).click();
 
@@ -1491,7 +1495,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
   test('Faculty correction preserves a failed save for retry without changing the recorded status', async ({ page }) => {
     const payloads: Array<Record<string, unknown>> = [];
     await page.route('**/api/faculty/attendance?*csId=1*', route => route.fulfill({
-      json: { status: 'ok', worksheet: mockWorksheetSectionA },
+      json: { status: 'ok', worksheet: payloads.length < 2 ? mockWorksheetSectionA : {
+        ...mockWorksheetSectionA,
+        roster: mockWorksheetSectionA.roster.map(r => r.studentName === 'Bob White' ? { ...r, status: 'absent' as const } : r),
+      } },
     }));
     await page.route('**/api/faculty/attendance/override', route => {
       payloads.push(route.request().postDataJSON());
@@ -1531,6 +1538,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
         ...mockWorksheetSectionA, date: '2026-09-20', attendanceSessions: sessions,
         attendanceSession: sessions.find(session => session.sessionId === sessionId) ?? null,
         roster: mockWorksheetSectionA.roster.map(item => ({ ...item, attendanceSessionId: sessionId,
+          ...(payloads.length > 0 && item.studentName === 'Alice Green' ? { status: 'late' as const } : {}),
           sessionCode: sessions.find(session => session.sessionId === sessionId)?.sessionCode ?? null })),
       } } });
     });
@@ -1542,9 +1550,9 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await openWorksheet(page, 'CLIN401 - Section A');
     await page.locator('input[type="date"]').fill('2026-09-20');
     const row = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
-    await expect(row.getByRole('button', { name: 'Override', exact: true })).toBeDisabled();
+    await expect(row.getByRole('button', { name: 'Mark', exact: true })).toBeDisabled();
     await page.getByRole('combobox', { name: 'Attendance session', exact: true }).selectOption('42');
-    await row.getByRole('button', { name: 'Override', exact: true }).click();
+    await row.getByRole('button', { name: 'Mark', exact: true }).click();
     await expect(page.getByText('Initial Entry Reason (Optional)', { exact: true })).toBeVisible();
     await page.locator('form').getByRole('button', { name: 'late', exact: true }).click();
     await page.locator('textarea').fill('  Verified arrival for the afternoon session  ');
@@ -1589,7 +1597,12 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
   test('bulk: mark all unrecorded as Present asks first and only records students without a status', async ({ page }) => {
     const payloads: Array<Record<string, unknown>> = [];
     await page.route('**/api/faculty/attendance?*csId=1*', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', worksheet: mockWorksheetSectionA }) });
+      // After the save the page reloads the worksheet, so the mock returns the saved row.
+      const worksheet = payloads.length === 0 ? mockWorksheetSectionA : {
+        ...mockWorksheetSectionA,
+        roster: mockWorksheetSectionA.roster.map(r => r.studentName === 'Alice Green' ? { ...r, id: '1000', status: 'present' as const, verificationMethod: 'manual_faculty' } : r),
+      };
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', worksheet }) });
     });
     await page.route('**/api/faculty/attendance/override', async (route) => {
       payloads.push(route.request().postDataJSON());
@@ -3235,6 +3248,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       // Fill in title
       await modalForm.locator('input[type="text"]').first().fill('Midterm Crown Quiz');
+      await modalForm.locator('input[type="number"]').first().fill('20');
 
       // Attempt submit without category selection: Confirm button is disabled
       const submitBtn = modalForm.getByRole('button', { name: 'Confirm Assessment' });
@@ -3297,14 +3311,15 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: 'Add Assessment' }).click();
       const modalForm = page.locator('form').last();
       const categorySelect = modalForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) });
-      await expect(categorySelect.locator('optgroup[label="Lecture Categories"] option[value="101"]')).toHaveText('Quiz (100%)');
+      await expect(categorySelect.locator('optgroup[label="Lecture Categories"] option[value="101"]')).toHaveText('Lecture · Quiz (100%)');
       await categorySelect.selectOption('101');
       await modalForm.locator('select', { has: page.locator('option[value="Final"]') }).selectOption('Final');
       await expect(categorySelect).toHaveValue('103');
-      await expect(categorySelect.locator('optgroup[label="Lecture Categories"] option[value="103"]')).toHaveText('Quiz (100%)');
-      await expect(categorySelect.locator('optgroup[label="Laboratory Categories"] option[value="102"]')).toHaveText('Quiz (100%)');
+      await expect(categorySelect.locator('optgroup[label="Lecture Categories"] option[value="103"]')).toHaveText('Lecture · Quiz (100%)');
+      await expect(categorySelect.locator('optgroup[label="Laboratory Categories"] option[value="102"]')).toHaveText('Laboratory · Quiz (100%)');
 
       await modalForm.locator('input[type="text"]').first().fill('Final Lecture Quiz');
+      await modalForm.locator('input[type="number"]').first().fill('20');
       await modalForm.getByRole('button', { name: 'Confirm Assessment' }).click();
       await expect(page.getByText('Assessment saved.')).toBeVisible();
       expect(postedAssessment?.gradingCategoryId).toBe(103);

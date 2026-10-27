@@ -13,6 +13,7 @@ import {
   Play,
   Navigation,
   Camera,
+  UserCheck,
   Pencil,
   Users,
   ChevronRight,
@@ -523,6 +524,7 @@ export const AttendanceMonitoring: React.FC = () => {
       }
     }
     setBulkMarking(false);
+    if (saved > 0) worksheetRefreshPending.current = true; // reload so rows show the server's method and time
     finishWorksheetMutation(writeScope);
     setNotification(failed.length === 0
       ? { type: 'success', message: `Marked ${saved} student${saved === 1 ? '' : 's'} as present.` }
@@ -605,6 +607,7 @@ export const AttendanceMonitoring: React.FC = () => {
         });
       }
 
+      worksheetRefreshPending.current = true; // reload so the row shows the server's method and time
       setIsCorrectionModalOpen(false);
       setCorrectionTarget(null);
       setCorrectionReason('');
@@ -1147,7 +1150,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   </button>
                 )}
 
-                <button
+                {!liveCurrentSession && <button
                   type="button"
                   onClick={() => {
                     setIsStartSessionOpen(true);
@@ -1157,7 +1160,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 >
                   <Play className="w-3.5 h-3.5 fill-white" />
                   <span>Start Session</span>
-                </button>
+                </button>}
 
                 <button
                   type="button"
@@ -1611,7 +1614,9 @@ export const AttendanceMonitoring: React.FC = () => {
                         <td className="py-3 px-4 sm:py-4 sm:px-6">
                           {item.status ? (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">
-                              <Camera className="w-3.5 h-3.5 stroke-[2.2]" />
+                              {item.verificationMethod === 'biometric' && !item.overrideReason
+                                ? <Camera className="w-3.5 h-3.5 stroke-[2.2]" />
+                                : <UserCheck className="w-3.5 h-3.5 stroke-[2.2]" />}
                               <span>{attendanceMethodLabel(item.verificationMethod, item.overrideReason)}</span>
                             </span>
                           ) : (
@@ -1656,7 +1661,7 @@ export const AttendanceMonitoring: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <Pencil className="w-3.5 h-3.5 text-slate-500" />
-                            <span>Override</span>
+                            <span>{item.status ? 'Override' : 'Mark'}</span>
                           </button>
                           )}
                         </td>
@@ -1726,7 +1731,7 @@ export const AttendanceMonitoring: React.FC = () => {
             setCorrectionReason('');
             setCorrectionError(null);
           }}
-          title="Manual Attendance Override"
+          title={correctionTarget?.status ? 'Manual Attendance Override' : 'Mark Attendance'}
         >
           <form onSubmit={handleCorrectionSubmit} className="space-y-4 text-xs">
             {correctionError && (
@@ -2307,7 +2312,7 @@ export const AttendanceMonitoring: React.FC = () => {
                       className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5 fill-white text-white" />
-                      <span>Start Attendance Session Now</span>
+                      <span>New Attendance Session</span>
                     </button>
                   </div>
                 )}
@@ -2389,7 +2394,7 @@ export const AttendanceMonitoring: React.FC = () => {
                               }}
                               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-xs cursor-pointer"
                             >
-                              <span>Open</span>
+                              <span>View</span>
                             </button>
                             <button
                               type="button"

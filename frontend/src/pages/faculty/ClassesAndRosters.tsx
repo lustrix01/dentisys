@@ -1,5 +1,6 @@
 import { filterPersonNameInput, preventInvalidPersonNameKey } from '../../utils/personNameValidation';
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   BookOpen,
   Search,
@@ -50,6 +51,8 @@ import {
   restoreClassApi,
   updateFacultyStudentApi,
   createStudentInvitation,
+  removeSecretaryAppointmentApi,
+  getFacultyEmailLogsApi,
   createStudentApi,
   FacultyClassItem,
   CourseCatalogItem
@@ -69,6 +72,8 @@ import { MeetingTimes, type DayTimes } from '../../components/MeetingTimes';
 import { RoomSelector } from '../../components/RoomSelector';
 import { RosterImportModal } from '../../components/RosterImportModal';
 import { recordAudit } from '../../services/auditService';
+import { createSecretaryInvitation, fetchSecretaryInvitations, type SecretaryInvitation } from '../../services/authService';
+import { useAuth } from '../../context/AuthContext';
 import { downloadXlsx } from '../../utils/xlsxDownload';
 import { buildClassList } from '../../utils/reportWorkbook';
 
@@ -187,6 +192,12 @@ export const ClassesAndRosters: React.FC = () => {
   const [targetEnrollCsId, setTargetEnrollCsId] = useState<number>(0);
   const [enrollTab, setEnrollTab] = useState<'directory' | 'manual'>('directory');
   const [openStudentMenuId, setOpenStudentMenuId] = useState<string | null>(null);
+  // Fixed position of the open row menu, from its button, so no table clipping can hide it.
+  const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
+  // Latest Student Invitation delivery status per e-mail (same source as Email Management).
+  const [inviteStatusByEmail, setInviteStatusByEmail] = useState<Record<string, string>>({});
+  const [pendingSecretaryInvs, setPendingSecretaryInvs] = useState<SecretaryInvitation[]>([]);
+  const { user } = useAuth();
   const [availableStudents, setAvailableStudents] = useState<Array<{
     id: string;
     studentId: string;
@@ -343,11 +354,23 @@ export const ClassesAndRosters: React.FC = () => {
     setLoading(true);
     setFetchError(null);
     try {
-      const [clsRes, crsRes, rosterRes] = await Promise.all([
+      const [clsRes, crsRes, rosterRes, logsRes, secInvs] = await Promise.all([
         getFacultyClassesApi(),
         getFacultyCoursesApi(),
         getFacultyStudentsApi(),
+        getFacultyEmailLogsApi().catch(() => null),
+        fetchSecretaryInvitations().catch(() => [] as SecretaryInvitation[]),
       ]);
+      const latestInvite: Record<string, string> = {};
+      for (const action of logsRes?.actions ?? []) {
+        if (action.type !== 'Student Invitation') continue;
+        for (const recipient of action.recipients) {
+          const key = recipient.email.toLowerCase();
+          if (!latestInvite[key]) latestInvite[key] = recipient.status;
+        }
+      }
+      setInviteStatusByEmail(latestInvite);
+      setPendingSecretaryInvs((secInvs ?? []).filter(inv => inv.status === 'Pending'));
 
       const classData = Array.isArray(clsRes.classes) ? clsRes.classes : [];
       setClasses(classData);
@@ -381,10 +404,19 @@ export const ClassesAndRosters: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const handleClickOutside = () => setOpenStudentMenuId(null);
+    const close = () => setOpenStudentMenuId(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
     if (openStudentMenuId) {
-      document.addEventListener('click', handleClickOutside);
-      return () => document.removeEventListener('click', handleClickOutside);
+      document.addEventListener('click', close);
+      document.addEventListener('keydown', onKey);
+      window.addEventListener('scroll', close, true);
+      window.addEventListener('resize', close);
+      return () => {
+        document.removeEventListener('click', close);
+        document.removeEventListener('keydown', onKey);
+        window.removeEventListener('scroll', close, true);
+        window.removeEventListener('resize', close);
+      };
     }
   }, [openStudentMenuId]);
 
@@ -1189,6 +1221,39 @@ export const ClassesAndRosters: React.FC = () => {
     return target && /^\d+$/.test(String(target.classId)) ? String(target.classId) : null;
   };
 
+  const sectionHasSecretary = (classId: string, className: string) =>
+    studentsList.some(s => s.classSections?.some(sec => String(sec.classId) === classId && sec.isSecretary))
+    || pendingSecretaryInvs.some(inv => inv.className === className);
+
+  const handleMakeSecretary = async (student: Student, classId: string, className: string) => {
+    const res = await createSecretaryInvitation({
+      studentId: student.studentId,
+      studentName: student.name,
+      email: student.email,
+      facultyName: user?.display_name || 'Faculty Member',
+      className,
+      classId,
+    });
+    showFeedback(res.message, res.success ? 'success' : 'info');
+    await fetchData();
+  };
+
+  const handleRemoveSecretary = async (student: Student, classId: string, className: string) => {
+    const confirmed = await requestConfirmation(
+      `Remove ${student.name} as Class Secretary of ${className}? Their Student access stays the same.`,
+      'Remove Class Secretary',
+      'Remove',
+    );
+    if (!confirmed) return;
+    try {
+      const res = await removeSecretaryAppointmentApi(student.id, classId);
+      showFeedback(res.message, 'success');
+    } catch (err) {
+      showFeedback(err instanceof Error ? err.message : 'Unable to remove the appointment.', 'error');
+    }
+    await fetchData();
+  };
+
   const handleSendStudentEmailInvite = async (student: Student) => {
     const classId = invitationClassId(student);
     if (!classId) {
@@ -1820,6 +1885,9 @@ const handleSendAllStudentInvites = async () => {
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <div className="relative inline-flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            {displayedSections.some(sec => sec.isSecretary) && (
+                              <span className="whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 border border-accent-200/60 dark:border-accent-800/40">Class Secretary</span>
+                            )}
                             {(() => {
                               const accountStatus = st.accountStatus ?? 'none';
                               if (accountStatus === 'active' || accountStatus === 'secretary') {
@@ -1830,12 +1898,27 @@ const handleSendAllStudentInvites = async () => {
                                   </span>
                                 );
                               }
-                              return null;
+                              const inviteStatus = inviteStatusByEmail[st.email.toLowerCase()];
+                              const [label, tone] = inviteStatus === 'Failed'
+                                ? ['Delivery failed', 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300']
+                                : inviteStatus || accountStatus === 'pending'
+                                  ? ['Invite sent', 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300']
+                                  : ['Not invited', 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'];
+                              return <span className={`whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold ${tone}`}>{label}</span>;
                             })()}
 
                             <button
                               type="button"
-                              onClick={() => setOpenStudentMenuId(openStudentMenuId === st.id ? null : st.id)}
+                              onClick={(e) => {
+                                if (openStudentMenuId === st.id) { setOpenStudentMenuId(null); return; }
+                                const r = e.currentTarget.getBoundingClientRect();
+                                const right = window.innerWidth - r.right;
+                                // Open upward when the menu (about 250px) does not fit below.
+                                setMenuPos(window.innerHeight - r.bottom < 250 && r.top > window.innerHeight - r.bottom
+                                  ? { bottom: window.innerHeight - r.top + 6, right }
+                                  : { top: r.bottom + 6, right });
+                                setOpenStudentMenuId(st.id);
+                              }}
                               className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
                                 openStudentMenuId === st.id
                                   ? 'bg-slate-200 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white'
@@ -1849,8 +1932,8 @@ const handleSendAllStudentInvites = async () => {
                               <MoreVertical className="w-4 h-4" />
                             </button>
 
-                            {openStudentMenuId === st.id && (
-                              <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-900/10 py-1.5 z-40 text-xs text-left">
+                            {openStudentMenuId === st.id && menuPos && createPortal(
+                              <div style={menuPos} onClick={(e) => e.stopPropagation()} className="fixed w-44 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-900/10 py-1.5 z-[60] text-xs text-left">
                                 {/* Edit */}
                                 <button
                                   type="button"
@@ -1887,6 +1970,31 @@ const handleSendAllStudentInvites = async () => {
                                   );
                                 })()}
 
+                                {/* Class Secretary (current school year only) */}
+                                {displayedSections.filter(sec => !isHistoricalClass(classes.find(c => String(c.csId) === String(sec.classId)))).map(sec => {
+                                  const classId = String(sec.classId);
+                                  const suffix = displayedSections.length > 1 ? ` (${sec.className})` : '';
+                                  if (sec.isSecretary) {
+                                    return (
+                                      <button key={classId} type="button"
+                                        onClick={() => { setOpenStudentMenuId(null); void handleRemoveSecretary(st, classId, sec.className); }}
+                                        className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors cursor-pointer">
+                                        <ShieldCheck className="w-3.5 h-3.5 text-rose-500" />
+                                        <span>Remove as Class Secretary{suffix}</span>
+                                      </button>
+                                    );
+                                  }
+                                  if (sectionHasSecretary(classId, sec.className)) return null;
+                                  return (
+                                    <button key={classId} type="button"
+                                      onClick={() => { setOpenStudentMenuId(null); void handleMakeSecretary(st, classId, sec.className); }}
+                                      className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors cursor-pointer">
+                                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                                      <span>Make Class Secretary{suffix}</span>
+                                    </button>
+                                  );
+                                })}
+
                                 <div className="my-1 border-t border-slate-100 dark:border-slate-800"></div>
 
                                 {/* Delete */}
@@ -1901,7 +2009,8 @@ const handleSendAllStudentInvites = async () => {
                                   <Trash2 className="w-3.5 h-3.5 text-rose-500" />
                                   <span>Remove from Class</span>
                                 </button>
-                              </div>
+                              </div>,
+                              document.body
                             )}
                           </div>
                         </td>

@@ -148,9 +148,16 @@ const formatComponentResultCell = (
 ) => {
   if (component?.percentage !== null && component?.percentage !== undefined) return `${component.percentage.toFixed(2)}%`;
   if (component?.status === 'pending' || periodStatus === 'pending') return 'Pending';
-  if (component?.reasons.length) return `Incomplete (${component.reasons[0]})`;
+  if (component?.reasons.length) return 'Incomplete';
   if (periodStatus === 'computed') return 'Unavailable (recompute required)';
   return periodStatus === 'incomplete' ? 'Incomplete' : '—';
+};
+
+// "Lecture · Quiz, Outputs; Laboratory · Recitation" — groups names by component.
+const groupNamesByComponent = (cats: Array<{ name: string; component?: string | null }>) => {
+  const groups = new Map<string, string[]>();
+  cats.forEach(c => groups.set(c.component ?? '', [...(groups.get(c.component ?? '') ?? []), c.name]));
+  return Array.from(groups, ([comp, names]) => `${comp ? `${comp} · ` : ''}${names.join(', ')}`).join('; ');
 };
 
 export const GradeComputation: React.FC = () => {
@@ -530,7 +537,7 @@ export const GradeComputation: React.FC = () => {
   const [assClassId, setAssClassId] = useState('CLINIC-A');
   const [assType, setAssType] = useState<string>('Quiz');
   const [assPeriod, setAssPeriod] = useState<'Midterm' | 'Final'>('Midterm');
-  const [assMaxScore, setAssMaxScore] = useState<number | ''>(50);
+  const [assMaxScore, setAssMaxScore] = useState<number | ''>('');
   const [assDueDate, setAssDueDate] = useState('');
   const [assInstructions, setAssInstructions] = useState('');
   const [assRemarks, setAssRemarks] = useState('');
@@ -889,7 +896,7 @@ export const GradeComputation: React.FC = () => {
     setAssType('');
     setModalCategoryWarning(false);
     setAssPeriod('Midterm');
-    setAssMaxScore(50);
+    setAssMaxScore('');
     setAssDueDate(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
     setAssInstructions('');
     setAssRemarks('');
@@ -967,8 +974,10 @@ export const GradeComputation: React.FC = () => {
     }
   };
 
-  const handleAssessmentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const [maxScoreToConfirm, setMaxScoreToConfirm] = useState<number | null>(null);
+
+  const handleAssessmentSubmit = async (e: React.FormEvent | null, maxScoreConfirmed = false) => {
+    e?.preventDefault();
     if (!assTitle.trim()) return;
     if (!availableClasses.some(classItem => classItem.id === assClassId)) {
       showFeedback('Select an active class or section for the selected course.', 'error');
@@ -1010,6 +1019,10 @@ export const GradeComputation: React.FC = () => {
     const parsedMaxScore = typeof assMaxScore === 'number' ? assMaxScore : parseInt(String(assMaxScore), 10);
     if (isNaN(parsedMaxScore) || parsedMaxScore <= 0) {
       showFeedback('Please enter a valid maximum score greater than 0.', 'error');
+      return;
+    }
+    if (!maxScoreConfirmed && parsedMaxScore > 500 && parsedMaxScore !== editingAssessment?.maxScore) {
+      setMaxScoreToConfirm(parsedMaxScore);
       return;
     }
 
@@ -2904,6 +2917,37 @@ export const GradeComputation: React.FC = () => {
     });
   }, [activeStudents, summarySearch, sortField, sortAsc, selectedSubjectCode, computeResultsByEnrollment, isPeriodMode]);
 
+  // "Lecture · " for the Scores Entry picker, only when the saved weights use both components.
+  const scoreComponentPrefix = (a: Assessment) => {
+    const cats = (assessmentConfig ?? loadedConfig)?.categories ?? [];
+    if (!cats.some(c => c.component === 'Lecture') || !cats.some(c => c.component === 'Laboratory')) return '';
+    const comp = cats.find(c => String(c.id) === String(a.gradingCategoryId))?.component;
+    return comp ? `${comp} · ` : '';
+  };
+
+  const selectedClassName = facultyClasses.find(c => c.id === selectedClassId)?.csName || 'Section';
+
+  // What keeps a period incomplete, from the saved grade-weight categories and the class assessments.
+  const describePeriodGaps = (period: 'Midterm' | 'Final') => {
+    const cats = ((loadedConfig ?? assessmentConfig)?.categories ?? []).filter(c =>
+      (c.gradingPeriod === period || !c.gradingPeriod) && c.sourceKind !== 'attendance');
+    const noAssessments: typeof cats = [];
+    const missingScores: typeof cats = [];
+    cats.forEach(cat => {
+      const catAssessments = assessments.filter(a => a.classId === selectedClassId
+        && a.gradingPeriod === period && a.status !== 'Archived'
+        && String(a.gradingCategoryId) === String(cat.id));
+      if (catAssessments.length === 0) noAssessments.push(cat);
+      else if (catAssessments.some(a => activeStudents.some(st =>
+        !assessmentScores.some(sc => sc.assessmentId === a.id && sc.studentId === st.id)))) missingScores.push(cat);
+    });
+    const parts = [
+      noAssessments.length ? `no assessments yet in ${groupNamesByComponent(noAssessments)}` : '',
+      missingScores.length ? `missing scores in ${groupNamesByComponent(missingScores)}` : '',
+    ].filter(Boolean);
+    return parts.length ? `${period}: ${parts.join('. ')}.` : '';
+  };
+
   const handleRecomputeGrades = async () => {
     if (!selectedClassId || selectedClassIsHistorical) return;
     setIsRecomputing(true);
@@ -2926,11 +2970,11 @@ export const GradeComputation: React.FC = () => {
           if (res.status === 'incomplete_period' && res.periods) {
             const m = res.periods.midterm;
             const f = res.periods.final;
-            if (Array.isArray(m?.incomplete)) {
-              m.incomplete.forEach(i => incompleteReasons.add(`Midterm: ${formatPeriodIncompleteReason(i.reason)}`));
+            if (Array.isArray(m?.incomplete) && m.incomplete.length > 0) {
+              incompleteReasons.add(describePeriodGaps('Midterm') || `Midterm: ${formatPeriodIncompleteReason(m.incomplete[0].reason)}`);
             }
-            if (Array.isArray(f?.incomplete)) {
-              f.incomplete.forEach(i => incompleteReasons.add(`Finals: ${formatPeriodIncompleteReason(i.reason)}`));
+            if (Array.isArray(f?.incomplete) && f.incomplete.length > 0) {
+              incompleteReasons.add(describePeriodGaps('Final') || `Final: ${formatPeriodIncompleteReason(f.incomplete[0].reason)}`);
             }
           } else if (res.status === 'incomplete_attendance') {
             incompleteReasons.add('Attendance data missing or unresolved');
@@ -3431,13 +3475,13 @@ export const GradeComputation: React.FC = () => {
                             {activeAssessment && !singleActivityFilteredAssessments.some(a => a.id === activeAssessment.id) && (
                               <option value={activeAssessment.id}>
                                 Current: {activityFilterPeriod === 'all' && activeAssessment.gradingPeriod ? `[${activeAssessment.gradingPeriod}] ` : ''}
-                                {activeAssessment.title} ({activeAssessment.type || 'Assessment'} • Max: {activeAssessment.maxScore})
+                                {activeAssessment.title} ({scoreComponentPrefix(activeAssessment)}{activeAssessment.type || 'Assessment'} • Max: {activeAssessment.maxScore})
                               </option>
                             )}
                             {singleActivityFilteredAssessments.map((ass) => (
                               <option key={ass.id} value={ass.id}>
                                 {activityFilterPeriod === 'all' && ass.gradingPeriod ? `[${ass.gradingPeriod}] ` : ''}
-                                {ass.title} ({ass.type || 'Assessment'} • Max: {ass.maxScore})
+                                {ass.title} ({scoreComponentPrefix(ass)}{ass.type || 'Assessment'} • Max: {ass.maxScore})
                               </option>
                             ))}
                           </select>
@@ -5011,7 +5055,7 @@ export const GradeComputation: React.FC = () => {
                 Confirm Grade Recomputation
               </div>
               <p className="text-[11px] leading-relaxed">
-                This will recalculate student period evaluations and final grades for all enrolled students in class <strong>{selectedClassId}</strong> using the authoritative grading configuration.
+                This will recalculate student period evaluations and final grades for all enrolled students in class <strong>{selectedClassName}</strong> using the saved grade weights.
               </p>
             </div>
             <div className="flex justify-end gap-2 pt-3 border-t dark:border-slate-800">
@@ -5049,7 +5093,7 @@ export const GradeComputation: React.FC = () => {
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-200">Academic Grade Summaries</h3>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-clinical-50 text-clinical-700 dark:bg-clinical-950/60 dark:text-clinical-400 border border-clinical-200/50">
-                  {selectedSubjectCode || 'Course'} · {selectedClassId || 'Section'}
+                  {selectedSubjectCode || 'Course'} · {selectedClassName}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Final grades and periodic evaluations based on current component scores</p>
@@ -5225,7 +5269,7 @@ export const GradeComputation: React.FC = () => {
                               <span className="text-slate-500 dark:text-slate-400 font-sans">Pending</span>
                             ) : evalResult.midtermReasons.length > 0 ? (
                               <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold" title={evalResult.midtermReasons.join(', ')}>
-                                Incomplete ({evalResult.midtermReasons[0]})
+                                Incomplete
                               </span>
                             ) : (
                               <span className="text-slate-500 dark:text-slate-400 font-sans">—</span>
@@ -5244,7 +5288,7 @@ export const GradeComputation: React.FC = () => {
                               <span className="text-slate-500 dark:text-slate-400 font-sans">Pending</span>
                             ) : evalResult.finalReasons.length > 0 ? (
                               <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold" title={evalResult.finalReasons.join(', ')}>
-                                Incomplete ({evalResult.finalReasons[0]})
+                                Incomplete
                               </span>
                             ) : (
                               <span className="text-slate-500 dark:text-slate-400 font-sans">—</span>
@@ -5528,6 +5572,35 @@ export const GradeComputation: React.FC = () => {
         );
       })()}
 
+      <Modal
+        isOpen={maxScoreToConfirm !== null}
+        onClose={() => setMaxScoreToConfirm(null)}
+        title="Confirm Maximum Score"
+      >
+        <div className="space-y-4 text-xs">
+          <p className="text-slate-700 dark:text-slate-300">Maximum score is {maxScoreToConfirm} points. Is that right?</p>
+          <div className="flex justify-end gap-2 pt-3 border-t dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setMaxScoreToConfirm(null)}
+              className="px-4 py-2 rounded-xl border dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMaxScoreToConfirm(null);
+                void handleAssessmentSubmit(null, true);
+              }}
+              className="px-5 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs shadow-md"
+            >
+              Yes, save
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* ASSESSMENT ADD/EDIT MODAL */}
       <Modal
         isOpen={isAssessmentModalOpen}
@@ -5657,13 +5730,15 @@ export const GradeComputation: React.FC = () => {
                         ));
                       }
 
+                      const allCategories = modalConfig?.categories ?? modalEligibleCategories;
+                      const bothComponents = allCategories.some(c => c.component === 'Lecture') && allCategories.some(c => c.component === 'Laboratory');
                       return (
                         <>
                           {lectureCategories.length > 0 && (
                             <optgroup label="Lecture Categories">
                               {lectureCategories.map(cat => (
                                 <option key={categoryOptionKey(cat, assPeriod)} value={categoryOptionKey(cat, assPeriod)}>
-                                  {cat.name} ({cat.weight}%)
+                                  {bothComponents ? 'Lecture · ' : ''}{cat.name} ({cat.weight}%)
                                 </option>
                               ))}
                             </optgroup>
@@ -5672,7 +5747,7 @@ export const GradeComputation: React.FC = () => {
                             <optgroup label="Laboratory Categories">
                               {labCategories.map(cat => (
                                 <option key={categoryOptionKey(cat, assPeriod)} value={categoryOptionKey(cat, assPeriod)}>
-                                  {cat.name} ({cat.weight}%)
+                                  {bothComponents ? 'Laboratory · ' : ''}{cat.name} ({cat.weight}%)
                                 </option>
                               ))}
                             </optgroup>
@@ -5713,11 +5788,6 @@ export const GradeComputation: React.FC = () => {
                   } else {
                     const num = parseInt(val, 10);
                     setAssMaxScore(isNaN(num) ? '' : num);
-                  }
-                }}
-                onBlur={() => {
-                  if (assMaxScore === '' || Number(assMaxScore) <= 0) {
-                    setAssMaxScore(50);
                   }
                 }}
                 className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"

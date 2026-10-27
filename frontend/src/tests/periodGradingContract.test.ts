@@ -340,7 +340,7 @@ test('Period Incomplete Reasons: formats server reasons to human-readable string
   assert.equal(formatPeriodIncompleteReason('missing_date_range'), 'Missing Date Range');
   assert.equal(formatPeriodIncompleteReason('no_sessions'), 'No Sessions');
   assert.equal(formatPeriodIncompleteReason('unresolved_attendance'), 'Unresolved Attendance');
-  assert.equal(formatPeriodIncompleteReason('no_assessment_results'), 'No Assessment Results');
+  assert.equal(formatPeriodIncompleteReason('no_assessment_results'), 'No assessments yet in some categories');
   assert.equal(formatPeriodIncompleteReason('missing_assessment_score'), 'Missing Assessment Score');
   assert.equal(formatPeriodIncompleteReason('unresolved_assessment_attendance'), 'Unresolved Transmuted Attendance');
   assert.equal(formatPeriodIncompleteReason('duplicate_attendance_sources'), 'Duplicate Attendance');

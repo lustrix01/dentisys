@@ -164,7 +164,7 @@ export function formatPeriodIncompleteReason(reason: PeriodIncompleteReason | st
     case 'unresolved_attendance':
       return 'Unresolved Attendance';
     case 'no_assessment_results':
-      return 'No Assessment Results';
+      return 'No assessments yet in some categories';
     case 'missing_assessment_score':
       return 'Missing Assessment Score';
     case 'unresolved_assessment_attendance':

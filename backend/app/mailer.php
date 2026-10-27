@@ -35,12 +35,28 @@ function log_to_outbox(
     );
 }
 
+// Plain, unauthenticated delivery to the local Mailpit server, whatever SMTP_* says.
+function mailpit_smtp_settings(array $config): array
+{
+    return [
+        'host' => (string) ($config['mailpit_smtp']['host'] ?? 'mailpit'),
+        'port' => (int) ($config['mailpit_smtp']['port'] ?? 1025),
+        'from' => (string) ($config['smtp']['from'] ?? 'noreply@dentisys.local'),
+        'encryption' => 'none',
+        'verify_peer' => false,
+        'mailpit_copy' => true,
+    ];
+}
+
 /**
  * @return array{sent: bool, error: ?string, headers: array<string,string>}
  */
 function smtp_transport(string $to, string $subject, string $body, array $config): array
 {
-    $smtp = $config['smtp'] ?? [];
+    // EML-001: mailpit mode never reaches a real mail server.
+    $smtp = strtolower((string) ($config['providers']['email']['active'] ?? 'smtp')) === 'mailpit'
+        ? mailpit_smtp_settings($config)
+        : ($config['smtp'] ?? []);
     $host = (string) ($smtp['host'] ?? '');
     $port = (int) ($smtp['port'] ?? 25);
     $user = (string) ($smtp['user'] ?? '');
@@ -193,14 +209,7 @@ function send_email(
         // CUSTOM: every message is copied to Mailpit; only allowlisted
         // recipients also receive it through the real SMTP server below.
         $mailpitConfig = $config;
-        $mailpitConfig['smtp'] = [
-            'host' => (string) ($config['mailpit_smtp']['host'] ?? 'mailpit'),
-            'port' => (int) ($config['mailpit_smtp']['port'] ?? 1025),
-            'from' => (string) ($config['smtp']['from'] ?? 'noreply@dentisys.local'),
-            'encryption' => 'none',
-            'verify_peer' => false,
-            'mailpit_copy' => true,
-        ];
+        $mailpitConfig['smtp'] = mailpit_smtp_settings($config);
         $copy = smtp_transport($to, $subject, $body, $mailpitConfig);
         if (!email_reaches_recipient($to, $config)) {
             log_to_outbox(

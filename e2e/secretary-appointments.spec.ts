@@ -56,8 +56,9 @@ test('Secretary tab shows one row per section and appoints / removes by section'
     await expect.poll(() => invites.length).toBe(1);
     expect(invites[0]).toMatchObject({ cs_id: 78 });
 
-    appPage.once('dialog', dialog => { expect(dialog.message()).toContain('Class Secretary of Section 4-A'); void dialog.accept(); });
     await rows.nth(0).getByRole('button', { name: 'Remove' }).click();
+    await expect(appPage.getByText(/Class Secretary of Section 4-A/)).toBeVisible();
+    await appPage.getByRole('button', { name: 'Remove', exact: true }).last().click(); // the in-app confirm's button
     await expect.poll(() => removes.length).toBe(1);
     expect(removes[0]).toEqual({ studentId: '42', csId: '77' });
   } finally {

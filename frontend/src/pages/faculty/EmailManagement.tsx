@@ -16,7 +16,7 @@ import {
   Filter
 } from 'lucide-react';
 import { Card } from '../../components/Card';
-import { showFeedback } from '../../components/FeedbackCenter';
+import { showFeedback, requestConfirmation } from '../../components/FeedbackCenter';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { EmailHistoryTable } from '../../components/email/EmailHistoryTable';
@@ -133,11 +133,11 @@ export const EmailManagement: React.FC = () => {
   // Development-only activation links, returned once when an invitation is issued.
   const [secretaryDevLinks, setSecretaryDevLinks] = useState<Record<string, string>>({});
   
-  const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
   // Also raise the corner notice: the banner is off-screen when the page is scrolled.
-  const notify = (n: { type: 'success' | 'error'; message: string }) => {
+  const notify = (n: { type: 'success' | 'error' | 'warning'; message: string }) => {
     setNotice(n);
-    showFeedback(n.message, n.type);
+    showFeedback(n.message, n.type === 'warning' ? 'info' : n.type);
   };
   const [isSending, setIsSending] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
@@ -211,6 +211,17 @@ export const EmailManagement: React.FC = () => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
+  // A section has one Secretary: choosing a student unticks the others of that section.
+  const toggleSecretarySelect = (key: string) => {
+    const classId = key.split('|')[1];
+    setSelected((prev) => (prev.includes(key) ? prev.filter((x) => x !== key) : [...prev.filter((x) => x.split('|')[1] !== classId), key]));
+  };
+
+  // Spec: one Secretary per section, counting a pending invitation.
+  const sectionHasSecretary = (classId: string, className: string) =>
+    safeStudents.some((st) => st.classSections?.some((sec) => String(sec.classId) === String(classId) && sec.isSecretary))
+    || secretaryInvs.some((inv) => inv.status === 'Pending' && inv.className === className);
+
   const toggleSelectAll = () => {
     if (selected.length === filteredStudents.length) {
       setSelected([]);
@@ -271,7 +282,6 @@ export const EmailManagement: React.FC = () => {
           }
         } else {
           refusals.push(`${student.name}: ${res.message}`);
-          notify({ type: 'error', message: res.message });
         }
       }
 
@@ -279,16 +289,18 @@ export const EmailManagement: React.FC = () => {
       await fetchEmailLogs();
       setSelected([]);
       setIsSending(false);
-      if (count > 0) {
-        // Keep any refusal visible next to the rows that were appointed.
+      // Green when all succeeded; amber (not red) listing each refusal.
+      if (count > 0 || refusals.length > 0) {
         notify({
-          type: refusals.length ? 'error' : 'success',
-          message: `Class Secretary appointment processed for ${count} student${count === 1 ? '' : 's'}: students with an account are appointed now; others receive an invitation that activates their Student account.`
+          type: refusals.length ? 'warning' : 'success',
+          message: (count > 0
+            ? `Class Secretary appointment processed for ${count} student${count === 1 ? '' : 's'}: students with an account are appointed now; others receive an invitation that activates their Student account.`
+            : '')
             + (refusals.length ? ` Not appointed: ${refusals.join(' ')}` : ''),
         });
-        const refreshed = await getFacultyStudentsApi();
-        if (Array.isArray(refreshed)) setDbStudents(refreshed as unknown as Student[]);
       }
+      const refreshed = await getFacultyStudentsApi();
+      if (Array.isArray(refreshed)) setDbStudents(refreshed as unknown as Student[]);
     } else if (tab === 'student_invites') {
       let successCount = 0;
       let failedCount = 0;
@@ -330,7 +342,7 @@ export const EmailManagement: React.FC = () => {
 
 
   const handleRemoveSecretary = async (student: Student, classId: string, className: string) => {
-    if (!window.confirm(`Remove ${student.name} as Class Secretary of ${className}? Their Student access stays the same.`)) return;
+    if (!(await requestConfirmation(`Remove ${student.name} as Class Secretary of ${className}? Their Student access stays the same.`, 'Remove Class Secretary', 'Remove'))) return;
     setIsSending(true);
     setNotice(null);
     try {
@@ -372,14 +384,16 @@ export const EmailManagement: React.FC = () => {
           className={`p-4 rounded-2xl border text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in ${
             notice.type === 'success'
               ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300'
-              : 'bg-rose-500/10 border-rose-500/20 text-rose-800 dark:text-rose-300'
+              : notice.type === 'warning'
+                ? 'bg-amber-500/10 border-amber-500/20 text-amber-800 dark:text-amber-300'
+                : 'bg-rose-500/10 border-rose-500/20 text-rose-800 dark:text-rose-300'
           }`}
         >
           <div className="flex items-center gap-2.5">
             {notice.type === 'success' ? (
               <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-rose-500 flex-shrink-0" />
+              <AlertCircle className={`w-4 h-4 flex-shrink-0 ${notice.type === 'warning' ? 'text-amber-500' : 'text-rose-500'}`} />
             )}
             <span>{notice.message}</span>
           </div>
@@ -628,7 +642,7 @@ export const EmailManagement: React.FC = () => {
                 Class Secretary Appointment Invitations
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Designate a student as Class Secretary with elevated attendance override & session logging privileges.
+                A Class Secretary can start attendance sessions and mark attendance for this section.
               </p>
             </div>
 
@@ -657,13 +671,15 @@ export const EmailManagement: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {secretaryRows.map(({ key, student, section }) => {
                   const isChecked = selected.includes(key);
+                  const sectionTaken = sectionHasSecretary(section.classId, section.className);
                   return (
                     <tr key={key} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="py-3.5 px-4">
                         <input
                           type="checkbox"
                           checked={isChecked}
-                          onChange={() => toggleSelect(key)}
+                          disabled={sectionTaken}
+                          onChange={() => toggleSecretarySelect(key)}
                           className="w-4 h-4 accent-emerald-600 cursor-pointer"
                         />
                       </td>
@@ -690,6 +706,9 @@ export const EmailManagement: React.FC = () => {
                             {student.accountStatus === 'active' || student.accountStatus === 'secretary' ? 'Student (has account)' : 'Student (no account yet)'}
                           </span>
                         )}
+                        {sectionTaken && !section.isSecretary && (
+                          <span className="block mt-1 text-[10px] text-slate-500 dark:text-slate-400">Section already has a Class Secretary</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -701,11 +720,11 @@ export const EmailManagement: React.FC = () => {
           {/* Active Secretary Invitations Ledger */}
           <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
             <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">
-              Active Secretary Invitation Tokens ({secretaryInvs.length})
+              Pending Secretary Invitations ({secretaryInvs.length})
             </h3>
             
             {secretaryInvs.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">No active Secretary invitation tokens issued yet.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">No pending Secretary invitations.</p>
             ) : (
               <div className="space-y-2">
                 {secretaryInvs.map(inv => (

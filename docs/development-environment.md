@@ -53,7 +53,7 @@ E-mail modes are described in the [README](../README.md#a7-choose-how-e-mail-is-
 - Real e-mail goes to real addresses. Demo accounts use `@bicol-u.edu.ph` addresses that may belong to real people, so prefer `custom` with your own address on `EMAIL_TEST_ALLOWLIST`.
 - Links in e-mails use `APP_BASE_URL` (`http://localhost:5173` by default), so they open only on the computer running DentiSys.
 - The automated tests always deliver to their own Mailpit, whatever `.env` says.
-- To switch back, set `EMAIL_PROVIDER=mailpit`, `SMTP_HOST=mailpit`, `SMTP_PORT=1025`, `SMTP_ENCRYPTION=none`, `SMTP_VERIFY_PEER=false`, then run `docker compose up -d web`.
+- To switch back, set `EMAIL_PROVIDER=mailpit` and run `docker compose up -d web`. The `SMTP_*` values are ignored in that mode.
 
 ## Testing on a phone (same Wi-Fi)
 

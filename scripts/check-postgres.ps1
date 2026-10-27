@@ -265,7 +265,8 @@ FROM (
         $deanBootstrapArgs = @('exec', '-T', '-e', "DB_NAME=$restoreDatabase",
             '-e', 'FIRST_DEAN_EMAIL=bootstrap.delivery@bicol-u.edu.ph', '-e', 'FIRST_DEAN_FIRST_NAME=Delivery', '-e', 'FIRST_DEAN_LAST_NAME=Test',
             '-e', 'EMAIL_PROVIDER=mailpit', '-e', 'SMTP_ENCRYPTION=none', '-e', 'SMTP_VERIFY_PEER=false')
-        & docker compose @composeFiles @deanBootstrapArgs -e SMTP_HOST=127.0.0.1 -e SMTP_PORT=1 web php /var/www/html/backend/bin/bootstrap-first-dean.php
+        # Mailpit mode delivers only to MAILPIT_SMTP_* (EML-001), so the refused connection is simulated there.
+        & docker compose @composeFiles @deanBootstrapArgs -e MAILPIT_SMTP_HOST=127.0.0.1 -e MAILPIT_SMTP_PORT=1 web php /var/www/html/backend/bin/bootstrap-first-dean.php
         if ($LASTEXITCODE -ne 1) { throw 'Failed first Dean delivery must exit 1.' }
         $deanTokenQuery = "SELECT count(*) FROM security_tokens st JOIN user_accounts ua ON ua.user_id = st.user_id WHERE ua.login_email = 'bootstrap.delivery@bicol-u.edu.ph' AND st.purpose = 'faculty_invitation' AND st.used_at IS NULL AND st.revoked_at IS NULL;"
         if ((Invoke-PsqlScalarDatabase $restoreDatabase $deanTokenQuery) -ne '0') { throw 'Failed first Dean delivery left a live token.' }

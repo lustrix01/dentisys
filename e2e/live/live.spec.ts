@@ -545,7 +545,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   const initialOverridePromise = page.waitForResponse(
     response => response.url().includes('/api/faculty/attendance/override') && response.request().method() === 'POST'
   );
-  await studentRow.getByRole('button', { name: 'Override', exact: true }).click();
+  await studentRow.getByRole('button', { name: 'Mark', exact: true }).click();
   await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
   await page.getByRole('button', { name: 'Save Override', exact: true }).click();
 
@@ -1111,6 +1111,7 @@ test('authoritative faculty assessment manager: create and edit assessments with
 
   // Fill in title
   await modalForm.locator('input[type="text"]').first().fill(testTitle);
+  await modalForm.getByPlaceholder('e.g. 50').fill('50'); // a new assessment's max score starts empty
   // Select firstCategory
   await categorySelect.selectOption(String(firstCategory.id));
 

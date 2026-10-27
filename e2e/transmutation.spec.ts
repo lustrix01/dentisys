@@ -325,6 +325,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     await expect(page.locator('select').nth(1)).toHaveValue('7');
     await page.getByRole('button', { name: 'Add Assessment' }).click();
     await page.getByPlaceholder('e.g. Molar Crown Prep quiz').fill('Unlinked assessment survives refresh');
+    await page.getByPlaceholder('e.g. 50').fill('50'); // a new assessment's max score starts empty
     // A course with a single section shows it as text instead of a picker.
     const createForm = page.locator('form').last();
     await expect(createForm.getByText('Target Class / Section')).toBeVisible();
