@@ -2969,9 +2969,14 @@ export const GradeComputation: React.FC = () => {
   };
 
   // Official grade sheet workbook (contract official-exports.md); classes without the official Grade Weights get the plain summary.
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const handleExportExcel = async () => {
     const cls = facultyClasses.find(c => c.id === selectedClassId);
-    if (!cls) return;
+    if (!cls) {
+      showFeedback('Your classes are still loading. Try Export Excel again in a moment.', 'info');
+      return;
+    }
+    setIsExportingExcel(true);
     try {
       await exportGradeWorkbook({ cls, students: activeStudents, assessments, scores: assessmentScores, attendanceRecords, by: user?.display_name ?? '' });
       recordAudit({
@@ -2982,6 +2987,8 @@ export const GradeComputation: React.FC = () => {
       });
     } catch (err) {
       showFeedback(err instanceof Error ? err.message : 'Unable to export the grade sheet.', 'error');
+    } finally {
+      setIsExportingExcel(false);
     }
   };
 
@@ -5059,17 +5066,18 @@ export const GradeComputation: React.FC = () => {
                 <span>{isRecomputing ? 'Recomputing...' : 'Recompute Grades'}</span>
               </button>}
 
-              {/* Clean Export Group (CSV & PDF) */}
+              {/* Clean Export Group (Excel & PDF) */}
               <div className="flex items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
                 <button
                   type="button"
                   onClick={handleExportExcel}
+                  disabled={isExportingExcel}
                   aria-label="Export official grade sheet (Excel)"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
                   title="Export official grade sheet as an Excel workbook"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span>Export Excel</span>
+                  <span>{isExportingExcel ? 'Exporting…' : 'Export Excel'}</span>
                 </button>
                 <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
                 <button

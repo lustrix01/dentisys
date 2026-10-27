@@ -503,14 +503,21 @@ export const Reports: React.FC = () => {
     window.print();
   };
 
-  // Retention and Attendance download as .xlsx (contract official-exports X18/X19).
+  // Academic downloads the official grade workbook; Retention and Attendance download as .xlsx (contract official-exports X1, X18/X19).
+  const [isExportingAcademic, setIsExportingAcademic] = useState(false);
   const handleExportExcel = async (type: 'academic' | 'retention' | 'attendance') => {
     if (type === 'academic') {
-      if (!selectedClass) return;
+      if (!selectedClass) {
+        showFeedback('Your classes are still loading. Try Export Excel again in a moment.', 'info');
+        return;
+      }
+      setIsExportingAcademic(true);
       try {
         await exportGradeWorkbook({ cls: selectedClass, students: studentsInSelectedSubject, assessments, scores: assessmentScores, attendanceRecords: appAttendanceRecords, by: user?.display_name ?? '' });
       } catch (err) {
         showFeedback(err instanceof Error ? err.message : 'Unable to export the grade sheet.', 'error');
+      } finally {
+        setIsExportingAcademic(false);
       }
       return;
     }
@@ -742,11 +749,12 @@ export const Reports: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleExportExcel('academic')}
-                className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
+                disabled={isExportingAcademic}
+                className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
                 title="Export official grade sheet as an Excel workbook"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Export Excel</span>
+                <span>{isExportingAcademic ? 'Exporting…' : 'Export Excel'}</span>
               </button>
               <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
               <button
