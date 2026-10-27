@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  UserCheck,
   Users,
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
@@ -28,6 +29,7 @@ import { StartSessionModal, type StartSessionValues } from '../../components/Sta
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { DEVELOPMENT_LOCATION_FIXTURES } from '../../services/developmentProviders';
 import { RevokedSessionsSwitch } from '../../components/RevokedSessionsSwitch';
+import { meetingVenueLines } from '../../utils/scheduleHelper';
 import {
   REVOKED_SESSION_VIEW_ONLY_NOTE, countRevokedSessions, matchesRollCallFilters, revokedHiddenText, visibleSessions,
   type OverriddenFilter, type RecordedByFilter,
@@ -36,6 +38,7 @@ import {
   getSecretaryAttendanceApi,
   getSecretaryProfileApi,
   getSecretaryDashboardKpisApi,
+  getSecretaryExcusedRequestsApi,
   getSecretaryActiveAttendanceSessionApi,
   startSecretaryAttendanceSessionApi,
   overrideSecretaryAttendanceApi,
@@ -47,6 +50,17 @@ import {
 
 type AttendanceItem = Awaited<ReturnType<typeof getSecretaryAttendanceApi>>['records'][number];
 type SessionItem = NonNullable<Awaited<ReturnType<typeof getSecretaryAttendanceApi>>['sessions']>[number];
+
+type Section = { classId: string; className: string; courseCode?: string; courseName?: string; semester?: string; schoolYear?: string; classroomName?: string | null; meetings?: ClassMeeting[] };
+
+const semesterLabel = (value?: string | null) => {
+  const v = (value ?? '').toLowerCase();
+  return v.includes('1st') ? '1st Semester' : v.includes('2nd') ? '2nd Semester' : v.includes('summer') ? 'Summer' : (value ?? '');
+};
+
+// A row belongs to the section by class id, or by course code when the data carries no class id.
+const inSection = (section: Section | undefined, item: { classId?: string; subjectCode?: string }) =>
+  !section || (section.classId && item.classId ? item.classId === section.classId : !section.courseCode || item.subjectCode === section.courseCode);
 
 const statusClass: Record<string, string> = {
   present: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
@@ -163,7 +177,18 @@ export const AttendanceList: React.FC = () => {
   const [classroomName, setClassroomName] = useState('');
   const [query, setQuery] = useState(() => searchParams.get('student') ?? '');
   const [date, setDate] = useState(() => searchParams.get('date') ?? manilaDateToday());
-  const [selectedSubject, setSelectedSubject] = useState<string>('all');
+  const [selectedCardId, setSelectedCardId] = useState('');
+  const [sections, setSections] = useState<Section[]>([]);
+  const [currentSchoolYear, setCurrentSchoolYear] = useState('');
+  // Students with an Excused request still waiting for Faculty: "studentId:sessionId".
+  const [pendingExcused, setPendingExcused] = useState<Set<string>>(new Set());
+  const [isPhone, setIsPhone] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const onChange = () => setIsPhone(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
   const [sessionId, setSessionId] = useState(() => searchParams.get('sessionId') ?? searchParams.get('session') ?? '');
   const [sessionRecords, setSessionRecords] = useState<AttendanceItem[]>([]);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -272,6 +297,7 @@ export const AttendanceList: React.FC = () => {
         : {}),
     });
     setIsStartOpen(false);
+    setSessionId(''); // reopen on the new live session once the list reloads
     setFeedback({
       type: 'success',
       text: res.session.status === 'scheduled'
@@ -292,6 +318,10 @@ export const AttendanceList: React.FC = () => {
     }, { replace: true });
   }, [searchParams]);
 
+  const loadExcused = () => getSecretaryExcusedRequestsApi()
+    .then(res => setPendingExcused(new Set(res.requests.filter(r => r.status === 'pending').map(r => `${r.studentId}:${r.sessionId ?? ''}`))))
+    .catch(() => { /* Keep the last known requests. */ });
+
   // quiet = background refresh: no spinner, keeps the last good data on failure, and a later load/End/Revoke/override makes it stale.
   const load = async (quiet = false) => {
     if (saving.current) return;
@@ -311,6 +341,9 @@ export const AttendanceList: React.FC = () => {
       setSessions(attendance.sessions || []);
       setClassName(profile.profile.assignedClassName || dashboard?.assignedClass?.className || '');
       setClassroomName(profile.profile.classroomName || dashboard?.assignedClass?.classroomName || '');
+      setSections((dashboard?.assignedClasses?.length ? dashboard.assignedClasses : dashboard?.assignedClass?.classId ? [dashboard.assignedClass] : []) as Section[]);
+      setCurrentSchoolYear(dashboard?.currentSchoolYear ?? '');
+      void loadExcused();
     } catch (requestError) {
       if (loadRequest.current !== requestId || quiet) return;
       setRecords([]);
@@ -357,6 +390,7 @@ export const AttendanceList: React.FC = () => {
           reason: trimmedReason,
         });
         setFeedback({ type: 'success', text: response.message || 'Excused request sent to Faculty for approval.' });
+        void loadExcused();
         setSelectedRecord(null);
         setReason('');
         setRefreshVersion(version => version + 1);
@@ -501,16 +535,6 @@ export const AttendanceList: React.FC = () => {
     return () => { ++sessionRequest.current; };
   }, [sessionId, refreshVersion]);
 
-  // Once per date, open that date's active session; otherwise the user chooses one.
-  const autoSelectedDate = useRef<string | null>(null);
-  useEffect(() => {
-    if (loading || autoSelectedDate.current === date) return;
-    autoSelectedDate.current = date;
-    if (sessionId) return;
-    const active = sessions.find(s => s.status === 'active' && (!date || (s.sessionDate || s.date) === date));
-    if (active) setSessionId(active.sessionId);
-  }, [loading, date, sessions, sessionId]);
-
   // Dynamically classify Current Session (happening right now) vs Upcoming Sessions (scheduled in the future)
   const { liveCurrentSession, upcomingSessions } = useMemo(() => {
     let current: SessionItem | null = null;
@@ -551,46 +575,28 @@ export const AttendanceList: React.FC = () => {
   const dates = useMemo(() => Array.from(new Set([...records.map(record => record.date), ...sessions.map(session => session.date)])).sort().reverse(), [records, sessions]);
   const subjects = useMemo(() => Array.from(new Set([...records.map(record => record.subjectCode), ...sessions.map(session => session.subjectCode)].filter(Boolean))).sort(), [records, sessions]);
 
-  // Derive Assigned Class Cards for View 1 (My Assigned Classes Grid)
+  // One card per section the Secretary holds (REG-006); unknown values are left out, never invented.
   const assignedClassCards = useMemo(() => {
-    if (subjects.length > 0) {
-      return subjects.map((sub) => {
-        const subRecords = records.filter(r => r.subjectCode === sub);
-        const subSessions = sessions.filter(s => s.subjectCode === sub);
-        const count = new Set(subRecords.map(r => r.studentId)).size || subRecords.length;
-        const currentActive = subSessions.some(s => s.sessionId === liveCurrentSession?.sessionId);
-        const room = subSessions.find(s => s.room)?.room || classroomName || 'Room 101';
-        return {
-          id: sub,
-          subjectCode: sub,
-          className: className || 'Section A',
-          courseTitle: `${sub} — Dental Medicine`,
-          enrolledCount: count || records.length || 0,
-          room,
-          semester: '1st Semester',
-          schoolYear: '2026-2027',
-          schedule: 'Regular Class Schedule',
-          hasLiveSession: currentActive,
-          yearLevel: subRecords[0]?.yearLevel || 1,
-        };
-      });
-    }
-
-    const count = new Set(records.map(r => r.studentId)).size || records.length;
-    return [{
-      id: className || 'class-section',
-      subjectCode: className || 'DMD 1-A',
-      className: className || 'Section A',
-      courseTitle: `Doctor of Dental Medicine — ${className || 'Section A'}`,
-      enrolledCount: count,
-      room: classroomName || 'Room 101',
-      semester: '1st Semester',
-      schoolYear: '2026-2027',
-      schedule: 'Regular Class Schedule',
-      hasLiveSession: Boolean(liveCurrentSession),
-      yearLevel: records[0]?.yearLevel || 1,
-    }];
-  }, [subjects, records, sessions, className, classroomName, liveCurrentSession]);
+    const base: Section[] = sections.length > 0 ? sections
+      : subjects.length > 0 ? subjects.map(sub => ({ classId: '', className, courseCode: sub, classroomName }))
+      : className ? [{ classId: '', className, classroomName }] : [];
+    return base.map((sec) => {
+      const scope = base.length > 1 ? sec : undefined;
+      const subRecords = records.filter(r => inSection(scope, r));
+      return {
+        ...sec,
+        id: sec.classId || sec.courseCode || sec.className,
+        courseTitle: [sec.courseCode, sec.courseName].filter(Boolean).join(' — ') || sec.className,
+        term: [semesterLabel(sec.semester), sec.schoolYear].filter(Boolean),
+        venue: meetingVenueLines(sec.meetings, sec.classroomName),
+        enrolledCount: new Set(subRecords.map(r => r.studentId)).size,
+        hasLiveSession: Boolean(liveCurrentSession && inSection(scope, liveCurrentSession)),
+        yearLevel: subRecords[0]?.yearLevel,
+      };
+    });
+  }, [sections, subjects, records, className, classroomName, liveCurrentSession]);
+  const activeCard = assignedClassCards.find(c => c.id === selectedCardId) ?? assignedClassCards[0];
+  const scopedCard = assignedClassCards.length > 1 ? activeCard : undefined; // a single section needs no filtering
 
   // Filtered Roster for Worksheet View
   const filtered = useMemo(() => {
@@ -598,7 +604,7 @@ export const AttendanceList: React.FC = () => {
     return (sessionId ? sessionRecords : []).filter((record) => {
       if (date && record.date !== date) return false;
       if (!matchesRollCallFilters(record, overriddenFilter, recordedByFilter)) return false;
-      if (selectedSubject !== 'all' && record.subjectCode !== selectedSubject) return false;
+      if (!inSection(scopedCard, record)) return false;
       if (status !== 'all') {
         if (status === 'unrecorded') {
           if (record.status && record.status !== 'not_recorded') return false;
@@ -609,17 +615,31 @@ export const AttendanceList: React.FC = () => {
       if (!needle) return true;
       return record.studentName.toLocaleLowerCase().includes(needle) || record.studentNumber.toLocaleLowerCase().includes(needle) || record.subjectCode.toLocaleLowerCase().includes(needle);
     });
-  }, [date, query, sessionRecords, sessionId, status, selectedSubject, overriddenFilter, recordedByFilter]);
+  }, [date, query, sessionRecords, sessionId, status, scopedCard, overriddenFilter, recordedByFilter]);
 
-  const dateSessions = useMemo(() => sessions.filter(s => !date || (s.sessionDate || s.date) === date), [sessions, date]);
+  const dateSessions = useMemo(() => sessions.filter(s => inSection(scopedCard, s) && (!date || (s.sessionDate || s.date) === date)), [sessions, date, scopedCard]);
   const revokedSessionCount = countRevokedSessions(dateSessions);
   const shownSessions = visibleSessions(dateSessions, showRevoked);
   const allSessionsHidden = dateSessions.length > 0 && shownSessions.length === 0;
+  // The roll call opens on the live session, else the most recent one for the date.
+  const autoSessionId = (shownSessions.find(s => s.sessionId === liveCurrentSession?.sessionId)
+    ?? [...shownSessions].sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''))[0])?.sessionId ?? '';
+  // Auto-pick once per opened worksheet/date/session list, so a deliberate "Choose a session" stays chosen.
+  const autoPickKey = useRef('');
+  useEffect(() => {
+    if (viewMode !== 'worksheet' || loading || !autoSessionId) return;
+    const key = `${date}|${dateSessions.map(s => s.sessionId).join(',')}`;
+    if (key === autoPickKey.current) return;
+    autoPickKey.current = key;
+    if (!sessionId) setSessionId(autoSessionId);
+  }, [viewMode, loading, sessionId, autoSessionId, date, dateSessions]);
+  useEffect(() => { if (viewMode !== 'worksheet') autoPickKey.current = ''; }, [viewMode]);
   const openSession = sessions.find(s => s.sessionId === sessionId);
   const revokedSessionOpen = openSession?.status === 'revoked';
   const handleRevokedSwitch = (show: boolean) => {
     setShowRevoked(show);
-    if (!show && revokedSessionOpen) setSessionId('');
+    // Hiding the revoked session being viewed clears it; the auto-pick then reopens the session the roll call opens on.
+    if (!show && revokedSessionOpen) { setSessionId(''); autoPickKey.current = ''; }
   };
 
   // Attendance rate & straightforward counts (strictly adheres to backend contract tests)
@@ -629,6 +649,58 @@ export const AttendanceList: React.FC = () => {
   const absent = filtered.filter((record) => record.status === 'absent').length;
   const excused = filtered.filter((record) => record.status === 'excused').length;
   const recorded = filtered.filter((record) => record.status && record.status !== 'not_recorded').length;
+
+  const isRecorded = (record: AttendanceItem) => Boolean(record.status && record.status !== 'not_recorded');
+
+  const methodChip = (record: AttendanceItem) => isRecorded(record) ? (
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border border-blue-200/80 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300">
+      {record.verificationMethod === 'biometric' && !record.overrideReason
+        ? <Camera className="w-3.5 h-3.5 stroke-[2.2]" />
+        : <UserCheck className="w-3.5 h-3.5 stroke-[2.2]" />}
+      <span>{attendanceMethodLabel(record.verificationMethod, record.overrideReason)}</span>
+    </span>
+  ) : <span className="text-slate-500 dark:text-slate-400 text-xs">—</span>;
+
+  const statusChip = (record: AttendanceItem) => (
+    <>
+      <span
+        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+          record.status === 'present'
+            ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+            : record.status === 'late'
+            ? 'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
+            : record.status === 'absent'
+            ? 'border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
+            : record.status === 'excused'
+            ? 'border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300'
+            : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+        }`}
+      >
+        <span className="text-sm leading-none">•</span>
+        <span className="capitalize">{isRecorded(record) ? record.status : 'Not recorded'}</span>
+      </span>
+      {pendingExcused.has(`${record.studentId}:${record.attendanceSessionId ?? ''}`) && (
+        <div className="mt-1">
+          <span className="inline-flex items-center rounded-full border border-dashed border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 px-2.5 py-0.5 text-[11px] font-bold text-sky-700 dark:text-sky-300">Excuse requested</span>
+        </div>
+      )}
+    </>
+  );
+
+  const actionControl = (record: AttendanceItem) => revokedSessionOpen ? (
+    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">View-only</span>
+  ) : record.excusedApprovedByFaculty ? (
+    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Approved by Faculty</span>
+  ) : (
+    <button
+      type="button"
+      onClick={() => handleOpenOverride(record)}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 text-xs font-bold shadow-2xs transition-all cursor-pointer"
+    >
+      <Pencil className="w-3.5 h-3.5 text-slate-500" />
+      <span>{isRecorded(record) ? 'Override' : 'Mark'}</span>
+    </button>
+  );
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
@@ -702,12 +774,14 @@ export const AttendanceList: React.FC = () => {
               </div>
 
               {/* Term Selector */}
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Term:</span>
-                <div className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 shadow-xs">
-                  2026-2027 (Current)
+              {currentSchoolYear && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Term:</span>
+                  <div className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 shadow-xs">
+                    {currentSchoolYear} (Current)
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {loading ? (
@@ -734,7 +808,7 @@ export const AttendanceList: React.FC = () => {
                     <div
                       key={c.id}
                       onClick={() => {
-                        setSelectedSubject(c.subjectCode || 'all');
+                        setSelectedCardId(c.id);
                         setViewMode('worksheet');
                       }}
                       className="group relative rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-800/50 hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-3.5 bg-white dark:bg-slate-900 shadow-xs"
@@ -743,7 +817,7 @@ export const AttendanceList: React.FC = () => {
                         {/* Top Row: Secretary Blue Badge, Section Label & Live Dot */}
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 text-[10px] font-extrabold uppercase tracking-wider">
-                            {c.subjectCode} &bull; Year {c.yearLevel}
+                            {[c.courseCode, c.yearLevel ? `Year ${c.yearLevel}` : ''].filter(Boolean).join(' • ')}
                           </span>
 
                           <div className="flex items-center gap-2">
@@ -776,16 +850,22 @@ export const AttendanceList: React.FC = () => {
 
                         {/* Class Details: Blue Calendar & MapPin Icons */}
                         <div className="space-y-1.5 text-xs text-slate-500 dark:text-slate-400">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                            <span>{c.semester} &bull; {c.schoolYear}</span>
-                          </div>
-                          <div className="flex items-start gap-2">
-                            <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                            <span className="truncate">
-                              <strong className="text-slate-700 dark:text-slate-200">Room:</strong> {c.room} ({c.schedule})
-                            </span>
-                          </div>
+                          {c.term.length > 0 && (
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                              <span>{c.term.join(' • ')}</span>
+                            </div>
+                          )}
+                          {c.venue.length > 0 && (
+                            <div className="flex items-start gap-2">
+                              <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                              <div className="min-w-0 break-words">
+                                {c.venue.map(line => (
+                                  <div key={line.label}><strong className="text-slate-700 dark:text-slate-200">{line.label}:</strong> {line.value}</div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -816,7 +896,7 @@ export const AttendanceList: React.FC = () => {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedSubject(c.subjectCode || 'all');
+                              setSelectedCardId(c.id);
                               setViewMode('worksheet');
                             }}
                             className="inline-flex items-center justify-center text-xs font-bold px-3 xl:max-[1439px]:px-2 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-600/20 transition-all cursor-pointer whitespace-nowrap"
@@ -889,15 +969,15 @@ export const AttendanceList: React.FC = () => {
                   <span>View / Manage Sessions</span>
                 </button>
 
-                {/* Start Session CTA */}
-                <button
+                {/* Start Session CTA (hidden while a session is live) */}
+                {!liveCurrentSession && <button
                   type="button"
                   onClick={() => void openStartSession()}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
                 >
                   <Play className="w-3.5 h-3.5 fill-white" />
                   <span>Start Session</span>
-                </button>
+                </button>}
 
                 {/* Refresh button */}
                 <button
@@ -920,20 +1000,24 @@ export const AttendanceList: React.FC = () => {
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-1.5">
                 <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-extrabold bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300">
-                  {selectedSubject !== 'all' ? selectedSubject : (className || 'SECTION')}
+                  {activeCard?.courseCode || activeCard?.className || className || 'SECTION'}
                 </span>
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">&bull;</span>
                 <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                  {className || 'Class Section'}
+                  {activeCard?.className || className || 'Class Section'}
                 </span>
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">&bull;</span>
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  1st Semester 2026-2027
-                </span>
+                {activeCard && activeCard.term.length > 0 && (
+                  <>
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">&bull;</span>
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                      {activeCard.term.join(' ')}
+                    </span>
+                  </>
+                )}
               </div>
 
               <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-900 dark:text-slate-50 tracking-tight">
-                {selectedSubject !== 'all' ? `${selectedSubject} Attendance Worksheet` : `${className || 'Class'} Attendance Worksheet`}
+                {`${activeCard?.courseCode || activeCard?.className || className || 'Class'} Attendance Worksheet`}
               </h1>
 
               <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-slate-500 dark:text-slate-400">
@@ -942,17 +1026,16 @@ export const AttendanceList: React.FC = () => {
                   <span className="font-bold text-slate-700 dark:text-slate-200">{filtered.length} Enrolled Students</span>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                  <span>
-                    <strong>Room:</strong> {classroomName || sessions.find(s => s.room)?.room || 'Room 101'}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                  <span>Regular Class Schedule</span>
-                </div>
+                {activeCard && activeCard.venue.length > 0 && (
+                  <div className="flex items-start gap-1.5">
+                    <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <div className="min-w-0 break-words">
+                      {activeCard.venue.map(line => (
+                        <div key={line.label}><strong>{line.label}:</strong> {line.value}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1065,13 +1148,13 @@ export const AttendanceList: React.FC = () => {
             {dateSessions.length > 0 && (
               <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-800/80 text-xs">
                 {shownSessions.length > 0 && (
-                <label className="flex items-center gap-2 font-bold text-slate-600 dark:text-slate-300">
-                  <span className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Switch Session:</span>
+                <label className="flex min-w-0 max-w-full items-center gap-2 font-bold text-slate-600 dark:text-slate-300">
+                  <span className="shrink-0 text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Switch Session:</span>
                   <select
                     value={sessionId}
                     disabled={submitting}
                     onChange={(e) => setSessionId(e.target.value)}
-                    className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    className="min-w-0 max-w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                   >
                     <option value="">Choose a session</option>
                     {shownSessions.map((s) => (
@@ -1168,106 +1251,109 @@ export const AttendanceList: React.FC = () => {
             </Card>
           ) : (
           <Card className="p-0 overflow-hidden border border-slate-200/80 dark:border-slate-800 shadow-xs">
-            <div className="max-h-[560px] overflow-y-auto overflow-x-auto">
-              <table className="w-full min-w-[640px] text-left text-xs border-collapse">
-                <thead className="sticky top-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-xs border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
-                  <tr>
-                    <th className="py-3 px-4 sm:py-4 sm:px-6">STUDENT DETAILS</th>
-                    <th className="py-3 px-4 sm:py-4 sm:px-6">CHECK-IN TIME</th>
-                    <th className="py-3 px-4 sm:py-4 sm:px-6">VERIFICATION METHOD</th>
-                    <th className="py-3 px-4 sm:py-4 sm:px-6">ATTENDANCE STATUS</th>
-                    <th className="py-3 px-4 sm:py-4 sm:px-6 text-right">ACTIONS</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                  {loading || sessionLoading ? (
+            {isPhone ? (
+              // Phones: one stacked block per student instead of a sideways-scrolling table.
+              <div className="max-h-[560px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
+                {loading || sessionLoading ? (
+                  <div className="py-12 text-center text-xs text-slate-500 dark:text-slate-400">
+                    <RefreshCw className="w-6 h-6 mx-auto mb-2 text-blue-500 animate-spin" />
+                    <span>Loading persisted attendance…</span>
+                  </div>
+                ) : filtered.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-slate-500 dark:text-slate-400">No attendance records match this filter.</div>
+                ) : (
+                  filtered.map((record) => (
+                    <div key={record.id || `${record.studentId}-${record.attendanceSessionId}`} className="space-y-3 p-4 text-xs">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <span className="block break-words font-bold text-slate-800 dark:text-slate-100 text-sm">{record.studentName}</span>
+                          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{record.studentNumber} • Year {record.yearLevel || 1}</span>
+                        </div>
+                        <div className="shrink-0 text-right" data-testid="attendance-status">{statusChip(record)}</div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <div className="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200">
+                          <Clock className="w-4 h-4 text-slate-400 stroke-[2.2]" />
+                          <span>{formatCheckInTime(record.timeRecorded)}</span>
+                        </div>
+                        {methodChip(record)}
+                      </div>
+                      <div className="flex justify-end">{actionControl(record)}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : (
+              <div className="max-h-[560px] overflow-y-auto overflow-x-auto">
+                <table className="w-full min-w-[640px] text-left text-xs border-collapse">
+                  <thead className="sticky top-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-xs border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-slate-500 dark:text-slate-400">
-                        <RefreshCw className="w-6 h-6 mx-auto mb-2 text-blue-500 animate-spin" />
-                        <span>Loading persisted attendance…</span>
-                      </td>
+                      <th className="py-3 px-4 sm:py-4 sm:px-6">STUDENT DETAILS</th>
+                      <th className="py-3 px-4 sm:py-4 sm:px-6">CHECK-IN TIME</th>
+                      <th className="py-3 px-4 sm:py-4 sm:px-6">VERIFICATION METHOD</th>
+                      <th className="py-3 px-4 sm:py-4 sm:px-6">ATTENDANCE STATUS</th>
+                      <th className="py-3 px-4 sm:py-4 sm:px-6 text-right">ACTIONS</th>
                     </tr>
-                  ) : filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-12 text-center text-slate-500 dark:text-slate-400">
-                        No attendance records match this filter.
-                      </td>
-                    </tr>
-                  ) : (
-                    filtered.map((record) => (
-                      <tr
-                        key={record.id || `${record.studentId}-${record.attendanceSessionId}`}
-                        className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
-                      >
-                        {/* Column 1: STUDENT DETAILS */}
-                        <td className="py-3 px-4 sm:py-4 sm:px-6">
-                          <span className="font-bold text-slate-800 dark:text-slate-100 block text-xs sm:text-sm">
-                            {record.studentName}
-                          </span>
-                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                            {record.studentNumber} • Year {record.yearLevel || 1}
-                          </span>
-                        </td>
-
-                        {/* Column 2: CHECK-IN TIME */}
-                        <td className="py-3 px-4 sm:py-4 sm:px-6">
-                          <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-bold text-xs sm:text-sm">
-                            <Clock className="w-4 h-4 text-slate-400 stroke-[2.2]" />
-                            <span>{formatCheckInTime(record.timeRecorded)}</span>
-                          </div>
-                        </td>
-
-                        {/* Column 3: VERIFICATION METHOD */}
-                        <td className="py-3 px-4 sm:py-4 sm:px-6">
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border border-blue-200/80 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300">
-                            <Camera className="w-3.5 h-3.5 stroke-[2.2]" />
-                            <span>{attendanceMethodLabel(record.verificationMethod, record.overrideReason)}</span>
-                          </span>
-                        </td>
-
-                        {/* Column 4: ATTENDANCE STATUS */}
-                        <td className="py-3 px-4 sm:py-4 sm:px-6" data-testid="attendance-status">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
-                              record.status === 'present'
-                                ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
-                                : record.status === 'late'
-                                ? 'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
-                                : record.status === 'absent'
-                                ? 'border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
-                                : record.status === 'excused'
-                                ? 'border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300'
-                                : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-                            }`}
-                          >
-                            <span className="text-sm leading-none">•</span>
-                            <span className="capitalize">{record.status && record.status !== 'not_recorded' ? record.status : 'Not recorded'}</span>
-                          </span>
-                        </td>
-
-                        {/* Column 5: ACTIONS */}
-                        <td className="py-3 px-4 sm:py-4 sm:px-6 text-right">
-                          {revokedSessionOpen ? (
-                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">View-only</span>
-                          ) : record.excusedApprovedByFaculty ? (
-                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Approved by Faculty</span>
-                          ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenOverride(record)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 text-xs font-bold shadow-2xs transition-all cursor-pointer"
-                          >
-                            <Pencil className="w-3.5 h-3.5 text-slate-500" />
-                            <span>Override</span>
-                          </button>
-                          )}
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                    {loading || sessionLoading ? (
+                      <tr>
+                        <td colSpan={5} className="py-12 text-center text-slate-500 dark:text-slate-400">
+                          <RefreshCw className="w-6 h-6 mx-auto mb-2 text-blue-500 animate-spin" />
+                          <span>Loading persisted attendance…</span>
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    ) : filtered.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-12 text-center text-slate-500 dark:text-slate-400">
+                          No attendance records match this filter.
+                        </td>
+                      </tr>
+                    ) : (
+                      filtered.map((record) => (
+                        <tr
+                          key={record.id || `${record.studentId}-${record.attendanceSessionId}`}
+                          className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
+                        >
+                          {/* Column 1: STUDENT DETAILS */}
+                          <td className="py-3 px-4 sm:py-4 sm:px-6">
+                            <span className="font-bold text-slate-800 dark:text-slate-100 block text-xs sm:text-sm">
+                              {record.studentName}
+                            </span>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                              {record.studentNumber} • Year {record.yearLevel || 1}
+                            </span>
+                          </td>
+
+                          {/* Column 2: CHECK-IN TIME */}
+                          <td className="py-3 px-4 sm:py-4 sm:px-6">
+                            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-bold text-xs sm:text-sm">
+                              <Clock className="w-4 h-4 text-slate-400 stroke-[2.2]" />
+                              <span>{formatCheckInTime(record.timeRecorded)}</span>
+                            </div>
+                          </td>
+
+                          {/* Column 3: VERIFICATION METHOD */}
+                          <td className="py-3 px-4 sm:py-4 sm:px-6">
+                            {methodChip(record)}
+                          </td>
+
+                          {/* Column 4: ATTENDANCE STATUS */}
+                          <td className="py-3 px-4 sm:py-4 sm:px-6" data-testid="attendance-status">
+                            {statusChip(record)}
+                          </td>
+
+                          {/* Column 5: ACTIONS */}
+                          <td className="py-3 px-4 sm:py-4 sm:px-6 text-right">
+                            {actionControl(record)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Card>
           )}
         </div>
@@ -1280,7 +1366,7 @@ export const AttendanceList: React.FC = () => {
         <Modal
           isOpen={isSessionModalOpen}
           onClose={() => setIsSessionModalOpen(false)}
-          title={`Attendance Sessions — ${className || 'Class Section'}`}
+          title={<>Attendance Sessions — <span className="whitespace-nowrap">{activeCard?.className || className || 'Class Section'}</span></>}
         >
           <div className="space-y-4 text-xs">
             {/* Modal Tabs Header with Secretary Blue Accent */}
@@ -1441,7 +1527,7 @@ export const AttendanceList: React.FC = () => {
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white font-bold text-xs shadow-md shadow-blue-600/20 hover:bg-blue-700 cursor-pointer"
                       >
                         <Play className="w-3.5 h-3.5 fill-white" />
-                        <span>Start Session Now</span>
+                        <span>New Attendance Session</span>
                       </button>
                     </div>
                   </div>
@@ -1678,7 +1764,7 @@ export const AttendanceList: React.FC = () => {
               setFeedback(null);
             }
           }}
-          title="Manual Attendance Override"
+          title={isRecorded(selectedRecord) ? 'Manual Attendance Override' : 'Mark Attendance'}
         >
           <div className="space-y-5">
             {/* Student info header */}
@@ -1695,7 +1781,7 @@ export const AttendanceList: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Current:</span>
                   <span className={`rounded-lg px-2.5 py-1 text-xs font-extrabold capitalize ${statusClass[selectedRecord.status] || 'bg-slate-100 text-slate-600'}`}>
-                    {selectedRecord.status || 'Not recorded'}
+                    {isRecorded(selectedRecord) ? selectedRecord.status : 'Not recorded'}
                   </span>
                 </div>
               </div>

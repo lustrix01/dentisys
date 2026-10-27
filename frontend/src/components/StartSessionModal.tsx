@@ -282,11 +282,11 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-            <input type="checkbox" checked={biometricRequired} onChange={(event) => setBiometricRequired(event.target.checked)} className={a.check} />
+            <input type="checkbox" checked={biometricRequired} aria-label="Face biometric" onChange={(event) => setBiometricRequired(event.target.checked)} className={a.check} />
             <span><strong className="block text-slate-700 dark:text-slate-200">Face biometric</strong><small className="text-slate-500 dark:text-slate-400">On: students check in with their face. Off: you mark attendance in the roll call.</small></span>
           </label>
           <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-            <input type="checkbox" checked={geofenceEnabled} onChange={(event) => setGeofenceEnabled(event.target.checked)} className={a.check} />
+            <input type="checkbox" checked={geofenceEnabled} aria-label="Geofence" onChange={(event) => setGeofenceEnabled(event.target.checked)} className={a.check} />
             <span><strong className="block text-slate-700 dark:text-slate-200">Geofence</strong><small className="text-slate-500 dark:text-slate-400">Use a configured room radius</small></span>
           </label>
         </div>

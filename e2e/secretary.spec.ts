@@ -415,7 +415,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(startForm(page).getByRole('alert')).toContainText('created by Faculty Jane Doe');
   });
 
-  test('initial state: active lookup returns session -> live session shown and Start Session stays available', async ({ page }) => {
+  test('initial state: active lookup returns session -> live session shown and the header Start Session is hidden', async ({ page }) => {
     await page.route('**/api/secretary/attendance', sessionsReply([mockActiveSession]));
     await page.goto('/secretary/attendance?view=worksheet');
     await expect(page.getByText('Live Session')).toBeVisible();
@@ -423,8 +423,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(page.getByText('CS8-20260921-ABC123').first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'End Session', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Start Session', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Start Attendance Session' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Start Session', exact: true })).toHaveCount(0);
   });
 
   test('cancelling a queued revocation does not change the active-session revoke target', async ({ page }) => {

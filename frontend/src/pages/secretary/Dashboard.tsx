@@ -4,6 +4,7 @@ import { ArrowRight, Play, AlertCircle } from 'lucide-react';
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import { getSecretaryActiveAttendanceSessionApi, getSecretaryDashboardKpisApi, type SecretaryAttendanceSession } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
+import { meetingVenueLines } from '../../utils/scheduleHelper';
 
 type DashboardData = Awaited<ReturnType<typeof getSecretaryDashboardKpisApi>>;
 
@@ -53,6 +54,8 @@ export const Dashboard: React.FC = () => {
   const todayRecordsVal = data?.kpis.todayRecords ?? 0;
   const overriddenVal = data?.kpis.overriddenCount ?? 0;
   const assignedClassName = data?.assignedClass?.className || 'No Section Assigned';
+  const assignedSection = data?.assignedClasses?.find(sec => sec.classId === data.assignedClass?.classId);
+  const venueLines = meetingVenueLines(assignedSection?.meetings, data?.assignedClass?.classroomName);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
@@ -161,36 +164,16 @@ export const Dashboard: React.FC = () => {
           
           {/* Section Overview */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex flex-wrap gap-2 items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
-                Assigned Section
+                Assigned Room
               </h3>
-              <span className="whitespace-nowrap text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-full">
-                {assignedClassName}
-              </span>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
-                <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
-                  Assigned Section
-                </span>
-                <h4 className="font-bold text-slate-800 dark:text-slate-100">
-                  {data?.assignedClass?.className || assignedClassName}
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Section ID: {data?.assignedClass?.classId || '—'}
-                </p>
-              </div>
-
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
-                <span className="text-[9px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider">
-                  Assigned Room
-                </span>
-                <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold">
-                  {data?.assignedClass?.classroomName || 'TBA'}
-                </p>
-              </div>
+            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1 text-xs text-slate-700 dark:text-slate-300 font-semibold">
+              {venueLines.length > 0
+                ? venueLines.map(line => <p key={line.label}><strong>{line.label}:</strong> {line.value}</p>)
+                : <p>TBA</p>}
             </div>
           </div>
 

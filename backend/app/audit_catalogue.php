@@ -397,9 +397,9 @@ function audit_read_entries(PDO $pdo, array $viewer, array $p): array
 /** Batched name lookups for a page of rows (one query per kind, never per row). */
 function audit_read_lookups(PDO $pdo, array $rows): array
 {
-    $ids = ['class' => [], 'assessment' => [], 'student' => [], 'enrollment' => [], 'session' => [], 'record' => [], 'user' => []];
+    $ids = ['class' => [], 'assessment' => [], 'student' => [], 'enrollment' => [], 'session' => [], 'record' => [], 'user' => [], 'xr' => []];
     $typeKey = ['class_section' => 'class', 'assessment' => 'assessment', 'student' => 'student', 'enrollment' => 'enrollment',
-        'attendance_session' => 'session', 'attendance_record' => 'record', 'user_account' => 'user',
+        'attendance_session' => 'session', 'attendance_record' => 'record', 'attendance_excused_request' => 'xr', 'user_account' => 'user',
         'student_biometric_profile' => 'student'];
     foreach ($rows as $r) {
         if ($r['scope_cs_id'] !== null) {
@@ -418,7 +418,7 @@ function audit_read_lookups(PDO $pdo, array $rows): array
         $stmt->execute(['{' . implode(',', array_keys($set)) . '}']);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     };
-    $lk = ['class' => [], 'assessment' => [], 'student' => [], 'enrollment' => [], 'session' => [], 'record' => [], 'user' => []];
+    $lk = ['class' => [], 'assessment' => [], 'student' => [], 'enrollment' => [], 'session' => [], 'record' => [], 'user' => [], 'xr' => []];
     $any = 'ANY (CAST(? AS INTEGER[]))';
 
     foreach ($fetch("SELECT assessment_id, title, grading_period, cs_id FROM assessments WHERE assessment_id = {$any}", $ids['assessment']) as $a) {
@@ -432,6 +432,10 @@ function audit_read_lookups(PDO $pdo, array $rows): array
     foreach ($fetch("SELECT record_id, enrollment_id, session_date FROM attendance_records WHERE record_id = {$any}", $ids['record']) as $rec) {
         $lk['record'][(int) $rec['record_id']] = $rec;
         $ids['enrollment'][(int) $rec['enrollment_id']] = true;
+    }
+    foreach ($fetch("SELECT request_id, enrollment_id FROM attendance_excused_requests WHERE request_id = {$any}", $ids['xr']) as $xr) {
+        $lk['xr'][(int) $xr['request_id']] = (int) $xr['enrollment_id'];
+        $ids['enrollment'][(int) $xr['enrollment_id']] = true;
     }
     foreach ($fetch("SELECT enrollment_id, student_id, cs_id FROM enrollments WHERE enrollment_id = {$any}", $ids['enrollment']) as $en) {
         $lk['enrollment'][(int) $en['enrollment_id']] = $en;
@@ -641,6 +645,10 @@ function audit_row_record(array $r, array $lk, ?array $before, ?array $after): s
             $rec = $lk['record'][$key] ?? null;
             $en = $rec !== null ? ($lk['enrollment'][(int) $rec['enrollment_id']] ?? null) : null;
             return $en !== null ? $join($lk['student'][(int) $en['student_id']] ?? null, $class((int) $en['cs_id']), (string) $rec['session_date']) : $fallback();
+        case 'attendance_excused_request':
+            $en = isset($lk['xr'][$key]) ? ($lk['enrollment'][$lk['xr'][$key]] ?? null) : null;
+            $name = $en !== null ? preg_replace('/ \([^()]*\)$/', '', $lk['student'][(int) $en['student_id']] ?? '') : '';
+            return $en !== null && $name !== '' ? $join($name, $class((int) $en['cs_id'])) : $fallback();
         case 'user_account':
             return $lk['user'][$key] ?? $fallback();
         case 'grading_config':

@@ -955,6 +955,8 @@ For attendance rates, Excused counts as attended.
 
 Owner-approved amendment (2026-10-22): A Secretary cannot change an attendance record whose Excused status comes from a Faculty-approved Excused request; the Secretary attendance list shows "Approved by Faculty" instead of the override action, and only Faculty can change it. In attendance rates, Late counts as attended, the same as Present.
 
+Owner decision (2026-10-28): Every Secretary manual attendance change — a first mark (Present, Late, Absent, Excused) or a change to an existing record — is a request that only the class's Faculty may approve or reject. Until approved, the record stays as it was. Biometric check-ins still need no approval. When the session ends, a student whose request is still pending is resolved to Absent like any unrecorded student; a later approval changes that record. Faculty review these requests in the existing Excused requests panel, which lists every Secretary request type.
+
 Students contact Secretary or Faculty outside DentiSys. Current scope has no Student-facing in-system excuse or dispute submission, no supporting-document upload requirement, and no specified dispute deadline. Manual correction audit MUST preserve the old status, new status, actor, timestamp, reason where applicable, and the original biometric outcome.
 
 ## ATT-007 — Student upcoming sessions

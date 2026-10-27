@@ -225,6 +225,18 @@ export const displayMeetingTime = (time: string): string => {
   return `${String(hours % 12 || 12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${hours < 12 ? 'AM' : 'PM'}`;
 };
 
+/** Lecture/lab rooms with their meeting times for a class card; falls back to the single room name, or nothing when unknown. */
+export const meetingVenueLines = (meetings: ClassMeeting[] = [], fallbackRoom?: string | null): Array<{ label: string; value: string }> => {
+  const lines = (['Lecture', 'Laboratory'] as const).flatMap(component => {
+    const rows = meetings.filter(meeting => meeting.component === component);
+    if (rows.length === 0) return [];
+    const rooms = Array.from(new Set(rows.map(meeting => meeting.room))).join(', ');
+    const times = rows.map(meeting => `${meeting.day} ${displayMeetingTime(meeting.startTime)} - ${displayMeetingTime(meeting.endTime)}`).join('; ');
+    return [{ label: component === 'Lecture' ? 'Lec' : 'Lab', value: `${rooms} (${times})` }];
+  });
+  return lines.length > 0 ? lines : fallbackRoom ? [{ label: 'Room', value: fallbackRoom }] : [];
+};
+
 export const formatSessionsForSubmission = (slots: ClassSessionSlot[]): { lecRoom: string; labRoom: string; meetings: ClassMeeting[] } => {
   const clock = (value: string) => {
     const minutes = parseTimeToMinutes(value);

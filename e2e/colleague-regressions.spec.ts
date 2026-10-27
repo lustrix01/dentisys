@@ -219,7 +219,7 @@ test('Secretary missing attendance is reachable for an exact session and writes 
   await expect(page.getByLabel('Switch Session')).toHaveValue('900');
   const row = page.getByRole('row').filter({ hasText: 'Missing Student' });
   await expect(row).toContainText('Not recorded');
-  await row.getByRole('button', { name: 'Override' }).click();
+  await row.getByRole('button', { name: 'Mark' }).click();
   await page.locator('textarea').fill('Verified attendance with Faculty');
   await page.getByRole('button', { name: 'Confirm override' }).click();
   await expect.poll(() => payload).toMatchObject({ studentId: '42', sessionId: 900, status: 'present', reason: 'Verified attendance with Faculty' });
@@ -264,8 +264,9 @@ test('Secretary revoked sessions are hidden by default, revealed on request and 
   await expect(row).toContainText('View-only');
   await expect(page.getByRole('button', { name: 'Override', exact: true })).toHaveCount(0);
   await revokedSwitch.getByRole('button', { name: 'Hide' }).click();
-  await expect(picker).toHaveValue('');
-  await expect(page.getByText('Choose a session to manage its attendance.')).toBeVisible();
+  // Hiding the revoked session returns to the active one the roll call opens on.
+  await expect(picker).toHaveValue('900');
+  await expect(row).toHaveCount(0);
 });
 
 

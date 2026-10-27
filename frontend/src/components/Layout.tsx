@@ -599,6 +599,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           {/* Hamburger Menu Toggle */}
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            aria-label="Open menu"
+            aria-expanded={isSidebarOpen}
             className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
           >
             {isSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}

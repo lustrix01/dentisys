@@ -1327,7 +1327,7 @@ export function getSecretaryDashboardKpisApi(schoolYear?: string): Promise<Schoo
     overriddenCount: number;
   };
   recentActivity: AuditEntry[];
-  assignedClasses?: Array<{ classId: string; className: string; classroomName: string | null; schoolYear?: string; courseCode?: string; meetings?: ClassMeeting[] }>;
+  assignedClasses?: Array<{ classId: string; className: string; classroomName: string | null; schoolYear?: string; semester?: string; courseCode?: string; courseName?: string; meetings?: ClassMeeting[] }>;
   assignedClass: {
     classId: string;
     className: string;

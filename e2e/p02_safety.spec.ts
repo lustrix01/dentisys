@@ -108,6 +108,12 @@ test.describe('P02 development safety seams', () => {
     await page.route('**/api/auth/me', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 300, login_email: 'secretary@bicol-u.edu.ph', display_name: 'Secretary', role: 'secretary' }) });
     });
+    // The class card comes from the Secretary's real section; nothing is invented when it is missing.
+    await page.route('**/api/secretary/profile', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', profile: { assignedClassName: 'CLINIC-4B' } }) }));
+    await page.route('**/api/secretary/dashboard/kpis**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      status: 'ok', kpis: { assignedStudents: 0, attendanceRate: null, todayRecords: 0, overriddenCount: 0 }, recentActivity: [],
+      assignedClass: { classId: '8', className: 'CLINIC-4B', classroomName: 'Dental Clinic Lab 2' },
+    }) }));
     await page.goto('/login');
     await page.fill('input[inputmode="email"]', 'secretary@bicol-u.edu.ph');
     await page.fill('input[type="password"]', 'Password123!');
