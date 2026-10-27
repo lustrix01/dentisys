@@ -32,7 +32,7 @@ one component and period. If an older unlinked assessment could match more than
 one category, choose its exact target before saving.
 
 An unconfigured offering automatically starts with editable, unsaved syllabus
-defaults: Lecture 60% / Laboratory 40% and Midterm 30% / Finals 70%. Both periods
+defaults: Lecture 60% / Laboratory 40% and Midterm 50% / Finals 50%. Both periods
 start with Lecture categories Term Exam 50%, Quiz 20%, Outputs 20%, Participation
 10%; and Laboratory categories Practical Exam 50%, Laboratory Exercises 30%,
 Quiz 10%, Recitation 10%. These become authoritative only after Faculty saves

@@ -550,7 +550,7 @@ Lecture/Laboratory transcript GWA is introduced.
 The supplied syllabus defines the editable, unsaved default for new,
 unconfigured offerings: Lecture 60%, Laboratory 40%; Lecture categories Term Exam
 50%, Quiz 20%, Outputs 20%, Participation 10%; Laboratory categories Practical Exam
-50%, Laboratory Exercises 30%, Quiz 10%, Recitation 10%; Midterm 30%, Finals 70%.
+50%, Laboratory Exercises 30%, Quiz 10%, Recitation 10%; Midterm 50%, Finals 50%.
 The same starting component category lists apply to both Midterm and Finals.
 Faculty may edit these values while preserving the separate component structure
 and all three 100% totals. Defaults are shown automatically without an Apply
@@ -563,8 +563,8 @@ are the only source. Courses without recorded units keep Lecture/Laboratory
 grading, and Grade Weights points the Faculty to Classes & Rosters to set them.
 Laboratory-only courses keep Lecture/Laboratory grading. A lecture-only
 configuration has one Lecture category list per period and no component
-contributions; its default is the Lecture category list above with Midterm 30%
-and Finals 70%. Its period grade is the Lecture period grade, and its course
+contributions; its default is the Lecture category list above with Midterm 50%
+and Finals 50%. Its period grade is the Lecture period grade, and its course
 grade is round(Midterm × Midterm share + Final × Final share), rounded once.
 This course-grade rule is provisional until confirmed against the official
 lecture-only grade sheet. Removing Laboratory units is blocked while any
@@ -574,6 +574,11 @@ until the Faculty's next Grade Weights save, which must use the new structure.
 Past school years are not affected. Saved scores are never deleted or
 rescaled, and grades change only through authorized recomputation. Detailed
 rules: docs/contracts/lecture-only-grading.md.
+
+Owner-approved amendment (2026-10-27): The Dean confirmed the default
+Midterm/Finals split is 50% / 50% (previously 30% / 70%) for both
+Lecture/Laboratory and lecture-only courses. It is only the unsaved default;
+saved configurations keep their own split.
 
 
 ---

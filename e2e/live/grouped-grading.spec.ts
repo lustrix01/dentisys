@@ -129,7 +129,7 @@ test('new offering defaults to split grading and requires an explicit mapping fo
     schemaMode: 'periods',
     componentMode: 'lecture_laboratory',
     componentWeights: { lecture: 60, laboratory: 40 },
-    termRatio: { midterm: 30, final: 70 },
+    termRatio: { midterm: 50, final: 50 },
   }));
   const expectedCategories = [
     { component: 'Lecture', name: 'Term Exam', weight: 50 },
@@ -170,8 +170,8 @@ test('new offering defaults to split grading and requires an explicit mapping fo
   await expect(editor.getByRole('button', { name: /Apply syllabus example/i })).toHaveCount(0);
   await expect(editor.locator('#lecture-component-weight')).toHaveValue('60');
   await expect(editor.locator('#laboratory-component-weight')).toHaveValue('40');
-  await expect(editor.locator('#midterm-ratio-input')).toHaveValue('30');
-  await expect(editor.locator('#final-ratio-input')).toHaveValue('70');
+  await expect(editor.locator('#midterm-ratio-input')).toHaveValue('50');
+  await expect(editor.locator('#final-ratio-input')).toHaveValue('50');
 
   const assertDefaultComponentCategories = async (component: 'Lecture' | 'Laboratory', expected: Array<{ name: string; weight: string }>) => {
     await editor.getByRole('tab', { name: `${component} Categories`, exact: true }).click();
@@ -238,7 +238,7 @@ test('new offering defaults to split grading and requires an explicit mapping fo
     schemaMode: 'periods',
     componentMode: 'lecture_laboratory',
     componentWeights: { lecture: 60, laboratory: 40 },
-    termRatio: { midterm: 30, final: 70 },
+    termRatio: { midterm: 50, final: 50 },
     assessmentAssignments: [expect.objectContaining({
       assessmentId: Number(unmappedAssessments[0].assessmentId),
       categoryName: 'Quiz',
@@ -257,7 +257,7 @@ test('new offering defaults to split grading and requires an explicit mapping fo
     schemaMode: 'periods',
     componentMode: 'lecture_laboratory',
     componentWeights: { lecture: 60, laboratory: 40 },
-    termRatio: { midterm: 30, final: 70 },
+    termRatio: { midterm: 50, final: 50 },
   }));
   expect(persistedConfig.categories).toHaveLength(16);
   for (const gradingPeriod of ['Midterm', 'Final']) {

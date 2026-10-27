@@ -49,7 +49,7 @@ assert_lecture_only(
     $lectureRows($defaults['midtermCategories']) === $expected && $lectureRows($defaults['finalCategories']) === $expected,
     'The lecture-only default has only the four Lecture categories in each period'
 );
-assert_lecture_only($defaults['termRatio'] === ['midterm' => 30, 'final' => 70], 'The lecture-only default term split is 30/70');
+assert_lecture_only($defaults['termRatio'] === ['midterm' => 50, 'final' => 50], 'The lecture-only default term split is 50/50');
 assert_lecture_only(
     faculty_grading_default_period_template() === faculty_grading_default_period_template('lecture_laboratory')
         && faculty_grading_default_period_template()['componentMode'] === 'lecture_laboratory'

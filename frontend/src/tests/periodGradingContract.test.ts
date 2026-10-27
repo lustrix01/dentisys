@@ -37,7 +37,7 @@ test('Grade Weights banner shows the current schema and the saved or unsaved bad
   assert.equal(render({ version: 1 }, '35', '65'), '<span>BU Dental Medicine Schema Active: Lecture 60% / Lab 40% • Midterm 35% / Final 65%</span>');
   assert.equal(render(null, '35', '65'), '<span>BU Dental Medicine Default Grade Weights: Lecture 60% / Lab 40% • Midterm 35% / Final 65%</span>');
   assert.equal(render({ version: 1 }, '30', '70', 'lecture'), '<span>BU Dental Medicine Schema Active: Lecture only • Midterm 30% / Final 70%</span>');
-  assert.equal(render(null, '30', '70', 'lecture'), '<span>BU Dental Medicine Default Grade Weights: Lecture only • Midterm 30% / Final 70%</span>');
+  assert.equal(render(null, '50', '50', 'lecture'), '<span>BU Dental Medicine Default Grade Weights: Lecture only • Midterm 50% / Final 50%</span>');
   // Unsaved edits replace the banner; saved versus unsaved presets are badges.
   assert.match(source, /\{isDirty \? \(/);
   assert.match(source, /You have unsaved changes\. Adjust weights or categories directly below, then click Save Grade Weights\./);
@@ -168,8 +168,8 @@ test('Faculty grade views use the inclusive authoritative retention boundary', (
 test('Period Draft: buildDefaultPeriodDraft produces the mandatory Lecture/Laboratory defaults', () => {
   const draft = buildDefaultPeriodDraft();
   assert.deepEqual(draft.componentWeights, { lecture: '60', laboratory: '40' });
-  assert.equal(draft.termRatio.midterm, '30');
-  assert.equal(draft.termRatio.final, '70');
+  assert.equal(draft.termRatio.midterm, '50');
+  assert.equal(draft.termRatio.final, '50');
   for (const categories of [draft.midtermCategories, draft.finalCategories]) {
     assert.equal(categories.length, 8);
     const lecture = categories.filter(category => category.component === 'Lecture');

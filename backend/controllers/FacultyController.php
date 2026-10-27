@@ -1457,8 +1457,8 @@ function faculty_grading_default_period_template(string $structure = 'lecture_la
             'laboratory' => 40,
         ]]),
         'termRatio' => [
-            'midterm' => 30,
-            'final' => 70,
+            'midterm' => 50,
+            'final' => 50,
         ],
         'midtermCategories' => $categories,
         'finalCategories' => $categories,

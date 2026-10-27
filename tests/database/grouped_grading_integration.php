@@ -202,7 +202,7 @@ expect_same(200, $groupedDefaultsStatus, 'An unconfigured grouped offering expos
 expect_same(null, $groupedDefaultsBody['configuration'] ?? null, 'Unconfigured defaults remain unsaved until Faculty saves');
 expect_same('lecture_laboratory', $groupedDefaultsBody['defaults']['componentMode'] ?? null, 'Server defaults require the Lecture/Laboratory structure');
 expect_same(['lecture' => 60, 'laboratory' => 40], $groupedDefaultsBody['defaults']['componentWeights'] ?? null, 'Server defaults return the approved 60/40 component ratio');
-expect_same(['midterm' => 30, 'final' => 70], $groupedDefaultsBody['defaults']['termRatio'] ?? null, 'Server defaults return the approved 30/70 period ratio');
+expect_same(['midterm' => 50, 'final' => 50], $groupedDefaultsBody['defaults']['termRatio'] ?? null, 'Server defaults return the approved 50/50 period ratio');
 $groupedDefaultCategoryRows = static fn(array $categories): array => array_map(
     static fn(array $category): array => [
         $category['name'] ?? null,

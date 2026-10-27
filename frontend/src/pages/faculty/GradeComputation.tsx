@@ -414,8 +414,8 @@ export const GradeComputation: React.FC = () => {
   const [savedCategoryRows, setSavedCategoryRows] = useState<EditorCategoryRow[]>([]);
 
   // Period Mode State (Midterm & Finals)
-  const [termRatio, setTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '30', final: '70' });
-  const [savedTermRatio, setSavedTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '30', final: '70' });
+  const [termRatio, setTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '50', final: '50' });
+  const [savedTermRatio, setSavedTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '50', final: '50' });
   const [isCustomizingWeights, setIsCustomizingWeights] = useState<boolean>(false);
 
   const [midtermCategories, setMidtermCategories] = useState<PeriodCategoryDraftRow[]>([]);
@@ -1716,12 +1716,12 @@ export const GradeComputation: React.FC = () => {
     setSchemaMode('periods');
     setComponentMode(lectureOnly ? 'lecture' : 'lecture_laboratory');
     setComponentWeights({ lecture: '60', laboratory: '40' });
-    setTermRatio({ midterm: '30', final: '70' });
+    setTermRatio({ midterm: '50', final: '50' });
     setMidtermCategories(buildDefaultLectureLaboratoryCategories('Midterm').filter(row => !lectureOnly || row.component === 'Lecture'));
     setFinalCategories(buildDefaultLectureLaboratoryCategories('Final').filter(row => !lectureOnly || row.component === 'Lecture'));
     showFeedback(lectureOnly
-      ? 'Applied BU Grading System standard (Lecture only | Midterm 30%, Finals 70%). Click Save to apply.'
-      : 'Applied BU Grading System standard (Lecture 60%, Lab 40% | Midterm 30%, Finals 70%). Click Save to apply.', 'success');
+      ? 'Applied BU Grading System standard (Lecture only | Midterm 50%, Finals 50%). Click Save to apply.'
+      : 'Applied BU Grading System standard (Lecture 60%, Lab 40% | Midterm 50%, Finals 50%). Click Save to apply.', 'success');
   };
 
   // Keep selected offering key synchronized with the active course filter

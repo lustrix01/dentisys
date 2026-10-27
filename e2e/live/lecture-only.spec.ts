@@ -59,7 +59,7 @@ test('a lecture-only course is graded as Lecture only, end to end', async ({ pag
   await page.goto('/grades?tab=components');
   await page.getByRole('main').getByLabel(/^Class:/).selectOption(csId);
   const main = page.getByRole('main');
-  await expect(main.getByText('BU Dental Medicine Default Grade Weights: Lecture only • Midterm 30% / Final 70%')).toBeVisible();
+  await expect(main.getByText('BU Dental Medicine Default Grade Weights: Lecture only • Midterm 50% / Final 50%')).toBeVisible();
   await expect(main.getByText("Lecture only, from this course's units (Lecture 3 · Laboratory 0). No Laboratory part.")).toBeVisible();
   await expect(main.getByRole('tab', { name: 'Laboratory Categories' })).toHaveCount(0);
   const saved = page.waitForResponse(r => r.url().includes('/api/faculty/grading-config') && r.request().method() === 'PUT');

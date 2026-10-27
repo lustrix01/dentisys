@@ -1848,8 +1848,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByRole('button', { name: /Apply syllabus example/i })).toHaveCount(0);
       const midtermRatioInput = page.locator('#midterm-ratio-input');
       const finalRatioInput = page.locator('#final-ratio-input');
-      await expect(midtermRatioInput).toHaveValue('30');
-      await expect(finalRatioInput).toHaveValue('70');
+      await expect(midtermRatioInput).toHaveValue('50');
+      await expect(finalRatioInput).toHaveValue('50');
 
       // Save Initial Schema button
       await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeVisible();
@@ -1993,7 +1993,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       expect(putPayload.version).toBeUndefined();
       expect(putPayload.componentMode).toBe('lecture_laboratory');
       expect(putPayload.componentWeights).toEqual({ lecture: 60, laboratory: 40 });
-      expect(putPayload.termRatio).toEqual({ midterm: 30, final: 70 });
+      expect(putPayload.termRatio).toEqual({ midterm: 50, final: 50 });
       expect(putPayload.midtermCategories).toHaveLength(8);
       expect(putPayload.finalCategories).toHaveLength(8);
       expect(putPayload.midtermCategories[0].id).toBeUndefined();
@@ -3865,8 +3865,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.locator('input[placeholder*="Category name"]')).toHaveCount(4);
       await expect(page.locator('#lecture-component-weight')).toHaveValue('60');
       await expect(page.locator('#laboratory-component-weight')).toHaveValue('40');
-      await expect(page.locator('#midterm-ratio-input')).toHaveValue('30');
-      await expect(page.locator('#final-ratio-input')).toHaveValue('70');
+      await expect(page.locator('#midterm-ratio-input')).toHaveValue('50');
+      await expect(page.locator('#final-ratio-input')).toHaveValue('50');
       const lectureNames = page.locator('input[placeholder*="Category name"]');
       const firstLectureCategory = await lectureNames.nth(0).inputValue();
       const secondLectureCategory = await lectureNames.nth(1).inputValue();
@@ -3891,7 +3891,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       expect(payload.schemaMode).toBe('periods');
       expect(payload.componentMode).toBe('lecture_laboratory');
       expect(payload.componentWeights).toEqual({ lecture: 60, laboratory: 40 });
-      expect(payload.termRatio).toEqual({ midterm: 30, final: 70 });
+      expect(payload.termRatio).toEqual({ midterm: 50, final: 50 });
       expect(payload.convertToLectureLaboratory).toBeUndefined();
       for (const [period, categories] of [['Midterm', payload.midtermCategories], ['Final', payload.finalCategories]] as const) {
         expect(categories).toHaveLength(8);
@@ -3921,7 +3921,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
           status: 'ok', configuration: null,
           defaults: {
             schemaMode: 'periods', componentMode: 'lecture', courseStructure: 'lecture', courseUnits: { lecture: 3, laboratory: 0 },
-            termRatio: { midterm: 30, final: 70 },
+            termRatio: { midterm: 50, final: 50 },
             midtermCategories: lectureDefaults('Midterm'), finalCategories: lectureDefaults('Final'),
             attendanceDateRanges: { midterm: { startDate: null, endDate: null }, final: { startDate: null, endDate: null } },
           },
@@ -3946,7 +3946,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=components');
-      await expect(page.getByText('BU Dental Medicine Default Grade Weights: Lecture only • Midterm 30% / Final 70%')).toBeVisible();
+      await expect(page.getByText('BU Dental Medicine Default Grade Weights: Lecture only • Midterm 50% / Final 50%')).toBeVisible();
       await expect(page.getByText("Lecture only, from this course's units (Lecture 3 · Laboratory 0). No Laboratory part.")).toBeVisible();
       await expect(page.getByText(/2\. Midterm Components/)).toBeVisible();
       await expect(page.getByRole('tab', { name: 'Laboratory Categories' })).toHaveCount(0);

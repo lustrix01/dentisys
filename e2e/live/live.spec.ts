@@ -765,8 +765,8 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
     await expect(page.locator('#period-component-mode')).toHaveCount(0);
     await expect(page.locator('#lecture-component-weight')).toHaveValue('60');
     await expect(page.locator('#laboratory-component-weight')).toHaveValue('40');
-    await expect(page.locator('#midterm-ratio-input')).toHaveValue('30');
-    await expect(page.locator('#final-ratio-input')).toHaveValue('70');
+    await expect(page.locator('#midterm-ratio-input')).toHaveValue('50');
+    await expect(page.locator('#final-ratio-input')).toHaveValue('50');
 
     if (unlinkedAssessments.length > 0) {
       // The live fixture supplies unlinked records before configuration; mapping is explicit per assessment.
@@ -845,7 +845,7 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
     expect(saveData.configuration.schemaMode).toBe('periods');
     expect(saveData.configuration.componentMode).toBe('lecture_laboratory');
     expect(saveData.configuration.componentWeights).toEqual({ lecture: 60, laboratory: 40 });
-    expect(saveData.configuration.termRatio).toEqual({ midterm: 30, final: 70 });
+    expect(saveData.configuration.termRatio).toEqual({ midterm: 50, final: 50 });
     expect(saveData.configuration.categories.length).toBeGreaterThanOrEqual(16);
     expect(saveData.configuration.attendanceDateRanges).toEqual({
       midterm: {

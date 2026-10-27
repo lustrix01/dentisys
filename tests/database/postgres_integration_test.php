@@ -5510,7 +5510,7 @@ expect_same(null, $weightInitialGetBody['configuration'] ?? null, 'Unconfigured 
 expect_same('periods', $weightInitialGetBody['defaults']['schemaMode'] ?? null, 'Unconfigured Faculty offering exposes editable period defaults');
 expect_same('lecture_laboratory', $weightInitialGetBody['defaults']['componentMode'] ?? null, 'Unconfigured Faculty defaults require separate components');
 expect_same(['lecture' => 60, 'laboratory' => 40], $weightInitialGetBody['defaults']['componentWeights'] ?? null, 'Unconfigured Faculty defaults use a 60/40 component ratio');
-expect_same(['midterm' => 30, 'final' => 70], $weightInitialGetBody['defaults']['termRatio'] ?? null, 'Unconfigured Faculty defaults use a 30/70 period ratio');
+expect_same(['midterm' => 50, 'final' => 50], $weightInitialGetBody['defaults']['termRatio'] ?? null, 'Unconfigured Faculty defaults use a 50/50 period ratio');
 $weightDefaultCategoryRows = static fn(array $categories): array => array_map(
     static fn(array $category): array => [
         $category['name'] ?? null,

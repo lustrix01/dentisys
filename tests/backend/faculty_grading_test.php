@@ -93,8 +93,8 @@ assert_faculty_grading(
     'Unconfigured grading defaults use the mandatory 60/40 component split'
 );
 assert_faculty_grading(
-    $periodDefaults['termRatio'] === ['midterm' => 30, 'final' => 70],
-    'Faculty default term ratio is 30/70'
+    $periodDefaults['termRatio'] === ['midterm' => 50, 'final' => 50],
+    'Faculty default term ratio is 50/50'
 );
 $expectedDefaultCategories = [
     ['Term Exam', 50, 1, 'Lecture'],

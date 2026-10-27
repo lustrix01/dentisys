@@ -50,7 +50,7 @@ export function buildRowCompositeKey(period: GradingPeriodEnum, id?: number | nu
 export function buildDefaultPeriodDraft(): PeriodDraftState {
   return {
     componentWeights: { lecture: '60', laboratory: '40' },
-    termRatio: { midterm: '30', final: '70' },
+    termRatio: { midterm: '50', final: '50' },
     midtermCategories: buildDefaultLectureLaboratoryCategories('Midterm'),
     finalCategories: buildDefaultLectureLaboratoryCategories('Final'),
     attendanceDateRanges: {

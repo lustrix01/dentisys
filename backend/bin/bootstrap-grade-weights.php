@@ -90,7 +90,7 @@ $failed = 0;
 foreach ($offerings as $offering) {
     $label = sprintf('%s %s %s (%s)', $offering['course_code'], $offering['semester'], $offering['school_year'], $offering['display_name']);
     if ($dryRun) {
-        echo "WOULD CREATE: {$label} grouped syllabus defaults (Lecture/Laboratory 60/40; Midterm/Finals 30/70)\n";
+        echo "WOULD CREATE: {$label} grouped syllabus defaults (Lecture/Laboratory 60/40; Midterm/Finals 50/50)\n";
         continue;
     }
     $actor = [

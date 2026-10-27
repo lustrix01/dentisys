@@ -8,7 +8,7 @@ Some BUCDM courses have no Laboratory. DentiSys used to force every course into 
 
 ## What Faculty see now
 
-**Grade Weights.** For a lecture-only course the banner reads "Lecture only • Midterm 30% / Final 70%", step 2 is one line ("Lecture only, from this course's units …") instead of the Lecture/Laboratory boxes, and each period has one Lecture category list. Courses whose units were never recorded keep Lecture + Laboratory, with a note pointing to Classes & Rosters. When a course's units change, the saved weights keep working until the next save, and a banner says what the save will do.
+**Grade Weights.** For a lecture-only course the banner reads "Lecture only • Midterm 50% / Final 50%", step 2 is one line ("Lecture only, from this course's units …") instead of the Lecture/Laboratory boxes, and each period has one Lecture category list. Courses whose units were never recorded keep Lecture + Laboratory, with a note pointing to Classes & Rosters. When a course's units change, the saved weights keep working until the next save, and a banner says what the save will do.
 
 | Before | After |
 |---|---|
