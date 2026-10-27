@@ -17,6 +17,7 @@ import { recordAudit } from '../../services/auditService';
 import { formatGrade } from '../../utils/gradeHelper';
 import { downloadXlsx } from '../../utils/xlsxDownload';
 import { buildReportSheet, dayToDate } from '../../utils/reportWorkbook';
+import { STANDING_LABELS, classStanding, pageStanding } from './deanStanding';
 
 type ReportTab = 'students' | 'retention' | 'attendance';
 
@@ -54,7 +55,7 @@ export const DeanReports: React.FC = () => {
     setError('');
     getAdminReportsSummaryApi(schoolYear)
       .then((res) => {
-        setDbStudents(res.reports?.students ?? []);
+        setDbStudents((res.reports?.students ?? []).map((s: any) => ({ ...s, status: classStanding(s) })));
         setDbAttendance(res.reports?.attendance ?? []);
         setCurrentSchoolYear(res.currentSchoolYear ?? null);
         setAvailableSchoolYears(res.availableSchoolYears ?? []);
@@ -107,6 +108,7 @@ export const DeanReports: React.FC = () => {
       students: any[];
       isArchived: boolean;
       activeCount: number;
+      noGradeCount: number;
       remedialCount: number;
     }>();
 
@@ -131,14 +133,16 @@ export const DeanReports: React.FC = () => {
           students: [],
           isArchived,
           activeCount: 0,
+          noGradeCount: 0,
           remedialCount: 0,
         });
       }
       const item = map.get(clsId)!;
       item.students.push(s);
       if (s.yearLevel && !item.yearLevel) item.yearLevel = s.yearLevel;
-      const st = String(s.status || '').toLowerCase();
+      const st = String(s.status || '');
       if (st === 'active' || st === 'cleared') item.activeCount++;
+      else if (st === 'noGrade') item.noGradeCount++;
       else if (st === 'remedial') item.remedialCount++;
     });
 
@@ -230,8 +234,7 @@ export const DeanReports: React.FC = () => {
     const filteredIds = new Set(filtered.map(s => s.id));
     return attendanceRecords
       .filter(r => filteredIds.has(r.studentId))
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, 200);
+      .sort((a, b) => b.date.localeCompare(a.date));
   }, [filtered, attendanceRecords]);
 
   const classAttendanceRecords = useMemo(() => {
@@ -289,7 +292,7 @@ export const DeanReports: React.FC = () => {
         ...base, sheet: 'Students', title: 'STUDENT SUMMARY',
         columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 }, { header: 'Year Level', width: 11 },
           { header: 'Grade', width: 9 }, { header: 'Status', width: 12 }, { header: 'Face Enrolled', width: 14 }],
-        rows: filtered.map(s => [s.studentId, s.name, s.className || '—', s.yearLevel, gradeOf(s), s.status, s.faceEnrolled ? 'Yes' : 'No']),
+        rows: filtered.map(s => [s.studentId, s.name, s.className || '—', s.yearLevel, gradeOf(s), STANDING_LABELS[s.status] ?? s.status, s.faceEnrolled ? 'Yes' : 'No']),
       });
     } else if (activeTab === 'retention') {
       fileName = `Retention_Report_${ts}.xlsx`;
@@ -297,7 +300,7 @@ export const DeanReports: React.FC = () => {
         ...base, sheet: 'Retention', title: 'RETENTION REPORT',
         columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 },
           { header: 'Grade', width: 9 }, { header: 'Status', width: 12 }, { header: 'Pending Remedials', width: 18 }],
-        rows: filtered.map((s: any) => [s.studentId, s.name, s.className || '—', gradeOf(s), s.status,
+        rows: filtered.map((s: any) => [s.studentId, s.name, s.className || '—', gradeOf(s), STANDING_LABELS[s.status] ?? s.status,
           Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0]),
       });
     } else {
@@ -330,10 +333,11 @@ export const DeanReports: React.FC = () => {
       critical: 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400',
       remedial: 'bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400',
       cleared: 'bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400',
+      noGrade: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
     };
     return (
       <span className={`text-[9px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${map[status] || 'bg-slate-100 text-slate-500'}`}>
-        {status}
+        {STANDING_LABELS[status] ?? status}
       </span>
     );
   };
@@ -507,7 +511,7 @@ export const DeanReports: React.FC = () => {
               <Card className="p-2.5 sm:p-3 text-center">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Good Standing</p>
                 <p className="text-xl sm:text-2xl font-extrabold font-heading mt-0.5 text-emerald-600 dark:text-emerald-400">
-                  {students.filter((s: any) => s.status === 'active').length}
+                  {students.filter((s: any) => pageStanding(s) === 'active').length}
                 </p>
               </Card>
               <Card className="p-2.5 sm:p-3 text-center">
@@ -583,6 +587,11 @@ export const DeanReports: React.FC = () => {
                         {cls.activeCount > 0 && (
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400">
                             {cls.activeCount} Good Standing
+                          </span>
+                        )}
+                        {cls.noGradeCount > 0 && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                            {cls.noGradeCount} No Grade Yet
                           </span>
                         )}
                         {cls.remedialCount > 0 && (
@@ -664,6 +673,7 @@ export const DeanReports: React.FC = () => {
                   >
                     <option value="all">All Statuses</option>
                     <option value="active">Good Standing</option>
+                    <option value="noGrade">No Grade Yet</option>
                     <option value="remedial">Remedial</option>
                     <option value="cleared">Cleared</option>
                   </select>
@@ -834,7 +844,7 @@ export const DeanReports: React.FC = () => {
             {/* Overall Institutional Retention Summary */}
             <div className="grid grid-cols-3 gap-2.5 sm:gap-3 no-print">
               {[
-                { label: 'Good Standing', val: students.filter((s: any) => s.status === 'active').length, color: 'text-emerald-600' },
+                { label: 'Good Standing', val: students.filter((s: any) => pageStanding(s) === 'active').length, color: 'text-emerald-600' },
                 { label: 'Remedial', val: students.filter((s: any) => s.status === 'remedial').length, color: 'text-violet-600' },
                 { label: 'Cleared', val: students.filter((s: any) => s.status === 'cleared').length, color: 'text-sky-600' },
               ].map(item => (
@@ -909,7 +919,11 @@ export const DeanReports: React.FC = () => {
                         )}
 
                         <div className="mt-4 flex flex-wrap gap-1.5 items-center">
-                          {atRisk > 0 ? (
+                          {atRisk === 0 && cls.activeCount === 0 ? (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                              No Grades Yet
+                            </span>
+                          ) : atRisk > 0 ? (
                             <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400">
                               {atRisk} Flagged / At Risk
                             </span>
@@ -993,6 +1007,7 @@ export const DeanReports: React.FC = () => {
                   >
                     <option value="all">All Statuses</option>
                     <option value="active">Good Standing</option>
+                    <option value="noGrade">No Grade Yet</option>
                     <option value="remedial">Remedial</option>
                     <option value="cleared">Cleared</option>
                   </select>
@@ -1170,7 +1185,7 @@ export const DeanReports: React.FC = () => {
             {/* Overall Attendance Summary */}
             <div className="grid grid-cols-3 gap-2.5 sm:gap-3 no-print">
               <Card className="p-2.5 sm:p-3 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Recorded Sessions</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Attendance Records</p>
                 <p className="text-xl sm:text-2xl font-extrabold font-heading mt-0.5 text-sky-600 dark:text-sky-400">{attendanceRecords.length}</p>
               </Card>
               <Card className="p-2.5 sm:p-3 text-center">
@@ -1476,8 +1491,7 @@ export const DeanReports: React.FC = () => {
         const classLabel = selectedClassId
           ? (currentSelectedClass?.name || selectedClassId)
           : (classFilter === 'all' ? 'All classes' : (students.find(s => s.classId === classFilter)?.className || classFilter));
-        const statusLabels: Record<string, string> = { active: 'Good Standing', remedial: 'Remedial', cleared: 'Cleared' };
-        const statusLabel = statusFilter === 'all' ? 'All statuses' : (statusLabels[statusFilter] ?? statusFilter);
+        const statusLabel = statusFilter === 'all' ? 'All statuses' : (STANDING_LABELS[statusFilter] ?? statusFilter);
         const gwa = (s: any) => (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : '—');
         const pending = (s: any) => (Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0);
         const standingBad = (s: any) => String(s.status || '').toLowerCase() === 'remedial';
@@ -1542,7 +1556,7 @@ export const DeanReports: React.FC = () => {
                       <td className={`l ${printCellClass(s.className || '—')}`}>{s.className || '—'}</td>
                       <td>Year {s.yearLevel}</td>
                       <td className={`grade ${printCellClass(gradeStr)}`}>{gradeStr}</td>
-                      <td className={`cap ${standingBad(s) ? 'bad' : ''}`}>{s.status}</td>
+                      <td className={`cap ${standingBad(s) ? 'bad' : ''}`}>{STANDING_LABELS[s.status] ?? s.status}</td>
                       <td>{s.faceEnrolled ? 'Enrolled' : 'Not enrolled'}</td>
                       <td>{pending(s)}</td>
                     </tr>
@@ -1560,7 +1574,7 @@ export const DeanReports: React.FC = () => {
                       <td className="nm">{s.name}</td>
                       <td className={`l ${printCellClass(s.className || '—')}`}>{s.className || '—'}</td>
                       <td className={`grade ${standingBad(s) ? 'bad' : printCellClass(gradeStr)}`}>{gradeStr}</td>
-                      <td className={`cap ${standingBad(s) ? 'bad' : ''}`}>{s.status}</td>
+                      <td className={`cap ${standingBad(s) ? 'bad' : ''}`}>{STANDING_LABELS[s.status] ?? s.status}</td>
                       <td>{s.clinicHoursCompleted}h</td>
                       <td className={pend > 0 ? 'bad' : ''}>{pend > 0 ? `${pend} Pending` : 'None'}</td>
                       <td className={flagged > 0 ? 'bad' : ''}>{flagged > 0 ? `${flagged} Subject${flagged > 1 ? 's' : ''}` : 'Clear'}</td>

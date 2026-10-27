@@ -43,6 +43,7 @@ export const Dashboard: React.FC = () => {
     .map((bucket: { range: string; count: number }) => ({ range: bucket.range, count: Number(bucket.count) || 0 }));
   const standing = [
     { label: 'Good standing', count: Number(apiData?.statusCounts?.active) || 0, color: '#10b981' },
+    { label: 'No grade yet', count: Number(apiData?.statusCounts?.noGrade) || 0, color: '#94a3b8' },
     { label: 'Remedial', count: Number(apiData?.statusCounts?.remedial) || 0, color: '#f97316' },
   ];
   const classAttendance: Array<{ name: string; rate: number }> = apiData?.classAttendance ?? [];

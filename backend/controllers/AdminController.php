@@ -19,7 +19,10 @@ function handle_admin_email_logs(): void
         $authCtx = admin_verify_auth($pdo, $config);
         json_response([
             'status' => 'ok',
-            'actions' => email_history_actions($pdo, (int) $authCtx['user_id']),
+            'actions' => array_map(
+                static fn(array $a): array => ['sentAt' => audit_manila_iso((string) $a['sentAt'])] + $a,
+                email_history_actions($pdo, (int) $authCtx['user_id'])
+            ),
         ], 200);
     } catch (\Throwable $e) {
         error_log('Admin email logs error: ' . sanitize_for_log($e));
@@ -145,6 +148,7 @@ function handle_admin_dashboard_kpis(): void
         $totalStudents = count($students);
 
         $goodStanding = 0;
+        $noGrade = 0;
         $remedialCount = 0;
         $atRiskStudents = [];
 
@@ -158,8 +162,10 @@ function handle_admin_dashboard_kpis(): void
             if ($riskScore >= 2) {
                 $remedialCount++;
                 $atRiskStudents[(int) $s['student_id']] = true;
-            } else {
+            } elseif (isset($s['final_gwa'])) {
                 $goodStanding++;
+            } else {
+                $noGrade++;
             }
 
             if (isset($s['final_gwa']) && $s['final_gwa'] !== null) {
@@ -247,6 +253,7 @@ function handle_admin_dashboard_kpis(): void
                 'totalStudents' => $totalStudents,
                 'totalFaculty' => $activeFacultyCount > 0 ? $activeFacultyCount : count($facultyList),
                 'goodStanding' => $goodStanding,
+                'noGrade' => $noGrade,
                 'atRisk' => $atRisk,
                 'remedialCount' => $remedialCount,
                 'attendanceRate' => $attendanceRate,
@@ -260,6 +267,7 @@ function handle_admin_dashboard_kpis(): void
             ],
             'statusCounts' => [
                 'active' => $goodStanding,
+                'noGrade' => $noGrade,
                 'remedial' => $remedialCount,
             ],
             'classAttendance' => $classAttendance,
@@ -737,7 +745,7 @@ function handle_admin_reports_summary(): void
              {$yearWhere} " . ($schoolYear === null ? 'WHERE' : 'AND') . "
                  NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = r.attendance_session_id AND rs.status = 'revoked')
                  AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
-             ORDER BY session_date DESC LIMIT 500"
+             ORDER BY session_date DESC"
         );
         $attStmt->execute($yearParams);
         $attendanceLogs = array_map(static fn(array $row): array => [
@@ -770,6 +778,8 @@ function handle_admin_reports_summary(): void
             if ($s['cs_id'] !== null) {
                 $grouped[$id]['classId'] = (string) $s['cs_id'];
                 $grouped[$id]['className'] = $s['cs_name'];
+                // Final grade of the class shown for this student (the same enrollment as classId).
+                $grouped[$id]['classGraded'] = $s['final_gwa'] !== null;
                 // Standing is the most serious state across all enrollments.
                 $state = strtolower((string) ($s['retention_state'] ?? 'active'));
                 if (($stateRank[$state] ?? 0) > ($stateRank[strtolower((string) $grouped[$id]['status'])] ?? 0)) {

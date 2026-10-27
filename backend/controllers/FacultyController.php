@@ -7555,7 +7555,10 @@ function handle_faculty_email_logs(): void
 
         json_response([
             'status' => 'ok',
-            'actions' => email_history_actions($pdo, (int) $authCtx['user_id']),
+            'actions' => array_map(static function (array $a): array {
+                $a['sentAt'] = audit_manila_iso((string) $a['sentAt']);
+                return $a;
+            }, email_history_actions($pdo, (int) $authCtx['user_id'])),
         ], 200);
     } catch (\Throwable $e) {
         error_log('Faculty email logs error: ' . sanitize_for_log($e));

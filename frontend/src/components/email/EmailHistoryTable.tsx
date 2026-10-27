@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Mail, ChevronRight } from 'lucide-react';
+import { formatManilaWhen } from '../../services/auditService';
 import { EmailAction, EmailStatus, filterEmailActions, recipientsLabel, summarizeStatuses } from './emailHistory';
 
 // The email_type values the server stores for a Faculty member's messages.
@@ -110,7 +111,7 @@ export const EmailHistoryTable: React.FC<EmailHistoryTableProps> = ({
                         ))}
                       </div>
                     </td>
-                    <td className="p-3 text-slate-500">{action.sentAt}</td>
+                    <td className="p-3 text-slate-500">{formatManilaWhen(action.sentAt)}</td>
                   </tr>
                   {expanded &&
                     action.recipients.map((recipient, index) => (

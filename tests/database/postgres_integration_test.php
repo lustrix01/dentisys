@@ -1914,7 +1914,7 @@ expect_same(200, $facultyListStatus, 'Admin can view Faculty invitation state');
 $listedFacultyInvitation = array_values(array_filter($facultyListBody['invitations'] ?? [], static fn(array $item): bool => $item['email'] === $facultyInvitationEmail))[0] ?? null;
 expect_same('Pending', $listedFacultyInvitation['status'] ?? null, 'Faculty invitation list reports the current pending state');
 $listedLegacyFaculty = array_values(array_filter($facultyListBody['invitations'] ?? [], static fn(array $item): bool => $item['email'] === 'faculty@bicol-u.edu.ph'))[0] ?? null;
-expect_same('Not invited', $listedLegacyFaculty['status'] ?? null, 'Legacy Active Faculty is not falsely labeled as having accepted an invitation');
+expect_same('Active', $listedLegacyFaculty['status'] ?? null, 'Legacy Active Faculty is shown as Active, not as having accepted an invitation');
 [$nonAdminInviteStatus] = integration_http_json('/api/admin/faculty-invitations', $facultyAccessToken, [
     'firstName' => 'Unauthorized',
     'lastName' => 'Faculty',
@@ -2959,7 +2959,7 @@ expect_same(2, count($groupedHistory['recipients'] ?? []), 'A multi-recipient se
 expect_same(['Suppressed', 'Suppressed'], array_column($groupedHistory['recipients'] ?? [], 'status'), 'The action keeps per-recipient delivery status');
 $legacyHistory = array_values(array_filter($historyActions, static fn(array $action): bool => $action['id'] === 'mail-' . $legacyHistoryEmailId))[0] ?? null;
 expect_same(1, count($legacyHistory['recipients'] ?? []), 'A row without an action id is its own one-recipient action');
-expect_same('2000-01-01 00:00:00', substr((string) ($legacyHistory['sentAt'] ?? ''), 0, 19), 'A legacy action falls back to the row creation time');
+expect_same('2000-01-01T08:00:00+08:00', $legacyHistory['sentAt'] ?? null, 'A legacy action falls back to the row creation time, sent as Manila time');
 $historyJson = json_encode($historyBody, JSON_THROW_ON_ERROR);
 expect_true(!str_contains($historyJson, 'History grouping subject') && !str_contains($historyJson, 'Legacy body') && !array_key_exists('logs', $historyBody), 'Email History never returns subjects or bodies');
 [, $otherHistoryBody] = integration_http_get_json('/api/admin/email-logs', $adminAccessToken);

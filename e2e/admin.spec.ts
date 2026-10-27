@@ -153,7 +153,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await dialog.getByRole('button', { name: 'Confirm and save' }).click();
     await expect(row).toContainText('Oct 9, 2026');
     expect(posted.some(data => data.confirmedExpiringEnrollments === 3)).toBe(true);
-    await section.getByRole('button', { name: 'Copy previous school year' }).click();
+    await section.getByRole('button', { name: 'Copy to next school year' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Copy terms', exact: true }).click();
     await expect(section).toContainText('Review and adjust their dates.');
     const copied = section.getByTestId('2027-2028-1ST');
@@ -211,7 +211,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(alexSummaryRow.getByRole('cell').nth(0)).toHaveText('2023-0101');
     await expect(alexSummaryRow.getByRole('cell').nth(2)).toHaveText('CLINIC, "4A" Special');
     await expect(alexSummaryRow.getByRole('cell').nth(4)).toHaveText('2.3');
-    await expect(alexSummaryRow.getByRole('cell').nth(5)).toContainText('remedial');
+    await expect(alexSummaryRow.getByRole('cell').nth(5)).toContainText('Remedial');
     await expect(studentTable).toContainText('Alex Example');
     await expect(studentTable).not.toContainText('Missing Class Name');
     await page.getByRole('button', { name: /Back/ }).click();
@@ -236,7 +236,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     const alexRetentionRow = retentionTable.getByRole('row').filter({ hasText: 'Alex Example' });
     await expect(alexRetentionRow.getByRole('cell').nth(1)).toHaveText('CLINIC, "4A" Special');
     await expect(alexRetentionRow.getByRole('cell').nth(2)).toHaveText('2.3');
-    await expect(alexRetentionRow.getByRole('cell').nth(3)).toContainText('remedial');
+    await expect(alexRetentionRow.getByRole('cell').nth(3)).toContainText('Remedial');
     await expect(alexRetentionRow.getByRole('cell').nth(4)).toHaveText('18h');
     await expect(alexRetentionRow.getByRole('cell').nth(5)).toContainText('1 Pending');
     await page.getByRole('button', { name: /Back/ }).click();
@@ -244,7 +244,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     const missingNameRetentionRow = retentionTable.getByRole('row').filter({ hasText: 'Missing Class Name' });
     await expect(missingNameRetentionRow.getByRole('cell').nth(1)).toHaveText('—');
     await expect(missingNameRetentionRow.getByRole('cell').nth(2)).toHaveText('—');
-    await expect(missingNameRetentionRow.getByRole('cell').nth(3)).toContainText('active');
+    await expect(missingNameRetentionRow.getByRole('cell').nth(3)).toContainText('No Grade Yet');
 
     await page.getByRole('button', { name: 'Attendance Reports' }).click();
     await openClassCard(page, 'CLINIC');
@@ -272,7 +272,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     let download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/^Student_Summary_.*\.xlsx$/);
     const summary = await readDownloadedXlsxText(download);
-    for (const text of ['STUDENT SUMMARY', 'Student Number', 'Face Enrolled', '2023-0101', 'Alex Example', '2023-0102', 'Missing Class Name', 'remedial']) expect(summary).toContain(text);
+    for (const text of ['STUDENT SUMMARY', 'Student Number', 'Face Enrolled', '2023-0101', 'Alex Example', '2023-0102', 'Missing Class Name', 'Remedial', 'No Grade Yet']) expect(summary).toContain(text);
     expect(summary).toContain('CLINIC, "4A"\nSpecial');
     // Formula-looking class names stay plain text (no formula cell, no guard apostrophe).
     for (const text of ['=1+1', '+SUM(1,1)', '-1+1', '@SUM(1,1)']) expect(summary).toContain(text);

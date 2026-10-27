@@ -88,6 +88,7 @@ export const GoogleLinkCard: React.FC = () => {
           size: 'large',
           width: Math.max(200, Math.min(360, Math.floor(buttonRef.current.parentElement?.clientWidth ?? 360))),
           text: 'continue_with',
+          locale: 'en',
         });
         setLoadState('ready');
       } catch {

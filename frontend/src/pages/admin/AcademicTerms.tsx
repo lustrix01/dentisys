@@ -11,6 +11,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { Modal } from '../../components/Modal';
+import { newTermDefaults, semesterLabel } from '../../utils/academicTermDefaults';
 import {
   getAcademicTermsApi,
   saveAcademicTermApi,
@@ -86,10 +87,14 @@ export const AcademicTermsSettings: React.FC = () => {
     setError('');
     setFields({});
     setConfirmation(null);
+    const defaults = newTermDefaults(
+      currentYear,
+      terms.filter((t) => t.id !== null && t.schoolYear === currentYear).map((t) => t.semester),
+    );
     setDraft({
       ...(term?.id ? { id: term.id } : {}),
-      schoolYear: term?.schoolYear ?? currentYear,
-      semester: term?.semester ?? '1ST',
+      schoolYear: term?.schoolYear ?? defaults.schoolYear,
+      semester: term?.semester ?? defaults.semester,
       startDate: term?.startDate ?? '',
       endDate: term?.endDate ?? '',
     });
@@ -212,7 +217,7 @@ export const AcademicTermsSettings: React.FC = () => {
               }}
             >
               <Copy className="w-4 h-4" />
-              Copy previous school year
+              Copy to next school year
             </button>
           </div>
         </div>
@@ -227,7 +232,7 @@ export const AcademicTermsSettings: React.FC = () => {
               {currentYear || 'Not configured'}
             </span>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              {currentTermObj ? `${currentTermObj.semester} Semester Active` : 'No active semester today'}
+              {currentTermObj ? `${semesterLabel(currentTermObj.semester)} Active` : 'No active semester today'}
             </p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-accent-50 dark:bg-accent-950/40 text-accent-600 dark:text-accent-400 flex items-center justify-center shrink-0">
@@ -341,7 +346,7 @@ export const AcademicTermsSettings: React.FC = () => {
                         {/* Semester Title & Status */}
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                            {term.semester} Semester
+                            {semesterLabel(term.semester)}
                           </span>
                           {status && (
                             <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold tracking-wide inline-flex items-center gap-1.5 ${status.className}`}>
@@ -438,7 +443,7 @@ export const AcademicTermsSettings: React.FC = () => {
                   {confirmation} unexpired biometric {confirmation === 1 ? 'enrollment will' : 'enrollments will'} expire with this change. A term ending today remains valid through today; past dates expire at the next expiry run. Biometric material is removed by the expiry run.
                 </p>
                 <p className="text-sm font-bold text-amber-950 dark:text-amber-100">
-                  Save end date {draft.endDate} for {draft.semester} {draft.schoolYear}?
+                  Save end date {draft.endDate} for the {semesterLabel(draft.semester)} of {draft.schoolYear}?
                 </p>
               </div>
             ) : (
@@ -469,8 +474,8 @@ export const AcademicTermsSettings: React.FC = () => {
                       }
                       aria-invalid={!!fields.semester}
                     >
-                      <option value="1ST">1ST</option>
-                      <option value="2ND">2ND</option>
+                      <option value="1ST">1st Semester</option>
+                      <option value="2ND">2nd Semester</option>
                       <option value="Summer">Summer</option>
                     </select>
                     {fields.semester && <span className="text-xs text-rose-600 dark:text-rose-400 mt-1 block">{fields.semester}</span>}
@@ -524,7 +529,7 @@ export const AcademicTermsSettings: React.FC = () => {
       >
         <div role="dialog" aria-modal="true" aria-label="Delete unused academic term" className="space-y-4">
           <p className="text-sm text-slate-700 dark:text-slate-200">
-            Delete {deleteTerm?.semester} {deleteTerm?.schoolYear}?
+            Delete the {deleteTerm ? semesterLabel(deleteTerm.semester) : ''} of {deleteTerm?.schoolYear}?
           </p>
           <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
             <button
@@ -567,9 +572,9 @@ export const AcademicTermsSettings: React.FC = () => {
         onClose={() => {
           if (!busy) setCopying(false);
         }}
-        title="Copy previous school year"
+        title="Copy to next school year"
       >
-        <div role="dialog" aria-modal="true" aria-label="Copy previous school year" className="space-y-4">
+        <div role="dialog" aria-modal="true" aria-label="Copy to next school year" className="space-y-4">
           <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
             Copy the latest defined school year ({latestYear}) into the next school year, shifting dates by one year? February 29 becomes February 28. Existing terms are kept. Review and adjust the copied dates afterwards.
           </p>

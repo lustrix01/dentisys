@@ -17,6 +17,7 @@ import {
 import { Card, CardHeader, CardTitle } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
+import { formatManilaWhen } from '../../services/auditService';
 import { EmailHistoryTable } from '../../components/email/EmailHistoryTable';
 import type { EmailAction } from '../../components/email/emailHistory';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
@@ -277,7 +278,7 @@ export const FacultyInvitation: React.FC = () => {
   };
 
   const statusBadge = (status: string) => {
-    const accepted = status === 'Accepted';
+    const accepted = status === 'Accepted' || status === 'Active';
     const pending = status === 'Pending';
     const revoked = status === 'Revoked';
     const expired = status === 'Expired';
@@ -448,6 +449,7 @@ export const FacultyInvitation: React.FC = () => {
               <option value="Expired">Expired</option>
               <option value="Revoked">Revoked</option>
               <option value="Accepted">Accepted</option>
+              <option value="Active">Active</option>
               <option value="Not invited">Not invited</option>
             </select>
             <div className="relative min-w-[10rem] flex-1 sm:w-64 sm:flex-none">
@@ -492,11 +494,11 @@ export const FacultyInvitation: React.FC = () => {
                   <tr key={invitation.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="px-4 py-3.5 font-bold text-slate-800 dark:text-slate-100">{invitation.name}</td>
                     <td className="px-4 py-3.5 font-mono text-slate-600 dark:text-slate-300">{invitation.email}</td>
-                    <td className="px-4 py-3.5 text-slate-500">{invitation.invitedAt ? new Date(invitation.invitedAt).toLocaleString() : '—'}</td>
+                    <td className="px-4 py-3.5 text-slate-500 whitespace-nowrap">{invitation.invitedAt ? formatManilaWhen(invitation.invitedAt) : '—'}</td>
                     <td className="px-4 py-3.5">{statusBadge(invitation.status)}</td>
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        {invitation.status !== 'Accepted' && (
+                        {invitation.status !== 'Accepted' && invitation.status !== 'Active' && (
                           <>
                             <button
                               type="button"

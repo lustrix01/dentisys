@@ -121,6 +121,7 @@ export function SsoLogin() {
           size: 'large',
           width: Math.max(200, Math.min(360, Math.floor(availableWidth))),
           text: 'signin_with',
+          locale: 'en',
         });
         setGoogleLoadState('ready');
       } catch {

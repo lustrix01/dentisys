@@ -162,6 +162,8 @@ function handle_admin_faculty_invitations_list(): void
                 $status = 'Expired';
             } elseif ($row['issued_at'] !== null) {
                 $status = 'Pending';
+            } elseif ($row['status'] === 'Active') {
+                $status = 'Active';
             } else {
                 $status = 'Not invited';
             }
@@ -181,8 +183,8 @@ function handle_admin_faculty_invitations_list(): void
                 'lastName' => $row['canonical_last_name'],
                 'suffix' => $row['canonical_name_suffix'],
                 'email' => (string) $row['login_email'],
-                'invitedAt' => $row['issued_at'],
-                'expiresAt' => $row['expires_at'],
+                'invitedAt' => $row['issued_at'] !== null ? audit_manila_iso((string) $row['issued_at']) : null,
+                'expiresAt' => $row['expires_at'] !== null ? audit_manila_iso((string) $row['expires_at']) : null,
                 'status' => $status,
             ];
         }, $stmt->fetchAll(PDO::FETCH_ASSOC));
@@ -480,8 +482,8 @@ function handle_admin_faculty_invitation_create(): void
                 'lastName' => $nameParts['lastName'],
                 'suffix' => $nameParts['suffix'],
                 'email' => $email,
-                'invitedAt' => $nowSql,
-                'expiresAt' => $expiresSql,
+                'invitedAt' => audit_manila_iso($nowSql),
+                'expiresAt' => audit_manila_iso($expiresSql),
                 'status' => 'Pending',
             ],
             'invitation_link' => $showDevLink ? $link : null,
@@ -651,8 +653,8 @@ function handle_admin_faculty_invitation_update(): void
                 'lastName' => $nameParts['lastName'],
                 'suffix' => $nameParts['suffix'],
                 'email' => $email,
-                'invitedAt' => $nowSql,
-                'expiresAt' => $expiresSql,
+                'invitedAt' => audit_manila_iso($nowSql),
+                'expiresAt' => audit_manila_iso($expiresSql),
                 'status' => 'Pending',
             ],
             'invitation_link' => !empty($config['show_dev_invitation_link']) ? $link : null,
@@ -875,8 +877,8 @@ function handle_admin_faculty_invitation_reissue(): void
                 'id' => (string) $userId,
                 'name' => $name,
                 'email' => $email,
-                'invitedAt' => $nowSql,
-                'expiresAt' => $expiresSql,
+                'invitedAt' => audit_manila_iso($nowSql),
+                'expiresAt' => audit_manila_iso($expiresSql),
                 'status' => 'Pending',
             ],
             'invitation_link' => $showDevLink ? $link : null,
