@@ -1,5 +1,7 @@
 import { test, expect, openAccountMenu } from './fixtures';
-import type { Page } from '@playwright/test';
+import type { Download, Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { strFromU8, unzipSync } from '../frontend/node_modules/fflate';
 
 const deanReportStudents = [
   {
@@ -56,12 +58,11 @@ const openClassCard = async (page: Page, name: string) => {
   await page.locator('div.cursor-pointer').filter({ has: page.locator('h3', { hasText: name }) }).getByText(/^View /).click();
 };
 
-const captureDeanReportCsv = async (page: Page) => page.evaluate(async () => {
-  const blobs = (window as any).__deanReportCsvBlobs as Blob[];
-  const blob = blobs[blobs.length - 1];
-  if (!blob) throw new Error('No Dean report CSV was generated.');
-  return blob.text();
-});
+// Dean reports download .xlsx: unzip it and return all the text the workbook holds.
+const readDownloadedXlsxText = async (download: Download) => {
+  const files = unzipSync(new Uint8Array(await readFile((await download.path())!)));
+  return Object.entries(files).filter(([name]) => name.endsWith('.xml')).map(([, data]) => strFromU8(data)).join('\n').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+};
 
 test.describe('Admin (Dean) Module E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
@@ -261,41 +262,33 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(missingNameAttendanceRow.getByRole('cell').nth(5)).toContainText('absent');
   });
 
-  test('Dean Student Summary and Retention CSVs escape readable class names and preserve report values', async ({ page }) => {
+  test('Dean Student Summary and Retention exports are Excel files that keep readable class names and report values', async ({ page }) => {
     await mockDeanReportSummary(page, [...deanReportStudents, ...deanReportFormulaStudents]);
     await page.goto('/admin/reports');
     await expect(page.getByRole('heading', { name: 'Class 22' })).toBeVisible();
-    await page.evaluate(() => {
-      (window as any).__deanReportCsvBlobs = [];
-      const createObjectURL = URL.createObjectURL.bind(URL);
-      URL.createObjectURL = (blob: Blob | MediaSource) => {
-        (window as any).__deanReportCsvBlobs.push(blob);
-        return createObjectURL(blob);
-      };
-    });
 
-    await page.getByRole('button', { name: 'Export CSV' }).click();
-    const summaryCsv = await captureDeanReportCsv(page);
-    expect(summaryCsv.replace(/^\uFEFF/, '')).toMatch(/^Student Number,Student Name,Class,/);
-    expect(summaryCsv).toContain('"2023-0101","Alex Example","CLINIC, ""4A""\nSpecial","4","2.3","remedial","No"');
-    expect(summaryCsv).toContain('"2023-0102","Missing Class Name","—","3","N/A","active","No"');
-    const escapedFormulaClassFields = [
-      '"2023-0103","Equals Formula","\'=1+1"',
-      '"2023-0104","Plus Formula","\'+SUM(1,1)"',
-      '"2023-0105","Minus Formula","\'-1+1"',
-      '"2023-0106","At Formula","\'@SUM(1,1)"',
-      '"2023-0107","Leading Tab Formula","\'\t=1+1"',
-      '"2023-0108","Leading Control Formula","\'\u0001@SUM(1,1)"',
-    ];
-    for (const classField of escapedFormulaClassFields) expect(summaryCsv).toContain(classField);
+    let downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export Excel' }).click();
+    let download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/^Student_Summary_.*\.xlsx$/);
+    const summary = await readDownloadedXlsxText(download);
+    for (const text of ['STUDENT SUMMARY', 'Student Number', 'Face Enrolled', '2023-0101', 'Alex Example', '2023-0102', 'Missing Class Name', 'remedial']) expect(summary).toContain(text);
+    expect(summary).toContain('CLINIC, "4A"\nSpecial');
+    // Formula-looking class names stay plain text (no formula cell, no guard apostrophe).
+    for (const text of ['=1+1', '+SUM(1,1)', '-1+1', '@SUM(1,1)']) expect(summary).toContain(text);
+    expect(summary).not.toContain("'=1+1");
+    expect(summary).not.toContain('<f>');
 
     await page.getByRole('button', { name: 'Retention Reports' }).click();
-    await page.getByRole('button', { name: 'Export CSV' }).click();
-    const retentionCsv = await captureDeanReportCsv(page);
-    expect(retentionCsv.replace(/^\uFEFF/, '')).toMatch(/^Student Number,Student Name,Class,Grade,/);
-    expect(retentionCsv).toContain('"2023-0101","Alex Example","CLINIC, ""4A""\nSpecial","2.3","remedial","1"');
-    expect(retentionCsv).toContain('"2023-0102","Missing Class Name","—","N/A","active","0"');
-    for (const classField of escapedFormulaClassFields) expect(retentionCsv).toContain(classField);
+    downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export Excel' }).click();
+    download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/^Retention_Report_.*\.xlsx$/);
+    const retention = await readDownloadedXlsxText(download);
+    for (const text of ['RETENTION REPORT', 'Pending Remedials', '2023-0101', 'Alex Example', '2023-0102', 'Missing Class Name']) expect(retention).toContain(text);
+    expect(retention).toContain('CLINIC, "4A"\nSpecial');
+    for (const text of ['=1+1', '+SUM(1,1)']) expect(retention).toContain(text);
+    expect(retention).not.toContain('<f>');
   });
 
   test('admin can navigate to Audit Trail page', async ({ page }) => {

@@ -2,13 +2,15 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Download, FileText, Filter, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldOff, SlidersHorizontal, UserX } from 'lucide-react';
 import type { AuditEntry, AuditListResponse, AuditQuery, AuditStatus, DatePreset } from '../services/auditService';
 import {
-  auditCsv, auditCsvRows, auditDateRange, auditWho, currentTerm, formatManilaWhen, groupByDay,
+  AUDIT_EXPORT_HEADER, auditCsvRows, auditDateRange, auditWho, currentTerm, formatManilaWhen, groupByDay,
 } from '../services/auditService';
 import { getAcademicTermsApi, getAdminAuditLogsApi, getFacultyActivityApi, getFacultyClassesApi, getSecretaryActivityApi } from '../services/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from './Card';
 import { Modal } from './Modal';
 import { flushSync } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
+import { downloadXlsx } from '../utils/xlsxDownload';
+import { buildReportSheet } from '../utils/reportWorkbook';
 import { PrintStyle, PrintHeader, PrintCaption, formatPrintedAt } from './PrintSheet';
 
 type Role = 'admin' | 'faculty' | 'secretary';
@@ -208,15 +210,16 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
     return all;
   };
 
-  const exportCsv = async () => {
+  const exportExcel = async () => {
     setWorking(true);
     try {
       const all = await fetchAll();
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(new Blob(['﻿' + auditCsv(all)], { type: 'text/csv;charset=utf-8;' }));
-      link.download = `dentisys-audit-trail-${new Date().toISOString().slice(0, 10)}.csv`;
-      link.click();
-      URL.revokeObjectURL(link.href);
+      await downloadXlsx(`dentisys-audit-trail-${new Date().toISOString().slice(0, 10)}.xlsx`, [buildReportSheet({
+        sheet: 'Audit Trail', title: title.toUpperCase(), filter: `Filters: ${filterLabel}`, term: `Sort: ${sort === 'newest' ? 'Newest first' : 'Oldest first'}`,
+        by: role === 'admin' ? "Dean's Office" : user?.display_name ?? '',
+        columns: AUDIT_EXPORT_HEADER.map((header, i) => ({ header, width: [24, 30, 26, 36, 36, 10][i] })),
+        rows: auditCsvRows(all),
+      })]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Export failed.');
     } finally { setWorking(false); }
@@ -349,9 +352,9 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
             )}
             <span className="col-span-2 sm:col-span-1 xl:ml-auto text-center sm:text-left xl:text-right whitespace-nowrap text-[10px] text-slate-500 dark:text-slate-400 font-semibold">{total} logs</span>
             <div className="col-span-2 sm:col-span-3 xl:col-span-1 flex w-full xl:w-auto items-center justify-center xl:justify-start bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-                <button onClick={exportCsv} disabled={working} className="flex flex-1 xl:flex-initial items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer disabled:opacity-50">
+                <button onClick={exportExcel} disabled={working} className="flex flex-1 xl:flex-initial items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer disabled:opacity-50">
                   <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  Export CSV
+                  Export Excel
                 </button>
                 <div className="w-px h-4 bg-slate-200 dark:bg-slate-800 mx-0.5" />
                 <button onClick={handlePrint} disabled={working} className="flex flex-1 xl:flex-initial items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer disabled:opacity-50">

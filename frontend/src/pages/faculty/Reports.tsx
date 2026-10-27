@@ -53,16 +53,14 @@ import {
   type FacultyAttendanceWorksheetRosterItem,
 } from '../../services/apiClient';
 import GradeValue from '../../components/GradeValue';
-
-function csvCell(value: unknown): string {
-  const text = value === null || value === undefined ? '' : String(value);
-  const safeText = /^[=+\-@]/.test(text) ? `'${text}` : text;
-  return `"${safeText.replace(/"/g, '""')}"`;
-}
+import { downloadXlsx } from '../../utils/xlsxDownload';
+import { showFeedback } from '../../components/FeedbackCenter';
+import { exportGradeWorkbook } from '../../utils/gradeSheetExportFlow';
+import { buildReportSheet, dayToDate, termLine } from '../../utils/reportWorkbook';
 
 export const Reports: React.FC = () => {
   const { user } = useAuth();
-  const { assessments, assessmentScores } = useApp();
+  const { assessments, assessmentScores, attendanceRecords: appAttendanceRecords } = useApp();
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -505,74 +503,49 @@ export const Reports: React.FC = () => {
     window.print();
   };
 
-  // CSV Exporter Utility
-  const handleExportCSV = (type: 'academic' | 'retention' | 'attendance') => {
-    let headers = '';
-    let rows = '';
-    let fileName = '';
-
+  // Retention and Attendance download as .xlsx (contract official-exports X18/X19).
+  const handleExportExcel = async (type: 'academic' | 'retention' | 'attendance') => {
     if (type === 'academic') {
-      headers = isLectureLaboratoryMode
-        ? 'Student Number,Student Name,Course Code,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Grade,Remarks\n'
-        : 'Student Number,Student Name,Course Code,Midterm %,Final %,Grade,Remarks\n';
-      rows = studentsInSelectedSubject.map((student: any) => {
-        const subj = subjectForSelection(student);
-        const evaluation = courseEvaluation(subj);
-        const midterm = evaluation.midtermPercentage !== null ? evaluation.midtermPercentage.toFixed(1) : 'N/A';
-        const final = evaluation.finalPercentage !== null ? evaluation.finalPercentage.toFixed(1) : 'N/A';
-        const grade = formatCourseGrade(evaluation);
-        const values = isLectureLaboratoryMode
-          ? [
-              student.studentId,
-              student.name,
-              selectedSubjectCode,
-              formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus),
-              formatComponentResult(evaluation.midtermComponents?.laboratory, evaluation.midtermStatus),
-              midterm,
-              formatComponentResult(evaluation.finalComponents?.lecture, evaluation.finalStatus),
-              formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus),
-              final,
-              grade,
-              courseRemark(student, subj),
-            ]
-          : [student.studentId, student.name, selectedSubjectCode, midterm, final, grade, courseRemark(student, subj)];
-        return values.map(csvCell).join(',');
-      }).join('\n');
-      fileName = `${selectedSubjectCode || 'Course'}_Academic_Report.csv`;
-    } else if (type === 'retention') {
-      headers = 'Student Number,Student Name,Standing Grade,At-Risk Courses,Risk Level,Remedial Status\n';
-      rows = facultyStudents.map((student: any) => {
+      if (!selectedClass) return;
+      try {
+        await exportGradeWorkbook({ cls: selectedClass, students: studentsInSelectedSubject, assessments, scores: assessmentScores, attendanceRecords: appAttendanceRecords, by: user?.display_name ?? '' });
+      } catch (err) {
+        showFeedback(err instanceof Error ? err.message : 'Unable to export the grade sheet.', 'error');
+      }
+      return;
+    }
+    const by = user?.display_name ?? '';
+    const term = selectedClass?.semester && selectedClass.schoolYear ? termLine(String(selectedClass.semester), String(selectedClass.schoolYear)) : '';
+    if (type === 'retention') {
+      const rows = facultyStudents.map((student: any) => {
         const atRiskCourses = retentionUnavailable ? null : (student.enrolledSubjects || []).filter((sub: any) =>
           assignedSubjects.includes(sub.code)
           && retentionIsAtRisk(retentionForStudentSubject(student, sub))
         ).length;
         const riskLevel = retentionUnavailable ? 'UNAVAILABLE' : atRiskCourses && atRiskCourses > 0 ? 'At Risk' : '';
         const gwa = standingGwa(student);
-        return [student.studentId, student.name, gwa !== null ? gwa.toFixed(2) : 'N/A', atRiskCourses ?? 'UNAVAILABLE', riskLevel, remedialStatusFor(student)].map(csvCell).join(',');
-      }).join('\n');
-      fileName = `Retention_Report.csv`;
-    } else {
-      headers = 'Date,Student Number,Student Name,Course Code,Status\n';
-      rows = attendanceRecords
-        .map(record => [
-          record.date,
-          record.studentNumber || '',
-          record.studentName || '',
-          selectedClass?.courseCode || '',
-          String(record.status || 'not recorded').toUpperCase(),
-        ].map(csvCell).join(','))
-        .join('\n');
-      fileName = `Attendance_${selectedClass?.courseCode || 'Class'}_${attendanceDate}.csv`;
+        return [student.studentId, student.name, gwa !== null ? gwa : 'N/A', atRiskCourses ?? 'UNAVAILABLE', riskLevel, remedialStatusFor(student)];
+      });
+      await downloadXlsx('Retention_Report.xlsx', [buildReportSheet({
+        sheet: 'Retention', title: 'RETENTION REPORT', filter: 'All assigned classes', term: selectedSchoolYear === 'all' ? 'All school years' : `AY ${selectedSchoolYear}`, by,
+        columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Standing Grade', width: 15, format: '0.00' },
+          { header: 'At-Risk Courses', width: 16 }, { header: 'Risk Level', width: 14 }, { header: 'Remedial Status', width: 20 }],
+        rows,
+      })]);
+      return;
     }
-
-    const blob = new Blob(['\uFEFF' + headers + rows], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', fileName);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const rows = attendanceRecords.map(record => [
+      dayToDate(String(record.date)) ?? record.date,
+      record.studentNumber || '',
+      record.studentName || '',
+      selectedClass?.courseCode || '',
+      String(record.status || 'not recorded').toUpperCase(),
+    ]);
+    await downloadXlsx(`Attendance_${selectedClass?.courseCode || 'Class'}_${attendanceDate}.xlsx`, [buildReportSheet({
+      sheet: 'Attendance', title: 'ATTENDANCE REPORT', filter: selectedClass ? `${selectedClass.courseCode} · ${selectedClass.csName}` : '', term: `${term}${term ? ' · ' : ''}Session ${attendanceDate}`, by,
+      columns: [{ header: 'Date', width: 14 }, { header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Course Code', width: 14 }, { header: 'Status', width: 14 }],
+      rows,
+    })]);
   };
 
   // Recharts Stats: course grade distribution for the selected course and
@@ -768,12 +741,12 @@ export const Reports: React.FC = () => {
             <div className="flex shrink-0 items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
               <button
                 type="button"
-                onClick={() => handleExportCSV('academic')}
+                onClick={() => handleExportExcel('academic')}
                 className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
-                title="Export academic ledger as CSV spreadsheet"
+                title="Export official grade sheet as an Excel workbook"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Export CSV</span>
+                <span>Export Excel</span>
               </button>
               <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
               <button
@@ -892,12 +865,12 @@ export const Reports: React.FC = () => {
             <div className="flex shrink-0 items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
               <button
                 type="button"
-                onClick={() => handleExportCSV('retention')}
+                onClick={() => handleExportExcel('retention')}
                 className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
-                title="Export retention report as CSV spreadsheet"
+                title="Export retention report as Excel spreadsheet"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Export CSV</span>
+                <span>Export Excel</span>
               </button>
               <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
               <button
@@ -1002,13 +975,13 @@ export const Reports: React.FC = () => {
               <div className="flex shrink-0 items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
                 <button
                   type="button"
-                  onClick={() => handleExportCSV('attendance')}
+                  onClick={() => handleExportExcel('attendance')}
                   disabled={attendanceRecords.length === 0}
                   className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors disabled:opacity-40 cursor-pointer"
-                  title="Export attendance register as CSV spreadsheet"
+                  title="Export attendance register as Excel spreadsheet"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span>Export CSV</span>
+                  <span>Export Excel</span>
                 </button>
                 <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
                 <button

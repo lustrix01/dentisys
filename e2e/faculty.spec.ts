@@ -1,6 +1,14 @@
 import { test, expect, openAccountMenu } from './fixtures';
 import type { Page } from '@playwright/test';
+import type { Download } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { strFromU8, unzipSync } from '../frontend/node_modules/fflate';
+
+// Grade exports download .xlsx: unzip it and return all the XML text the workbook holds (cell values and shared strings).
+const readDownloadedXlsxText = async (download: Download) => {
+  const files = unzipSync(new Uint8Array(await readFile((await download.path())!)));
+  return Object.entries(files).filter(([name]) => name.endsWith('.xml')).map(([, data]) => strFromU8(data)).join('\n').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+};
 
 // Attendance Monitoring opens on the Assigned Classes grid; this enters a class's roll-call worksheet.
 const openWorksheet = async (page: Page, section: string) => {
@@ -4030,11 +4038,14 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       }
 
       const downloadPromise = page.waitForEvent('download');
-      await page.getByRole('button', { name: 'Export CSV Ledger' }).click();
+      await page.getByRole('button', { name: 'Export official grade sheet (Excel)' }).click();
       const download = await downloadPromise;
-      const csv = await readFile((await download.path())!, 'utf8');
-      expect(csv).toContain('Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %');
-      expect(csv).toContain('"DENT-007","Alice Reyes","81.00%","91.00%","87.00%","93.00%","83.00%","89.00%","2.1","PASS"');
+      expect(download.suggestedFilename()).toMatch(/^CLIN401_.*_Grade_Sheet_2026-2027_1st\.xlsx$/);
+      const xlsx = await readDownloadedXlsxText(download);
+      for (const sheet of ['LEC', 'LAB', 'TFG', 'DATA']) expect(xlsx).toContain(`name="${sheet}"`);
+      for (const header of ['MIDTERM LEC GRADE', 'MIDTERM LAB GRADE', 'FINAL LEC GRADE', 'FINAL LAB GRADE', 'MG (30%)', 'TFG (70%)', 'Alice Reyes']) expect(xlsx).toContain(header);
+      // Lecture x 60% and Laboratory x 40% for each period, the period totals, the course grade and its grade equivalent.
+      for (const value of ['48.6', '36.4', '87', '26', '55.8', '33.2', '89', '62', '88.4', '2.1']) expect(xlsx).toContain(`<v>${value}</v>`);
     });
 
     test('legacy combined period grading requires explicit forward conversion and preserves category IDs', async ({ page }) => {
@@ -4127,7 +4138,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       expect(computeRequests).toBe(0);
     });
 
-    test('Faculty Reports uses saved grouped results in its table, print layout, and CSV', async ({ page }) => {
+    test('Faculty Reports uses saved grouped results in its table, print layout, and Excel export', async ({ page }) => {
       const groupedComponents = (lecture: number, laboratory: number) => ({
         lecture: { component: 'Lecture', status: 'computed', percentage: lecture, categories: [], incomplete: [] },
         laboratory: { component: 'Laboratory', status: 'computed', percentage: laboratory, categories: [], incomplete: [] },
@@ -4180,8 +4191,27 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
           id: 'saved-grouped-report', course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
           semester: '1st Semester', schoolYear: '2026-2027', version: 3, schemaMode: 'periods',
           componentMode: 'lecture_laboratory', componentWeights: { lecture: 60, laboratory: 40 },
-          termRatio: { midterm: 30, final: 70 }, categories: [], midtermCategories: [], finalCategories: [],
+          termRatio: { midterm: 30, final: 70 }, categories: [],
+          midtermCategories: [
+            { id: 101, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', component: 'Lecture' },
+            { id: 102, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', component: 'Laboratory' },
+          ],
+          finalCategories: [
+            { id: 103, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment', component: 'Lecture' },
+            { id: 104, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment', component: 'Laboratory' },
+          ],
         } }) });
+      });
+      // The export reads the live server results (the grade preview) for a current class.
+      await page.route('**/api/faculty/grades/compute', async route => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', results: [
+          { status: 'computed', enrollmentId: '801', studentId: '701', percentage: 88.4, gwa: 2.1, retentionState: 'active', periods: savedGroupResult.periods },
+          { status: 'computed', enrollmentId: '802', studentId: '702', percentage: 79.2, gwa: 2.8, retentionState: 'active', periods: olderCombinedResult.periods },
+          { status: 'incomplete_period', enrollmentId: '803', studentId: '703', periods: {
+            midterm: { period: 'Midterm', status: 'incomplete', percentage: null, categories: [], incomplete: [] },
+            final: { period: 'Final', status: 'incomplete', percentage: null, categories: [], incomplete: [] },
+          } },
+        ] }) });
       });
 
       await page.goto('/reports');
@@ -4209,13 +4239,16 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(printTable.getByRole('row', { includeHidden: true }).filter({ hasText: 'Caleb Reyes' })).toContainText('Prior: 2.5 (Historical)');
 
       const downloadPromise = page.waitForEvent('download');
-      await page.getByRole('button', { name: 'Export CSV' }).click();
+      await page.getByRole('button', { name: 'Export Excel' }).click();
       const download = await downloadPromise;
-      const csv = await readFile((await download.path())!, 'utf8');
-      expect(csv).toContain('Student Number,Student Name,Course Code,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Grade,Remarks');
-      expect(csv).toContain('"DENT-007","Alice Reyes","CLIN401","81.0%","91.0%","87.0","93.0%","83.0%","89.0","2.1"');
-      expect(csv).toContain('"DENT-008","Bea Santos","CLIN401","Unavailable (recompute required)","Unavailable (recompute required)","72.0","Unavailable (recompute required)","Unavailable (recompute required)","84.0","2.8"');
-      expect(csv).toContain('"DENT-009","Caleb Reyes","CLIN401","Pending","Pending","N/A","Pending","Pending","N/A","Prior: 2.5 (Historical)","PENDING"');
+      expect(download.suggestedFilename()).toMatch(/^CLIN401_.*_Grade_Sheet_2026-2027_1st\.xlsx$/);
+      const xlsx = await readDownloadedXlsxText(download);
+      for (const name of ['Alice Reyes', 'Bea Santos', 'Caleb Reyes', 'MIDTERM LEC GRADE', 'FINAL LAB GRADE']) expect(xlsx).toContain(name);
+      // Alice: saved Lecture and Laboratory grades x their shares, Midterm 87 / Final 89, course grade 88.4 = 2.1
+      for (const value of ['48.6', '36.4', '55.8', '33.2', '87', '89', '88.4', '2.1']) expect(xlsx).toContain(`<v>${value}</v>`);
+      // Bea (older combined result): period grades 72 and 84 and course grade 79.2 = 2.8; no Lecture/Laboratory split, so those cells are INC
+      for (const value of ['72', '84', '79.2', '2.8']) expect(xlsx).toContain(`<v>${value}</v>`);
+      expect(xlsx).toContain('INC');
     });
   });
 });

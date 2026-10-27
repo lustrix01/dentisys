@@ -68,6 +68,9 @@ import {
 import { MeetingTimes, type DayTimes } from '../../components/MeetingTimes';
 import { RoomSelector } from '../../components/RoomSelector';
 import { RosterImportModal } from '../../components/RosterImportModal';
+import { recordAudit } from '../../services/auditService';
+import { downloadXlsx } from '../../utils/xlsxDownload';
+import { buildClassList } from '../../utils/reportWorkbook';
 
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
 
@@ -1204,7 +1207,25 @@ export const ClassesAndRosters: React.FC = () => {
     }
   };
 
-  const handleSendAllStudentInvites = async () => {
+  // Class list .xlsx for the open class (contract official-exports X14-X17); archived classes export too.
+const handleExportClassList = async () => {
+  if (!selectedClass) return;
+  const cls = selectedClass;
+  const enrolled = studentsList.filter(st => st.classSections?.some(sec => String(sec.classId) === String(cls.csId)) || String(st.classId) === String(cls.csId));
+  recordAudit({ action: 'Exported class list', module: 'Classes & Rosters', description: `Exported class list for ${cls.courseCode} ${cls.csName}.`, status: 'Success' });
+  try {
+    const { fileName, sheet } = buildClassList({
+      courseCode: cls.courseCode, courseTitle: cls.courseName, section: cls.csName, yearLevel: cls.yearLevel, units: cls.units,
+      lectureUnits: cls.lectureUnits, labUnits: cls.labUnits, faculty: cls.instructorName, schedules: cls.schedule,
+      semester: cls.semester, schoolYear: cls.schoolYear, students: enrolled,
+    });
+    await downloadXlsx(fileName, [sheet]);
+  } catch (err) {
+    showFeedback(err instanceof Error ? err.message : 'Could not export the class list.', 'info');
+  }
+};
+
+const handleSendAllStudentInvites = async () => {
     setIsSendingInvitations(true);
     const invitable = filteredStudents.filter(student => {
       const accountStatus = student.accountStatus ?? 'none';
@@ -1707,6 +1728,16 @@ export const ClassesAndRosters: React.FC = () => {
               >
                 <Upload className="w-3.5 h-3.5" />
                 <span>Import Students</span>
+              </button>
+
+              <button
+                onClick={handleExportClassList}
+                disabled={!selectedClass}
+                className="inline-flex items-center gap-1.5 px-3.5 max-[374px]:px-2.5 py-2 whitespace-nowrap rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-xs font-bold transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                title="Download the class list as an Excel file"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export class list</span>
               </button>
 
               <button

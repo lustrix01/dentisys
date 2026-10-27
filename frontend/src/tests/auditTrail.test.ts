@@ -1,7 +1,7 @@
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  auditCsv, auditCsvRows, auditDateRange, auditQueryString, currentTerm, formatManilaWhen, groupByDay, manilaDayLabel,
+  AUDIT_EXPORT_HEADER, auditCsvRows, auditDateRange, auditQueryString, currentTerm, formatManilaWhen, groupByDay, manilaDayLabel,
   type AuditEntry,
 } from '../services/auditService.ts';
 import { getAdminAuditLogsApi, getFacultyActivityApi, getSecretaryActivityApi } from '../services/apiClient.ts';
@@ -78,7 +78,7 @@ test('date presets resolve to Manila days and This term needs a current term', (
   assert.equal(currentTerm([terms[0]], now), null);
 });
 
-test('CSV expands a batch to one line per member and keeps the formula guard', () => {
+test('export expands a batch to one line per member and keeps the text as it is', () => {
   const batch = entry({
     what: 'Imported students', record: '40 students', change: '40 added',
     batch: { count: 2, members: [{ record: '=HYPERLINK("x")', change: 'added' }, { record: 'Maria Cruz', change: 'added' }] },
@@ -87,9 +87,8 @@ test('CSV expands a batch to one line per member and keeps the formula guard', (
   assert.equal(rows.length, 3);
   assert.deepEqual(rows[0], ['Oct 17, 2026 · 10:16 AM', 'Dr. Ana Reyes · Faculty', 'Changed scores', 'Quiz 2 (Midterm) · DENT 101-A', '3 scores changed', 'Success']);
   assert.deepEqual(rows[2].slice(3, 5), ['Maria Cruz', 'added']);
-  const csv = auditCsv([batch]).split('\n');
-  assert.equal(csv[0], '"When","Who","What","Record","Change","Status"');
-  assert.match(csv[1], /"'=HYPERLINK\(""x""\)"/);
+  assert.deepEqual(AUDIT_EXPORT_HEADER, ['When', 'Who', 'What', 'Record', 'Change', 'Status']);
+  assert.equal(auditCsvRows([batch])[0][3], '=HYPERLINK("x")');
 });
 
 test('system and unknown-account rows keep their text in the export', () => {

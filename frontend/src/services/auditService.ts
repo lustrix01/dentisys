@@ -168,15 +168,7 @@ export function currentTerm<T extends { startDate: string | null; endDate: strin
   return terms.find(t => t.startDate && t.endDate && t.startDate <= today && today <= t.endDate) ?? null;
 }
 
-// Formula guard: a leading = + - @ (after whitespace/control chars) is prefixed with ' so spreadsheets do not run it.
-// eslint-disable-next-line no-control-regex
-const FORMULA = /^[\s\u0000-\u001f\u007f-\u009f]*[=+\-@]/u;
-export const csvCell = (value: unknown): string => {
-  const text = String(value ?? '');
-  return `"${(FORMULA.test(text) ? `'${text}` : text).replaceAll('"', '""')}"`;
-};
-
-export const AUDIT_CSV_HEADER = ['When', 'Who', 'What', 'Record', 'Change', 'Status'];
+export const AUDIT_EXPORT_HEADER = ['When', 'Who', 'What', 'Record', 'Change', 'Status'];
 
 /** Same columns as the screen; a batch becomes one line per member. */
 export function auditCsvRows(entries: AuditEntry[]): string[][] {
@@ -187,6 +179,3 @@ export function auditCsvRows(entries: AuditEntry[]): string[][] {
       : [[...base, e.record, e.change, e.status]];
   });
 }
-
-export const auditCsv = (entries: AuditEntry[]): string =>
-  [AUDIT_CSV_HEADER, ...auditCsvRows(entries)].map(row => row.map(csvCell).join(',')).join('\n');

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types --test src/tests/biometricAttendance.test.ts src/tests/guidedCapture.test.ts src/tests/geofenceRadiusAndMfaSetup.test.ts src/tests/retentionMonitoringContract.test.ts src/tests/periodGradingContract.test.ts src/tests/attendanceNormalization.test.ts src/tests/emailHistory.test.ts src/tests/remedialProgressionContract.test.ts src/tests/personNameValidation.test.ts src/tests/rosterImport.test.ts src/tests/gradeConversion.test.ts src/tests/sessionTiming.test.ts src/tests/gradeValue.test.ts src/tests/refreshKeepalive.test.ts src/tests/attendanceRevokedSessions.test.ts src/tests/auditBatchId.test.ts src/tests/auditTrail.test.ts src/tests/classArchiving.test.ts src/tests/importDestination.test.ts src/tests/gradeSheetImport.test.ts src/tests/sessionDefaults.test.ts src/tests/classArchivingViews.test.ts",
+    "test": "node --experimental-strip-types --test src/tests/biometricAttendance.test.ts src/tests/guidedCapture.test.ts src/tests/geofenceRadiusAndMfaSetup.test.ts src/tests/retentionMonitoringContract.test.ts src/tests/periodGradingContract.test.ts src/tests/attendanceNormalization.test.ts src/tests/emailHistory.test.ts src/tests/remedialProgressionContract.test.ts src/tests/personNameValidation.test.ts src/tests/rosterImport.test.ts src/tests/gradeConversion.test.ts src/tests/sessionTiming.test.ts src/tests/gradeValue.test.ts src/tests/refreshKeepalive.test.ts src/tests/attendanceRevokedSessions.test.ts src/tests/auditBatchId.test.ts src/tests/auditTrail.test.ts src/tests/classArchiving.test.ts src/tests/importDestination.test.ts src/tests/gradeSheetImport.test.ts src/tests/officialGradeSheetExport.test.ts src/tests/reportWorkbook.test.ts src/tests/sessionDefaults.test.ts src/tests/classArchivingViews.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -19,7 +19,8 @@
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.18.0",
     "read-excel-file": "9.3.10",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "write-excel-file": "4.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

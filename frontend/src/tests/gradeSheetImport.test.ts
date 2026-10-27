@@ -235,3 +235,31 @@ test('lecture-only class: LAB sheets are skipped, an unlabeled sheet is Lecture,
   assert.deepEqual(normal.skippedSheets, []);
   assert.equal(normal.sheets.length, 2);
 });
+
+test('row-8 titles name the items (exported sheets); without them the names stay positional (X23)', () => {
+  const titled = lecture.map(r => [...r]);
+  titled[7] = [];
+  titled[7][colNo('F')] = 'Output A'; titled[7][colNo('L')] = 'Midterm Quiz'; titled[7][colNo('N')] = '  Pop Quiz ';
+  titled[7][colNo('U')] = 'Midterm Exam'; titled[7][colNo('AD')] = 12; // a number is not a title
+  const s = parseSheet('Sheet2', titled, 0)!;
+  const used = (p: string) => s.items.filter(i => i.period === p && isUsed(i)).map(i => `${i.title}/${i.categoryName}`);
+  assert.deepEqual(used('Midterm'), ['Recitation/Recitation', 'Output A/Outputs', 'Midterm Quiz/Quiz', 'Pop Quiz/Quiz', 'Midterm Exam/Major Exam']);
+  assert.deepEqual(used('Final'), ['Recitation/Recitation', 'Major Exam/Major Exam']);
+  // the same sheet without row 8 text is read exactly as before
+  const plain = parseSheet('Sheet2', lecture, 0)!;
+  assert.deepEqual(plain.items.filter(isUsed).map(i => i.title), ['Recitation', 'Outputs 1', 'Quiz 1', 'Quiz 2', 'Major Exam', 'Recitation', 'Major Exam']);
+});
+
+test('columns of an attendance-sourced category are skipped: not new, not counted', () => {
+  const c = ctx();
+  c.categories.push({ ...cat(9, 'Recitation', 10), attendance: true }); // saved Recitation is attendance-sourced here
+  c.assessments = c.assessments.filter(a => a.id !== 'a-rec');
+  const p = buildPreview(sheets(), c, emptyDecisions());
+  const view = p.sheets[0];
+  assert.ok(!view.items.some(i => i.item.title === 'Recitation' && i.item.period === 'Midterm'));
+  assert.ok(view.rows.every(r => r.cells.length === view.items.length));
+  assert.equal(p.counts.itemsToCreate, 0);
+  // ordinary classes still list it
+  const plain = buildPreview(sheets(), ctx(), emptyDecisions());
+  assert.ok(plain.sheets[0].items.some(i => i.item.title === 'Recitation'));
+});

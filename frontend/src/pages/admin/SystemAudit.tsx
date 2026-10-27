@@ -15,6 +15,8 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { recordAudit } from '../../services/auditService';
 import { formatGrade } from '../../utils/gradeHelper';
+import { downloadXlsx } from '../../utils/xlsxDownload';
+import { buildReportSheet, dayToDate } from '../../utils/reportWorkbook';
 
 type ReportTab = 'students' | 'retention' | 'attendance';
 
@@ -26,14 +28,6 @@ import GradeValue from '../../components/GradeValue';
 import { flushSync } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { PrintStyle, PrintHeader, PrintCaption, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
-
-const csvEscapeField = (value: unknown) => {
-  const text = String(value ?? '—');
-  // Spreadsheet formula detection must recognize control characters before a formula marker.
-  // eslint-disable-next-line no-control-regex
-  const safeText = /^[\s\u0000-\u001f\u007f-\u009f]*[=+\-@]/u.test(text) ? `'${text}` : text;
-  return `"${safeText.replace(/"/g, '""')}"`;
-};
 
 export const DeanReports: React.FC = () => {
   const { user } = useAuth();
@@ -274,54 +268,52 @@ export const DeanReports: React.FC = () => {
 
   const totalAttendancePages = Math.ceil(filteredAttendanceRows.length / pageSize) || 1;
 
-  // ── CSV export ───────────────────────────────────────────
-  const handleExportCSV = () => {
-    recordAudit({ action: 'Exported report CSV', module: 'Reports & Analytics', description: `Exported ${activeTab} report data as CSV.`, status: 'Success' });
-    const now = new Date();
-    const ts = now.toISOString().replace('T', ' ').substring(0, 19);
-    let csv = '';
-    let fileName = '';
+  // ── Excel export ─────────────────────────────────────────
+  const handleExportExcel = async () => {
+    recordAudit({ action: 'Exported report', module: 'Reports & Analytics', description: `Exported ${activeTab} report data as Excel.`, status: 'Success' });
+    const ts = new Date().toISOString().replace('T', ' ').substring(0, 19).replace(/[: ]/g, '-');
+    const term = schoolYear === 'all' ? 'All school years' : `AY ${schoolYear === 'current' ? (currentSchoolYear ?? '') : schoolYear}`;
+    const filter = currentSelectedClass?.name ? `Class: ${currentSelectedClass.name}` : 'All classes';
+    const gradeOf = (s: any) => {
+      const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
+      const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
+      return gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? formatGrade(Number(gradeVal)) : 'N/A';
+    };
+    const base = { filter, term, by: user?.display_name ?? '' };
+    let fileName: string;
+    let sheet;
 
     if (activeTab === 'students') {
-      csv = `Student Number,Student Name,Class,Year Level,Grade,Status,Face Enrolled\n`;
-      csv += filtered.map(s => {
-        const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
-        const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
-        const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? formatGrade(Number(gradeVal)) : 'N/A';
-        return [s.studentId, s.name, s.className || '—', s.yearLevel, gradeStr, s.status, s.faceEnrolled ? 'Yes' : 'No'].map(csvEscapeField).join(',');
-      }).join('\n');
-      fileName = `Student_Summary_${ts.replace(/[: ]/g, '-')}.csv`;
-
+      fileName = `Student_Summary_${ts}.xlsx`;
+      sheet = buildReportSheet({
+        ...base, sheet: 'Students', title: 'STUDENT SUMMARY',
+        columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 }, { header: 'Year Level', width: 11 },
+          { header: 'Grade', width: 9 }, { header: 'Status', width: 12 }, { header: 'Face Enrolled', width: 14 }],
+        rows: filtered.map(s => [s.studentId, s.name, s.className || '—', s.yearLevel, gradeOf(s), s.status, s.faceEnrolled ? 'Yes' : 'No']),
+      });
     } else if (activeTab === 'retention') {
-      csv = `Student Number,Student Name,Class,Grade,Status,Pending Remedials\n`;
-      csv += filtered.map((s: any) => {
-        const pendingRem = Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0;
-        const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
-        const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
-        const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? formatGrade(Number(gradeVal)) : 'N/A';
-        return [s.studentId, s.name, s.className || '—', gradeStr, s.status, pendingRem].map(csvEscapeField).join(',');
-      }).join('\n');
-      fileName = `Retention_Report_${ts.replace(/[: ]/g, '-')}.csv`;
-
+      fileName = `Retention_Report_${ts}.xlsx`;
+      sheet = buildReportSheet({
+        ...base, sheet: 'Retention', title: 'RETENTION REPORT',
+        columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 },
+          { header: 'Grade', width: 9 }, { header: 'Status', width: 12 }, { header: 'Pending Remedials', width: 18 }],
+        rows: filtered.map((s: any) => [s.studentId, s.name, s.className || '—', gradeOf(s), s.status,
+          Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0]),
+      });
     } else {
-      csv = `Student Number,Student Name,Class,Course Code,Date,Status\n`;
+      fileName = `Attendance_Report_${ts}.xlsx`;
       const relevantRows = selectedClassId ? filteredAttendanceRows : (historyRows.length > 0 ? historyRows : attendanceRecords);
-      csv += relevantRows
-        .map(r => {
+      sheet = buildReportSheet({
+        ...base, sheet: 'Attendance', title: 'ATTENDANCE REPORT',
+        columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 },
+          { header: 'Course Code', width: 14 }, { header: 'Date', width: 14 }, { header: 'Status', width: 12 }],
+        rows: relevantRows.map(r => {
           const s = students.find(st => st.id === r.studentId);
-          return [s?.studentId || '-', s?.name || '-', r.className || currentSelectedClass?.name || '—', r.subjectCode, r.date, r.status].map(csvEscapeField).join(',');
-        }).join('\n');
-      fileName = `Attendance_Report_${ts.replace(/[: ]/g, '-')}.csv`;
+          return [s?.studentId || '-', s?.name || '-', r.className || currentSelectedClass?.name || '—', r.subjectCode, dayToDate(String(r.date)) ?? r.date, r.status];
+        }),
+      });
     }
-
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', fileName);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    await downloadXlsx(fileName, [sheet]);
   };
 
   const handlePrint = () => {
@@ -350,11 +342,11 @@ export const DeanReports: React.FC = () => {
     <div className="flex items-center gap-2 no-print flex-shrink-0">
       <button
         type="button"
-        onClick={handleExportCSV}
+        onClick={handleExportExcel}
         className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white font-bold text-xs transition-all shadow-sm cursor-pointer whitespace-nowrap"
       >
         <Download className="w-3.5 h-3.5" />
-        <span>Export CSV</span>
+        <span>Export Excel</span>
       </button>
       <button
         type="button"

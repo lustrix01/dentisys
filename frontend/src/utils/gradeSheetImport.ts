@@ -166,7 +166,8 @@ export function parseSheet(name: string, rows: Cell[][], index: number): ParsedS
         const owner = ownerOf(c);
         const mine = ownerPairs.get(owner?.col ?? -1)!;
         const base = owner ? (/^lab exercises?$/i.test(owner.text) ? 'Lab Exercise' : titleCase(owner.text)) : 'Item';
-        const title = owner && mine.length === 1 ? base : `${base} ${mine.indexOf(c) + 1}`;
+        // Exported sheets (X23) name each item in row 8; official sheets leave it empty.
+        const title = text(row(8)[c]) || (owner && mine.length === 1 ? base : `${base} ${mine.indexOf(c) + 1}`);
         items.push({ key: `${index}:${half.period}:${c}`, sheetIndex: index, period: half.period, col: c, title, kind: 'points', maxScore: num(maxRow[c])!, categoryName });
       }
     });
@@ -394,7 +395,9 @@ export function buildPreview(allSheets: ParsedSheet[], ctx: ImportContext, dec: 
     const comp = compOf(s);
     const itemViews: ItemView[] = [];
     const pool = (period: Period) => ctx.assessments.filter(a => a.period === period && !a.attendance && comp !== null && compMatches(a.component, comp));
-    for (const it of s.items.filter(isUsed)) {
+    // Attendance-sourced categories (e.g. exported attendance columns) hold no scores to import: skipped, not listed as new.
+    const attendanceItem = (it: SheetItem) => !!comp && ctx.categories.some(c => c.attendance && c.period === it.period && compMatches(c.component, comp) && categoryKey(c.name) === categoryKey(it.categoryName));
+    for (const it of s.items.filter(i => isUsed(i) && !attendanceItem(i))) {
       let assessment: SavedAssessment | null = null;
       let chosen = false;
       if (comp) {
@@ -437,7 +440,7 @@ export function buildPreview(allSheets: ParsedSheet[], ctx: ImportContext, dec: 
     const rowViews: RowView[] = s.rows.map(r => {
       const candidates = matchStudentName(r.name, index);
       const decisionKey = studentDecisionKey(r, s.index);
-      const hasScores = Object.values(r.cells).some(c => c.kind !== 'blank');
+      const hasScores = Object.entries(r.cells).some(([k, c]) => itemByKey.has(k) && c.kind !== 'blank');
       const pick = dec.pick[decisionKey];
       let state: RowView['state'];
       let studentId: string | null = null;
@@ -454,7 +457,7 @@ export function buildPreview(allSheets: ParsedSheet[], ctx: ImportContext, dec: 
     for (const r of rowViews) {
       if (r.state === 'pick') blockers.push(`Row ${r.row.rowNo} of "${s.name}": choose a student or leave the row out.`);
       if (r.state === 'duplicate') blockers.push(`Row ${r.row.rowNo} of "${s.name}": the same student is on another row. Leave one out.`);
-      r.cells = Object.entries(r.row.cells).map(([itemKey, c]): CellView => {
+      r.cells = Object.entries(r.row.cells).filter(([k]) => itemByKey.has(k)).map(([itemKey, c]): CellView => {
         const v = itemByKey.get(itemKey)!;
         if (c.kind === 'blank') return { itemKey, kind: 'blank' };
         if (c.kind === 'invalid') return { itemKey, kind: 'held', reason: `"${c.raw}" is not a number` };

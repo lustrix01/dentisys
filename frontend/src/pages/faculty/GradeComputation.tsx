@@ -81,10 +81,10 @@ import {
   normalizeDateRangesForPayload,
   formatPeriodIncompleteReason,
   extractPeriodEvaluation,
-  generateGradeSummaryCSV,
   isPeriodComputeResult
 } from '../../utils/periodGradingHelper';
 import { formatGrade, percentageToGWAExact, matchesActivityFilters, saveStatusBadge } from '../../utils/gradeHelper';
+import { exportGradeWorkbook } from '../../utils/gradeSheetExportFlow';
 import { GradeSheetImportPanel } from '../../components/GradeSheetImportPanel';
 import type { GradeSheetImportPlan } from '../../utils/gradeSheetImport';
 import type {
@@ -2968,29 +2968,21 @@ export const GradeComputation: React.FC = () => {
     }
   };
 
-  const handleExportCSV = () => {
-    recordAudit({
-      action: 'Exported grade CSV',
-      module: 'Grade Computation',
-      description: `Exported grade ledger for ${selectedSubjectCode}.`,
-      status: 'Success',
-    });
-    const csvContent = generateGradeSummaryCSV(
-      sortedSummaryStudents,
-      selectedSubjectCode,
-      isPeriodMode,
-      computeResultsByEnrollment,
-      isLectureLaboratoryMode ? 'lecture_laboratory' : 'combined'
-    );
-
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `${selectedSubjectCode}_Grade_Summary.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // Official grade sheet workbook (contract official-exports.md); classes without the official Grade Weights get the plain summary.
+  const handleExportExcel = async () => {
+    const cls = facultyClasses.find(c => c.id === selectedClassId);
+    if (!cls) return;
+    try {
+      await exportGradeWorkbook({ cls, students: activeStudents, assessments, scores: assessmentScores, attendanceRecords, by: user?.display_name ?? '' });
+      recordAudit({
+        action: 'Exported grade sheet',
+        module: 'Grade Computation',
+        description: `Exported grade sheet for ${selectedSubjectCode}.`,
+        status: 'Success',
+      });
+    } catch (err) {
+      showFeedback(err instanceof Error ? err.message : 'Unable to export the grade sheet.', 'error');
+    }
   };
 
   const [printedAt, setPrintedAt] = useState<Date | null>(null);
@@ -5071,13 +5063,13 @@ export const GradeComputation: React.FC = () => {
               <div className="flex items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
                 <button
                   type="button"
-                  onClick={handleExportCSV}
-                  aria-label="Export CSV Ledger"
+                  onClick={handleExportExcel}
+                  aria-label="Export official grade sheet (Excel)"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
-                  title="Export grade ledger as CSV spreadsheet"
+                  title="Export official grade sheet as an Excel workbook"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span>Export CSV</span>
+                  <span>Export Excel</span>
                 </button>
                 <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
                 <button
