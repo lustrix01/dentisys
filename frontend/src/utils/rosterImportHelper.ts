@@ -246,13 +246,12 @@ export function findClassMatchingHeader<T extends ClassLike>(header: RosterPDFHe
   return classes.find(cls => compareRosterHeader(header, cls).length === 0);
 }
 
-/** N5: the Dean term for the file's semester, or the reason a new class cannot be made. */
-export function termForHeader(header: RosterPDFHeader, currentSchoolYear: string, terms: Array<{ id: number | null; schoolYear: string; semester: string }>): { termId: string; pastYear?: string; noTerm?: string } {
-  if (header.schoolYear && header.schoolYear !== currentSchoolYear.replace(/\s/g, '')) {
-    return { termId: '', pastYear: `This file is for AY ${header.schoolYear}. New classes can only be made for the current school year.` };
-  }
-  const term = header.semester && terms.find(item => item.id !== null && item.schoolYear === currentSchoolYear && semesterCode(item.semester) === header.semester);
-  return term ? { termId: String(term.id) } : { termId: '', noTerm: `No term for AY ${header.schoolYear ?? ''} ${header.semester ? semesterName[header.semester] : ''}`.replace(/\s+/g, ' ').trim() + '. Ask the Dean to add it.' };
+/** N5: default to the Dean term matching the file header; creating a class requires the Faculty's selected term to be current-year. */
+export function termForHeader(header: RosterPDFHeader, currentSchoolYear: string, terms: Array<{ id: number | null; schoolYear: string; semester: string }>): { termId: string; noTerm?: string } {
+  const fileYear = header.schoolYear?.replace(/\s/g, '') ?? '';
+  if (fileYear && fileYear !== currentSchoolYear.replace(/\s/g, '')) return { termId: '', noTerm: `This file is for AY ${fileYear}. Choose a ${currentSchoolYear} term to create the class here.` };
+  const term = header.semester && fileYear && terms.find(item => item.id !== null && item.schoolYear.replace(/\s/g, '') === fileYear && semesterCode(item.semester) === header.semester);
+  return term ? { termId: String(term.id) } : { termId: '', noTerm: `No Dean-defined term matches AY ${fileYear} ${header.semester ? semesterName[header.semester] : ''}. Choose a term from the list or ask the Dean to add it.`.replace(/\s+/g, ' ').trim() };
 }
 
 /** N3a: DentiSys keeps the units it has recorded for a course; say so when the file disagrees. */

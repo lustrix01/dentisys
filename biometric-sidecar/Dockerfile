@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && pip install --no-cache-dir --force-reinstall --no-deps opencv-contrib-python-headless==4.11.0.86
 
 COPY app.py ./
-RUN mkdir -p /var/lib/dentisys-biometric \
+RUN mkdir -p /app/models /var/lib/dentisys-biometric \
     && useradd --create-home --uid 10001 --shell /usr/sbin/nologin dentisys
 RUN chown -R dentisys:dentisys /app /var/lib/dentisys-biometric
 USER dentisys

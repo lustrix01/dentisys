@@ -18,13 +18,13 @@ test('provisional roster creates real records and repeat import preserves their 
   await page.locator('a[href="/classes"]').click();
   const importFile = async () => {
     await page.getByRole('button', { name: 'Import Roster', exact: true }).click();
-    await expect(page.getByText('Official format not confirmed.', { exact: true })).toBeVisible();
-    await page.getByLabel('Target class section').selectOption(String(target.csId));
-    await page.getByLabel('Provisional roster file').setInputFiles({ name: 'fictional-live.csv', mimeType: 'text/csv', buffer: csv });
+    await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).toBeVisible();
+    await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'fictional-live.csv', mimeType: 'text/csv', buffer: csv });
     await expect(page.getByText('Parsed Students (1)', { exact: true })).toBeVisible();
+    await page.getByLabel('Target class section').selectOption(String(target.csId));
     await page.getByRole('checkbox', { name: /I reviewed the source course/ }).check();
     await page.getByRole('button', { name: 'Confirm & Import (1) Students' }).click();
-    await expect(page.getByText('Provisional Student Roster Import', { exact: true })).not.toBeVisible();
+    await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).not.toBeVisible();
   };
   await importFile();
   const read = async () => {

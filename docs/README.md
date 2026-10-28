@@ -26,6 +26,7 @@ Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) 
 - [Start Session defaults and small fixes, October 2026](session-default-times-2026-10.md): session times from the class schedule, the geofence radius box and the authenticator setup window.
 - [Owhie's UI changes merged, October 2026](owhie-merge-2026-10.md): what was taken from Owhie's layout branch, what was changed or replaced in the merge, and the Owner's rulings.
 - [Owhie's responsive changes merged, October 2026](owhie-responsive-merge-2026-10.md): the second Owhie merge (phone layouts, Grade Computation school years), its fixes and rulings.
+- [Owhie's roster import changes merged, October 2026](owhie-roster-import-merge-2026-10.md): the roster import redesign merge, its fixes, and the Sex / middle-name rulings.
 - Approved specification amendment records: [2026-10-01](spec-amendments-2026-10-01.md), [2026-10-03](spec-amendments-2026-10-03.md), [2026-10-04](spec-amendments-2026-10-04.md), [2026-10-09](spec-amendments-2026-10-09.md), [2026-10-09 deployment](spec-amendments-2026-10-09-deployment.md), [2026-10-10 academic terms](spec-amendments-2026-10-10-academic-terms.md); proposals in [proposals/](proposals/).
 
 ## Architecture and design

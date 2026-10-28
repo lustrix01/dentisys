@@ -59,10 +59,10 @@ export const Modal: React.FC<ModalProps> = ({
 
       {/* Modal Content */}
       <div 
-        className={`relative w-full min-w-0 ${sizeClasses[size]} glass shadow-2xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden transform transition-all duration-300 scale-100 flex flex-col ${fullScreenOnMobile ? 'h-full max-h-full rounded-none sm:h-auto sm:max-h-[90vh] sm:rounded-3xl' : 'max-h-[90vh] rounded-2xl sm:rounded-3xl'}`}
+        className={`relative w-full min-w-0 ${sizeClasses[size]} bg-white dark:bg-slate-900 shadow-2xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden transform transition-all duration-300 scale-100 flex flex-col ${fullScreenOnMobile ? 'h-full max-h-full rounded-none sm:h-auto sm:max-h-[90vh] sm:rounded-3xl' : 'max-h-[90vh] rounded-2xl sm:rounded-3xl'}`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-100 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/40">
+        <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900">
           <h3 className="min-w-0 text-lg sm:text-xl font-semibold font-heading tracking-tight text-slate-800 dark:text-slate-100 break-words">
             {title}
           </h3>
@@ -75,7 +75,7 @@ export const Modal: React.FC<ModalProps> = ({
         </div>
 
         {/* Body */}
-        <div className="min-w-0 px-4 py-4 sm:px-6 sm:py-6 overflow-y-auto flex-1 bg-white/20 dark:bg-slate-950/20">
+        <div className="min-w-0 px-4 py-4 sm:px-6 sm:py-6 overflow-y-auto flex-1 bg-white dark:bg-slate-950">
           {children}
         </div>
       </div>

@@ -40,7 +40,7 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 - Remedial is a row action after Finals with Student, Course and Section locked; no separate "Schedule a Remedial" action — UI-003 — implemented, tests passing.
 - Two remedial attempts, each passing at 50% or more; the second only after a failed first; the original course grade never changes — UI-003 — implemented, tests passing.
 - Students get a stored in-app notification when a remedial is assigned — UI-003, NTF-001 — implemented, tests passing.
-- Student roster import into existing classes from the official class list PDF (or the provisional CSV template, still labelled "Official format not confirmed"), with total-count and wrong-class checks — IMP-001 — implemented, tests passing.
+- Student roster import into existing classes from the official class list PDF (or the CSV template; no "Official format not confirmed" label since 2026-10-28), with total-count and wrong-class checks — IMP-001 — implemented, tests passing.
 - Official grade sheet workbook (.xlsx) import of raw scores, name matching, ticked create/link/remove and one all-or-nothing save — IMP-001 — implemented, tests passing.
 
 ## Attendance

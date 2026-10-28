@@ -41,21 +41,26 @@ async function setup(page: Page, failEmail = '') {
   await expect(page).toHaveURL('/');
   await page.locator('a[href="/classes"]').click();
   await page.getByRole('button', { name: 'Import Roster', exact: true }).click();
-  await expect(page.getByText('Official format not confirmed.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Target class section')).toHaveCount(0);
   return { creates, enrolls, classCreates };
 }
 
 test('provisional PDF keeps all rows unselected, flags marks, preserves fields and resolves existing server IDs', async ({ page }) => {
   const { creates, enrolls } = await setup(page);
-  await page.getByLabel('Provisional roster file').setInputFiles('e2e/fixtures/provisional-roster.pdf');
+  await page.getByLabel('Class list or student roster file').setInputFiles('e2e/fixtures/provisional-roster.pdf');
   await expect(page.getByText('Parsed Students (3)', { exact: true })).toBeVisible();
   await expect(page.getByText('Possible crossed-out row', { exact: true })).toHaveCount(1);
   await expect(page.getByLabel('Include student 2099-01-12345', { exact: true })).not.toBeChecked();
   await expect(page.getByLabel('Include student 2099-1234-56789', { exact: true })).not.toBeChecked();
   await expect(page.getByLabel('First name for 2099-1234-56789', { exact: true })).toHaveValue('José Miguel Reyes');
   await expect(page.getByLabel('Email for 2099-1234-56789', { exact: true })).toHaveValue('actual.fixture@bicol-u.edu.ph');
+  // Every row here is flagged for review or has an error, so bulk select has nothing to select.
+  await expect(page.getByRole('button', { name: 'Select all visible' })).toBeDisabled();
+  await expect(page.getByLabel('Include student 2099-01-12345', { exact: true })).not.toBeChecked();
   await expect(page.getByLabel('Year level for 2099-01-12345', { exact: true })).toHaveValue('2');
   // This file has a course/section/term header, so Step 1 is picked from it ("New class from this file"); the Faculty changes it.
+  await expect(page.getByLabel('Target class section')).toBeVisible();
   await expect(page.getByLabel('Target class section').locator('option')).toHaveCount(2);
   await expect(page.getByLabel('Target class section').locator('option').nth(1)).toHaveText(/1ST, 2099-2100/);
   await page.getByLabel('Target class section').selectOption('11');
@@ -65,14 +70,14 @@ test('provisional PDF keeps all rows unselected, flags marks, preserves fields a
   await expect(page.getByRole('button', { name: 'Confirm & Import (1) Students' })).toBeDisabled();
   await page.getByRole('checkbox', { name: /I reviewed the source course/ }).check();
   await page.getByRole('button', { name: 'Confirm & Import (1) Students' }).click();
-  await expect(page.getByText('Provisional Student Roster Import', { exact: true })).not.toBeVisible();
+  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).not.toBeVisible();
   expect(creates).toHaveLength(0);
   expect(enrolls).toEqual([{ csId: 11, studentIds: [7001] }]);
 });
 
 test('partial CSV failure remains visible and retry does not repeat successful rows or mask email conflicts', async ({ page }) => {
   const { creates, enrolls } = await setup(page, 'conflict@bicol-u.edu.ph');
-  await page.getByLabel('Provisional roster file').setInputFiles({ name: 'fictional.csv', mimeType: 'text/csv', buffer: Buffer.from('Student ID,First Name,Last Name,Email,Year Level,Contact #,Gender\n2099-3333-44444,Ana,Reyes,ana.fixture@bicol-u.edu.ph,2,00123,Female\n2099-5555-66666,Bea,Santos,conflict@bicol-u.edu.ph,,,') });
+  await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'fictional.csv', mimeType: 'text/csv', buffer: Buffer.from('Student ID,First Name,Last Name,Email,Year Level,Contact #,Gender\n2099-3333-44444,Ana,Reyes,ana.fixture@bicol-u.edu.ph,2,00123,Female\n2099-5555-66666,Bea,Santos,conflict@bicol-u.edu.ph,,,') });
   await expect(page.getByText('Parsed Students (2)', { exact: true })).toBeVisible();
   await page.getByRole('checkbox', { name: /I reviewed the source course/ }).check();
   await page.getByRole('button', { name: 'Confirm & Import (2) Students' }).click();
@@ -83,7 +88,7 @@ test('partial CSV failure remains visible and retry does not repeat successful r
   expect(creates[1]).not.toHaveProperty('yearLevel');
   await page.getByLabel('Email for 2099-5555-66666', { exact: true }).fill('bea.fixture@bicol-u.edu.ph');
   await page.getByRole('button', { name: 'Confirm & Import (1) Students' }).click();
-  await expect(page.getByText('Provisional Student Roster Import', { exact: true })).not.toBeVisible();
+  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).not.toBeVisible();
   expect(creates.filter(row => row.studentId === '2099-3333-44444')).toHaveLength(1);
   expect(creates).toHaveLength(3);
 });
@@ -97,21 +102,22 @@ test('retry resolves a committed student after the creation response is lost', a
     if (!committed) { committed = true; return route.abort('failed'); }
     return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ status: 'error', message: 'Student number already exists.' }) });
   });
+  await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'fictional-retry.csv', mimeType: 'text/csv', buffer: Buffer.from('Student ID,First Name,Last Name,Institutional Email\n2099-8888-99999,Ana,Reyes,ana.retry@bicol-u.edu.ph') });
+  await expect(page.getByText('Parsed Students (1)', { exact: true })).toBeVisible();
   await page.getByLabel('Target class section').selectOption('11');
-  await page.getByLabel('Provisional roster file').setInputFiles({ name: 'fictional-retry.csv', mimeType: 'text/csv', buffer: Buffer.from('Student ID,First Name,Last Name,Institutional Email\n2099-8888-99999,Ana,Reyes,ana.retry@bicol-u.edu.ph') });
   await page.getByRole('checkbox', { name: /I reviewed the source course/ }).check();
   await page.getByRole('button', { name: 'Confirm & Import (1) Students' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Rows requiring correction' })).toContainText('2099-8888-99999');
   expect(creates).toHaveLength(1);
   await page.getByRole('button', { name: 'Confirm & Import (1) Students' }).click();
-  await expect(page.getByText('Provisional Student Roster Import', { exact: true })).not.toBeVisible();
+  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).not.toBeVisible();
   expect(creates).toHaveLength(2);
   expect(enrolls).toEqual([{ csId: 11, studentIds: [8002] }]);
 });
 
 test('missing institutional email blocks saves until a valid allowed email is supplied', async ({ page }) => {
   const { creates, enrolls } = await setup(page);
-  await page.getByLabel('Provisional roster file').setInputFiles({ name: 'fictional-missing-email.csv', mimeType: 'text/csv', buffer: Buffer.from('Student ID,First Name,Last Name,Institutional Email\n2099-2222-33333,Ana,Reyes,') });
+  await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'fictional-missing-email.csv', mimeType: 'text/csv', buffer: Buffer.from('Student ID,First Name,Last Name,Institutional Email\n2099-2222-33333,Ana,Reyes,') });
   await expect(page.getByText('Institutional email is required before this row can be imported.', { exact: true })).toBeVisible();
   await page.getByRole('checkbox', { name: /I reviewed the source course/ }).check();
   await expect(page.getByRole('button', { name: 'Confirm & Import (0) Students' })).toBeDisabled();
@@ -123,7 +129,7 @@ test('missing institutional email blocks saves until a valid allowed email is su
   await expect(page.getByRole('button', { name: 'Confirm & Import (0) Students' })).toBeDisabled();
   await page.getByLabel('Email for 2099-2222-33333', { exact: true }).fill('ana.required@bicol-u.edu.ph');
   await page.getByRole('button', { name: 'Confirm & Import (1) Students' }).click();
-  await expect(page.getByText('Provisional Student Roster Import', { exact: true })).not.toBeVisible();
+  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).not.toBeVisible();
   expect(creates).toHaveLength(1);
   expect(creates[0]).toMatchObject({ studentId: '2099-2222-33333', email: 'ana.required@bicol-u.edu.ph' });
 });
@@ -137,7 +143,7 @@ const classList = (over: Partial<ClassListOptions> = {}): ClassListOptions => ({
 test('official class list for a class that does not exist creates it, then adds the students', async ({ page }) => {
   const pdf = await makeClassListPdf(page, classList());
   const { creates, enrolls, classCreates } = await setup(page);
-  await page.getByLabel('Provisional roster file').setInputFiles({ name: 'fictional-class-list.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'fictional-class-list.pdf', mimeType: 'application/pdf', buffer: pdf });
   await expect(page.getByText('Parsed Students (2)', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Target class section')).toHaveValue('-1');
   await expect(page.getByLabel('Target class section').locator('option').first()).toHaveText('New class from this file');
@@ -150,19 +156,19 @@ test('official class list for a class that does not exist creates it, then adds 
   await expect(page.getByText('Laboratory units 0: this class is graded Lecture only.')).toBeVisible();
   await expect(page.getByLabel('Meeting 1 room')).toHaveValue('CDM 1');
   await expect(page.getByLabel('Meeting 3 day')).toHaveValue('Fri');
-  await expect(page.getByText('Every meeting needs a room.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Enter a room.', { exact: true })).toHaveCount(2);
   await page.getByLabel('Meeting 2 room').fill('CDM2');
   await page.getByLabel('Meeting 3 room').fill('CDM2');
-  await expect(page.getByText('Every meeting needs a room.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Enter a room.', { exact: true })).toHaveCount(0);
   // Rows that only need ticking are not "no students": the empty-class hint is for files with no addable row.
   await expect(page.getByText('No students are ready to add. To make an empty class, use Create Class.')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Create class and add 0 students' })).toBeDisabled();
   await page.getByLabel('Include student 2099-0001-00001', { exact: true }).check();
   await page.getByLabel('Include student 2099-0001-00002', { exact: true }).check();
   await expect(page.getByText('No students are ready to add. To make an empty class, use Create Class.')).toHaveCount(0);
-  await page.getByRole('checkbox', { name: /I reviewed the source course/ }).check();
+  await page.getByRole('checkbox', { name: /I reviewed the class details/ }).check();
   await page.getByRole('button', { name: 'Create class and add 2 students' }).click();
-  await expect(page.getByText('Provisional Student Roster Import', { exact: true })).not.toBeVisible();
+  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).not.toBeVisible();
   expect(classCreates).toHaveLength(1);
   expect(classCreates[0]).toMatchObject({ csName: 'NEW 200-DMD-1A', block: 'DMD-1A', courseCode: 'NEW 200', courseName: 'Fictional Studies', academicTermId: 5, yearLevel: 1, lectureUnits: 2, labUnits: null, lecRoom: 'CDM 1' });
   expect(classCreates[0].meetings).toEqual([
@@ -177,7 +183,7 @@ test('official class list for a class that does not exist creates it, then adds 
 test("official class list for one of the Faculty's own classes asks to import into it and creates no class", async ({ page }) => {
   const pdf = await makeClassListPdf(page, classList({ code: 'TEST101', section: 'A', title: 'Fixture Course', students: [{ id: '2099-0001-00003', name: 'Cruz, Dana', email: 'dana.fixture@bicol-u.edu.ph' }] }));
   const { creates, classCreates } = await setup(page);
-  await page.getByLabel('Provisional roster file').setInputFiles({ name: 'fictional-class-list.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'fictional-class-list.pdf', mimeType: 'application/pdf', buffer: pdf });
   await expect(page.getByText('Parsed Students (1)', { exact: true })).toBeVisible();
   await expect(page.getByText('This file matches TEST101-A. Import into it?')).toBeVisible();
   await expect(page.getByLabel('Target class section')).toHaveValue('11');
@@ -187,7 +193,7 @@ test("official class list for one of the Faculty's own classes asks to import in
   await page.getByLabel('Include student 2099-0001-00003', { exact: true }).check();
   await page.getByRole('checkbox', { name: /I reviewed the source course/ }).check();
   await page.getByRole('button', { name: 'Confirm & Import (1) Students' }).click();
-  await expect(page.getByText('Provisional Student Roster Import', { exact: true })).not.toBeVisible();
+  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).not.toBeVisible();
   expect(classCreates).toHaveLength(0);
   expect(creates).toHaveLength(1);
   expect(creates[0]).toMatchObject({ studentId: '2099-0001-00003', classId: '11' });

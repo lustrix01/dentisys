@@ -26,7 +26,7 @@ Where: Classes & Rosters → Import roster (existing screen). CSV import stays a
 | P3 | The number of rows read must equal `Total Number of Students`. If not, an amber warning names both numbers; the Faculty may still save (Owner, 2026-10-26). | Not checked |
 | P4 | `No University Email` means the email is missing: the row is blocked until the Faculty types a valid institutional email (IMP-001). The text never becomes part of the name. | Bug: text goes into the name |
 | P5 | The header's Course Code, Class Section, school year and semester are compared with the class the Faculty picked. A difference shows a warning listing each field (file vs class). The Faculty may still continue. Nothing is created or changed from the header, except a new class the Faculty confirms (see [class-from-class-list.md](class-from-class-list.md), 2026-10-27). | Not checked |
-| P6 | The "Official format not confirmed" label is removed for this PDF layout. It stays on the CSV template. | Label shown |
+| P6 | The "Official format not confirmed" label is removed for this PDF layout. Owner 2026-10-28: removed for the CSV template too; no import file shows it. | Label shown |
 | P7 | Unchanged: preview and class confirmation before saving, crossed-out row detection, name review, existing-Student matching by server identity, no email overwrite, invitations separate, file processed in the browser only. | — |
 
 Example warning (P5), using the files as named:

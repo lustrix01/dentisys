@@ -42,7 +42,7 @@ test('class list for a class that does not exist creates the class and enrolls t
 
   await page.locator('a[href="/classes"]').click();
   await page.getByRole('button', { name: 'Import Roster', exact: true }).click();
-  await page.getByLabel('Provisional roster file').setInputFiles({ name: 'made-up-class-list.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'made-up-class-list.pdf', mimeType: 'application/pdf', buffer: pdf });
   await expect(page.getByText('Parsed Students (3)', { exact: true })).toBeVisible({ timeout: 45_000 }); // the PDF reader loads on first use
   await expect(page.getByText('✓ 3 of 3 students read')).toBeVisible();
   await expect(page.getByLabel('Target class section')).toHaveValue('-1');
@@ -55,9 +55,9 @@ test('class list for a class that does not exist creates the class and enrolls t
   await expect(page.getByLabel('Academic term')).toHaveValue(String(term!.id));
   await expect(page.getByLabel('Meeting 1 room')).toHaveValue('CDM 1');
   for (const id of ids) await page.getByLabel(`Include student ${id}`, { exact: true }).check();
-  await page.getByRole('checkbox', { name: /I reviewed the source course/ }).check();
+  await page.getByRole('checkbox', { name: /I reviewed the class details/ }).check();
   await page.getByRole('button', { name: 'Create class and add 3 students' }).click();
-  await expect(page.getByText('Provisional Student Roster Import', { exact: true })).not.toBeVisible();
+  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).not.toBeVisible();
   await expect(page.getByText(`Class ${code}-DMD-1A created and 3 students added.`).first()).toBeVisible();
 
   const after = await read();
