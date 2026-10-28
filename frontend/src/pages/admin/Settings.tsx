@@ -157,7 +157,7 @@ export const Settings: React.FC = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-sm">
                 <RotateCcw className="w-4.5 h-4.5 text-rose-500" />
-                Compatibility cache
+                Browser cache
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -170,7 +170,7 @@ export const Settings: React.FC = () => {
                 Clear local cache
               </button>
               <p className="mt-2 text-[10px] text-center text-slate-500 dark:text-slate-400">
-                The database remains unchanged.
+                Clears data this browser saved for DentiSys. Your records are not affected.
               </p>
             </CardContent>
           </Card>
@@ -184,7 +184,7 @@ export const Settings: React.FC = () => {
           </CardHeader>
           <CardContent className="p-5">
             <div>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-4">New assessments start with these bounded transformation values.</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-4">New assessments start with these transmutation limits.</p>
               <div className="grid sm:grid-cols-2 gap-4">
                 {([
                   ['minimumPercentage', 'Minimum percentage'],
@@ -222,7 +222,7 @@ export const Settings: React.FC = () => {
       <Modal
         isOpen={showResetConfirmation}
         onClose={() => setShowResetConfirmation(false)}
-        title="Clear compatibility cache"
+        title="Clear browser cache"
       >
         <p className="text-sm text-slate-600 dark:text-slate-300">
           Clear locally cached compatibility data? Persisted database records

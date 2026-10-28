@@ -105,7 +105,8 @@ function class_meetings_conflict(PDO $pdo, string $schoolYear, int $instructorId
             foreach ($proposed as $meeting) {
                 if ($meeting['day'] !== $existing['day'] || $meeting['startTime'] >= $existing['endTime'] || $existing['startTime'] >= $meeting['endTime']) continue;
                 if ((int) $class['instructor_user_id'] === $instructorId || strcasecmp($meeting['room'], $existing['room']) === 0) {
-                    return "Schedule conflict: {$class['cs_name']} already uses {$existing['room']} on {$existing['day']} from {$existing['startTime']} to {$existing['endTime']}.";
+                    $clock = static fn (string $time): string => DateTimeImmutable::createFromFormat('!H:i', $time)->format('g:i A');
+                    return "Schedule conflict: {$class['cs_name']} already uses {$existing['room']} on {$existing['day']}, {$clock($existing['startTime'])} – {$clock($existing['endTime'])}.";
                 }
             }
         }

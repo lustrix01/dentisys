@@ -208,7 +208,7 @@ test.describe('Faculty Module E2E Tests', () => {
     const enrollPayloads: unknown[] = [];
     await page.route('**/api/faculty/classes/enroll', async route => {
       enrollPayloads.push(route.request().postDataJSON());
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Successfully enrolled 1 student(s).', enrolledCount: 1 }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Enrolled 1 student.', enrolledCount: 1 }) });
     });
 
     await page.click('a[href="/classes"]');
@@ -219,7 +219,7 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.getByPlaceholder('e.g. Dela Cruz')).toHaveValue('Student');
     await expect(page.getByPlaceholder('e.g. Juan')).toHaveAttribute('readonly', '');
     await page.getByRole('button', { name: 'Enroll Existing Student' }).click();
-    await expect(page.getByText('Successfully enrolled 1 student(s).')).toBeVisible();
+    await expect(page.getByText('Enrolled 1 student.')).toBeVisible();
     expect(enrollPayloads).toEqual([{ csId: 77, studentIds: [501] }]);
     expect(createCalled).toBe(false);
   });

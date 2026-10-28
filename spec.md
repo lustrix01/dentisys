@@ -278,6 +278,8 @@ There is no public Faculty or Student signup. A Faculty account may be establish
 
 The invitation authorizes account establishment. Google MUST NOT create an invitation or independently begin account creation; Google may be linked only after activation (REG-003). Secretary appointment remains governed by REG-006.
 
+Owner decision (2026-10-28): Faculty and Student invitations expire 7 days after they are sent; reissuing starts a new 7 days.
+
 ## REG-002 — Password-backed invitation acceptance
 
 **Status: CURRENT**
@@ -479,6 +481,10 @@ scores; they do not add an authoritative Attendance-source category automaticall
 Faculty defines one inclusive attendance date range for Midterm and one for Finals for each offering. Each start date must be on or before its end date; Midterm must end before Finals starts. Gaps are allowed. Attendance is assigned using its recorded session date, and records outside both ranges do not contribute to period attendance. Missing ranges or unresolved attendance keep the affected result incomplete. Saving changed dates does not rewrite recorded results; changes apply through explicit recomputation.
 
 Grade displays and exports must distinguish authoritative Midterm, Finals, and overall results. Unavailable period results must not be replaced with the overall grade.
+
+Owner decision (2026-10-28): Students see their own period and final grades, not individual assessment scores.
+
+Owner decision (2026-10-27): Grade sheets, class lists and report exports are Excel (.xlsx) files in the Dean's official layouts; see docs/contracts/official-exports.md.
 
 ---
 

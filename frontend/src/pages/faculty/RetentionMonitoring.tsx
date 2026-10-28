@@ -1048,7 +1048,7 @@ export const RetentionMonitoring: React.FC = () => {
             <table className="w-full text-left text-xs border-collapse">
               <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Student Number</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center">Course Grade</th><th className="py-3 px-4">State</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {watchlistRecords.length === 0 ? <tr><td colSpan={7} className="py-10 text-center text-slate-500 dark:text-slate-400">{isLoading ? 'Loading authoritative retention records...' : 'No persisted retention records match the selected filters.'}</td></tr> : watchlistRecords.map(record => (
+                {watchlistRecords.length === 0 ? <tr><td colSpan={7} className="py-10 text-center text-slate-500 dark:text-slate-400">{isLoading ? 'Loading authoritative retention records...' : 'No students match these filters.'}</td></tr> : watchlistRecords.map(record => (
                   <tr key={record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(record.studentName, 'Student name unavailable')}</td>
                     <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-mono">{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>

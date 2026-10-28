@@ -119,7 +119,7 @@ export const checkScheduleConflicts = (
     const label = `${s.type} (Session ${i + 1})`;
 
     if (!s.room.trim()) {
-      return `Please choose what room to use for ${label}.`;
+      return `Please choose what room to use for ${s.type}.`;
     }
     if (s.days.length === 0) {
       return `Please select at least one day for ${label}.`;
@@ -167,7 +167,7 @@ export const checkScheduleConflicts = (
     for (const meeting of cls.meetings ?? []) {
       const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
       existingSessions.push({ room: meeting.room.toLowerCase(), days: [meeting.day], start: minutes(meeting.startTime), end: minutes(meeting.endTime),
-        raw: `${meeting.day} ${meeting.startTime} - ${meeting.endTime}` });
+        raw: `${meeting.day} ${displayMeetingTime(meeting.startTime).replace(/^0/, '')} – ${displayMeetingTime(meeting.endTime).replace(/^0/, '')}` });
     }
     const parsedLec = cls.meetings?.length ? null : extractSessionFromText(cls.lecRoom || '', cls.lecRoom || '');
     if (parsedLec) {

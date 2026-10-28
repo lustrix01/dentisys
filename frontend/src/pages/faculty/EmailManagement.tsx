@@ -331,7 +331,7 @@ export const EmailManagement: React.FC = () => {
       await fetchEmailLogs();
       setIsSending(false);
       notify({
-        type: failedCount === 0 && deliveryFailedCount === 0 ? 'success' : 'error',
+        type: failedCount > 0 ? 'error' : deliveryFailedCount > 0 ? 'warning' : 'success',
         message: (deliveryFailedCount > 0
           ? `Student invitations: ${successCount} issued, ${deliveryFailedCount} email deliveries failed, ${failedCount} failed or skipped.`
           : `Student invitations: ${successCount} issued, ${failedCount} failed or skipped.`)

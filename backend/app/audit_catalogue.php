@@ -564,6 +564,10 @@ function audit_row_changes(array $r, ?array $before, ?array $after): array
         }
         return $out;
     }
+    if ($code === 'class_archive' || $code === 'class_restore') {
+        $reason = static fn(mixed $v): string => ['finished' => 'Finished', 'mistake' => 'Created by mistake', 'cancelled' => 'Cancelled'][(string) $v] ?? '—';
+        return [$line('Reason', $reason($before['archive_reason'] ?? null), $code === 'class_restore' ? 'Restored' : $reason($after['archive_reason'] ?? null))];
+    }
     $b = audit_flatten($before);
     $a = audit_flatten($after);
     foreach (array_unique(array_merge(array_keys($b), array_keys($a))) as $k) {
@@ -602,6 +606,12 @@ function audit_row_change_text(array $r, ?array $before, ?array $after, array $c
     if ($code === 'assessment_deleted') {
         return isset($before['scoreCount']) ? $n((int) $before['scoreCount'], 'score deleted', 'scores deleted') : '—';
     }
+    if ($code === 'academic_term_deleted') {
+        return 'Deleted';
+    }
+    if ($code === 'class_archive' || $code === 'class_restore') {
+        return $code === 'class_restore' ? 'Restored' : 'Reason: ' . $changes[0]['after'];
+    }
     if ($before === null || $before === [] || $changes === []) {
         return '—';
     }
@@ -628,6 +638,9 @@ function audit_row_record(array $r, array $lk, ?array $before, ?array $after): s
 
     switch ($type) {
         case 'class_section':
+            if ($r['action_code'] === 'student_unenroll' && preg_match('/^Removed (.+?)(?: \([^()]*\))? from /', (string) $r['description'], $m) === 1) {
+                return $join($m[1], $class($key));
+            }
             return $class($key) ?? $fallback();
         case 'assessment':
             $a = $lk['assessment'][$key] ?? null;

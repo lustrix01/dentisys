@@ -55,10 +55,8 @@ export const FacultyInvitation: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
-  // Also raise the corner notice: the banner is off-screen when the page is scrolled.
-  const [notice, setNoticeState] = useState('');
+  // Results show once, as a corner notice; the page banner is only for load and validation errors.
   const setNotice = (m: string) => {
-    setNoticeState(m);
     if (m) showFeedback(m, 'success');
   };
 
@@ -154,7 +152,7 @@ export const FacultyInvitation: React.FC = () => {
       const response = await createFacultyInvitation(payload);
 
       setNotice(response.delivery_status === 'Sent'
-        ? `Invitation sent to ${cleanEmail}. The Admin invitation authorizes account setup.`
+        ? `Invitation sent to ${cleanEmail}.`
         : `Invitation created for ${cleanEmail}, but email delivery failed. Verify Mailpit or email settings.`);
 
       setPrefix('');
@@ -166,7 +164,6 @@ export const FacultyInvitation: React.FC = () => {
       await refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to issue Faculty invitation.';
-      setError(message);
       showFeedback(message, 'error');
     } finally {
       setSending(false);
@@ -251,7 +248,6 @@ export const FacultyInvitation: React.FC = () => {
       await refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to revoke Faculty invitation.';
-      setError(message);
       showFeedback(message, 'error');
     } finally {
       setRevoking(false);
@@ -270,7 +266,6 @@ export const FacultyInvitation: React.FC = () => {
       await refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to reissue Faculty invitation.';
-      setError(message);
       showFeedback(message, 'error');
     } finally {
       setSending(false);
@@ -300,20 +295,55 @@ export const FacultyInvitation: React.FC = () => {
     );
   };
 
+  const invitationActions = (invitation: FacultyInvitationRecord) => (
+  <div className="flex items-center justify-end gap-1.5">
+    {invitation.status !== 'Accepted' && invitation.status !== 'Active' && (
+      <>
+        <button
+          type="button"
+          onClick={() => openEditModal(invitation)}
+          disabled={sending}
+          className="rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/40 flex items-center gap-1 cursor-pointer"
+          title="Edit invitation"
+        >
+          <Edit3 className="w-3 h-3" />
+          Edit
+        </button>
+        {invitation.status === 'Pending' && (
+          <button
+            type="button"
+            onClick={() => setRevokingInvitation(invitation)}
+            disabled={sending}
+            className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/40 flex items-center gap-1 cursor-pointer"
+            title="Revoke invitation"
+          >
+            <Trash2 className="w-3 h-3" />
+            Revoke
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={sending}
+          onClick={() => void handleReissue(invitation)}
+          className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+        >
+          Reissue
+        </button>
+      </>
+    )}
+  </div>
+  );
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12 animate-fade-in">
 
-      {(error || notice) && (
+      {error && (
         <div
-          role={error ? 'alert' : 'status'}
-          className={`flex items-start gap-2 rounded-xl border p-3 text-xs font-semibold ${
-            error
-              ? 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300'
-              : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'
-          }`}
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300"
         >
-          {error ? <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}
-          <span>{error || notice}</span>
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
         </div>
       )}
 
@@ -327,9 +357,10 @@ export const FacultyInvitation: React.FC = () => {
         </CardHeader>
         <form onSubmit={handleCreateInvitation} className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-2">
+              <label htmlFor="admin-faculty-create-prefix" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-2">
                 Prefix
                 <select
+                  id="admin-faculty-create-prefix"
                   value={prefix}
                   onChange={event => setPrefix(filterPersonNameInput('prefix', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setPrefix(filterPersonNameInput('prefix', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('prefix', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
@@ -340,9 +371,10 @@ export const FacultyInvitation: React.FC = () => {
                 </select>
               </label>
 
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-3">
+              <label htmlFor="admin-faculty-create-first" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-3">
                 First name *
                 <input
+                  id="admin-faculty-create-first"
                   required
                   value={firstName}
                   onChange={event => setFirstName(filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setFirstName(filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)}
@@ -351,9 +383,10 @@ export const FacultyInvitation: React.FC = () => {
                 />
               </label>
 
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-2">
+              <label htmlFor="admin-faculty-create-middle" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-2">
                 Middle name
                 <input
+                  id="admin-faculty-create-middle"
                   value={middleName}
                   onChange={event => setMiddleName(filterPersonNameInput('middleName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setMiddleName(filterPersonNameInput('middleName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('middleName', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
@@ -361,9 +394,10 @@ export const FacultyInvitation: React.FC = () => {
                 />
               </label>
 
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-3">
+              <label htmlFor="admin-faculty-create-last" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-3">
                 Last name *
                 <input
+                  id="admin-faculty-create-last"
                   required
                   value={lastName}
                   onChange={event => setLastName(filterPersonNameInput('lastName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setLastName(filterPersonNameInput('lastName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('lastName', event)}
@@ -372,9 +406,10 @@ export const FacultyInvitation: React.FC = () => {
                 />
               </label>
 
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-2">
+              <label htmlFor="admin-faculty-create-suffix" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-2">
                 Suffix
                 <input
+                  id="admin-faculty-create-suffix"
                   value={suffix}
                   onChange={event => setSuffix(filterPersonNameInput('suffix', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setSuffix(filterPersonNameInput('suffix', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('suffix', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
@@ -473,7 +508,26 @@ export const FacultyInvitation: React.FC = () => {
             </button>
           </div>
         </CardHeader>
-        <div className="overflow-x-auto">
+        <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800/60">
+          {loading ? (
+            <p className="py-8 text-center text-xs text-slate-500 dark:text-slate-400">Loading invitations…</p>
+          ) : filteredInvitations.length === 0 ? (
+            <p className="py-8 text-center text-xs text-slate-500 dark:text-slate-400">No Faculty invitations found.</p>
+          ) : (
+            filteredInvitations.map(invitation => (
+              <div key={invitation.id} className="space-y-2 py-3.5 text-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-bold text-slate-800 dark:text-slate-100">{invitation.name}</span>
+                  {statusBadge(invitation.status)}
+                </div>
+                <div className="break-all font-mono text-slate-600 dark:text-slate-300">{invitation.email}</div>
+                <div className="text-slate-500">Invited {invitation.invitedAt ? formatManilaWhen(invitation.invitedAt) : '—'}</div>
+                {invitationActions(invitation)}
+              </div>
+            ))
+          )}
+        </div>
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
@@ -497,42 +551,7 @@ export const FacultyInvitation: React.FC = () => {
                     <td className="px-4 py-3.5 text-slate-500 whitespace-nowrap">{invitation.invitedAt ? formatManilaWhen(invitation.invitedAt) : '—'}</td>
                     <td className="px-4 py-3.5">{statusBadge(invitation.status)}</td>
                     <td className="px-4 py-3.5 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {invitation.status !== 'Accepted' && invitation.status !== 'Active' && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => openEditModal(invitation)}
-                              disabled={sending}
-                              className="rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/40 flex items-center gap-1 cursor-pointer"
-                              title="Edit invitation"
-                            >
-                              <Edit3 className="w-3 h-3" />
-                              Edit
-                            </button>
-                            {invitation.status === 'Pending' && (
-                              <button
-                                type="button"
-                                onClick={() => setRevokingInvitation(invitation)}
-                                disabled={sending}
-                                className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/40 flex items-center gap-1 cursor-pointer"
-                                title="Revoke invitation"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                Revoke
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              disabled={sending}
-                              onClick={() => void handleReissue(invitation)}
-                              className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer"
-                            >
-                              Reissue
-                            </button>
-                          </>
-                        )}
-                      </div>
+                      {invitationActions(invitation)}
                     </td>
                   </tr>
                 ))

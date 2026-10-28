@@ -1096,6 +1096,7 @@ export const GradeComputation: React.FC = () => {
   const [scoreSearch, setScoreSearch] = useState('');
   const [scoresInputState, setScoresInputState] = useState<Record<string, { score: string; remarks: string }>>({});
   const [isScoresSavedAlert, setIsScoresSavedAlert] = useState(false);
+  const [scoresSavedThisVisit, setScoresSavedThisVisit] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(() => {
     try {
       return localStorage.getItem('dentisys_grading_autosave') !== 'false';
@@ -1329,6 +1330,7 @@ export const GradeComputation: React.FC = () => {
       singleDirtyRef.current = cleared.size > 0 || invalidCount > 0 || unsent;
       setSingleSaveStatus('saved');
       setIsScoresSavedAlert(invalidCount === 0 && !unsent);
+      setScoresSavedThisVisit(true);
       if (isManual) {
         showFeedback(`Saved ${saveList.filter(e => e.score !== null).length} scores successfully!`, 'success');
       }
@@ -2007,6 +2009,17 @@ export const GradeComputation: React.FC = () => {
     if (!currentOffering) return;
     loadGradingConfig(currentOffering);
   }, [currentOffering?.key]);
+
+  // Setup steps for a new class: shown until weights, an assessment and a saved score all exist.
+  const setupSteps = useMemo(() => {
+    if (!selectedClassId || selectedClassIsHistorical || !currentOffering || configLoading || configError) return null;
+    const classAssessmentIds = new Set(assessments.filter(a => a.classId === selectedClassId && a.status !== 'Archived').map(a => a.id));
+    const done = [loadedConfig !== null, classAssessmentIds.size > 0, assessmentScores.some(score => classAssessmentIds.has(score.assessmentId))];
+    if (done.every(Boolean)) return null;
+    const next = done.indexOf(false);
+    const tabs = ['components', 'assessments', 'scores'] as const;
+    return ['Grade weights', 'Assessments', 'Scores'].map((label, index) => ({ label, tab: tabs[index], done: done[index], next: index === next }));
+  }, [selectedClassId, selectedClassIsHistorical, currentOffering, configLoading, configError, assessments, assessmentScores, loadedConfig]);
 
   // Dirty state checking
   const isOverallDirty = useMemo(() => {
@@ -3217,6 +3230,24 @@ export const GradeComputation: React.FC = () => {
         </div>
       )}
 
+      {setupSteps && (
+        <div role="status" className="no-print flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+          <span className="font-bold text-slate-800 dark:text-slate-100">Set up this class:</span>
+          {setupSteps.map((step, index) => (
+            <React.Fragment key={step.label}>
+              {index > 0 && <span aria-hidden="true">&rarr;</span>}
+              {step.done ? (
+                <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400"><Check className="w-3.5 h-3.5" />{index + 1} {step.label}</span>
+              ) : step.next ? (
+                <button type="button" onClick={() => setActiveSubTab(step.tab)} className="rounded-lg bg-clinical-600 px-2.5 py-1 text-white hover:bg-clinical-700">{index + 1} {step.label}</button>
+              ) : (
+                <span>{index + 1} {step.label}</span>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+
       {/* Navigation Sub-Tabs */}
       <div className="no-print flex flex-wrap xl:flex-nowrap bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
         {!selectedClassIsHistorical && <button
@@ -3470,7 +3501,7 @@ export const GradeComputation: React.FC = () => {
                               flushSingleAutoSave();
                               setSelectedAssessmentId(next);
                             }}
-                            className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                            className="w-full pl-4 pr-10 truncate py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
                           >
                             {activeAssessment && !singleActivityFilteredAssessments.some(a => a.id === activeAssessment.id) && (
                               <option value={activeAssessment.id}>
@@ -3654,7 +3685,13 @@ export const GradeComputation: React.FC = () => {
                   </div>
 
                   {selectedAssessmentId && filteredScoreStudents.length > 0 && (
-                    <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800/80 flex justify-end items-center gap-2.5">
+                    <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap justify-end items-center gap-2.5">
+                      {scoresSavedThisVisit && (
+                        <span className="text-xs text-slate-600 dark:text-slate-300 mr-auto">
+                          Grades update when you recompute them in Summaries &amp; Export.{' '}
+                          <button type="button" onClick={() => setActiveSubTab('summaries')} className="font-bold text-clinical-600 dark:text-clinical-400 hover:underline">Go to Summaries</button>
+                        </span>
+                      )}
                       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
                         {(() => {
                           const badge = saveStatusBadge(singleSaveStatus, singleDirtyRef.current || singlePendingClearRef.current.ids.size > 0);
@@ -5645,7 +5682,7 @@ export const GradeComputation: React.FC = () => {
               <select
                 value={assPeriod}
                 onChange={(e) => handlePeriodChange(e.target.value as any)}
-                className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                className="w-full pl-4 pr-10 truncate py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
               >
                 <option value="Midterm">Midterm Period</option>
                 <option value="Final">Final Period</option>
@@ -5707,7 +5744,7 @@ export const GradeComputation: React.FC = () => {
                       setModalCategoryWarning(false);
                     }}
                     required
-                    className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                    className="w-full pl-4 pr-10 truncate py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
                   >
                     <option value="">Select grading category</option>
                     {(() => {
@@ -5955,7 +5992,7 @@ export const GradeComputation: React.FC = () => {
               <select
                 value={assStatus}
                 onChange={(e) => setAssStatus(e.target.value as any)}
-                className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
+                className="w-full pl-4 pr-10 truncate py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
               >
                 <option value="Active">Active / Open</option>
                 <option value="Closed">Closed</option>

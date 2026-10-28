@@ -322,7 +322,7 @@ export const Dashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:flex-wrap xl:flex-nowrap sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            Welcome back, {user?.display_name || 'Faculty Member'}
+            Welcome, {user?.display_name || 'Faculty Member'}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             Access your assigned dental courses, grade computations, student attendance records, and retention evaluations in one place.
@@ -336,6 +336,16 @@ export const Dashboard: React.FC = () => {
           onChange={setSchoolYear}
         />
       </div>
+
+      {dashboardKpis && activeSubjects.length === 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold font-heading text-slate-800 dark:text-slate-100">First steps</h2>
+            <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">1 Create your class &middot; 2 Add students &middot; 3 Set grade weights</p>
+          </div>
+          <button type="button" onClick={() => navigate('/classes')} className="px-4 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white text-xs font-bold">Create Class</button>
+        </div>
+      )}
 
       {/* 2-Column Layout */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
@@ -464,7 +474,6 @@ export const Dashboard: React.FC = () => {
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">Pending Remedials</h3>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Authoritative</span>
                 <button
                   type="button"
                   onClick={() => navigate('/retention')}
@@ -518,6 +527,7 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="space-y-2.5 text-xs">
+              {activeSubjects.length === 0 && <p className="text-slate-500 dark:text-slate-400">No classes yet.</p>}
               {activeSubjects.slice(0, 2).map((subj, idx) => (
                 <div key={subj.code} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between max-xl:flex-col max-xl:items-stretch max-xl:gap-2">
                   <div className="flex items-center gap-3">

@@ -1151,6 +1151,7 @@ function scoreSaveHarness(mode: 'single' | 'matrix' = 'single', autoSaveEnabled 
     saveAssessmentScores: () => {},
     showRecomputeNotice: (response: unknown) => { notices.push(response); },
     setIsScoresSavedAlert: () => {},
+    setScoresSavedThisVisit: () => {},
     showFeedback: (message: string) => feedback.push(message),
     requestConfirmation: async (message: string, title: string) => { prompts.push([title, message]); return confirmAnswer; },
     setTimeout: (fn: () => void, ms: number) => { const timer = { fn, ms, cancelled: false }; timers.push(timer); return timer; },

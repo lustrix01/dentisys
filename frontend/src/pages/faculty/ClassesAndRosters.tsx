@@ -113,6 +113,29 @@ const canonicalSemester = (value: string | null | undefined): '1ST' | '2ND' | 'S
   if (upper.includes('SUMMER')) return 'SUMMER';
   return '1ST';
 };
+// "Room 302 · Tue & Thu 8:00–9:00 AM": days that share a room and time are grouped.
+const venueSummary = (cls: FacultyClassItem, component: 'Lecture' | 'Laboratory', fallback?: string | null): string | null => {
+  const rows = (cls.meetings ?? []).filter(meeting => meeting.component === component);
+  if (rows.length === 0) return fallback || null;
+  if (fallback && fallback.split(';').length !== rows.length) return fallback; // keep legacy text that has no meeting
+  const clock = (time: string) => displayMeetingTime(time).replace(/^0/, '');
+  const groups = new Map<string, { room: string; days: string[]; start: string; end: string }>();
+  for (const m of rows) {
+    const key = `${m.room}|${m.startTime}|${m.endTime}`;
+    const group = groups.get(key) ?? { room: m.room, days: [], start: clock(m.startTime), end: clock(m.endTime) };
+    group.days.push(m.day);
+    groups.set(key, group);
+  }
+  return Array.from(groups.values()).map(g => {
+    const days = g.days.length > 1 ? `${g.days.slice(0, -1).join(', ')} & ${g.days[g.days.length - 1]}` : g.days[0];
+    const sameHalf = g.start.slice(-2) === g.end.slice(-2);
+    return `${g.room} · ${days} ${sameHalf ? g.start.slice(0, -3) : g.start}–${g.end}`;
+  }).join('; ');
+};
+const termDate = (iso: string | null, withYear = false): string => (
+  new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(withYear ? { year: 'numeric' } : {}) })
+);
+const studentsLabel = (n: number, word: 'Student' | 'student' = 'Student') => `${n} ${word}${n === 1 ? '' : 's'}`;
 const semesterLabel = (value: string | null | undefined): string => (
   { '1ST': '1st Semester', '2ND': '2nd Semester', SUMMER: 'Summer' }[canonicalSemester(value)]
 );
@@ -268,6 +291,7 @@ export const ClassesAndRosters: React.FC = () => {
   const [editLabUnits, setEditLabUnits] = useState('1');
   const [editSchoolYear, setEditSchoolYear] = useState('2025-2026');
   const [editError, setEditError] = useState<string | null>(null);
+  const [serverClash, setServerClash] = useState<string | null>(null);
   const [isUpdatingClass, setIsUpdatingClass] = useState(false);
 
   // Student roster profile edit state. Membership and canonical Student number
@@ -884,6 +908,8 @@ export const ClassesAndRosters: React.FC = () => {
     return checkScheduleConflicts(sessionSlots, classes, newSchoolYear);
   }, [sessionSlots, classes, newSchoolYear]);
 
+  useEffect(() => { setServerClash(null); }, [sessionSlots]);
+
   const handleUpdateSlot = (id: string, updates: Partial<ClassSessionSlot>) => {
     setSessionSlots(prev =>
       prev.map(s => {
@@ -1054,6 +1080,7 @@ export const ClassesAndRosters: React.FC = () => {
       }
       await fetchData();
     } catch (err: any) {
+      if (/conflict/i.test(err.message || '')) setServerClash(err.message);
       showFeedback(err.message || 'Failed to create class section.', 'error');
     } finally {
       setIsSubmittingClass(false);
@@ -1079,7 +1106,7 @@ export const ClassesAndRosters: React.FC = () => {
         studentIds: selectedStudentIds,
       });
 
-      showFeedback(res.message || `Successfully enrolled ${selectedStudentIds.length} student(s)!`, 'success');
+      showFeedback(`Enrolled ${studentsLabel(selectedStudentIds.length, 'student')}.`, 'success');
       setIsAddStudentOpen(false);
       setSelectedStudentIds([]);
       await fetchData();
@@ -1104,7 +1131,7 @@ export const ClassesAndRosters: React.FC = () => {
           csId: targetEnrollCsId,
           studentIds: [Number(existingStudentMatch.id)],
         });
-        showFeedback(res.message || `${existingStudentMatch.name} enrolled successfully.`, 'success');
+        showFeedback('Enrolled 1 student.', 'success');
         setIsAddStudentOpen(false);
         setStudentIdInput('');
         await fetchData();
@@ -1142,7 +1169,7 @@ export const ClassesAndRosters: React.FC = () => {
         classId: String(targetEnrollCsId),
       });
 
-      showFeedback(res.message || `Student registered and enrolled successfully!`, 'success');
+      showFeedback('Student added to the class.', 'success');
       setIsAddStudentOpen(false);
       setStudentIdInput('');
       setStudentFirstName('');
@@ -1422,12 +1449,12 @@ const handleSendAllStudentInvites = async () => {
                           <div className="space-y-0.5">
                             {cls.lecRoom && (
                               <div>
-                                <span className="font-bold text-slate-700 dark:text-slate-200">Lec:</span> {cls.lecRoom}
+                                <span className="font-bold text-slate-700 dark:text-slate-200">Lec:</span> {venueSummary(cls, 'Lecture', cls.lecRoom)}
                               </div>
                             )}
                             {cls.labRoom && (
                               <div>
-                                <span className="font-bold text-slate-700 dark:text-slate-200">{'Lab:'}</span> {cls.labRoom}
+                                <span className="font-bold text-slate-700 dark:text-slate-200">{'Lab:'}</span> {venueSummary(cls, 'Laboratory', cls.labRoom)}
                               </div>
                             )}
                             {!cls.lecRoom && !cls.labRoom && <div>Venue / Schedule TBA</div>}
@@ -1446,7 +1473,7 @@ const handleSendAllStudentInvites = async () => {
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex max-sm:flex-wrap lg:max-[1535px]:flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
                       <Users className="w-4 h-4 text-slate-400" />
-                      <span>{cls.enrolledCount} Students</span>
+                      <span>{studentsLabel(cls.enrolledCount)}</span>
                     </div>
 
                     <div className="flex items-center gap-2 max-sm:gap-1.5">
@@ -1499,9 +1526,9 @@ const handleSendAllStudentInvites = async () => {
       )}
 
       {notification && (
-        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in">
+        <div className={`p-4 rounded-2xl border text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in ${notification.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300' : 'bg-amber-500/10 border-amber-500/20 text-amber-800 dark:text-amber-300'}`}>
           <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+            {notification.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />}
             <span>{notification.message}</span>
           </div>
           <button onClick={() => setNotification(null)} className="text-slate-500 dark:text-slate-400 hover:text-slate-600 text-xs cursor-pointer">Dismiss</button>
@@ -1641,7 +1668,7 @@ const handleSendAllStudentInvites = async () => {
       {archiveTarget && (
         <Modal isOpen={Boolean(archiveTarget)} onClose={() => setArchiveTarget(null)} title="Archive Class Section">
           <form onSubmit={handleArchiveSubmit} className="space-y-4 text-xs">
-            <p className="text-slate-600 dark:text-slate-300">{archiveTarget.courseCode} ({archiveTarget.block}) · {archiveTarget.courseName} · {archiveTarget.enrolledCount} Students</p>
+            <p className="text-slate-600 dark:text-slate-300">{archiveTarget.courseCode} ({archiveTarget.block}) · {archiveTarget.courseName} · {studentsLabel(archiveTarget.enrolledCount)}</p>
             <p className="text-slate-500 dark:text-slate-400">Choose why you are archiving this class.</p>
             {archiveRemedialOnly && (
               <div className="rounded-xl px-3 py-2.5 bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900 font-semibold">
@@ -1650,7 +1677,7 @@ const handleSendAllStudentInvites = async () => {
             )}
             {([
               { key: 'finished', label: 'Finished', text: 'The class is done. Students keep seeing it and their grades under past classes. Remedial and cost recovery results can still be recorded.' },
-              { key: 'cancelled', label: 'Cancelled', text: `The class will not continue. It is hidden from Students and the Class Secretary. The ${archiveTarget.enrolledCount} enrolled Students are notified.` },
+              { key: 'cancelled', label: 'Cancelled', text: `The class will not continue. It is hidden from Students and the Class Secretary. The ${studentsLabel(archiveTarget.enrolledCount).replace(' ', ' enrolled ')} are notified.` },
               { key: 'mistake', label: 'Created by mistake', text: 'The class should not exist. It is hidden from Students and the Class Secretary. No one is notified.' },
             ] as const).map(option => {
               const off = archiveRemedialOnly && option.key !== 'finished';
@@ -1701,7 +1728,7 @@ const handleSendAllStudentInvites = async () => {
             <p className="text-slate-600 dark:text-slate-300">{restoreTarget.courseCode} ({restoreTarget.block}) returns to Assigned Classes and can be edited again.</p>
             <ul className="list-disc pl-4 text-slate-600 dark:text-slate-300 space-y-1">
               <li>Revoked attendance sessions and the Class Secretary appointment do not come back. Appoint a Secretary again if needed.</li>
-              {restoreTarget.archiveReason === 'cancelled' && <li>The {restoreTarget.enrolledCount} enrolled Students are notified that the class is back.</li>}
+              {restoreTarget.archiveReason === 'cancelled' && <li>The {studentsLabel(restoreTarget.enrolledCount).replace(' ', ' enrolled ')} are notified that the class is back.</li>}
             </ul>
             <div className="pt-2 flex justify-end gap-2">
               <button type="button" onClick={() => setRestoreTarget(null)} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button>
@@ -1772,7 +1799,7 @@ const handleSendAllStudentInvites = async () => {
                   </span>
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                  {selectedClass?.courseName ? `${selectedClass.courseName} • ` : ''}Room: {selectedClass?.lecRoom || selectedClass?.labRoom || 'N/A'}
+                  {selectedClass?.courseName ? `${selectedClass.courseName} • ` : ''}Room: {(selectedClass && (venueSummary(selectedClass, 'Lecture', selectedClass.lecRoom) || venueSummary(selectedClass, 'Laboratory', selectedClass.labRoom))) || 'N/A'}
                 </p>
               </div>
             </div>
@@ -2399,7 +2426,7 @@ const handleSendAllStudentInvites = async () => {
                   className={`w-full px-3.5 py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 font-medium cursor-pointer ${fieldCls('term', 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800')}`}
                 >
                   <option value="">Choose a term</option>
-                  {academicTerms.map(term => <option key={term.id} value={String(term.id)}>{term.semester} {term.schoolYear} ({term.startDate} – {term.endDate})</option>)}
+                  {academicTerms.map(term => <option key={term.id} value={String(term.id)}>{semesterLabel(term.semester)} {term.schoolYear} ({termDate(term.startDate)} – {termDate(term.endDate, true)})</option>)}
                 </select>
                 {fieldErr('term')}
               </div>
@@ -2508,8 +2535,12 @@ const handleSendAllStudentInvites = async () => {
               ))}
             </div>
 
+            {serverClash && (
+              <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400">{serverClash}</p>
+            )}
+
             {/* Conflict Error Banner (its missing room/day text is already shown inline after Save) */}
-            {scheduleConflict && !shownProblems.some(p => p.key.startsWith('room-') || p.key.startsWith('days-')) && (
+            {scheduleConflict && (createAttempted || !scheduleConflict.startsWith('Please ')) && !shownProblems.some(p => p.key.startsWith('room-') || p.key.startsWith('days-')) && (
               <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-semibold flex items-start gap-2.5 animate-fade-in">
                 <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
                 <span>{scheduleConflict}</span>

@@ -717,13 +717,17 @@ function handle_admin_reports_summary(): void
                     ers.exam_date AS normalized_exam_date,
                     ers.notes AS normalized_remedial_notes,
                     e.grade_components_json, e.clinic_hours_completed,
-                    cs.cs_id, cs.cs_name, c.course_code, c.name AS course_name, c.units, c.is_clinical
+                    cs.cs_id, cs.cs_name, cs.archive_reason, c.course_code, c.name AS course_name, c.units, c.is_clinical,
+                    COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(ipi.name_prefix, ''), NULLIF(ipi.first_name, ''),
+                        NULLIF(ipi.middle_name, ''), NULLIF(ipi.last_name, ''), NULLIF(ipi.name_suffix, '')), ''), iu.display_name) AS instructor_name
              FROM students s
              LEFT JOIN person_identities pi ON pi.person_id = s.person_id
              LEFT JOIN enrollments e ON e.student_id = s.student_id AND e.cs_id NOT IN (SELECT hx.cs_id FROM class_sections hx WHERE hx.archive_reason IN ('cancelled', 'mistake'))
              LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
              LEFT JOIN enrollment_remedial_states ers ON ers.enrollment_id = e.enrollment_id
              LEFT JOIN class_sections cs ON cs.cs_id = e.cs_id
+             LEFT JOIN user_accounts iu ON iu.user_id = cs.instructor_user_id
+             LEFT JOIN person_identities ipi ON ipi.person_id = iu.person_id
              LEFT JOIN courses c ON c.course_id = cs.course_id
              LEFT JOIN biometric_profiles b ON s.student_id = b.student_id
              {$yearWhere}
@@ -778,6 +782,8 @@ function handle_admin_reports_summary(): void
             if ($s['cs_id'] !== null) {
                 $grouped[$id]['classId'] = (string) $s['cs_id'];
                 $grouped[$id]['className'] = $s['cs_name'];
+                $grouped[$id]['instructorName'] = $s['instructor_name'];
+                $grouped[$id]['classFinished'] = $s['archive_reason'] === 'finished';
                 // Final grade of the class shown for this student (the same enrollment as classId).
                 $grouped[$id]['classGraded'] = $s['final_gwa'] !== null;
                 // Standing is the most serious state across all enrollments.

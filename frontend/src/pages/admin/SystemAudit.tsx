@@ -105,6 +105,8 @@ export const DeanReports: React.FC = () => {
       yearLevel: number | null;
       subjectCode?: string;
       subjectName?: string;
+      instructorName?: string | null;
+      finished?: boolean;
       students: any[];
       isArchived: boolean;
       activeCount: number;
@@ -130,6 +132,8 @@ export const DeanReports: React.FC = () => {
           yearLevel: s.yearLevel ?? null,
           subjectCode: subj?.code,
           subjectName: subj?.name,
+          instructorName: s.instructorName ?? null,
+          finished: Boolean(s.classFinished),
           students: [],
           isArchived,
           activeCount: 0,
@@ -569,6 +573,11 @@ export const DeanReports: React.FC = () => {
                             )}
                           </div>
                         </div>
+                        {cls.finished && !cls.isArchived && (
+                          <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500">
+                            Finished
+                          </span>
+                        )}
                         {cls.isArchived && (
                           <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500">
                             Archived
@@ -582,6 +591,7 @@ export const DeanReports: React.FC = () => {
                           {cls.subjectName && <span> · {cls.subjectName}</span>}
                         </div>
                       )}
+                      {cls.instructorName && <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 line-clamp-1">{cls.instructorName}</div>}
 
                       <div className="mt-4 flex flex-wrap gap-1.5 items-center">
                         {cls.activeCount > 0 && (
@@ -701,7 +711,7 @@ export const DeanReports: React.FC = () => {
                       <th className="py-2.5 px-3">Year</th>
                       <th className="py-2.5 px-3">Grade</th>
                       <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-3">Face ID</th>
+                      <th className="py-2.5 px-3">Face check-in</th>
                       <th className="py-2.5 px-3">Remedials</th>
                     </tr>
                   </thead>
@@ -904,6 +914,11 @@ export const DeanReports: React.FC = () => {
                               )}
                             </div>
                           </div>
+                          {cls.finished && !cls.isArchived && (
+                            <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500">
+                              Finished
+                            </span>
+                          )}
                           {cls.isArchived && (
                             <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500">
                               Archived
@@ -917,6 +932,7 @@ export const DeanReports: React.FC = () => {
                             {cls.subjectName && <span> · {cls.subjectName}</span>}
                           </div>
                         )}
+                        {cls.instructorName && <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 line-clamp-1">{cls.instructorName}</div>}
 
                         <div className="mt-4 flex flex-wrap gap-1.5 items-center">
                           {atRisk === 0 && cls.activeCount === 0 ? (
@@ -1253,6 +1269,11 @@ export const DeanReports: React.FC = () => {
                               )}
                             </div>
                           </div>
+                          {cls.finished && !cls.isArchived && (
+                            <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500">
+                              Finished
+                            </span>
+                          )}
                           {cls.isArchived && (
                             <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500">
                               Archived
@@ -1266,6 +1287,7 @@ export const DeanReports: React.FC = () => {
                             {cls.subjectName && <span> · {cls.subjectName}</span>}
                           </div>
                         )}
+                        {cls.instructorName && <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 line-clamp-1">{cls.instructorName}</div>}
 
                         <div className="mt-4">
                           <div className="flex items-baseline justify-between mb-1.5">
@@ -1535,7 +1557,7 @@ export const DeanReports: React.FC = () => {
               {cols(widths[activeTab])}
               <thead>
                 {activeTab === 'students' && (
-                  <tr><th className="l">Student No.</th><th className="l">Student Name</th><th className="l">Class</th><th>Year</th><th>Grade</th><th>Status</th><th>Face ID</th><th>Remedials</th></tr>
+                  <tr><th className="l">Student No.</th><th className="l">Student Name</th><th className="l">Class</th><th>Year</th><th>Grade</th><th>Status</th><th>Face check-in</th><th>Remedials</th></tr>
                 )}
                 {activeTab === 'retention' && (
                   <tr><th className="l">Student No.</th><th className="l">Student Name</th><th className="l">Class</th><th>Grade</th><th>Standing</th><th>Clinic Hrs</th><th>Pending Remedials</th><th>Flagged Subjects</th></tr>

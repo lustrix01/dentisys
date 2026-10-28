@@ -174,7 +174,7 @@ test.describe('Auth Module E2E Tests', () => {
     await page.getByLabel('Last name *').fill('Invalid');
     await page.getByLabel('Institutional email').fill('invalid.faculty@bicol-u.edu.ph');
     await page.getByRole('button', { name: 'Send invite' }).click();
-    await expect(page.getByRole('main').getByRole('alert')).toContainText(/This Faculty email cannot be invited/i);
+    await expect(page.getByText(/This Faculty email cannot be invited/i)).toBeVisible();
     await page.getByLabel('First name *').fill('Test');
     await page.getByLabel('Last name *').fill('Faculty');
     await page.getByLabel('Institutional email').fill('test.faculty@bicol-u.edu.ph');
@@ -185,12 +185,12 @@ test.describe('Auth Module E2E Tests', () => {
     await expect(page.getByText('Invitation emails you sent. View-only.')).toBeVisible();
     await expect(page.getByRole('table').filter({ hasText: 'Date Sent' }).getByText('Faculty Invitation', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Reissue' }).click();
-    await expect(page.getByRole('main').getByText(/Invitation sent to test.faculty@bicol-u.edu.ph/)).toBeVisible();
+    await expect(page.getByText(/Invitation sent to test.faculty@bicol-u.edu.ph/)).toBeVisible();
     expect(reissuePayload).toEqual({ id: '17' });
     const statusFilter = page.getByLabel('Filter Faculty invitations by status');
     await statusFilter.selectOption('Accepted');
     await expect(page.getByRole('cell', { name: 'test.faculty@bicol-u.edu.ph' })).toHaveCount(0);
-    await expect(page.getByText('No Faculty invitations found.')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'No Faculty invitations found.' })).toBeVisible();
     await statusFilter.selectOption('Pending');
     await expect(page.getByRole('cell', { name: 'test.faculty@bicol-u.edu.ph' })).toBeVisible();
   });

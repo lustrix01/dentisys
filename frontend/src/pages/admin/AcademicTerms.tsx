@@ -272,7 +272,7 @@ export const AcademicTermsSettings: React.FC = () => {
       </div>
 
       {/* Notifications & Status Alerts */}
-      {error && (
+      {error && !draft && (
         <div role="alert" className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-xs font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2.5">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
@@ -436,7 +436,7 @@ export const AcademicTermsSettings: React.FC = () => {
               void saveTerm(confirmation !== null);
             }}
           >
-            {error && <p role="alert" className="text-sm font-semibold text-rose-600 dark:text-rose-400">{error}</p>}
+            {error && Object.keys(fields).length === 0 && <p role="alert" className="text-sm font-semibold text-rose-600 dark:text-rose-400">{error}</p>}
             {confirmation !== null ? (
               <div className="space-y-3 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded-xl">
                 <p className="text-sm text-amber-900 dark:text-amber-200">
