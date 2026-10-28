@@ -67,6 +67,9 @@ test('provisional PDF keeps all rows unselected, flags marks, preserves fields a
   await page.getByLabel('Target class section').selectOption('11');
   await page.getByLabel('First name for 2099-1234-56789', { exact: true }).fill('José Miguel');
   await page.getByLabel('Middle name for 2099-1234-56789', { exact: true }).fill('Reyes');
+  // The fixture's fictional contact is not a Philippine mobile number, so the row stays blocked until it is corrected.
+  await expect(page.getByLabel('Include student 2099-1234-56789', { exact: true })).toBeDisabled();
+  await page.getByLabel('Contact for 2099-1234-56789', { exact: true }).fill('0917 123 4567');
   await page.getByLabel('Include student 2099-1234-56789', { exact: true }).check();
   await expect(page.getByRole('button', { name: 'Confirm & Import (1) Students' })).toBeDisabled();
   await page.getByRole('checkbox', { name: /I reviewed the source course/ }).check();
@@ -78,14 +81,14 @@ test('provisional PDF keeps all rows unselected, flags marks, preserves fields a
 
 test('partial CSV failure remains visible and retry does not repeat successful rows or mask email conflicts', async ({ page }) => {
   const { creates, enrolls } = await setup(page, 'conflict@bicol-u.edu.ph');
-  await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'fictional.csv', mimeType: 'text/csv', buffer: Buffer.from('Student ID,First Name,Last Name,Email,Year Level,Contact #,Gender\n2099-3333-44444,Ana,Reyes,ana.fixture@bicol-u.edu.ph,2,00123,Female\n2099-5555-66666,Bea,Santos,conflict@bicol-u.edu.ph,,,') });
+  await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'fictional.csv', mimeType: 'text/csv', buffer: Buffer.from('Student ID,First Name,Last Name,Email,Year Level,Contact #,Gender\n2099-3333-44444,Ana,Reyes,ana.fixture@bicol-u.edu.ph,2,0917 123 4567,Female\n2099-5555-66666,Bea,Santos,conflict@bicol-u.edu.ph,,,') });
   await expect(page.getByText('Parsed Students (2)', { exact: true })).toBeVisible();
   await page.getByRole('checkbox', { name: /I reviewed the source course/ }).check();
   await page.getByRole('button', { name: 'Confirm & Import (2) Students' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Rows requiring correction' })).toContainText('2099-5555-66666');
   await expect(page.getByText('Parsed Students (1)', { exact: true })).toBeVisible();
   expect(enrolls).toHaveLength(0);
-  expect(creates[0]).toMatchObject({ studentId: '2099-3333-44444', contact: '00123', yearLevel: 2, sex: 'F', classId: '11' });
+  expect(creates[0]).toMatchObject({ studentId: '2099-3333-44444', contact: '09171234567', yearLevel: 2, sex: 'F', classId: '11' });
   expect(creates[1]).not.toHaveProperty('yearLevel');
   await page.getByLabel('Email for 2099-5555-66666', { exact: true }).fill('bea.fixture@bicol-u.edu.ph');
   await page.getByRole('button', { name: 'Confirm & Import (1) Students' }).click();

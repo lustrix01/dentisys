@@ -72,7 +72,7 @@ function validate_person_name(array $data, string $field, int $minBytes = 2, int
         throw new ValidationException([['field' => $field, 'message' => "{$label} is required."]]);
     }
 
-    if (!preg_match('/^[\p{L}\s\'’\-\.]+$/u', $name)) {
+    if (!preg_match('/^(?=.*\p{L})[\p{L}\s\'’\-\.]+$/u', $name)) {
         throw new ValidationException([['field' => $field, 'message' => 'Name can only contain letters, spaces, hyphens, apostrophes, and periods.']]);
     }
 
@@ -112,7 +112,66 @@ function validate_optional_name_affix(array $data, string $field): ?string
         $label = $field === 'prefix' ? 'Prefix' : 'Suffix';
         throw new ValidationException([['field' => $field, 'message' => "{$label} can only contain letters, periods, commas, apostrophes, and hyphens."]]);
     }
-    return $value;
+    return normalize_name_affix($value, $field);
+}
+
+/** Fixes the casing of known titles and degrees only; unknown words stay as typed. */
+function normalize_name_affix(string $value, string $field = 'suffix'): string
+{
+    $words = [
+        'dr' => 'Dr.', 'dra' => 'Dra.', 'mr' => 'Mr.', 'mrs' => 'Mrs.', 'prof' => 'Prof.', 'engr' => 'Engr.', 'atty' => 'Atty.',
+        'jr' => 'Jr.', 'sr' => 'Sr.', 'ii' => 'II', 'iii' => 'III', 'iv' => 'IV', 'v' => 'V',
+        'dmd' => 'DMD', 'md' => 'MD', 'phd' => 'PhD', 'msc' => 'MSc', 'mph' => 'MPH', 'ma' => 'MA', 'rn' => 'RN',
+        // "Ms" is a title in a prefix but the MS degree in a suffix.
+        'ms' => $field === 'prefix' ? 'Ms.' : 'MS',
+    ];
+    $parts = preg_split('/([,\s]+)/u', $value, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$value];
+    foreach ($parts as $i => $part) {
+        $key = mb_strtolower(rtrim($part, '.'), 'UTF-8');
+        if ($i % 2 === 0 && isset($words[$key])) {
+            $parts[$i] = $words[$key];
+        }
+    }
+    return implode('', $parts);
+}
+
+/** Trims and collapses inner whitespace to single spaces; optionally upper-cases. */
+function normalize_spaces(?string $value, bool $upper = false): ?string
+{
+    if ($value === null) {
+        return null;
+    }
+    $value = preg_replace('/\s+/u', ' ', trim($value)) ?? trim($value);
+    return $upper ? mb_strtoupper($value, 'UTF-8') : $value;
+}
+
+/** Sex is stored as 'M' or 'F'; blank means not given. */
+function validate_optional_sex(array $data, string $field): ?string
+{
+    $value = strtolower(trim((string) ($data[$field] ?? '')));
+    if ($value === '') {
+        return null;
+    }
+    if ($value === 'm' || $value === 'male') {
+        return 'M';
+    }
+    if ($value === 'f' || $value === 'female') {
+        return 'F';
+    }
+    throw new ValidationException([['field' => $field, 'message' => 'Sex must be Male or Female.']]);
+}
+
+/** Optional Philippine mobile number, stored as 09XXXXXXXXX. */
+function validate_optional_ph_mobile(array $data, string $field): ?string
+{
+    $value = preg_replace('/[\s\-()]/', '', trim((string) ($data[$field] ?? ''))) ?? '';
+    if ($value === '') {
+        return null;
+    }
+    if (!preg_match('/^(09|\+639|639)\d{9}$/', $value)) {
+        throw new ValidationException([['field' => $field, 'message' => 'Enter a Philippine mobile number, e.g. 0917 123 4567.']]);
+    }
+    return '09' . substr($value, -9);
 }
 
 function normalize_person_name(string $value): string

@@ -1037,6 +1037,8 @@ Owner decision (2026-10-13): Saving a class schedule is blocked when one of its 
 
 Canonical Student identity stores first name, optional middle name, and last name as separate persisted fields. APIs may expose a compatibility display name, but MUST NOT persist or overwrite the entire name as one Student field.
 
+Owner decision (2026-10-28): First, middle and last names contain letters, spaces, hyphens, apostrophes and periods, and at least one letter. Accented letters such as ñ are allowed. The server saves names in their usual capitalization ("NAme" → "Name"). In a prefix or suffix, known words get their usual capitalization (`jr` → `Jr.`, `phd` → `PhD`) and other text is kept as typed. Sex is Male or Female, chosen from a list; an unrecognized value in an import file is left blank for the Faculty to choose. Contact is optional and must be a Philippine mobile number, saved as `09XXXXXXXXX`. Student numbers have no required pattern and are kept as typed, except that line breaks and control characters are rejected. Course codes and blocks are saved in uppercase. Course titles and rooms only have extra spaces removed. Existing values that fit these rules were converted once (including upper-casing existing course codes and blocks); other values stay as they are until someone changes them.
+
 ## ACA-001 - Server-authoritative academic decisions
 **Status: CURRENT**
 

@@ -128,4 +128,22 @@ try {
     exit(1);
 }
 
+// Field normalization
+assert_throws(fn() => validate_person_name(['firstName' => ".-'"], 'firstName'), 'Name can only contain', 'Punctuation-only name rejected');
+assert_same('María', validate_person_name(['firstName' => 'María'], 'firstName'), 'Accented name accepted');
+foreach ([['dr', 'prefix', 'Dr.'], ['ms', 'prefix', 'Ms.'], ['ms', 'suffix', 'MS'], ['jr', 'suffix', 'Jr.'], ['dmd, phd', 'suffix', 'DMD, PhD'],
+    ['DMD, MSc', 'suffix', 'DMD, MSc'], ['DMD, MPH', 'suffix', 'DMD, MPH'], ['Esq', 'suffix', 'Esq'], ['Dr.', 'prefix', 'Dr.']] as [$in, $field, $out]) {
+    assert_same($out, normalize_name_affix($in, $field), "Affix '$in' ($field)");
+}
+assert_same('DMD, MS', validate_optional_name_affix(['suffix' => 'dmd, ms'], 'suffix'), 'Suffix is normalized on validation');
+foreach ([['male', 'M'], [' F ', 'F'], ['FEMALE', 'F'], ['', null], [null, null]] as [$in, $out]) {
+    assert_same($out, validate_optional_sex(['sex' => $in], 'sex'), 'Sex ' . var_export($in, true));
+}
+assert_throws(fn() => validate_optional_sex(['sex' => 'X'], 'sex'), 'Sex must be Male or Female.', 'Unknown sex rejected');
+foreach ([['0917 123 4567', '09171234567'], ['+63 917-123-4567', '09171234567'], ['(0917)1234567', '09171234567'], ['639171234567', '09171234567'], ['', null]] as [$in, $out]) {
+    assert_same($out, validate_optional_ph_mobile(['contact' => $in], 'contact'), "Mobile '$in'");
+}
+assert_throws(fn() => validate_optional_ph_mobile(['contact' => '001234'], 'contact'), 'Enter a Philippine mobile number, e.g. 0917 123 4567.', 'Non-mobile contact rejected');
+assert_same('SECTION 3 A', normalize_spaces("  section   3  A ", true), 'Spaces collapsed and upper-cased');
+
 echo "\n=== ALL VALIDATION TESTS PASSED ===\n";

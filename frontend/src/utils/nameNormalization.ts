@@ -69,3 +69,17 @@ export const normalizePersonName = (value: string): string => {
 
 export const normalizeOptionalPersonName = (value: string): string =>
   value.trim() ? normalizePersonName(value) : '';
+
+const AFFIX_WORDS: Record<string, string> = {
+  dr: 'Dr.', dra: 'Dra.', mr: 'Mr.', mrs: 'Mrs.', prof: 'Prof.', engr: 'Engr.', atty: 'Atty.',
+  jr: 'Jr.', sr: 'Sr.', ii: 'II', iii: 'III', iv: 'IV', v: 'V',
+  dmd: 'DMD', md: 'MD', phd: 'PhD', msc: 'MSc', mph: 'MPH', ma: 'MA', rn: 'RN',
+};
+
+/** Fixes the casing of known titles and degrees only; unknown words stay as typed. */
+export const normalizeNameAffix = (value: string, field: 'prefix' | 'suffix'): string =>
+  value.split(/([,\s]+)/u).map((token) => {
+    const key = token.replace(/\.$/, '').toLowerCase();
+    if (key === 'ms') return field === 'prefix' ? 'Ms.' : 'MS';
+    return AFFIX_WORDS[key] ?? token;
+  }).join('');

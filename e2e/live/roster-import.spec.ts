@@ -14,7 +14,7 @@ test('provisional roster creates real records and repeat import preserves their 
   expect(target).toBeTruthy();
   const suffix = Date.now().toString(36);
   const number = `PROVISIONAL-${suffix}`;
-  const csv = Buffer.from(`Student ID,First Name,Middle Name,Last Name,Email,Year Level,Gender,Contact #\n${number},Ana,Reyes,Peña,provisional.${suffix}@bicol-u.edu.ph,3,Female,00123456789`);
+  const csv = Buffer.from(`Student ID,First Name,Middle Name,Last Name,Email,Year Level,Gender,Contact #\n${number},Ana,Reyes,Peña,provisional.${suffix}@bicol-u.edu.ph,3,Female,+63 917 123 4567`);
   await page.locator('a[href="/classes"]').click();
   const importFile = async () => {
     await page.getByRole('button', { name: 'Import Roster', exact: true }).click();
@@ -36,7 +36,7 @@ test('provisional roster creates real records and repeat import preserves their 
     return matching[0];
   };
   const before = await read();
-  expect(before).toMatchObject({ studentId: number, firstName: 'Ana', middleName: 'Reyes', lastName: 'Peña', email: `provisional.${suffix}@bicol-u.edu.ph`, contact: '00123456789', sex: 'F', yearLevel: 3 });
+  expect(before).toMatchObject({ studentId: number, firstName: 'Ana', middleName: 'Reyes', lastName: 'Peña', email: `provisional.${suffix}@bicol-u.edu.ph`, contact: '09171234567', sex: 'F', yearLevel: 3 });
   const targetEnrollment = before.classSections.find((section: { classId: string }) => String(section.classId) === String(target.csId));
   expect(Number(targetEnrollment.enrollmentId)).toBeGreaterThan(0);
   await importFile();

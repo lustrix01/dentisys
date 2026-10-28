@@ -1,5 +1,5 @@
 // Same rules as the server (backend/app/validation.php).
-const NAME_PATTERN = /^[\p{L}\s'’\-.]+$/u;
+const NAME_PATTERN = /^(?=.*\p{L})[\p{L}\s'’\-.]+$/u;
 const AFFIX_PATTERN = /^(?=.*\p{L})[\p{L}\s.,'’\-]+$/u;
 
 export type PersonNamePartKey = 'prefix' | 'firstName' | 'middleName' | 'lastName' | 'suffix';

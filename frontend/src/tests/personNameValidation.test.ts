@@ -2,6 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { filterPersonNameInput, personNameFieldError, isPersonNameValid } from '../utils/personNameValidation.ts';
 
+test('names need at least one letter', () => {
+  assert.notEqual(personNameFieldError('firstName', ".-'"), null);
+  assert.notEqual(personNameFieldError('lastName', '--'), null);
+  assert.notEqual(personNameFieldError('middleName', '.'), null);
+  assert.equal(personNameFieldError('firstName', 'María'), null);
+  assert.equal(personNameFieldError('lastName', 'Muñoz-O’Neil'), null);
+  assert.equal(personNameFieldError('middleName', 'M.'), null);
+});
+
 test('name input excludes digits and unsupported symbols while preserving legitimate names', () => {
   assert.equal(filterPersonNameInput('firstName', 'Ana123@#$'), 'Ana');
   assert.equal(filterPersonNameInput('lastName', 'José Dela Cruz-O’Neil'), 'José Dela Cruz-O’Neil');

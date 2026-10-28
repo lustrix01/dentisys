@@ -100,7 +100,7 @@ export const validatePersonName = (name: string): { isValid: boolean; message: s
   }
 
   const trimmedName = name.trim();
-  const nameRegex = /^[\p{L}\s'’.\-]+$/u;
+  const nameRegex = /^(?=.*\p{L})[\p{L}\s'’.\-]+$/u;
 
   if (!nameRegex.test(trimmedName)) {
     return {

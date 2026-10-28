@@ -291,6 +291,7 @@ $expectedMigrations = [
     '050_class_archiving.sql',
     '051_lecture_only_grading.sql',
     '052_secretary_attendance_requests.sql',
+    '053_field_normalization.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -2571,7 +2572,7 @@ expect_same('CONFLICT', $disabledFacultyRenameBody['code'] ?? null, 'Disabled pr
     'firstName' => 'Invited Renamed',
     'middleName' => 'Canonical',
     'lastName' => 'Student',
-    'contact' => '555-0101',
+    'contact' => '0917 555 0101',
 ]);
 expect_same(200, $activatedFacultyContactStatus, 'Faculty can update other roster fields when activated Student names are unchanged');
 

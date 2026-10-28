@@ -5,11 +5,11 @@ import { catalogUnitsNote, compareRosterHeader, findClassMatchingHeader, newClas
 const domains = ['bicol-u.edu.ph', 'example.edu'];
 
 test('structured CSV preserves complete identifiers, Unicode names, contact and individual years', () => {
-  const rows = validateRosterStudents(parseCSVText('\uFEFFStudent No.,Last Name,First Name,Middle Name,Email,Gender,Year Level,Contact #,Unrelated\r\n2099-1234-56789,Peña,José,Reyes,actual@example.edu,Male,3rd Year,001234,ignored\r\n2099-01-12345,Dela Cruz,Ana,,other@bicol-u.edu.ph,Female,2,009876,ignored'), domains);
+  const rows = validateRosterStudents(parseCSVText('\uFEFFStudent No.,Last Name,First Name,Middle Name,Email,Gender,Year Level,Contact #,Unrelated\r\n2099-1234-56789,Peña,José,Reyes,actual@example.edu,Male,3rd Year,09123456789,ignored\r\n2099-01-12345,Dela Cruz,Ana,,other@bicol-u.edu.ph,Female,2,09187654321,ignored'), domains);
   assert.deepEqual(rows.map(row => row.studentId), ['2099-1234-56789', '2099-01-12345']);
   assert.equal(rows[0].lastName, 'Peña');
   assert.equal(rows[0].firstName, 'José');
-  assert.equal(rows[0].contact, '001234');
+  assert.equal(rows[0].contact, '09123456789');
   assert.deepEqual(rows.map(row => row.yearLevel), [3, 2]);
   assert.deepEqual(rows.map(row => row.sex), ['M', 'F']);
   assert.ok(rows.every(row => row.status === 'valid' && row.included));
@@ -83,7 +83,7 @@ function samplePage(page: number): RosterPDFPage {
       item('Gender', 272, 100, 24), item('Year Level', 305, 100, 31), item('Contact #', 350, 100, 38),
       item('1', 31, 123), item(page === 1 ? '2099-1234-56789' : '2099-01-12345', 43, 123, 64),
       item('Peña, José Miguel Reyes', 111, 116, 140), item('actual@example.edu', 111, 126, 110),
-      item('Male', 270, 123), item('3rd Year', 303, 123), item('00123456789', 343, 123, 48),
+      item('Male', 270, 123), item('3rd Year', 303, 123), item('09123456789', 343, 123, 48),
     ],
   };
 }
@@ -96,7 +96,7 @@ test('multi-page PDF geometry separates identity/email and flags marks without i
   assert.equal(rows[0].firstName, 'José Miguel');
   assert.equal(rows[0].middleName, 'Reyes');
   assert.equal(rows[0].email, 'actual@example.edu');
-  assert.equal(rows[0].contact, '00123456789');
+  assert.equal(rows[0].contact, '09123456789');
   assert.equal(rows[0].yearLevel, 3);
   assert.equal(rows[0].sex, 'M');
   assert.equal(rows[0].possibleCrossedOut, true);
@@ -120,11 +120,27 @@ test('database field limits block unsupported values without truncating the sour
   const oversized = { ...row, studentId: 'A'.repeat(51), contact: '1'.repeat(51), email: 'a'.repeat(250) + '@example.edu', sex: 'Unspecified' };
   const validated = validateRosterStudents([oversized], domains)[0];
   assert.equal(validated.status, 'error');
-  assert.match(validated.validationMessage!, /Student number.*50.*Contact.*50.*Sex.*Email.*254/);
+  assert.match(validated.validationMessage!, /Student number.*50.*Philippine mobile number.*Email.*254/);
   assert.equal(validated.studentId, oversized.studentId);
   assert.equal(validated.contact, oversized.contact);
   assert.equal(validateRosterStudents([{ ...row, sex: ' male ' }], domains)[0].sex, 'M');
   assert.equal(validateRosterStudents([{ ...row, sex: '' }], domains)[0].sex, '');
+});
+
+test('sex outside Male/Female becomes blank and contact must be a Philippine mobile number', () => {
+  const row = { ...parseCSVText('Student ID,First Name,Last Name,Email'+String.fromCharCode(10)+'ABC-123,Ana,Reyes,ana@example.edu')[0], contact: undefined };
+  const check = (overrides: Record<string, unknown>) => validateRosterStudents([{ ...row, ...overrides }], domains)[0];
+  assert.equal(check({ sex: 'Unspecified' }).sex, '');
+  assert.equal(check({ sex: 'Unspecified' }).status, 'valid');
+  assert.equal(check({ sex: 'F' }).sex, 'F');
+  for (const contact of ['0917 123 4567', '+63 917-123-4567', '(0917) 1234567', '639171234567']) {
+    assert.equal(check({ contact }).contact, '09171234567');
+    assert.equal(check({ contact }).status, 'valid');
+  }
+  assert.equal(check({ contact: '' }).status, 'valid');
+  const bad = check({ contact: '001234' });
+  assert.equal(bad.status, 'error');
+  assert.match(bad.validationMessage!, /Philippine mobile number/);
 });
 
 test('preview applies server name-byte limits without truncating names', () => {
@@ -164,17 +180,17 @@ test('PDF student-number fragments form one complete row without inserted spaces
     ? [{ ...item, text: '2099-', width: 23 }, { ...item, text: '1234-', x: item.x + 23, width: 23 }, { ...item, text: '56789', x: item.x + 46, width: 18 }]
     : item.text === 'actual@example.edu'
       ? [{ ...item, text: 'actual@', width: 30 }, { ...item, text: 'example.edu', x: item.x + 30, width: 80 }]
-      : item.text === '00123456789'
-        ? [{ ...item, text: '001234', width: 26 }, { ...item, text: '56789', x: item.x + 26, width: 22 }]
+      : item.text === '09123456789'
+        ? [{ ...item, text: '091234', width: 26 }, { ...item, text: '56789', x: item.x + 26, width: 22 }]
     : [item]);
   const rows = parsePDFRosterPages([{ ...page, items: page.items.reverse() }]);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].studentId, '2099-1234-56789');
   assert.equal(rows[0].email, 'actual@example.edu');
-  assert.equal(rows[0].contact, '00123456789');
+  assert.equal(rows[0].contact, '09123456789');
   assert.equal(rows[0].possibleCrossedOut, true);
   const spaced = page.items.map(item => item.text === '56789' && item.x > 300 ? { ...item, x: item.x + 6 } : item);
-  assert.equal(parsePDFRosterPages([{ ...page, items: spaced }])[0].contact, '001234 56789');
+  assert.equal(parsePDFRosterPages([{ ...page, items: spaced }])[0].contact, '091234 56789');
 });
 
 // Synthetic official-layout fixture: Program column, header block, optional "No University Email".

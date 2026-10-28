@@ -528,8 +528,19 @@ function handle_faculty_student_create(): void
             : null;
 
         $email = trim((string) ($data['email'] ?? ''));
-        $contact = trim((string) ($data['contact'] ?? ''));
-        $sex = trim((string) ($data['sex'] ?? ''));
+        $errors = [];
+        try {
+            $contact = validate_optional_ph_mobile($data, 'contact');
+        } catch (ValidationException $e) {
+            $contact = null;
+            $errors['contact'] = $e->getErrors()[0]['message'];
+        }
+        try {
+            $sex = validate_optional_sex($data, 'sex');
+        } catch (ValidationException $e) {
+            $sex = null;
+            $errors['sex'] = $e->getErrors()[0]['message'];
+        }
         $yearLevel = array_key_exists('yearLevel', $data) && $data['yearLevel'] !== null && $data['yearLevel'] !== ''
             ? (int) $data['yearLevel']
             : null;
@@ -542,9 +553,10 @@ function handle_faculty_student_create(): void
             return;
         }
 
-        $errors = [];
         if (strlen($studentNumber) < 3) {
             $errors['studentId'] = 'Student ID number must be at least 3 characters.';
+        } elseif (preg_match('/[\x00-\x1F\x7F]/', $studentNumber)) {
+            $errors['studentId'] = 'Student number cannot contain line breaks or control characters.';
         }
         if (empty($firstName) || strlen($firstName) < 2) {
             $errors['firstName'] = 'First name must be at least 2 characters.';
@@ -694,8 +706,8 @@ function handle_faculty_student_create(): void
                 'lastName' => $lastName,
                 'suffix' => $suffix,
                 'email' => $email,
-                'contact' => $contact,
-                'sex' => $sex,
+                'contact' => $contact ?? '',
+                'sex' => $sex ?? '',
                 'yearLevel' => $yearLevel,
                 'status' => $status,
                 'admissionDate' => $admissionDate,
@@ -847,11 +859,11 @@ function handle_faculty_student_update(array $params = []): void
         }
         if (array_key_exists('contact', $data)) {
             $updates[] = 'contact = ?';
-            $values[] = validate_optional_string($data, 'contact', 1, 50);
+            $values[] = validate_optional_ph_mobile($data, 'contact');
         }
         if (array_key_exists('sex', $data)) {
             $updates[] = 'sex = ?';
-            $values[] = validate_optional_string($data, 'sex', 1, 1);
+            $values[] = validate_optional_sex($data, 'sex');
         }
         if (array_key_exists('yearLevel', $data)) {
             $yearLevel = $data['yearLevel'];
@@ -8008,10 +8020,10 @@ function handle_faculty_class_create(): void
         }
 
         $data = $body['data'];
-        $csName = validate_required_string($data, 'csName', 2, 255);
+        $csName = normalize_spaces(validate_required_string($data, 'csName', 2, 255));
         $courseId = (int) ($data['courseId'] ?? 0);
-        $courseCode = isset($data['courseCode']) ? trim((string) $data['courseCode']) : '';
-        $courseName = isset($data['courseName']) ? trim((string) $data['courseName']) : '';
+        $courseCode = isset($data['courseCode']) ? normalize_spaces((string) $data['courseCode'], true) : '';
+        $courseName = isset($data['courseName']) ? normalize_spaces((string) $data['courseName']) : '';
         $pdo->beginTransaction();
         academic_terms_lock($pdo);
         $term = academic_term_for_class_create($pdo, $data);
@@ -8022,9 +8034,9 @@ function handle_faculty_class_create(): void
         if ($yearLevel < 1 || $yearLevel > 6) {
             throw new ValidationException(['yearLevel' => 'Year level must be an integer between 1 and 6.']);
         }
-        $block = validate_optional_string($data, 'block', 1, 50) ?? 'A';
-        $labRoom = validate_optional_string($data, 'labRoom', 1, 100);
-        $lecRoom = validate_optional_string($data, 'lecRoom', 1, 100);
+        $block = normalize_spaces(validate_optional_string($data, 'block', 1, 50), true) ?: 'A';
+        $labRoom = normalize_spaces(validate_optional_string($data, 'labRoom', 1, 100));
+        $lecRoom = normalize_spaces(validate_optional_string($data, 'lecRoom', 1, 100));
         $meetings = array_key_exists('meetings', $data) ? class_meetings_validate($data['meetings']) : null;
         [$lectureUnits, $labUnits] = faculty_parse_component_units($data);
         if (mb_strlen($courseCode) > 50) {
@@ -8189,11 +8201,11 @@ function handle_faculty_class_update(): void
         $params = [];
         if (array_key_exists('csName', $data)) {
             $updates[] = 'cs_name = ?';
-            $params[] = validate_required_string($data, 'csName', 2, 255);
+            $params[] = normalize_spaces(validate_required_string($data, 'csName', 2, 255));
         }
         if (array_key_exists('block', $data)) {
             $updates[] = 'block = ?';
-            $params[] = validate_required_string($data, 'block', 1, 50);
+            $params[] = normalize_spaces(validate_required_string($data, 'block', 1, 50), true);
         }
         // Course, semester and school year may change only for a current
         // school-year class that has no scores or grades yet (checked below).
@@ -8224,11 +8236,11 @@ function handle_faculty_class_update(): void
         }
         if (array_key_exists('lecRoom', $data)) {
             $updates[] = 'lec_room = ?';
-            $params[] = validate_optional_string($data, 'lecRoom', 1, 100);
+            $params[] = normalize_spaces(validate_optional_string($data, 'lecRoom', 1, 100));
         }
         if (array_key_exists('labRoom', $data)) {
             $updates[] = 'lab_room = ?';
-            $params[] = validate_optional_string($data, 'labRoom', 1, 100);
+            $params[] = normalize_spaces(validate_optional_string($data, 'labRoom', 1, 100));
         }
         $hasCourseUpdates = array_key_exists('courseCode', $data) || array_key_exists('courseName', $data);
         $hasUnitUpdates = array_key_exists('lectureUnits', $data) || array_key_exists('labUnits', $data);
@@ -8262,7 +8274,7 @@ function handle_faculty_class_update(): void
             $currentCourseStmt = $pdo->prepare('SELECT course_code, name FROM courses WHERE course_id = ?');
             $currentCourseStmt->execute([(int) $before['course_id']]);
             $currentCourse = $currentCourseStmt->fetch(PDO::FETCH_ASSOC) ?: ['course_code' => '', 'name' => ''];
-            $newCode = isset($data['courseCode']) ? trim((string) $data['courseCode']) : '';
+            $newCode = isset($data['courseCode']) ? normalize_spaces((string) $data['courseCode'], true) : '';
             $codeChanges = $newCode !== '' && strcasecmp($newCode, (string) $currentCourse['course_code']) !== 0;
             $semesterChanges = isset($termFieldsRequested['semester'])
                 && strcasecmp($termFieldsRequested['semester'], (string) $before['semester']) !== 0;
@@ -8343,7 +8355,7 @@ function handle_faculty_class_update(): void
                     $course = faculty_resolve_catalog_course(
                         $pdo,
                         $newCode,
-                        isset($data['courseName']) ? trim((string) $data['courseName']) : '',
+                        isset($data['courseName']) ? normalize_spaces((string) $data['courseName']) : '',
                         $editLectureUnits,
                         $editLabUnits,
                         (int) ($data['yearLevel'] ?? $before['year_level'] ?? 1),
@@ -8358,7 +8370,7 @@ function handle_faculty_class_update(): void
                     // The title belongs to this class only; the shared catalog
                     // course is never renamed for other Faculty.
                     $updates[] = 'course_title = ?';
-                    $params[] = faculty_class_course_title((string) ($data['courseName'] ?? ''), $catalogName);
+                    $params[] = faculty_class_course_title(normalize_spaces((string) ($data['courseName'] ?? '')), $catalogName);
                 }
             }
 

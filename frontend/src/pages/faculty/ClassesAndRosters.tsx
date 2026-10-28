@@ -2260,7 +2260,7 @@ const handleSendAllStudentInvites = async () => {
                   list="course-catalog-codes"
                   value={newCourseCode}
                   onChange={(e) => {
-                    const code = e.target.value;
+                    const code = e.target.value.toUpperCase();
                     setNewCourseCode(code);
                     const found = courses.find(c => c.courseCode.toLowerCase() === code.trim().toLowerCase());
                     if (found) {
@@ -2396,7 +2396,7 @@ const handleSendAllStudentInvites = async () => {
                   required
                   {...fieldAria('block')}
                   value={newBlock}
-                  onChange={(e) => setNewBlock(e.target.value)}
+                  onChange={(e) => setNewBlock(e.target.value.toUpperCase())}
                   placeholder="e.g. 4B or Section 3-A"
                   className={`w-full px-3.5 py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 font-medium ${fieldCls('block', 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900')}`}
                 />
@@ -2723,7 +2723,7 @@ const handleSendAllStudentInvites = async () => {
                   readOnly={editTermLocked}
                   value={editCourseCode}
                   onChange={(e) => {
-                    const code = e.target.value;
+                    const code = e.target.value.toUpperCase();
                     setEditCourseCode(code);
                     const found = courses.find(c => c.courseCode.toLowerCase() === code.trim().toLowerCase());
                     const foundComponents = found ? componentsFromUnits(found.lectureUnits, found.labUnits) : null;
@@ -2762,7 +2762,7 @@ const handleSendAllStudentInvites = async () => {
                   type="text"
                   required
                   value={editBlock}
-                  onChange={(e) => setEditBlock(e.target.value)}
+                  onChange={(e) => setEditBlock(e.target.value.toUpperCase())}
                   placeholder="Section 4-A"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />

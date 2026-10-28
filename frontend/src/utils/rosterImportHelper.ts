@@ -1,4 +1,6 @@
 import { personNameFieldError } from './personNameValidation.ts';
+import { normalizeNameAffix } from './nameNormalization.ts';
+import { normalizePhMobile, PH_MOBILE_MESSAGE } from './phMobile.ts';
 
 /** Provisional roster data only; no official Registrar format is confirmed. */
 export interface ParsedRosterStudent {
@@ -55,7 +57,7 @@ function normalizeRosterSex(value: string): string {
   const trimmed = value.trim();
   if (/^(female|f)$/i.test(trimmed)) return 'F';
   if (/^(male|m)$/i.test(trimmed)) return 'M';
-  return trimmed;
+  return '';
 }
 
 export function validateRosterStudents(rows: ParsedRosterStudent[], allowedDomains: string[]): ParsedRosterStudent[] {
@@ -68,16 +70,16 @@ export function validateRosterStudents(rows: ParsedRosterStudent[], allowedDomai
     const errors: string[] = [];
     if (row.studentId.trim().length < 3) errors.push('Student number must contain at least 3 characters.');
     if (row.studentId.trim().length > 50) errors.push('Student number must contain at most 50 characters.');
-    if ((row.contact?.trim().length ?? 0) > 50) errors.push('Contact must contain at most 50 characters.');
+    const contact = normalizePhMobile(row.contact ?? '');
+    if (contact === null) errors.push(PH_MOBILE_MESSAGE);
     const sex = normalizeRosterSex(row.sex ?? '');
-    if (sex.length > 1) errors.push('Sex must be Male, Female, a one-character code, or blank. Review the source value.');
     if ((counts.get(row.studentId.trim().toLowerCase()) ?? 0) > 1) errors.push('Duplicate student number in this file.');
     for (const key of ['prefix', 'firstName', 'middleName', 'lastName', 'suffix'] as const) {
       const raw = row[key] ?? '';
       const error = personNameFieldError(key, raw);
       if (error) errors.push(error);
       const affix = key === 'prefix' || key === 'suffix';
-      const normalized = affix ? raw.trim() : raw.trim().replace(/\s+/g, ' ').replace(/(^| )(jr|sr)\.?(?= |$)/gi, '$1$2.');
+      const normalized = affix ? normalizeNameAffix(raw.trim(), key === 'prefix' ? 'prefix' : 'suffix') : raw.trim().replace(/\s+/g, ' ').replace(/(^| )(jr|sr)\.?(?= |$)/gi, '$1$2.');
       const maxBytes = affix ? 50 : 100;
       const label = { prefix: 'Prefix', firstName: 'First name', middleName: 'Middle name', lastName: 'Last name', suffix: 'Suffix' }[key];
       if (new TextEncoder().encode(normalized).length > maxBytes) errors.push(`${label} must contain at most ${maxBytes} UTF-8 bytes.`);
@@ -91,7 +93,7 @@ export function validateRosterStudents(rows: ParsedRosterStudent[], allowedDomai
     }
     if (row.yearLevel !== null && (!Number.isInteger(row.yearLevel) || row.yearLevel < 1 || row.yearLevel > 6)) errors.push('Year level must be between 1 and 6, or blank.');
     const needsReview = !row.reviewed && (row.requiresNameReview || row.possibleCrossedOut);
-    return { ...row, sex, status: errors.length ? 'error' : needsReview ? 'warning' : 'valid', validationMessage: errors.length ? errors.join(' ') : needsReview ? 'Review the source and name fields before selecting this row.' : undefined };
+    return { ...row, sex, ...(contact !== null && row.contact !== undefined ? { contact } : {}), status: errors.length ? 'error' : needsReview ? 'warning' : 'valid', validationMessage: errors.length ? errors.join(' ') : needsReview ? 'Review the source and name fields before selecting this row.' : undefined };
   });
 }
 

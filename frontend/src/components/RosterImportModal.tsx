@@ -1,3 +1,5 @@
+import { normalizeNameAffix } from '../utils/nameNormalization';
+import { normalizePhMobile } from '../utils/phMobile';
 import { filterPersonNameInput, preventInvalidPersonNameKey } from '../utils/personNameValidation';
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -347,13 +349,13 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
         }
         await createStudentApi({
           studentId: student.studentId.trim(),
-          prefix: student.prefix,
-          suffix: student.suffix,
+          prefix: normalizeNameAffix(student.prefix ?? '', 'prefix') || undefined,
+          suffix: normalizeNameAffix(student.suffix ?? '', 'suffix') || undefined,
           firstName: student.firstName,
           middleName: student.middleName,
           lastName: student.lastName,
           email: student.email.trim().toLowerCase(),
-          contact: student.contact?.trim() || undefined,
+          contact: normalizePhMobile(student.contact ?? '') || undefined,
           yearLevel: student.yearLevel ?? undefined,
           sex: student.sex,
           classId: String(csId),
@@ -500,7 +502,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
             <span className={labelCls}>New class from this file</span>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <label className={labelCls}>Course code
-                <input type="text" value={draft.code} onChange={e => updateDraft({ code: e.target.value })} aria-invalid={Boolean(problemFor('Enter a course code.'))} className={`mt-1 ${fieldCls} ${problemFor('Enter a course code.') ? invalidFieldCls : ''}`} />
+                <input type="text" value={draft.code} onChange={e => updateDraft({ code: e.target.value.toUpperCase() })} aria-invalid={Boolean(problemFor('Enter a course code.'))} className={`mt-1 ${fieldCls} ${problemFor('Enter a course code.') ? invalidFieldCls : ''}`} />
                 {problemFor('Enter a course code.') && <span role="alert" className="mt-1 block text-xs font-medium text-rose-700 dark:text-rose-300">Enter a course code.</span>}
               </label>
               <label className={labelCls}>Course title
@@ -508,7 +510,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                 {problemFor('Enter the course title.') && <span role="alert" className="mt-1 block text-xs font-medium text-rose-700 dark:text-rose-300">Enter the course title.</span>}
               </label>
               <label className={labelCls}>Section
-                <input type="text" value={draft.section} onChange={e => updateDraft({ section: e.target.value })} aria-invalid={Boolean(problemFor('Enter the section or block.'))} className={`mt-1 ${fieldCls} ${problemFor('Enter the section or block.') ? invalidFieldCls : ''}`} />
+                <input type="text" value={draft.section} onChange={e => updateDraft({ section: e.target.value.toUpperCase() })} aria-invalid={Boolean(problemFor('Enter the section or block.'))} className={`mt-1 ${fieldCls} ${problemFor('Enter the section or block.') ? invalidFieldCls : ''}`} />
                 {problemFor('Enter the section or block.') && <span role="alert" className="mt-1 block text-xs font-medium text-rose-700 dark:text-rose-300">Enter a section or block.</span>}
               </label>
               <label className={labelCls}>Year level
@@ -719,7 +721,11 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                     <div role="cell" className="col-span-2 min-w-0 sm:col-span-3 lg:col-span-4">
                       <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Sex and contact</span>
                       <div className="grid min-w-0 grid-cols-2 gap-1.5">
-                        <input type="text" aria-label={`Sex for ${st.studentId}`} placeholder="Sex" value={st.sex ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'sex', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" />
+                        <select aria-label={`Sex for ${st.studentId}`} value={st.sex ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'sex', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900">
+                          <option value="">—</option>
+                          <option value="M">Male</option>
+                          <option value="F">Female</option>
+                        </select>
                         <input type="text" aria-label={`Contact for ${st.studentId}`} placeholder="Contact" value={st.contact ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'contact', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" />
                       </div>
                     </div>

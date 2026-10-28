@@ -77,6 +77,9 @@ function handle_secretary_invite(): void
         $data = $body['data'];
         $studentName = validate_person_name($data, 'student_name', 2, 255);
         $studentNumber = validate_required_string($data, 'student_number', 1, 50);
+        if (preg_match('/[\x00-\x1F\x7F]/', $studentNumber)) {
+            throw new ValidationException([['field' => 'student_number', 'message' => 'Student number cannot contain line breaks or control characters.']]);
+        }
         $csId = filter_var($data['cs_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         if ($csId === false) {
             throw new ValidationException([['field' => 'cs_id', 'message' => 'A class section is required.']]);
