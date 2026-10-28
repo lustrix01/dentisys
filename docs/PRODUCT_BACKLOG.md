@@ -67,6 +67,24 @@ Keep meaningful at-a-glance information; remove Quick Action buttons that only r
 
 Remove **Course Component Ratios** and **Retention Standard**. Do not add replacement settings; the page may stay sparse.
 
+## 4.5 Dean view of grade and attendance changes (walkthrough D12, spec question P6)
+
+**Status: Unclear.** Waiting on the Owner's group discussion (2026-10-28).
+
+The Dean's Audit Trail hides class work ("Class work (grades, attendance, retention) is not shown here; it stays recorded"). Decide whether the Dean can see or filter grade and attendance changes, for example to check grade tampering. Then add the spec line before building.
+
+## 4.6 Course catalog control (walkthrough F14, spec question P7)
+
+**Status: Unclear.** Waiting on the Owner's group discussion (2026-10-28).
+
+Any Faculty member can add a course code when creating a class, and no one can retire one; test courses stay visible to the Dean. Decide whether the Dean manages the catalog (Faculty pick from it) or the Dean can retire codes. Then add the spec line before building.
+
+## 4.7 Account deactivation (walkthrough D5, spec question P5)
+
+**Status: Not started.** Backlogged by the Owner (2026-10-28).
+
+The Dean cannot deactivate or reactivate a Faculty or Student account (someone leaves, or an account is misused), and has no list of all students or of each Faculty member's classes. Needs a spec line and a contract before building.
+
 ---
 
 # 5. Faculty
