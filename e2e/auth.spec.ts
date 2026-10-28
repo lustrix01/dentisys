@@ -529,7 +529,7 @@ test('configured Google Sign-In reports GIS script load failure without blocking
   await page.route('**/api/runtime-config', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GOOGLE_RUNTIME_CONFIG) });
   });
-  await page.route('**/gsi/client', async (route) => {
+  await page.route('**/gsi/client*', async (route) => {
     await route.abort();
   });
 

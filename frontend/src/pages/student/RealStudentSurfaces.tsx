@@ -22,12 +22,11 @@ import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import {
   getStudentAcademicDashboardApi,
   getStudentAcademicProfileApi,
+  getStudentBiometricProfile,
   updateStudentProfileApi,
 } from '../../services/apiClient';
 import type { PersonNameParts } from '../../components/PersonNameFields';
-import type {
-  StudentAcademicProfile,
-} from '../../types';
+import { isAuthoritativeActiveEnrolled, type StudentAcademicProfile } from '../../types';
 import GradeValue from '../../components/GradeValue';
 import { formatGrade } from '../../utils/gradeHelper';
 
@@ -104,6 +103,7 @@ export const RealStudentDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [schoolYear, setSchoolYear] = useState('current');
+  const [faceEnrolled, setFaceEnrolled] = useState(true);
 
   const loadData = async () => {
     setLoading(true);
@@ -111,6 +111,10 @@ export const RealStudentDashboard: React.FC = () => {
     try {
       const res = await getStudentAcademicDashboardApi(schoolYear);
       setData(res);
+      // The face prompt is optional guidance: if the profile cannot be read, hide it rather than fail the dashboard.
+      getStudentBiometricProfile()
+        .then(profile => setFaceEnrolled(isAuthoritativeActiveEnrolled(profile.enrollmentStatus)))
+        .catch(() => setFaceEnrolled(true));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unable to load student dashboard.');
     } finally {
@@ -162,7 +166,7 @@ export const RealStudentDashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:flex-wrap xl:flex-nowrap sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            Welcome back, {student.name}!
+            Welcome, {student.name}!
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             Monitor your clinical attendance, academic progress, and retention standing.
@@ -176,6 +180,27 @@ export const RealStudentDashboard: React.FC = () => {
         />
 
       </div>
+
+      {!faceEnrolled && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-blue-200 dark:border-blue-900/50 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
+              <Camera className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Register your face to check in</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Face check-in is optional; your Class Secretary or Faculty can still mark you manually.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/student/face-registration')}
+            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer whitespace-nowrap"
+          >
+            Register Face
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <div className="lg:col-span-8 space-y-6">
@@ -242,7 +267,7 @@ export const RealStudentDashboard: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
             ['Academic Roster', 'Enrolled Courses', 'View schedule and grades', '/student/classes'],
-            ['Audit Trail', 'Attendance Logs', 'Full historical log entries', '/student/attendance-logs'],
+            ['Attendance', 'Attendance Logs', 'Full historical log entries', '/student/attendance-logs'],
             ['Biometrics', 'Face Registration', 'Enroll or update face model', '/student/face-registration'],
           ].map(([label, title, description, path]) => (
             <button key={path} onClick={() => navigate(path)} className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-blue-500/50 hover:shadow-xs transition-all text-left group cursor-pointer">
@@ -290,7 +315,8 @@ export const RealStudentDashboard: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {classes.map((cls) => {
-                    const isAtRisk = cls.retentionState?.toLowerCase() === 'remedial';
+                    const retentionKey = cls.retentionState?.toLowerCase();
+                    const isAtRisk = retentionKey === 'remedial';
                     return (
                       <tr key={cls.enrollmentId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                         <td className="py-3 px-4">
@@ -322,7 +348,7 @@ export const RealStudentDashboard: React.FC = () => {
                                 : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
                             }`}
                           >
-                            {cls.retentionState || 'Good Standing'}
+                            {cls.grade === null && (!cls.retentionState || retentionKey === 'active') ? 'No grade yet' : cls.retentionState || 'Good Standing'}
                           </span>
                         </td>
                       </tr>

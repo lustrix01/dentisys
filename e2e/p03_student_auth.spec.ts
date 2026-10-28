@@ -215,7 +215,7 @@ test.describe('P03 Student identity and authentication', () => {
     await page.getByRole('button', { name: 'Login', exact: true }).click();
     await expect(page).toHaveURL('/student/dashboard');
 
-    await expect(page.getByRole('main').getByRole('heading', { name: /Welcome back, Real Student!/i })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('heading', { name: /Welcome, Real Student!/i })).toBeVisible();
     for (const value of fabricatedValues) {
       await expect(page.locator('body')).not.toContainText(value);
     }
@@ -356,7 +356,7 @@ test.describe('P03 Student identity and authentication', () => {
     await page.goto('/student/attendance');
     const main = page.getByRole('main');
     await expect(page.getByRole('heading', { level: 1, name: 'Daily Attendance' })).toBeVisible();
-    await expect(main.getByText('Upcoming sessions')).toBeVisible();
+    await expect(main.getByText('Today & upcoming sessions')).toBeVisible();
     await expect(main.getByText('Open · Present until 10:30')).toBeVisible();
     await expect(main.getByText('Opens in 3h 30m')).toBeVisible();
     await expect(main.getByText('WEEK103')).toBeVisible();

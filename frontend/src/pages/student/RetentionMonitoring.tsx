@@ -10,6 +10,16 @@ import { getStudentAcademicRetentionApi } from '../../services/apiClient';
 import type { Student, StudentAcademicClass } from '../../types';
 import GradeValue from '../../components/GradeValue';
 import { formatGrade } from '../../utils/gradeHelper';
+import { semesterLabel } from '../../utils/academicTermDefaults';
+
+const courseKind = (cls: StudentAcademicClass): string | null => {
+  const hasLab = Boolean(cls.meetings?.some(m => m.component === 'Laboratory') || cls.gradingComponentMode === 'lecture_laboratory' || cls.labRoom);
+  const hasLec = Boolean(cls.meetings?.some(m => m.component === 'Lecture') || cls.gradingComponentMode || cls.lecRoom);
+  if (hasLec && hasLab) return 'Lecture & Laboratory';
+  if (hasLab) return 'Laboratory';
+  if (hasLec) return 'Lecture';
+  return cls.isClinical ? 'Clinical Lab' : null;
+};
 
 type RemedialStage =
   | 'none'
@@ -471,14 +481,14 @@ export const RetentionMonitoring: React.FC = () => {
                       <tr key={cls.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                         <td className="py-3.5 px-4">
                           <div className="space-y-0.5">
-                            <span className="font-mono font-bold text-blue-600 dark:text-blue-400 text-sm mr-2">
+                            <span className="font-mono font-bold text-blue-600 dark:text-blue-400 text-sm mr-2 whitespace-nowrap">
                               {cls.courseCode}
                             </span>
                             <span className="text-slate-800 dark:text-slate-100 font-semibold">
                               {cls.courseName}
                             </span>
                             <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                              {cls.isClinical ? 'Clinical Lab' : 'Lecture'} · {cls.units} Units · {cls.instructorName || 'Faculty'}
+                              {[courseKind(cls), `${cls.units} Units`, cls.instructorName || 'Faculty'].filter(Boolean).join(' · ')}
                             </div>
                           </div>
                         </td>
@@ -551,7 +561,7 @@ export const RetentionMonitoring: React.FC = () => {
               <h4 className="text-xs font-bold"><span className="font-mono text-blue-600 mr-2">{cls.courseCode}</span>{cls.courseName}</h4>
               <p className="text-xs">Original Course Grade: {cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue>}</p>
               <p className="text-xs">Retention: {cls.retentionState || 'State unavailable'}</p>
-              <p className="text-[10px] text-slate-500">{cls.semester} · {cls.schoolYear}</p>
+              <p className="text-[10px] text-slate-500">{semesterLabel(cls.semester)} · {cls.schoolYear}</p>
               <p className="text-xs font-semibold">{readRemedialProgression(cls).stage === 'none' ? 'No remedial attempt assigned.' : 'Remedial progression needs Faculty review.'}</p>
             </Card>)}
             {[...activeRemedialRecords, ...remedialHistoryRecords].map((cls, index) => {
@@ -581,7 +591,7 @@ export const RetentionMonitoring: React.FC = () => {
                     </span>
                   </div>
 
-                  <p className="text-[10px] text-slate-500">{cls.semester} · {cls.schoolYear} · {progression.stage.replaceAll('_', ' ')}</p>
+                  <p className="text-[10px] text-slate-500">{semesterLabel(cls.semester)} · {cls.schoolYear} · {progression.stage.replaceAll('_', ' ')}</p>
                   {/* Scheduled Exam Date */}
                   <div className="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 flex items-center gap-3">
                     <Clock className="w-5 h-5 text-blue-600 shrink-0" />
@@ -734,7 +744,7 @@ export const RetentionMonitoring: React.FC = () => {
                   >
                     <div>
                       <h4 className="font-bold text-xs text-slate-800 dark:text-slate-100">
-                        S.Y. {sem.schoolYear} · {sem.semester}
+                        S.Y. {sem.schoolYear} · {semesterLabel(sem.semester)}
                       </h4>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400">
                         {sem.records.length} Courses

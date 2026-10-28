@@ -39,7 +39,7 @@ foreach (['student invitation', 'secretary invitation', 'faculty invitation', 'p
 assert_email(str_contains($emails['student invitation'], 'Juan &lt;Dela&gt; Cruz'), 'recipient names are escaped');
 assert_email(str_contains($emails['student invitation'], 'Class Invitation Details'), 'student invitation has the class details card');
 assert_email(str_contains($emails['student invitation'], 'S.Y. 2026-2027'), 'student invitation shows the school year');
-assert_email(str_contains($emails['student invitation'], '24 hours'), 'student invitation states its 24-hour expiry');
+assert_email(str_contains($emails['student invitation'], '7 days'), 'student invitation states its 7-day expiry');
 assert_email(str_contains($emails['secretary invitation'], '7 days'), 'secretary invitation states its 7-day expiry');
 assert_email(str_contains($emails['faculty message'], '&lt;b&gt;Room 2&lt;/b&gt;'), 'Faculty-written text is escaped');
 assert_email(str_contains($emails['faculty message'], '>Please see me.</p>'), 'Faculty message paragraphs are kept');

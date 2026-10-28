@@ -249,7 +249,7 @@ function handle_student_invitation_create(): void
             $accountId = (int) $account['user_id'];
             $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
             $nowSql = $now->format('Y-m-d H:i:s.u');
-            $expiresSql = $now->add(new DateInterval('P1D'))->format('Y-m-d H:i:s.u');
+            $expiresSql = $now->add(new DateInterval('P7D'))->format('Y-m-d H:i:s.u');
             $revoke = $pdo->prepare(
                 "UPDATE security_tokens SET revoked_at = ?, revocation_reason = 'Replaced by a Faculty-authorized Student invitation'
                   WHERE purpose = 'student_activation' AND user_id = ? AND used_at IS NULL AND revoked_at IS NULL"

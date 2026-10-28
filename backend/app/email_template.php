@@ -170,7 +170,7 @@ function email_student_invitation_html(
         ],
         'action_text' => 'To activate your student account, confirm your class membership, and access clinical requirements, attendance logs, and academic assessments, please click the button below:',
         'button' => ['label' => 'Accept Invitation & Join Class', 'url' => $link],
-        'notice' => '<strong>Important:</strong> This invitation link is unique to your institutional email address and will expire in <strong>24 hours</strong>. If you were not expecting it, please contact your Faculty instructor.',
+        'notice' => '<strong>Important:</strong> This invitation link is unique to your institutional email address and will expire in <strong>7 days</strong>. If you were not expecting it, please contact your Faculty instructor.',
         'signature' => ['name' => $faculty, 'lines' => ['Bicol University College of Dental Medicine']],
     ]);
 }

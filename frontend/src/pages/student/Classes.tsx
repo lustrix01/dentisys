@@ -21,6 +21,8 @@ import { getStudentAcademicClassesApi } from '../../services/apiClient';
 import type { StudentAcademicClass } from '../../types';
 import GradeValue, { lectureHoverSteps } from '../../components/GradeValue';
 import { formatGrade } from '../../utils/gradeHelper';
+import { semesterLabel } from '../../utils/academicTermDefaults';
+import { displayMeetingTime } from '../../utils/scheduleHelper';
 
 interface ParsedSchedule {
   room: string;
@@ -61,8 +63,8 @@ const getFormattedSchedule = (cls: StudentAcademicClass, component: 'Lecture' | 
   if (meetings.length > 0) {
     const rooms = Array.from(new Set(meetings.map(m => m.room).filter(Boolean)));
     // Several rooms: keep each room beside its own meeting so the day-room pairing is not lost.
-    if (rooms.length > 1) return { times: meetings.map(m => `${m.day} ${m.startTime} - ${m.endTime} · ${m.room || 'TBA'}`).join('; '), room: '' };
-    return { times: meetings.map(m => `${m.day} ${m.startTime} - ${m.endTime}`).join('; '), room: rooms[0] ?? 'TBA' };
+    if (rooms.length > 1) return { times: meetings.map(m => `${m.day} ${displayMeetingTime(m.startTime)} - ${displayMeetingTime(m.endTime)} · ${m.room || 'TBA'}`).join('; '), room: '' };
+    return { times: meetings.map(m => `${m.day} ${displayMeetingTime(m.startTime)} - ${displayMeetingTime(m.endTime)}`).join('; '), room: rooms[0] ?? 'TBA' };
   }
   // Legacy room text supplies the room only; once meetings are recorded, no meeting means no time.
   const legacy = parseRoomAndSchedule(component === 'Lecture' ? cls.lecRoom : cls.labRoom);
@@ -259,7 +261,7 @@ export const Classes: React.FC = () => {
             </div>
             <div>
               <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Current Enrolled</p>
-              <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100">{currentClasses.length} Subjects</p>
+              <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100">{currentClasses.length} {currentClasses.length === 1 ? 'Subject' : 'Subjects'}</p>
             </div>
           </div>
 
@@ -284,7 +286,7 @@ export const Classes: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Archived History</p>
-                  <p className="text-sm font-extrabold text-slate-700 dark:text-slate-300">{archivedClasses.length} Subjects</p>
+                  <p className="text-sm font-extrabold text-slate-700 dark:text-slate-300">{archivedClasses.length} {archivedClasses.length === 1 ? 'Subject' : 'Subjects'}</p>
                 </div>
               </div>
             </>
@@ -399,7 +401,7 @@ export const Classes: React.FC = () => {
                           {cls.courseName}
                         </h3>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                          {cls.semester} Semester • S.Y. {cls.schoolYear}
+                          {semesterLabel(cls.semester)} • S.Y. {cls.schoolYear}
                         </p>
                       </div>
 
@@ -515,7 +517,7 @@ export const Classes: React.FC = () => {
                           {cls.courseName}
                         </h3>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                          {cls.semester} Semester • Sec. {cls.className}
+                          {semesterLabel(cls.semester)} • Sec. {cls.className}
                         </p>
                       </div>
 

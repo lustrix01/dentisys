@@ -104,7 +104,7 @@ export const GoogleLinkCard: React.FC = () => {
       render();
     } else {
       script.id = 'google-gis-client';
-      script.src = 'https://accounts.google.com/gsi/client';
+      script.src = 'https://accounts.google.com/gsi/client?hl=en'; // Google picks the button language when the script loads
       script.async = true;
       script.defer = true;
       script.addEventListener('load', handleLoad);

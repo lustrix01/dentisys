@@ -45,7 +45,7 @@ test('Student Classes reads canonical meetings including Sunday and avoids fabri
   }] } }));
   await page.goto('/student/classes');
   await expect(page.getByRole('button', { name: /Current Classes \(2027-2028\)/ })).toBeVisible();
-  await expect(page.getByText(/Sun 13:00 - 14:00 · New clinic; Tue 09:00 - 10:00 · Clinic 2/)).toBeVisible();
+  await expect(page.getByText(/Sun 01:00 PM - 02:00 PM · New clinic; Tue 09:00 AM - 10:00 AM · Clinic 2/)).toBeVisible();
   await expect(page.getByRole('main')).not.toContainText('Mon 08:00 AM');
   await expect(page.getByRole('main')).not.toContainText('2023-2689-70869');
 });
@@ -100,7 +100,7 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 
     const toggle = page.locator('[aria-label="Account view"]');
     await toggle.getByRole('button', { name: 'Student', exact: true }).click();
     await expect(page).toHaveURL('/student/dashboard');
-    await expect(page.getByRole('main')).toContainText('Welcome back, Real Student!');
+    await expect(page.getByRole('main')).toContainText('Welcome, Real Student!');
     if (phone) await page.locator('header').first().getByRole('button').last().click();
     await expect(toggle.getByRole('button', { name: 'Student', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await toggle.getByRole('link', { name: 'Secretary', exact: true }).click();
@@ -123,7 +123,7 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 
     if (phone) await page.locator('header').first().getByRole('button').last().click();
     await toggle.getByRole('button', { name: 'Student', exact: true }).click();
     await expect(page).toHaveURL('/student/dashboard');
-    await expect(page.getByRole('main')).toContainText('Welcome back, Real Student!');
+    await expect(page.getByRole('main')).toContainText('Welcome, Real Student!');
     await expect(toggle.getByRole('button', { name: 'Student', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await openProfile();
     await expect(header.getByRole('link', { name: 'My Profile', exact: true })).toHaveAttribute('href', '/secretary/profile');

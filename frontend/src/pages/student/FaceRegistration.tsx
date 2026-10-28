@@ -726,7 +726,17 @@ export const FaceRegistration: React.FC = () => {
 
       {/* 3-Step Visual Progress Bar (hidden once registered) */}
       {currentStep !== 3 && (
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="sm:hidden flex items-center gap-3 text-xs font-bold text-slate-600 dark:text-slate-300">
+        <span>Step {currentStep} of 3 · {currentStep === 1 ? 'Privacy Agreement' : 'Liveness & Capture'}</span>
+        <span className="flex gap-1" aria-hidden="true">
+          {[1, 2, 3].map(n => (
+            <span key={n} className={`h-1.5 w-6 rounded-full ${n <= currentStep ? 'bg-blue-600' : 'bg-slate-200 dark:bg-slate-700'}`} />
+          ))}
+        </span>
+      </div>
+      )}
+      {currentStep !== 3 && (
+      <div className="hidden sm:grid grid-cols-3 gap-3">
         <div className={`p-3 rounded-2xl border text-center transition-all ${currentStep === 1
           ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20'
           : currentStep > 1
@@ -1064,7 +1074,7 @@ export const FaceRegistration: React.FC = () => {
                       ) : mockScanning ? (
                         <span>Scanning...</span>
                       ) : isAuthoritative ? (
-                        <span>Start Guided Biometric Capture (up to 30 Frames)</span>
+                        <span>Start face capture</span>
                       ) : (
                         <span>Capture & Submit Enrollment</span>
                       )}

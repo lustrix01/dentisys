@@ -139,7 +139,7 @@ export function SsoLogin() {
     script.addEventListener('error', handleScriptError);
     if (!existing) {
       script.id = 'google-gis-client';
-      script.src = 'https://accounts.google.com/gsi/client';
+      script.src = 'https://accounts.google.com/gsi/client?hl=en'; // Google picks the button language when the script loads
       script.async = true;
       script.defer = true;
       document.head.appendChild(script);

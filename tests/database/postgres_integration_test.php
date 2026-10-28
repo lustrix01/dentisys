@@ -2350,7 +2350,7 @@ $knownStudentToken = base64url_encode(random_bytes(32));
 $knownStudentDigest = hash('sha256', $knownStudentToken, true);
 $knownStudentTokenInsert = $pdo->prepare(
     "INSERT INTO security_tokens (purpose, user_id, related_student_id, related_cs_id, token_digest, issued_at, expires_at)
-     VALUES ('student_activation', ?, ?, ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6) + INTERVAL '24 hours')"
+     VALUES ('student_activation', ?, ?, ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6) + INTERVAL '7 days')"
 );
 $knownStudentTokenInsert->bindValue(1, (int) $pendingStudent['user_id'], PDO::PARAM_INT);
 $knownStudentTokenInsert->bindValue(2, $invitedStudentId, PDO::PARAM_INT);
@@ -2463,7 +2463,7 @@ $unscopedToken = base64url_encode(random_bytes(32));
 $unscopedDigest = hash('sha256', $unscopedToken, true);
 $unscopedTokenInsert = $pdo->prepare(
     "INSERT INTO security_tokens (purpose, user_id, related_student_id, token_digest, issued_at, expires_at)
-     VALUES ('student_activation', ?, ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6) + INTERVAL '24 hours')"
+     VALUES ('student_activation', ?, ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6) + INTERVAL '7 days')"
 );
 $unscopedTokenInsert->bindValue(1, $unscopedAccountId, PDO::PARAM_INT);
 $unscopedTokenInsert->bindValue(2, $unscopedStudentId, PDO::PARAM_INT);

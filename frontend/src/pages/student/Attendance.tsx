@@ -1176,7 +1176,7 @@ export const Attendance: React.FC = () => {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
                     <Clock className="w-4 h-4 text-blue-600" />
-                    Upcoming sessions
+                    Today &amp; upcoming sessions
                   </h3>
                   <button
                     type="button"
