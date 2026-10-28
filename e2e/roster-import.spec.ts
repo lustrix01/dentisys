@@ -53,7 +53,8 @@ test('provisional PDF keeps all rows unselected, flags marks, preserves fields a
   await expect(page.getByText('Possible crossed-out row', { exact: true })).toHaveCount(1);
   await expect(page.getByLabel('Include student 2099-01-12345', { exact: true })).not.toBeChecked();
   await expect(page.getByLabel('Include student 2099-1234-56789', { exact: true })).not.toBeChecked();
-  await expect(page.getByLabel('First name for 2099-1234-56789', { exact: true })).toHaveValue('José Miguel Reyes');
+  await expect(page.getByLabel('First name for 2099-1234-56789', { exact: true })).toHaveValue('José Miguel');
+  await expect(page.getByLabel('Middle name for 2099-1234-56789', { exact: true })).toHaveValue('Reyes');
   await expect(page.getByLabel('Email for 2099-1234-56789', { exact: true })).toHaveValue('actual.fixture@bicol-u.edu.ph');
   // Every row here is flagged for review or has an error, so bulk select has nothing to select.
   await expect(page.getByRole('button', { name: 'Select all visible' })).toBeDisabled();

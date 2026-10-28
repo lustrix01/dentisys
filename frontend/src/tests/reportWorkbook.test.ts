@@ -56,7 +56,7 @@ test('class list: header block, columns, name cell, total line, program and file
     ['Units', 'Academic 2.0 · Lab 1.0 · Credit 3.0'], ['Lab Hours', ''], ['Faculty', 'Dr. Ana Reyes'], ['Schedules', 'Mon 8:00-10:00 AM'],
   ]);
   const head = d.findIndex(r => cellValue(r[0]) === '#');
-  assert.deepEqual(rowValues(d[head]), ['#', 'Student No.', 'Program', 'Name', 'Gender', 'Year Level', 'Contact #']);
+  assert.deepEqual(rowValues(d[head]), ['#', 'Student No.', 'Program', 'Name', 'Sex', 'Year Level', 'Contact #']);
   // Sorted by last name; program from the section; name + email on two lines.
   assert.deepEqual(rowValues(d[head + 1]), [1, '2023-0101', 'DMD', 'Cruz, Ana\nana@bicol-u.edu.ph', 'F', 3, '0917']);
   assert.equal((d[head + 1][3] as { wrap?: boolean }).wrap, true);

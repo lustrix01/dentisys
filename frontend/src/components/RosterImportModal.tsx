@@ -717,9 +717,9 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                       <input type="number" min="1" max="6" value={st.yearLevel !== null && Number.isFinite(st.yearLevel) ? st.yearLevel : ''} aria-label={`Year level for ${st.studentId}`} onChange={event => handleUpdateStudentField(st.tempKey, 'yearLevel', event.target.value === '' ? null : Number(event.target.value))} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-center text-xs font-semibold dark:border-slate-700 dark:bg-slate-900" />
                     </label>
                     <div role="cell" className="col-span-2 min-w-0 sm:col-span-3 lg:col-span-4">
-                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Gender and contact</span>
+                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Sex and contact</span>
                       <div className="grid min-w-0 grid-cols-2 gap-1.5">
-                        <input type="text" aria-label={`Gender for ${st.studentId}`} placeholder="Gender" value={st.sex ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'sex', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" />
+                        <input type="text" aria-label={`Sex for ${st.studentId}`} placeholder="Sex" value={st.sex ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'sex', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" />
                         <input type="text" aria-label={`Contact for ${st.studentId}`} placeholder="Contact" value={st.contact ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'contact', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" />
                       </div>
                     </div>

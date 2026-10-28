@@ -137,7 +137,7 @@ export function buildClassList(input: ClassListInput): { fileName: string; sheet
   const students = [...input.students].sort((a, b) =>
     (a.lastName ?? a.name).localeCompare(b.lastName ?? b.name) || a.name.localeCompare(b.name));
   const program = input.section.split('-')[0];
-  const head = ['#', 'Student No.', 'Program', 'Name', 'Gender', 'Year Level', 'Contact #'];
+  const head = ['#', 'Student No.', 'Program', 'Name', 'Sex', 'Year Level', 'Contact #'];
 
   const data: Row[] = [
     ...titleRows(width, [...UNIVERSITY, 'OFFICIAL LIST OF ENROLLED STUDENTS', termLine(input.semester, input.schoolYear)]),

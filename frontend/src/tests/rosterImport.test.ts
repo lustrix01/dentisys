@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { catalogUnitsNote, compareRosterHeader, findClassMatchingHeader, newClassBlockers, parseCSVText, parsePDFRoster, parseScheduleLines, termForHeader, parsePDFRosterPages, validateRosterStudents, type RosterPDFPage } from '../utils/rosterImportHelper.ts';
+import { catalogUnitsNote, compareRosterHeader, findClassMatchingHeader, newClassBlockers, parseCSVText, parsePDFRoster, parseScheduleLines, termForHeader, parsePDFRosterPages, splitFullName, validateRosterStudents, type RosterPDFPage } from '../utils/rosterImportHelper.ts';
 
 const domains = ['bicol-u.edu.ph', 'example.edu'];
 
@@ -20,8 +20,8 @@ test('quoted full names and multiline fields stay intact and need explicit name 
   const rows = parseCSVText('Student ID,Name,Email\n2099-1234-56789,"Dela Cruz, Ana\nMaria Reyes",actual@example.edu');
   assert.equal(rows.length, 1);
   assert.equal(rows[0].lastName, 'Dela Cruz');
-  assert.equal(rows[0].firstName, 'Ana Maria Reyes');
-  assert.equal(rows[0].middleName, '');
+  assert.equal(rows[0].firstName, 'Ana Maria');
+  assert.equal(rows[0].middleName, 'Reyes');
   assert.equal(rows[0].included, false);
   assert.equal(validateRosterStudents(rows, domains)[0].status, 'warning');
   assert.equal(validateRosterStudents(rows, domains)[0].validationMessage, 'Review the source and name fields before selecting this row.');
@@ -93,7 +93,8 @@ test('multi-page PDF geometry separates identity/email and flags marks without i
   assert.equal(rows.length, 2);
   assert.deepEqual(rows.map(row => row.studentId), ['2099-1234-56789', '2099-01-12345']);
   assert.equal(rows[0].originalName, 'Peña, José Miguel Reyes');
-  assert.equal(rows[0].firstName, 'José Miguel Reyes');
+  assert.equal(rows[0].firstName, 'José Miguel');
+  assert.equal(rows[0].middleName, 'Reyes');
   assert.equal(rows[0].email, 'actual@example.edu');
   assert.equal(rows[0].contact, '00123456789');
   assert.equal(rows[0].yearLevel, 3);
@@ -119,7 +120,7 @@ test('database field limits block unsupported values without truncating the sour
   const oversized = { ...row, studentId: 'A'.repeat(51), contact: '1'.repeat(51), email: 'a'.repeat(250) + '@example.edu', sex: 'Unspecified' };
   const validated = validateRosterStudents([oversized], domains)[0];
   assert.equal(validated.status, 'error');
-  assert.match(validated.validationMessage!, /Student number.*50.*Contact.*50.*Gender.*Email.*254/);
+  assert.match(validated.validationMessage!, /Student number.*50.*Contact.*50.*Sex.*Email.*254/);
   assert.equal(validated.studentId, oversized.studentId);
   assert.equal(validated.contact, oversized.contact);
   assert.equal(validateRosterStudents([{ ...row, sex: ' male ' }], domains)[0].sex, 'M');
@@ -204,7 +205,8 @@ test('official Program column is ignored and "No University Email" means a missi
   const rows = validateRosterStudents(parsePDFRosterPages([officialPage(1, fixtureRows)]), domains);
   assert.equal(rows.length, 2);
   assert.deepEqual(rows.map(row => row.studentId), ['2099-01-00001', '2099-7003-00002']);
-  assert.deepEqual(rows.map(row => row.firstName), ['Ana Maria', 'Ben']);
+  assert.deepEqual(rows.map(row => row.firstName), ['Ana', 'Ben']);
+  assert.deepEqual(rows.map(row => row.middleName), ['Maria', '']);
   assert.ok(rows.every(row => !/DMD|University/i.test(row.originalName ?? '')));
   assert.equal(rows[0].email, 'ana.fixture@bicol-u.edu.ph');
   assert.equal(rows[1].email, '');
@@ -290,4 +292,16 @@ test('new class decisions: own matching class, Dean term, past year, DentiSys un
   assert.deepEqual(newClassBlockers({ ...ok, scheduleError: 'Internal Conflict: x' }), ['Internal Conflict: x']);
   assert.deepEqual(newClassBlockers({ ...ok, ...termForHeader({ ...header, semester: '2ND' }, '2026-2027', terms) }), ['No Dean-defined term matches AY 2026-2027 2nd Semester. Choose a term from the list or ask the Dean to add it.']);
   assert.deepEqual(newClassBlockers({ ...ok, lectureUnits: '0', labUnits: '0', code: ' ', section: '' }), ['Enter a course code.', 'Enter units between 0.5 and 20.', 'Enter the section or block.']);
+});
+
+test('Last, First Middle splits the last given token (with surname particles) into the middle name', () => {
+  const split = (name: string) => { const { firstName, middleName, lastName, suffix } = splitFullName(name); return [lastName, firstName, middleName, suffix ?? '']; };
+  assert.deepEqual(split('Dechavez, Mickole Romero'), ['Dechavez', 'Mickole', 'Romero', '']);
+  assert.deepEqual(split('Peña, José Miguel Reyes'), ['Peña', 'José Miguel', 'Reyes', '']);
+  assert.deepEqual(split('Reyes, Bea Isabel Dela Cruz'), ['Reyes', 'Bea Isabel', 'Dela Cruz', '']);
+  assert.deepEqual(split('Cruz, Juan De La Cruz'), ['Cruz', 'Juan', 'De La Cruz', '']);
+  assert.deepEqual(split('Santos, Ben'), ['Santos', 'Ben', '', '']);
+  assert.deepEqual(split('Cruz, Juan Jr.'), ['Cruz', 'Juan', '', 'Jr.']);
+  assert.deepEqual(split('Reyes, Ana Maria'), ['Reyes', 'Ana', 'Maria', '']);
+  assert.deepEqual(split('Ana Maria Reyes'), ['', 'Ana Maria Reyes', '', '']);
 });

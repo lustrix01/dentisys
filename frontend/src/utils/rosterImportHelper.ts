@@ -24,13 +24,24 @@ export interface ParsedRosterStudent {
   validationMessage?: string;
 }
 
-/** Keep ambiguous given names together for explicit preview reconciliation. */
+const NAME_SUFFIX = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i;
+const SURNAME_PARTICLE = /^(de|del|dela|delos|delas|dos|san|santa|sta\.?|sto\.?|van|von|da|di|du|la|los|las)$/i;
+
+/** Last, First Middle: last given token (with surname particles) is the middle name; the Faculty still reviews every split. */
 export function splitFullName(rawName: string) {
   const cleaned = rawName.normalize('NFC').trim().replace(/\s+/g, ' ');
   const comma = cleaned.indexOf(',');
-  return comma < 0
-    ? { firstName: cleaned, middleName: '', lastName: '' }
-    : { firstName: cleaned.slice(comma + 1).trim(), middleName: '', lastName: cleaned.slice(0, comma).trim() };
+  if (comma < 0) return { firstName: cleaned, middleName: '', lastName: '' };
+  const lastName = cleaned.slice(0, comma).trim();
+  const tokens = cleaned.slice(comma + 1).trim().split(' ').filter(Boolean);
+  let suffix: string | undefined;
+  if (tokens.length > 1 && NAME_SUFFIX.test(tokens[tokens.length - 1])) suffix = tokens.pop();
+  let at = tokens.length;
+  if (tokens.length > 1) {
+    at = tokens.length - 1;
+    while (at > 1 && SURNAME_PARTICLE.test(tokens[at - 1])) at--;
+  }
+  return { firstName: tokens.slice(0, at).join(' '), middleName: tokens.slice(at).join(' '), lastName, suffix };
 }
 
 export function parseRosterYear(value: string): number | null {
@@ -59,7 +70,7 @@ export function validateRosterStudents(rows: ParsedRosterStudent[], allowedDomai
     if (row.studentId.trim().length > 50) errors.push('Student number must contain at most 50 characters.');
     if ((row.contact?.trim().length ?? 0) > 50) errors.push('Contact must contain at most 50 characters.');
     const sex = normalizeRosterSex(row.sex ?? '');
-    if (sex.length > 1) errors.push('Gender must be Male, Female, a one-character code, or blank. Review the source value.');
+    if (sex.length > 1) errors.push('Sex must be Male, Female, a one-character code, or blank. Review the source value.');
     if ((counts.get(row.studentId.trim().toLowerCase()) ?? 0) > 1) errors.push('Duplicate student number in this file.');
     for (const key of ['prefix', 'firstName', 'middleName', 'lastName', 'suffix'] as const) {
       const raw = row[key] ?? '';
@@ -148,7 +159,7 @@ export function parseCSVText(text: string): ParsedRosterStudent[] {
         : splitFullName(originalName);
     return {
       tempKey: `csv-${index}`, studentId: (hasHeader ? get('studentId') : values[0] ?? '').trim(), ...names,
-      prefix: get('prefix') || undefined, suffix: get('suffix') || undefined,
+      prefix: get('prefix') || undefined, suffix: get('suffix') || ('suffix' in names ? names.suffix : undefined),
       email: (hasHeader ? get('email') : values.find(value => value.includes('@')) ?? '').trim().toLowerCase(),
       contact: get('contact') || undefined, sex: get('sex') || undefined,
       yearLevel: parseRosterYear(hasHeader ? get('yearLevel') : values.find(value => /^[1-6]$/.test(value)) ?? ''),
@@ -378,5 +389,5 @@ export function parsePDFRoster(pages: RosterPDFPage[]): RosterPDFResult {
 }
 
 export function getSampleRegistrarCSV(): string {
-  return 'Student ID,Last Name,First Name,Middle Name,Email,Year Level,Gender,Contact #\n2099-1234-56789,Dela Cruz,Ana,Reyes,ana.fixture@bicol-u.edu.ph,4,Female,\n2099-01-12345,Peña,José,,jose.fixture@bicol-u.edu.ph,3,Male,';
+  return 'Student ID,Last Name,First Name,Middle Name,Email,Year Level,Sex,Contact #\n2099-1234-56789,Dela Cruz,Ana,Reyes,ana.fixture@bicol-u.edu.ph,4,Female,\n2099-01-12345,Peña,José,,jose.fixture@bicol-u.edu.ph,3,Male,';
 }
