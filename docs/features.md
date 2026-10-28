@@ -17,16 +17,22 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 ## Invitations and roles
 
 - Faculty invitations with structured names and institutional email checked against the server's allowed domains while typing — REG-005, UI-004, AUTH-004 — implemented, tests passing.
+- Faculty and Student invitations last 7 days — REG-001 — implemented, tests passing.
+- Faculty who are active but have no invitation record show "Active" in the Dean's list, not "Not invited" — REG-005 — implemented in code.
 - Pending Faculty invitations can be edited, revoked and reissued; editing the email revokes the old token; an invitation counts as accepted only after the account is activated — REG-005 — implemented, tests passing.
+- The roster shows a status chip per student (Registered, Invite sent, Delivery failed, Not invited), and Make or Remove Class Secretary is in the roster ⋮ menu — REG-006 — implemented in code.
 - Class Secretary on the Student's own account: Faculty invites, the Student accepts, at most one pending or active Secretary per section, removal restores normal Student access — REG-006, BIO-010 — implemented, tests passing.
 - Email Management shows whether each Student is an ordinary Student, has a pending Secretary invitation or is the active Secretary — REG-006 — implemented, tests passing.
 - Faculty send At-Risk and Privacy Consent notices to selected Students from Email Management; in custom email mode, non-allowlisted recipients are recorded as "Suppressed (test mode)" — EML-001 — implemented, tests passing.
+- With `EMAIL_PROVIDER=mailpit`, all mail goes to Mailpit with no login and `SMTP_*` settings are ignored — EML-001 — implemented in code.
 - A Secretary keeps their own Student context and switches between Secretary and Student views with the sidebar toggle only — BIO-010, UI-005 — implemented, tests passing.
 
 ## Grading and retention
 
 - Faculty edit grading categories and weights; weights must total exactly 100% and grades stay computed — GRD-002, GRD-003 — implemented, tests passing.
 - Grades follow the official BUCDM grade sheet: plain category averages, whole-percent rounding (.5 up), the 2026-10-17 conversion table with below 75% = 5.0, and a hover showing the steps (e.g. "83.77% → 84% → 2.5"); server and screen produce the same value — UI-003, spec amendment 2026-10-26 — implemented, tests passing.
+- Assessment categories say Lecture or Laboratory; a new max score starts empty and asks for confirmation above 500 points; a cell shows "Incomplete" with a note naming categories that have no assessments; students without a final grade show "No Grade Yet" in Dean reports, exports and the Dashboard — GRD-002 — implemented in code.
+- Students see grades only; exports are .xlsx in the official layouts — GRD-002 — implemented in code.
 - Score entry (single assessment and full matrix) saves when Faculty leave a cell while Auto-save is on, keeps a visible Saving / Saved / Failed – Retry bar, asks before clearing a stored score, and saves the matrix all-or-nothing; the matrix pins student ID and name columns — UI-002 — implemented, tests passing.
 - Grade ledgers, retention lists and attendance registers export as CSV or a printable PDF of the open section — GRD-002 — implemented, tests passing for CSV and print content; the open-section-only PDF was checked manually.
 - Midterm Watchlist shows server risk once a student's midterm is complete or Faculty unlock the class; locked classes stay hidden from "At risk only" — UI-003 — implemented, tests passing.
@@ -40,8 +46,10 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 ## Attendance
 
 - Attendance Monitoring offers only the Faculty's assigned courses, and only sections of the chosen course — ATT-001 — implemented, tests passing.
+- Every Secretary manual change (first mark, change, Excused) is a request the section's Faculty approves, with bulk approve, reject with a note and history. Approved records read "Secretary (approved by Faculty)". Requests close on a direct Faculty mark, a session revoke or a face check-in. Notices are in-app only — ATT-006 — implemented, tests passing.
 - Every Secretary or Faculty override records actor, Student, class, session, old and new status, reason and time — ATT-006 — implemented, tests passing.
 - Faculty Class Attendance Activity, a tab in Attendance Monitoring, shows their own and their Secretary's attendance changes with that full context — ATT-006 — implemented, tests passing.
+- Dean Attendance Reports and the all-classes attendance export count every record, with no cap — ATT-001 — implemented in code.
 
 ## Audit and notifications
 
@@ -53,6 +61,7 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 
 ## Student surfaces and data
 
+- The Student dashboard shows a "Register your face to check in" card until the face is enrolled, and "No grade yet" before a final grade — BIO-001 — implemented in code.
 - Student dashboard, classes and retention pages read server data; prototype paths that have no server data yet stay switched off — ACA-001 — implemented, tests passing.
 - Schema changes are ordered, additive migrations — DATA-001 — implemented, tests passing.
 

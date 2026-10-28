@@ -49,6 +49,7 @@ git checkout <approved sha>
 git checkout lighthal9-responsive
 ```
 
+- `promote-prod.ps1` needs HEAD to equal the sha you promote, so commit nothing after the tested commit before promoting. If a commit lands anyway, ask Claude to test the new head on the demo, or promote from a detached worktree at the tested sha.
 - `-DryRun` changes nothing. It checks that the commit, a clean working tree and the three demo images exist, then prints the plan.
 - The real run asks for:
   - your GitHub token (`write:packages`);

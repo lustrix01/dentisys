@@ -19,6 +19,7 @@ Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) 
 - [Roadmap](roadmap.md): what's next, in order. [Implemented features](features.md): what works today, with spec IDs.
 - [Local demo on lighthal7](local-demo-lighthal7.md) and [Lecture/Laboratory grading](lecture-laboratory-grading.md).
 - [UI polish, October 2026](ui-polish-2026-10.md): device-audit fixes 1–6 and batches 2A–2H, the Owner's layout rulings, and how they were checked.
+- [User walkthrough, October 2026](walkthrough-2026-10.md): Dean, Faculty, Secretary and Student fixes, Secretary attendance requests that need Faculty approval, the Owner's rulings, and how they were checked.
 - [Official imports, October 2026](official-imports-2026-10.md): the Dean's class list PDF and grade sheet workbook as import formats, and the grade sheet's grade math.
 - [Lecture-only courses, October 2026](lecture-only-2026-10.md): courses with no Laboratory graded as Lecture only, with a provisional one-rounding course grade.
 - [New class from the class list, October 2026](class-from-class-list-2026-10.md): Import Roster creates the class from the Dean's class list PDF when it does not exist yet.
