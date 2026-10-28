@@ -113,7 +113,7 @@ const formatCheckInTime = (value?: string | null) => {
 };
 
 const attendanceMethodLabel = (method?: string | null, overrideReason?: string | null): string => {
-  if (overrideReason) return 'Manual Override';
+  if (overrideReason && method !== 'secretary_approved') return 'Manual Override';
   switch (method) {
     case 'biometric':
       return 'Face Biometric';
