@@ -36,11 +36,13 @@ foreach ([[$faculty, 'handle_faculty_dashboard_kpis'], [$secretary, 'handle_secr
     $check(str_contains($fn($src, $name), 'attendance_sessions_end_overdue('), "H5 {$name} ends overdue sessions first");
 }
 
-$override = $fn($secretary, 'handle_secretary_attendance_override');
-$check(str_contains($override, 'Choose the attendance record to correct.'), 'L11 override requires a record or session');
+// ATT-006 (2026-10-28): Secretary changes are requests; the shared request path never writes attendance.
+$override = $fn($secretary, 'secretary_attendance_request_create');
+$check(str_contains($fn($secretary, 'handle_secretary_attendance_override'), 'secretary_attendance_request_create(false)'), 'Secretary override sends a request');
+$check(str_contains($override, 'Choose the attendance record or session to change.'), 'L11 override requires a record or session');
 $check(str_contains($override, 'This Excused status was approved by Faculty. Only Faculty can change it.')
     && str_contains($override, "WHERE record_id = ? AND status = 'approved'")
-    && strpos($override, 'approved by Faculty') < strpos($override, 'UPDATE attendance_records'), 'Secretary cannot change a Faculty-approved Excused record (409 before the update)');
+    && !str_contains($override, 'UPDATE attendance_records') && !str_contains($override, 'INSERT INTO attendance_records'), 'Secretary cannot change a Faculty-approved Excused record, and a request never writes attendance');
 $check(str_contains($secretary, "xr.record_id = r.record_id AND xr.status = 'approved'") && str_contains($secretary, "'excusedApprovedByFaculty' =>"), 'Secretary attendance list flags Faculty-approved Excused records');
 
 $check(str_contains($fn($faculty, 'handle_faculty_class_enroll_students'), 'ON CONFLICT (student_id, cs_id) DO NOTHING'), 'L12 duplicate enroll is not a 500');

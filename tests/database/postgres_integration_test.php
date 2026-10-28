@@ -23,6 +23,7 @@ require_once $root . '/backend/app/validation.php';
 require_once $root . '/backend/app/academic_year.php';
 require_once $root . '/backend/app/security.php';
 require_once $root . '/backend/app/attendance_sessions.php';
+require_once $root . '/backend/app/account_identity.php';
 require_once $root . '/backend/app/student_auth.php';
 require_once $root . '/backend/app/student_biometrics.php';
 require_once $root . '/backend/app/google_auth.php';
@@ -289,6 +290,7 @@ $expectedMigrations = [
     '049_audit_chain_baseline.sql',
     '050_class_archiving.sql',
     '051_lecture_only_grading.sql',
+    '052_secretary_attendance_requests.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -839,15 +841,21 @@ $sessionStudentId = (int) $sessionStudentStmt->fetchColumn();
     'status' => 'late',
     'reason' => 'Correct older linked session',
 ]);
-expect_same(200, $olderOverrideStatus, 'Secretary override selects an older session when recordId is omitted');
+expect_same(201, $olderOverrideStatus, 'Secretary override selects an older session when recordId is omitted and creates a request');
 $olderOverrideRowStmt = $pdo->prepare(
     'SELECT status FROM attendance_records WHERE enrollment_id = ? AND attendance_session_id = ? ORDER BY record_id DESC LIMIT 1'
 );
 $olderOverrideRowStmt->execute([$sessionEnrollmentId, $attendanceSessionId]);
-expect_same('late', $olderOverrideRowStmt->fetchColumn(), 'Older Secretary session record receives the override');
+expect_true($olderOverrideRowStmt->fetchColumn() !== 'late', 'A pending Secretary request leaves the older session record unchanged');
+$olderRequestStmt = $pdo->prepare("SELECT request_id FROM attendance_excused_requests WHERE enrollment_id = ? AND attendance_session_id = ? AND status = 'pending'");
+$olderRequestStmt->execute([$sessionEnrollmentId, $attendanceSessionId]);
+[$olderApproveStatus] = integration_http_json('/api/faculty/excused-requests/decide', $facultyActivityAccessToken, ['requestId' => (string) $olderRequestStmt->fetchColumn(), 'decision' => 'approve']);
+expect_same(200, $olderApproveStatus, 'Faculty approve the older-session request');
+$olderOverrideRowStmt->execute([$sessionEnrollmentId, $attendanceSessionId]);
+expect_same('late', $olderOverrideRowStmt->fetchColumn(), 'Older Secretary session record receives the approved request');
 $secretaryCorrectionMethodStmt = $pdo->prepare('SELECT verification_method FROM attendance_records WHERE record_id = ?');
 $secretaryCorrectionMethodStmt->execute([$sessionAttendanceRecordId]);
-expect_same('integration_fixture', $secretaryCorrectionMethodStmt->fetchColumn(), 'Secretary correction keeps the original verification method');
+expect_same('secretary_approved', $secretaryCorrectionMethodStmt->fetchColumn(), 'An approved Secretary request marks the record Secretary (approved by Faculty)');
 $secretaryCorrectionStmt = $pdo->prepare(
     "SELECT previous_status, new_status, corrected_by_role FROM attendance_record_corrections
       WHERE record_id = ? ORDER BY correction_id DESC LIMIT 1"
@@ -855,7 +863,7 @@ $secretaryCorrectionStmt = $pdo->prepare(
 $secretaryCorrectionStmt->execute([$sessionAttendanceRecordId]);
 $secretaryCorrection = $secretaryCorrectionStmt->fetch(PDO::FETCH_ASSOC);
 expect_same('late', $secretaryCorrection['new_status'] ?? null, 'Secretary correction is kept in the correction history');
-expect_same('secretary', $secretaryCorrection['corrected_by_role'] ?? null, 'Secretary correction history records the Secretary role');
+expect_same('faculty', $secretaryCorrection['corrected_by_role'] ?? null, 'The approved request is a Faculty correction in the history');
 
 // A student with no record for a session can be recorded manually by the Secretary.
 $lateEnrollStudentStmt = $pdo->prepare(
@@ -882,27 +890,57 @@ expect_same('not_recorded', $missingRows[0]['status'] ?? null, 'A student withou
     'status' => 'present',
     'reason' => 'Enrolled late; present in class',
 ]);
-expect_same(200, $manualCreateStatus, 'Secretary can record attendance for a student who has no record');
-expect_same('created', $manualCreateBody['operation'] ?? null, 'Manual recording reports a created record');
-$manualCreatedStmt = $pdo->prepare('SELECT attendance_session_id, status, verification_method FROM attendance_records WHERE record_id = ?');
-$manualCreatedStmt->execute([(int) ($manualCreateBody['record']['id'] ?? 0)]);
+expect_same(201, $manualCreateStatus, 'A Secretary first mark for a student with no record creates a request');
+expect_same('present', $manualCreateBody['requestedStatus'] ?? null, 'The request response names the requested status');
+$manualRequestId = (string) ($manualCreateBody['requestId'] ?? '');
+$manualNoRecordStmt = $pdo->prepare('SELECT COUNT(*) FROM attendance_records WHERE enrollment_id = ? AND attendance_session_id = ?');
+$manualNoRecordStmt->execute([(int) $pdo->query("SELECT enrollment_id FROM enrollments WHERE student_id = {$lateEnrollStudentId} AND cs_id = {$secretarySessionClassId}")->fetchColumn(), $secondAttendanceSessionId]);
+expect_same(0, (int) $manualNoRecordStmt->fetchColumn(), 'A pending first-mark request creates no attendance record');
+[$manualDuplicateStatus, $manualDuplicateBody] = integration_http_json('/api/secretary/attendance/override', $secretaryAccessToken, [
+    'studentId' => (string) $lateEnrollStudentId, 'sessionId' => (string) $secondAttendanceSessionId, 'status' => 'late',
+]);
+expect_same(409, $manualDuplicateStatus, 'A second pending request for the same student and session is refused');
+expect_true(str_contains((string) ($manualDuplicateBody['message'] ?? ''), 'already waiting'), 'The duplicate refusal names the waiting request');
+[$manualCancelStatus] = integration_http_method_json('DELETE', '/api/secretary/excused-requests/' . $manualRequestId, $secretaryAccessToken, []);
+expect_same(200, $manualCancelStatus, 'The Secretary cancels their pending request');
+$manualCancelStmt = $pdo->prepare('SELECT status FROM attendance_excused_requests WHERE request_id = ?');
+$manualCancelStmt->execute([(int) $manualRequestId]);
+expect_same('cancelled', $manualCancelStmt->fetchColumn(), 'A cancelled request is stored as cancelled');
+[$manualRecancelStatus] = integration_http_method_json('DELETE', '/api/secretary/excused-requests/' . $manualRequestId, $secretaryAccessToken, []);
+expect_same(409, $manualRecancelStatus, 'A cancelled request cannot be cancelled again');
+[$manualCreateStatus, $manualCreateBody] = integration_http_json('/api/secretary/attendance/override', $secretaryAccessToken, [
+    'studentId' => (string) $lateEnrollStudentId, 'sessionId' => (string) $secondAttendanceSessionId, 'status' => 'present',
+    'reason' => 'Enrolled late; present in class',
+]);
+expect_same(201, $manualCreateStatus, 'The Secretary sends a new request after cancelling');
+$manualRequestId = (string) ($manualCreateBody['requestId'] ?? '');
+[$manualOtherFacultyStatus] = integration_http_json('/api/faculty/excused-requests/decide', $secretaryAccessToken, ['requestId' => $manualRequestId, 'decision' => 'approve']);
+expect_same(403, $manualOtherFacultyStatus, 'The Secretary cannot decide the request');
+[$manualApproveStatus, $manualApproveBody] = integration_http_json('/api/faculty/excused-requests/decide', $facultyActivityAccessToken, ['requestIds' => [$manualRequestId], 'decision' => 'approve']);
+expect_same(200, $manualApproveStatus, 'Faculty approve the first-mark request');
+$manualCreatedStmt = $pdo->prepare(
+    "SELECT r.attendance_session_id, r.status, r.verification_method, r.time_recorded = xr.requested_at AS same_time, r.secretary_user_id = xr.requested_by_user_id AS same_secretary
+       FROM attendance_records r JOIN attendance_excused_requests xr ON xr.record_id = r.record_id WHERE xr.request_id = ?"
+);
+$manualCreatedStmt->execute([(int) $manualRequestId]);
 $manualCreated = $manualCreatedStmt->fetch(PDO::FETCH_ASSOC);
 expect_same(
-    [(string) $secondAttendanceSessionId, 'present', 'manual_secretary'],
+    [(string) $secondAttendanceSessionId, 'present', 'secretary_approved'],
     [(string) ($manualCreated['attendance_session_id'] ?? ''), $manualCreated['status'] ?? null, $manualCreated['verification_method'] ?? null],
-    'The manual record is linked to the session and marked as Secretary-entered'
+    'The approved record is linked to the session and marked Secretary (approved by Faculty)'
 );
+expect_true(($manualCreated['same_time'] ?? false) === true && ($manualCreated['same_secretary'] ?? false) === true, 'The approved record keeps the request time and the requesting Secretary');
 [$attendanceActivityStatus, $attendanceActivityBody] = integration_http_get_json('/api/faculty/attendance-activity', $facultyActivityAccessToken);
 expect_same(200, $attendanceActivityStatus, 'Class Attendance Activity loads for the class Faculty member');
 $secretaryCorrectionRows = array_values(array_filter(
     $attendanceActivityBody['activity'] ?? [],
-    static fn(array $row): bool => ($row['reason'] ?? '') === 'Correct older linked session' && ($row['actorRole'] ?? '') === 'secretary',
+    static fn(array $row): bool => str_contains((string) ($row['reason'] ?? ''), 'Correct older linked session'),
 ));
 expect_same('late', $secretaryCorrectionRows[0]['newStatus'] ?? null, 'Class Attendance Activity shows the Secretary correction with its new status');
 expect_true(($secretaryCorrectionRows[0]['previousStatus'] ?? null) !== null && ($secretaryCorrectionRows[0]['studentName'] ?? null) !== null && ($secretaryCorrectionRows[0]['className'] ?? null) !== null, 'The correction row names the old status, student and section');
 $manualActivityRows = array_values(array_filter(
     $attendanceActivityBody['activity'] ?? [],
-    static fn(array $row): bool => ($row['reason'] ?? '') === 'Enrolled late; present in class',
+    static fn(array $row): bool => str_contains((string) ($row['reason'] ?? ''), 'Enrolled late; present in class'),
 ));
 expect_same([null, 'present', 'secretary'], [array_key_exists('previousStatus', $manualActivityRows[0] ?? []) ? $manualActivityRows[0]['previousStatus'] : 'missing', $manualActivityRows[0]['newStatus'] ?? null, $manualActivityRows[0]['actorRole'] ?? null], 'A manual Secretary record appears with no previous status');
 [$attendanceActivityDeniedStatus] = integration_http_get_json('/api/faculty/attendance-activity', $secretaryAccessToken);
@@ -1003,10 +1041,9 @@ echo "PASS: Persistent Secretary attendance-session integration coverage complet
     'studentId' => (string) $sessionStudentId,
     'recordId' => $sessionAttendanceRecordId,
     'status' => 'excused',
-    'reason' => 'Direct excused attempt',
 ]);
-expect_same(422, $secretaryDirectExcusedStatus, 'The Secretary cannot set Excused through the manual override');
-expect_same('status', $secretaryDirectExcusedBody['errors'][0]['field'] ?? null, 'The rejected override names the status field');
+expect_same(422, $secretaryDirectExcusedStatus, 'An Excused request needs a reason');
+expect_same('reason', $secretaryDirectExcusedBody['errors'][0]['field'] ?? null, 'The rejected request names the reason field');
 [$excusedRequestStatus, $excusedRequestBody] = integration_http_json('/api/secretary/excused-requests', $secretaryAccessToken, [
     'studentId' => (string) $sessionStudentId,
     'recordId' => (string) $sessionAttendanceRecordId,
@@ -1059,6 +1096,135 @@ expect_same(['rejected', 'present'], [$rejectBody['request']['status'] ?? null, 
 [$secretaryExcusedListStatus, $secretaryExcusedListBody] = integration_http_get_json('/api/secretary/excused-requests', $secretaryAccessToken);
 expect_same(200, $secretaryExcusedListStatus, 'The Secretary lists their Excused requests');
 expect_true(count(array_filter($secretaryExcusedListBody['requests'] ?? [], static fn(array $row): bool => in_array($row['status'], ['approved', 'rejected'], true))) >= 2, 'The Secretary sees the Faculty decisions');
+
+// ATT-006 Secretary attendance requests: bulk approval, rejection, locks and automatic closes.
+$reqOwners = $pdo->prepare('SELECT secretary_user_id, instructor_user_id FROM class_sections WHERE cs_id = ?');
+$reqOwners->execute([$secretarySessionClassId]);
+$reqOwner = $reqOwners->fetch(PDO::FETCH_ASSOC);
+$reqSessionInsert = $pdo->prepare(
+    "INSERT INTO attendance_sessions (cs_id, secretary_user_id, owner_user_id, session_date, session_code, status, ended_at, opening_time, present_cutoff_time, late_cutoff_time, class_end_time)
+     VALUES (?, ?, ?, ?, ?, ?, ?, '00:00', '23:50', '23:55', '23:59') RETURNING session_id"
+);
+$reqNewSession = static function (string $status) use ($reqSessionInsert, $secretarySessionClassId, $reqOwner, $sessionDate): int {
+    $reqSessionInsert->execute([
+        $secretarySessionClassId, (int) $reqOwner['secretary_user_id'], (int) $reqOwner['secretary_user_id'], $sessionDate,
+        'REQ-' . strtoupper(bin2hex(random_bytes(4))), $status, $status === 'ended' ? gmdate('Y-m-d H:i:s') : null,
+    ]);
+    return (int) $reqSessionInsert->fetchColumn();
+};
+$reqStudentInsert = $pdo->prepare(
+    "INSERT INTO students (student_number, first_name, last_name, bu_email, status) VALUES (?, 'Request', ?, ?, 'active') RETURNING student_id"
+);
+$reqNewStudent = static function (string $tag) use ($pdo, $reqStudentInsert, $secretarySessionClassId): int {
+    $suffix = strtoupper(bin2hex(random_bytes(3)));
+    $reqStudentInsert->execute(["REQ-{$tag}-{$suffix}", $tag, "req-{$tag}-" . strtolower($suffix) . '@bicol-u.edu.ph']);
+    $studentId = (int) $reqStudentInsert->fetchColumn();
+    $pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status) VALUES (?, ?, 'Active')")->execute([$studentId, $secretarySessionClassId]);
+    return $studentId;
+};
+$reqAsk = static function (int $studentId, int $sessionId, string $status, ?string $reason = null) use ($secretaryAccessToken): array {
+    $payload = ['studentId' => (string) $studentId, 'sessionId' => (string) $sessionId, 'status' => $status];
+    if ($reason !== null) {
+        $payload['reason'] = $reason;
+    }
+    return integration_http_json('/api/secretary/attendance/override', $secretaryAccessToken, $payload);
+};
+$reqRow = $pdo->prepare('SELECT status, decision_note, record_id FROM attendance_excused_requests WHERE request_id = ?');
+$reqRecord = $pdo->prepare(
+    'SELECT r.status, r.verification_method FROM attendance_records r JOIN enrollments e ON e.enrollment_id = r.enrollment_id WHERE e.student_id = ? AND r.attendance_session_id = ?'
+);
+$reqSession = $reqNewSession('ended');
+[$reqStudentA, $reqStudentB, $reqStudentC, $reqStudentD] = [$reqNewStudent('A'), $reqNewStudent('B'), $reqNewStudent('C'), $reqNewStudent('D')];
+
+// Bulk approval: one decision call applies each requested status.
+[$reqAStatus, $reqABody] = $reqAsk($reqStudentA, $reqSession, 'present');
+[$reqBStatus, $reqBBody] = $reqAsk($reqStudentB, $reqSession, 'late');
+expect_same([201, 201], [$reqAStatus, $reqBStatus], 'First marks need no reason');
+[$reqKpiStatus, $reqKpiBody] = integration_http_get_json('/api/secretary/dashboard/kpis', $secretaryAccessToken);
+expect_true(($reqKpiBody['kpis']['pendingRequests'] ?? 0) >= 2, 'The Secretary dashboard counts pending requests');
+[, $reqFacultyListBody] = integration_http_get_json('/api/faculty/excused-requests', $facultyActivityAccessToken);
+$reqListed = array_values(array_filter($reqFacultyListBody['requests'] ?? [], static fn(array $row): bool => $row['id'] === ($reqABody['requestId'] ?? '')));
+expect_same(['present', 'pending', null, '23:50', '23:55'], [$reqListed[0]['requestedStatus'] ?? null, $reqListed[0]['status'] ?? null, $reqListed[0]['currentStatus'] ?? null, $reqListed[0]['presentCutoff'] ?? null, $reqListed[0]['lateCutoff'] ?? null], 'The Faculty list shows the requested status, current status and session cutoffs');
+$reqSessionNotice = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE recipient_user_id = ? AND notification_type = 'attendance_request_created' AND entity_id = ?");
+$reqSessionNotice->execute([(int) $reqOwner['instructor_user_id'], $reqABody['requestId'] ?? '']);
+expect_same(1, (int) $reqSessionNotice->fetchColumn(), 'The class Faculty member is notified of a new request');
+[$reqBulkStatus] = integration_http_json('/api/faculty/excused-requests/decide', $facultyActivityAccessToken, ['requestIds' => [$reqABody['requestId'], $reqBBody['requestId']], 'decision' => 'approve']);
+expect_same(200, $reqBulkStatus, 'Faculty approve several requests at once');
+$reqRecord->execute([$reqStudentA, $reqSession]);
+expect_same(['present', 'secretary_approved'], array_values($reqRecord->fetch(PDO::FETCH_ASSOC) ?: []), 'Bulk approval creates the first requested record');
+$reqRecord->execute([$reqStudentB, $reqSession]);
+expect_same(['late', 'secretary_approved'], array_values($reqRecord->fetch(PDO::FETCH_ASSOC) ?: []), 'Bulk approval creates the second requested record');
+$reqDecidedNotice = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE recipient_user_id = ? AND notification_type = 'attendance_request_decided'");
+$reqDecidedNotice->execute([(int) $reqOwner['secretary_user_id']]);
+expect_true((int) $reqDecidedNotice->fetchColumn() >= 2, 'The Secretary is notified of each decision');
+$reqAuditCodes = $pdo->query("SELECT DISTINCT action_code FROM audit_events WHERE action_code LIKE 'attendance_%request%' OR action_code = 'attendance_change_requested'")->fetchAll(PDO::FETCH_COLUMN);
+expect_true(in_array('attendance_change_requested', $reqAuditCodes, true) && in_array('attendance_request_approved', $reqAuditCodes, true), 'Requests and approvals are audited');
+
+// The same status as the official record is refused; Faculty-approved Excused stays locked.
+[$reqSameStatus] = $reqAsk($reqStudentA, $reqSession, 'present', 'Mark the same status again');
+expect_same(409, $reqSameStatus, 'A request equal to the current status is refused');
+[$reqExcusedStatus, $reqExcusedBody] = $reqAsk($reqStudentA, $reqSession, 'excused', 'Medical certificate seen');
+expect_same(201, $reqExcusedStatus, 'Excused can be requested through the override route with a reason');
+integration_http_json('/api/faculty/excused-requests/decide', $facultyActivityAccessToken, ['requestId' => $reqExcusedBody['requestId'], 'decision' => 'approve']);
+[$reqLockedStatus] = $reqAsk($reqStudentA, $reqSession, 'absent', 'Try to undo the approved Excused');
+expect_same(409, $reqLockedStatus, 'A Faculty-approved Excused record cannot be changed by the Secretary');
+[$reqNoReasonStatus] = $reqAsk($reqStudentB, $reqSession, 'absent');
+expect_same(422, $reqNoReasonStatus, 'Changing an existing record needs a reason');
+
+// Rejection leaves the record; a Faculty member who is not the instructor cannot decide.
+[$reqCStatus, $reqCBody] = $reqAsk($reqStudentC, $reqSession, 'absent');
+$pdo->prepare('UPDATE class_sections SET instructor_user_id = ? WHERE cs_id = ?')->execute([(int) $reqOwner['secretary_user_id'], $secretarySessionClassId]);
+[$reqOtherStatus] = integration_http_json('/api/faculty/excused-requests/decide', $facultyActivityAccessToken, ['requestId' => $reqCBody['requestId'], 'decision' => 'approve']);
+$pdo->prepare('UPDATE class_sections SET instructor_user_id = ? WHERE cs_id = ?')->execute([(int) $reqOwner['instructor_user_id'], $secretarySessionClassId]);
+expect_same(404, $reqOtherStatus, 'A Faculty member who is not the section instructor cannot decide the request');
+[$reqMultiRejectStatus] = integration_http_json('/api/faculty/excused-requests/decide', $facultyActivityAccessToken, ['requestIds' => [$reqCBody['requestId'], '999999'], 'decision' => 'reject']);
+expect_same(422, $reqMultiRejectStatus, 'Reject takes one request at a time');
+[$reqRejectStatus] = integration_http_json('/api/faculty/excused-requests/decide', $facultyActivityAccessToken, ['requestId' => $reqCBody['requestId'], 'decision' => 'reject', 'note' => 'Student was present']);
+expect_same(200, $reqRejectStatus, 'Faculty reject a request with a note');
+$reqRow->execute([(int) $reqCBody['requestId']]);
+expect_same(['rejected', 'Student was present', null], array_values($reqRow->fetch(PDO::FETCH_ASSOC) ?: []), 'A rejection stores the note and creates no record');
+$reqRecord->execute([$reqStudentC, $reqSession]);
+expect_same(false, $reqRecord->fetch(PDO::FETCH_ASSOC), 'A rejected first mark leaves the student unrecorded');
+
+// Automatic closes.
+[, $reqDBody] = $reqAsk($reqStudentD, $reqSession, 'absent');
+[$reqFacultyMarkStatus] = integration_http_json('/api/faculty/attendance/override', $facultyActivityAccessToken, [
+    'csId' => (string) $secretarySessionClassId,
+    'studentId' => (string) $reqStudentD,
+    'sessionDate' => $sessionDate,
+    'sessionId' => (string) $reqSession,
+    'status' => 'present',
+]);
+expect_same(200, $reqFacultyMarkStatus, 'Faculty can record attendance directly');
+$reqRow->execute([(int) $reqDBody['requestId']]);
+expect_same(['rejected', 'Faculty recorded attendance directly'], array_slice(array_values($reqRow->fetch(PDO::FETCH_ASSOC) ?: []), 0, 2), 'A direct Faculty mark closes the pending request');
+
+$reqStudentE = $reqNewStudent('E');
+$reqStudentF = $reqNewStudent('F');
+$reqLiveSession = $reqNewSession('active');
+[, $reqEBody] = $reqAsk($reqStudentE, $reqLiveSession, 'present');
+[$reqCancelOtherStatus] = integration_http_method_json('DELETE', '/api/secretary/excused-requests/999999', $secretaryAccessToken, []);
+expect_same(404, $reqCancelOtherStatus, 'Cancelling an unknown request returns 404');
+[$reqRevokeStatus] = integration_http_json('/api/faculty/attendance/session/revoke', $facultyActivityAccessToken, ['sessionId' => $reqLiveSession]);
+expect_same(200, $reqRevokeStatus, 'Faculty revoke the live session');
+$reqRow->execute([(int) $reqEBody['requestId']]);
+expect_same(['rejected', 'Session revoked'], array_slice(array_values($reqRow->fetch(PDO::FETCH_ASSOC) ?: []), 0, 2), 'Revoking the session closes its pending requests');
+
+// Face check-in: the biometric submit calls the same helper inside its transaction.
+[, $reqFBody] = $reqAsk($reqStudentF, $reqSession, 'late');
+$pdo->beginTransaction();
+attendance_requests_auto_close(
+    $pdo, $sessionConfig, ['user_id' => (int) $reqOwner['instructor_user_id'], 'login_email' => 'faculty@bicol-u.edu.ph', 'role' => 'faculty', 'display_name' => 'Faculty', 'session_id' => null],
+    'Student checked in by face', $reqSession,
+    (int) $pdo->query("SELECT enrollment_id FROM enrollments WHERE student_id = {$reqStudentF} AND cs_id = {$secretarySessionClassId}")->fetchColumn(), $sessionDate,
+    ['http_method' => 'POST', 'endpoint' => '/api/student/attendance/biometric', 'request_id' => 'integration', 'ip_address' => '127.0.0.1', 'user_agent' => 'integration']
+);
+$pdo->commit();
+$reqRow->execute([(int) $reqFBody['requestId']]);
+expect_same(['rejected', 'Student checked in by face'], array_slice(array_values($reqRow->fetch(PDO::FETCH_ASSOC) ?: []), 0, 2), 'A face check-in closes a pending first-mark request');
+[$reqLastListStatus, $reqLastListBody] = integration_http_get_json('/api/secretary/excused-requests', $secretaryAccessToken);
+$reqLastRow = array_values(array_filter($reqLastListBody['requests'] ?? [], static fn(array $row): bool => $row['id'] === $reqFBody['requestId']));
+expect_same(['rejected', 'late', 'Student checked in by face'], [$reqLastRow[0]['status'] ?? null, $reqLastRow[0]['requestedStatus'] ?? null, $reqLastRow[0]['decisionNote'] ?? null], 'The Secretary list shows the requested status and the decision note');
 
 $originalAdminGradingDefaultsJson = (string) $pdo->query(
     "SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults'"

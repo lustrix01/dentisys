@@ -290,6 +290,12 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'DELETE',
+        'path' => '/api/secretary/excused-requests/{request_id}',
+        'handler' => 'handle_secretary_excused_request_cancel',
+        'has_params' => true,
+    ],
+    [
         'method' => 'GET',
         'path' => '/api/secretary/profile',
         'handler' => 'handle_secretary_profile_get',

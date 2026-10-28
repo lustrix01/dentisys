@@ -94,10 +94,10 @@ test.describe('Class Secretary Module E2E Tests', () => {
     await page.goto('/secretary/attendance');
     await openSecretaryWorksheet(page, '2026-09-20');
     await page.getByRole('row').filter({ hasText: 'Request Student' }).getByRole('button', { name: 'Override' }).click();
-    await page.getByRole('button', { name: 'Request Excused' }).click();
-    await expect(page.getByText(/Excused needs Faculty approval/)).toBeVisible();
+    await page.getByRole('button', { name: 'Excused', exact: true }).click();
+    await expect(page.getByText('Your class Faculty must approve this before it counts.')).toBeVisible();
     await page.locator('textarea').fill('Medical certificate given to the Secretary');
-    await page.getByRole('button', { name: 'Send request' }).click();
+    await page.getByRole('button', { name: 'Send for approval' }).click();
     await expect.poll(() => requestPayload).toEqual({ studentId: '42', recordId: '501', sessionId: 900, reason: 'Medical certificate given to the Secretary' });
     await expect(page.getByRole('main').getByText('Excused request sent to Faculty for approval.')).toBeVisible();
     expect(overrideCalled).toBe(false);

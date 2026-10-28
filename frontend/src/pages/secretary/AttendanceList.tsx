@@ -43,6 +43,8 @@ import {
   startSecretaryAttendanceSessionApi,
   overrideSecretaryAttendanceApi,
   createSecretaryExcusedRequestApi,
+  cancelSecretaryExcusedRequestApi,
+  type AttendanceExcusedRequest,
   endSecretaryAttendanceSessionApi,
   revokeSecretaryAttendanceSessionApi,
   type ClassMeeting,
@@ -121,12 +123,16 @@ const attendanceMethodLabel = (method?: string | null, overrideReason?: string |
     case 'manual_secretary':
     case 'secretary_manual':
       return 'Secretary Manual Entry';
+    case 'secretary_approved':
+      return 'Secretary (approved by Faculty)';
     case 'system_resolution':
       return 'System Resolution';
     default:
       return 'Not recorded';
   }
 };
+
+const statusWord = (status?: string | null): string => status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Excused';
 
 const manilaDateToday = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
 
@@ -180,8 +186,9 @@ export const AttendanceList: React.FC = () => {
   const [selectedCardId, setSelectedCardId] = useState('');
   const [sections, setSections] = useState<Section[]>([]);
   const [currentSchoolYear, setCurrentSchoolYear] = useState('');
-  // Students with an Excused request still waiting for Faculty: "studentId:sessionId".
-  const [pendingExcused, setPendingExcused] = useState<Set<string>>(new Set());
+  // Latest Secretary request per "studentId:sessionId": the pending one, else the last decided one.
+  const [requestsByRow, setRequestsByRow] = useState<Record<string, AttendanceExcusedRequest>>({});
+  const [cancelTarget, setCancelTarget] = useState<AttendanceExcusedRequest | null>(null);
   const [isPhone, setIsPhone] = useState(() => window.matchMedia('(max-width: 767px)').matches);
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
@@ -319,7 +326,15 @@ export const AttendanceList: React.FC = () => {
   }, [searchParams]);
 
   const loadExcused = () => getSecretaryExcusedRequestsApi()
-    .then(res => setPendingExcused(new Set(res.requests.filter(r => r.status === 'pending').map(r => `${r.studentId}:${r.sessionId ?? ''}`))))
+    .then(res => {
+      const next: Record<string, AttendanceExcusedRequest> = {};
+      for (const r of res.requests) {
+        const key = `${r.studentId}:${r.sessionId ?? ''}`;
+        const kept = next[key];
+        if (r.status === 'pending' || !kept || (kept.status !== 'pending' && (r.decidedAt ?? '') > (kept.decidedAt ?? ''))) next[key] = r;
+      }
+      setRequestsByRow(next);
+    })
     .catch(() => { /* Keep the last known requests. */ });
 
   // quiet = background refresh: no spinner, keeps the last good data on failure, and a later load/End/Revoke/override makes it stale.
@@ -363,11 +378,29 @@ export const AttendanceList: React.FC = () => {
     setFeedback(null);
   };
 
+  const reasonRequired = Boolean(selectedRecord && (overrideStatus === 'excused' || (selectedRecord.status && selectedRecord.status !== 'not_recorded')));
+
+  const handleCancelRequest = async () => {
+    if (!cancelTarget) return;
+    setSubmitting(true);
+    try {
+      await cancelSecretaryExcusedRequestApi(cancelTarget.id);
+      setFeedback({ type: 'success', text: 'Request cancelled.' });
+      setCancelTarget(null);
+      await loadExcused();
+    } catch (err) {
+      setFeedback({ type: 'error', text: err instanceof Error ? err.message : 'Unable to cancel the request.' });
+      setCancelTarget(null);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSaveOverride = async () => {
     if (!selectedRecord || saving.current || loading || sessionLoading) return;
     const trimmedReason = reason.trim().replace(/\s+/g, ' ');
-    if (trimmedReason.length < 8 || trimmedReason.length > (overrideStatus === 'excused' ? 500 : 240)) {
-      setFeedback({ type: 'error', text: `Provide a new reason of 8–${overrideStatus === 'excused' ? 500 : 240} characters.` });
+    if ((reasonRequired || trimmedReason) && (trimmedReason.length < 8 || trimmedReason.length > 500)) {
+      setFeedback({ type: 'error', text: 'Provide a reason of 8–500 characters.' });
       return;
     }
     if (overrideStatus === selectedRecord.status) {
@@ -397,53 +430,23 @@ export const AttendanceList: React.FC = () => {
         return;
       }
 
-      const response = await overrideSecretaryAttendanceApi({
+      await overrideSecretaryAttendanceApi({
         studentId: selectedRecord.studentId,
         recordId: selectedRecord.id,
         sessionId: targetSessionId,
         date: selectedRecord.date,
         status: overrideStatus,
-        reason: trimmedReason,
+        reason: trimmedReason || undefined,
       });
-
-      const updateRecords = (current: AttendanceItem[]) =>
-        current.map((r) =>
-          (r.id && r.id === selectedRecord.id) || (!r.id && r.studentId === selectedRecord.studentId && r.attendanceSessionId === selectedRecord.attendanceSessionId)
-            ? {
-                ...r,
-                id: response.record?.id ?? r.id,
-                status: overrideStatus,
-                overrideReason: trimmedReason,
-                overrideAt: response.record?.overrideAt ?? r.overrideAt,
-                verificationMethod: r.id ? r.verificationMethod : 'manual_secretary',
-              }
-            : r
-        )
-      ;
-      setRecords(current => {
-        const updated = updateRecords(current);
-        if (!selectedRecord.id && response.record?.id && !current.some(record => record.id === response.record?.id)) {
-          return [...updated, {
-            ...selectedRecord,
-            id: response.record.id,
-            status: overrideStatus,
-            overrideReason: trimmedReason,
-            overrideAt: response.record.overrideAt,
-            verificationMethod: 'manual_secretary',
-          }];
-        }
-        return updated;
-      });
-      setSessionRecords(updateRecords);
-
-      setFeedback({ type: 'success', text: response.message || 'Attendance override applied successfully.' });
+      setFeedback({ type: 'success', text: 'Request sent to your class Faculty for approval.' });
+      void loadExcused();
       setSelectedRecord(null);
       setReason('');
       setRefreshVersion(version => version + 1);
     } catch (err) {
       setFeedback({
         type: 'error',
-        text: err instanceof Error ? err.message : 'Attendance override was rejected.',
+        text: err instanceof Error ? err.message : 'Unable to send the request.',
       });
     } finally {
       saving.current = false;
@@ -679,11 +682,17 @@ export const AttendanceList: React.FC = () => {
         <span className="text-sm leading-none">•</span>
         <span className="capitalize">{isRecorded(record) ? record.status : 'Not recorded'}</span>
       </span>
-      {pendingExcused.has(`${record.studentId}:${record.attendanceSessionId ?? ''}`) && (
-        <div className="mt-1">
-          <span className="inline-flex items-center rounded-full border border-dashed border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 px-2.5 py-0.5 text-[11px] font-bold text-sky-700 dark:text-sky-300">Excuse requested</span>
-        </div>
-      )}
+      {(() => {
+        const req = requestsByRow[`${record.studentId}:${record.attendanceSessionId ?? ''}`];
+        if (!req || (req.status !== 'pending' && record.excusedApprovedByFaculty)) return null;
+        const label = req.status === 'pending' ? `${statusWord(req.requestedStatus)} requested` : req.status === 'approved' ? 'Approved' : 'Rejected';
+        return (
+          <div className="mt-1">
+            <span title={req.decisionNote || undefined} className="inline-flex items-center rounded-full border border-dashed border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 px-2.5 py-0.5 text-[11px] font-bold text-sky-700 dark:text-sky-300">{label}</span>
+            {req.status !== 'pending' && req.decisionNote && <span className="block text-[11px] text-slate-500 dark:text-slate-400">{req.decisionNote}</span>}
+          </div>
+        );
+      })()}
     </>
   );
 
@@ -691,6 +700,14 @@ export const AttendanceList: React.FC = () => {
     <span className="text-xs font-bold text-slate-500 dark:text-slate-400">View-only</span>
   ) : record.excusedApprovedByFaculty ? (
     <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Approved by Faculty</span>
+  ) : requestsByRow[`${record.studentId}:${record.attendanceSessionId ?? ''}`]?.status === 'pending' ? (
+    <button
+      type="button"
+      onClick={() => setCancelTarget(requestsByRow[`${record.studentId}:${record.attendanceSessionId ?? ''}`])}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-800 text-rose-700 dark:text-rose-300 text-xs font-bold shadow-2xs transition-all cursor-pointer"
+    >
+      <span>Cancel request</span>
+    </button>
   ) : (
     <button
       type="button"
@@ -1764,7 +1781,7 @@ export const AttendanceList: React.FC = () => {
               setFeedback(null);
             }
           }}
-          title={isRecorded(selectedRecord) ? 'Manual Attendance Override' : 'Mark Attendance'}
+          title="Request Attendance Change"
         >
           <div className="space-y-5">
             {/* Student info header */}
@@ -1798,7 +1815,7 @@ export const AttendanceList: React.FC = () => {
                     { key: 'present', label: 'Present' },
                     { key: 'late', label: 'Late' },
                     { key: 'absent', label: 'Absent' },
-                    { key: 'excused', label: 'Request Excused' },
+                    { key: 'excused', label: 'Excused' },
                   ] as const
                 ).map((opt) => {
                   const isSelected = overrideStatus === opt.key;
@@ -1827,30 +1844,23 @@ export const AttendanceList: React.FC = () => {
               </div>
             </div>
 
-            {overrideStatus === 'excused' && (
-              <div className="rounded-xl border border-sky-200 bg-sky-50/80 p-3 text-xs text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
-                <p className="font-semibold">Excused needs Faculty approval</p>
-                <p className="mt-0.5 text-[11px] text-sky-700 dark:text-sky-300">
-                  Submitting will create an excused absence request for the assigned faculty to review.
-                </p>
-              </div>
-            )}
+            <p className="text-xs text-slate-600 dark:text-slate-300">Your class Faculty must approve this before it counts.</p>
 
             {/* Reason */}
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                Required Correction Reason
+                {reasonRequired ? 'Reason' : 'Reason (optional)'}
               </label>
               <textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="State the reason for this attendance override (e.g., Medical certificate verified, technical camera delay, authorized official business)..."
+                placeholder="Why is this change needed? (e.g., Medical certificate verified, technical camera delay, authorized official business)"
                 rows={3}
-                maxLength={overrideStatus === 'excused' ? 500 : 240}
+                maxLength={500}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800 outline-none focus:border-blue-500 focus:bg-white dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-100 dark:focus:bg-slate-800"
               />
               <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 text-right">
-                {reason.length}/{overrideStatus === 'excused' ? 500 : 240}
+                {reason.length}/500
               </span>
             </div>
 
@@ -1870,11 +1880,23 @@ export const AttendanceList: React.FC = () => {
               <button
                 type="button"
                 onClick={() => void handleSaveOverride()}
-                disabled={submitting || reason.trim().length < 8 || overrideStatus === selectedRecord.status}
+                disabled={submitting || (reasonRequired && reason.trim().length < 8) || overrideStatus === selectedRecord.status}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-blue-600/20 hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
               >
-                {submitting ? 'Saving…' : overrideStatus === 'excused' ? 'Send request' : 'Confirm override'}
+                {submitting ? 'Sending…' : 'Send for approval'}
               </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {cancelTarget && (
+        <Modal isOpen onClose={() => { if (!submitting) setCancelTarget(null); }} title="Cancel request">
+          <div className="space-y-4">
+            <p className="text-sm text-slate-700 dark:text-slate-200">Cancel the {statusWord(cancelTarget.requestedStatus).toLowerCase()} request for {cancelTarget.studentName}?</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" disabled={submitting} onClick={() => setCancelTarget(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300 cursor-pointer">Keep request</button>
+              <button type="button" disabled={submitting} onClick={() => void handleCancelRequest()} className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50 cursor-pointer">Yes, cancel</button>
             </div>
           </div>
         </Modal>

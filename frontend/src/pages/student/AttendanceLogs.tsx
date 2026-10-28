@@ -28,6 +28,8 @@ function formatVerificationMethod(method: AttendanceVerificationMethod): { label
       return { label: 'Faculty Manual Entry', icon: UserCheck };
     case 'secretary_manual':
       return { label: 'Secretary Manual Entry', icon: ClipboardCheck };
+    case 'secretary_approved':
+      return { label: 'Secretary (approved by Faculty)', icon: ClipboardCheck };
     case 'system_resolution':
       return { label: 'Automatic System Resolution', icon: AlertCircle };
     case 'unknown':

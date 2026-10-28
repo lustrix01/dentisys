@@ -6,9 +6,11 @@ import { useAuth } from '../../context/AuthContext';
 import { Card } from '../../components/Card';
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import { Modal } from '../../components/Modal';
+import { PendingRequestsBadge } from '../../components/FacultyExcusedRequestsPanel';
 import { showFeedback } from '../../components/FeedbackCenter';
 import {
   getFacultyActivityApi,
+  getFacultyExcusedRequestsApi,
   getFacultyClassesApi,
   getFacultyDashboardKpisApi,
   getFacultyRetentionApi,
@@ -39,6 +41,12 @@ export const Dashboard: React.FC = () => {
   // Search input state
   const [searchQuery, setSearchQuery] = useState('');
   const [schoolYear, setSchoolYear] = useState('current');
+  const [pendingRequests, setPendingRequests] = useState(0);
+  useEffect(() => {
+    getFacultyExcusedRequestsApi()
+      .then(res => setPendingRequests((res.requests ?? []).filter(r => r.status === 'pending').length))
+      .catch(() => setPendingRequests(0));
+  }, []);
 
   const loadDashboard = useCallback(() => {
     setSelectedClassId('');
@@ -319,6 +327,7 @@ export const Dashboard: React.FC = () => {
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             Access your assigned dental courses, grade computations, student attendance records, and retention evaluations in one place.
           </p>
+          <PendingRequestsBadge count={pendingRequests} className="mt-2" />
         </div>
         <SchoolYearFilter
           value={schoolYear}

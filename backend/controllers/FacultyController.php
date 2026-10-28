@@ -92,8 +92,8 @@ function faculty_attendance_activity_rows(PDO $pdo, int $userId, int $limit = 10
                    NULL,
                    COALESCE(first_fix.previous_status, r.status),
                    CASE WHEN first_fix.previous_status IS NULL THEN r.override_reason END,
-                   CASE r.verification_method WHEN 'manual_secretary' THEN 'secretary' ELSE 'faculty' END,
-                   CASE r.verification_method WHEN 'manual_secretary' THEN COALESCE(r.secretary_user_id, r.override_by_user_id)
+                   CASE WHEN r.verification_method IN ('manual_secretary', 'secretary_approved') THEN 'secretary' ELSE 'faculty' END,
+                   CASE WHEN r.verification_method IN ('manual_secretary', 'secretary_approved') THEN COALESCE(r.secretary_user_id, r.override_by_user_id)
                         ELSE r.override_by_user_id END,
                    r.record_id, r.session_date, r.session_code, e.enrollment_id
               FROM attendance_records r
@@ -105,7 +105,7 @@ function faculty_attendance_activity_rows(PDO $pdo, int $userId, int $limit = 10
               JOIN class_sections cs ON cs.cs_id = e.cs_id
              WHERE cs.instructor_user_id = :faculty_id2
                AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
-               AND r.verification_method IN ('manual_secretary', 'manual_faculty')
+               AND r.verification_method IN ('manual_secretary', 'manual_faculty', 'secretary_approved')
          ) activity
          ORDER BY occurred_at DESC, id DESC
          LIMIT {$limit}"
@@ -5701,6 +5701,7 @@ function handle_faculty_attendance_session_revoke(): void
                   WHERE session_id = ? AND status IN ('active', 'scheduled')"
             );
             $update->execute([$nowSql, $authCtx['user_id'], $reason, $nowSql, $sessionId]);
+            attendance_requests_auto_close($pdo, $config, $authCtx, 'Session revoked', $sessionId);
             attendance_session_record_audit(
                 $pdo, $config, $authCtx, $context, 'attendance_session_revoked', $sessionId, (int) $session['cs_id'],
                 'Revoked attendance session for ' . audit_class_label($pdo, (int) $session['cs_id']) . " on {$session['session_date']}.", $reason,
@@ -5822,9 +5823,10 @@ function handle_faculty_excused_requests_list(): void
 }
 
 /**
- * ATT-006: Faculty approve or reject a Secretary's Excused request. Approval
- * sets the student's attendance for that day to Excused (a correction of the
- * existing record, or a new record); rejection leaves attendance unchanged.
+ * ATT-006: the section's Faculty approve or reject Secretary attendance requests. Approve takes one
+ * `requestId` or a `requestIds` list and applies each request's requested status (a new record, or
+ * a correction of the existing one, like a Faculty correction); reject takes one id and an optional
+ * note and leaves attendance unchanged.
  */
 function handle_faculty_excused_request_decide(): void
 {
@@ -5835,129 +5837,155 @@ function handle_faculty_excused_request_decide(): void
         $authCtx = faculty_verify_auth($pdo, $config);
         $body = request_body();
         $data = $body['has_body'] && is_array($body['data']) ? $body['data'] : [];
-        $requestId = faculty_attendance_positive_int($data['requestId'] ?? null);
-        if ($requestId === null) {
-            throw new ValidationException([['field' => 'requestId', 'message' => 'A valid Excused request is required.']]);
+        $rawIds = is_array($data['requestIds'] ?? null) ? $data['requestIds'] : [$data['requestId'] ?? null];
+        $requestIds = [];
+        foreach ($rawIds as $rawId) {
+            $id = faculty_attendance_positive_int($rawId);
+            if ($id === null) {
+                throw new ValidationException([['field' => 'requestId', 'message' => 'A valid attendance request is required.']]);
+            }
+            $requestIds[$id] = $id;
+        }
+        $requestIds = array_values($requestIds);
+        if ($requestIds === []) {
+            throw new ValidationException([['field' => 'requestId', 'message' => 'A valid attendance request is required.']]);
         }
         $decision = validate_enum($data, 'decision', ['approve', 'reject']);
+        if ($decision === 'reject' && count($requestIds) > 1) {
+            throw new ValidationException([['field' => 'requestIds', 'message' => 'Reject one request at a time.']]);
+        }
         $note = validate_optional_string($data, 'note', 1, 500);
         $nowSql = attendance_session_now_utc()->format('Y-m-d H:i:s.u');
 
         $pdo->beginTransaction();
         try {
-            $stmt = $pdo->prepare(
-                "SELECT xr.*, e.cs_id, s.student_number
-                   FROM attendance_excused_requests xr
-                   JOIN enrollments e ON e.enrollment_id = xr.enrollment_id
-                   JOIN students s ON s.student_id = e.student_id
-                   JOIN class_sections cs ON cs.cs_id = e.cs_id
-                  WHERE xr.request_id = ? AND cs.instructor_user_id = ?
-                  FOR UPDATE OF xr"
-            );
-            $stmt->execute([$requestId, $authCtx['user_id']]);
-            $request = $stmt->fetch(PDO::FETCH_ASSOC);
-            if ($request === false) {
-                $pdo->rollBack();
-                safe_error_response('Excused request was not found in an assigned class.', 404);
-                return;
-            }
-            if ($request['status'] !== 'pending') {
-                $pdo->rollBack();
-                safe_error_response('This Excused request has already been decided.', 409);
-                return;
-            }
-            if (academic_class_section_is_past($pdo, (int) $request['cs_id'])) {
-                $pdo->rollBack();
-                safe_error_response(academic_view_only_message($pdo, (int) $request['cs_id']), 409);
-                return;
-            }
-            $recordId = null;
-            $previousStatus = null;
-            if ($decision === 'approve') {
-                if ($request['attendance_session_id'] !== null) {
-                    $sessionState = $pdo->prepare('SELECT status FROM attendance_sessions WHERE session_id = ? FOR UPDATE');
-                    $sessionState->execute([(int) $request['attendance_session_id']]);
-                    $sessionStatus = $sessionState->fetchColumn();
-                    if (in_array($sessionStatus, ['scheduled', 'revoked'], true)) {
-                        $pdo->rollBack();
-                        safe_error_response(
-                            $sessionStatus === 'revoked'
-                                ? 'This session was revoked. Its attendance is view-only.'
-                                : 'The session must be open or ended before Excused attendance can be approved.',
-                            409
-                        );
-                        return;
-                    }
-                }
-                $recordStmt = $pdo->prepare(
-                    "SELECT r.record_id, r.status FROM attendance_records r
-                      LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
-                      WHERE r.enrollment_id = ? AND r.session_date = ? AND (rs.session_id IS NULL OR rs.status <> 'revoked')
-                        AND (r.attendance_session_id = ? OR r.attendance_session_id IS NULL)
-                      ORDER BY CASE WHEN r.record_id = ? THEN 0 ELSE 1 END, r.record_id DESC
-                      LIMIT 1 FOR UPDATE OF r"
+            foreach ($requestIds as $requestId) {
+                $stmt = $pdo->prepare(
+                    "SELECT xr.*, e.cs_id, e.student_id, s.student_number
+                       FROM attendance_excused_requests xr
+                       JOIN enrollments e ON e.enrollment_id = xr.enrollment_id
+                       JOIN students s ON s.student_id = e.student_id
+                       JOIN class_sections cs ON cs.cs_id = e.cs_id
+                      WHERE xr.request_id = ? AND cs.instructor_user_id = ?
+                      FOR UPDATE OF xr"
                 );
-                $recordStmt->execute([(int) $request['enrollment_id'], $request['session_date'], $request['attendance_session_id'], (int) ($request['record_id'] ?? 0)]);
-                $record = $recordStmt->fetch(PDO::FETCH_ASSOC);
-                $approvalReason = 'Excused request approved: ' . $request['reason'];
-                if ($record !== false) {
-                    $recordId = (int) $record['record_id'];
-                    $previousStatus = (string) $record['status'];
-                    if ($previousStatus !== 'excused') {
-                        attendance_record_correction_insert($pdo, $recordId, $previousStatus, 'excused', $approvalReason, (int) $authCtx['user_id'], 'faculty');
-                        $pdo->prepare(
-                            "UPDATE attendance_records
-                                SET status = 'excused', override_reason = ?, override_by_user_id = ?, override_at = ?
-                              WHERE record_id = ?"
-                        )->execute([mb_substr($approvalReason, 0, 500), $authCtx['user_id'], $nowSql, $recordId]);
-                    }
-                } else {
-                    $insert = $pdo->prepare(
-                        "INSERT INTO attendance_records
-                            (enrollment_id, attendance_session_id, session_date, session_code, status, verification_method,
-                             time_recorded, override_reason, override_by_user_id, override_at)
-                         VALUES (?, ?, ?, ?, 'excused', 'manual_faculty', ?, ?, ?, ?) RETURNING record_id"
-                    );
-                    $insert->execute([
-                        (int) $request['enrollment_id'],
-                        $request['attendance_session_id'] !== null ? (int) $request['attendance_session_id'] : null,
-                        $request['session_date'], $request['session_code'], $nowSql,
-                        mb_substr($approvalReason, 0, 500), $authCtx['user_id'], $nowSql,
-                    ]);
-                    $recordId = (int) $insert->fetchColumn();
+                $stmt->execute([$requestId, $authCtx['user_id']]);
+                $request = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ($request === false) {
+                    $pdo->rollBack();
+                    safe_error_response('Request was not found in an assigned class.', 404);
+                    return;
                 }
+                if ($request['status'] !== 'pending') {
+                    $pdo->rollBack();
+                    safe_error_response('This request has already been decided.', 409);
+                    return;
+                }
+                if (academic_class_section_is_past($pdo, (int) $request['cs_id'])) {
+                    $pdo->rollBack();
+                    safe_error_response(academic_view_only_message($pdo, (int) $request['cs_id']), 409);
+                    return;
+                }
+                $recordId = null;
+                $previousStatus = null;
+                if ($decision === 'approve') {
+                    if ($request['attendance_session_id'] !== null) {
+                        $sessionState = $pdo->prepare('SELECT status FROM attendance_sessions WHERE session_id = ? FOR UPDATE');
+                        $sessionState->execute([(int) $request['attendance_session_id']]);
+                        $sessionStatus = $sessionState->fetchColumn();
+                        if (in_array($sessionStatus, ['scheduled', 'revoked'], true)) {
+                            $pdo->rollBack();
+                            safe_error_response(
+                                $sessionStatus === 'revoked'
+                                    ? 'This session was revoked. Its attendance is view-only.'
+                                    : 'The session must be open or ended before a request can be approved.',
+                                409
+                            );
+                            return;
+                        }
+                    }
+                    $recordStmt = $pdo->prepare(
+                        "SELECT r.record_id, r.status, r.verification_method FROM attendance_records r
+                          LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
+                          WHERE r.enrollment_id = ? AND r.session_date = ? AND (rs.session_id IS NULL OR rs.status <> 'revoked')
+                            AND (r.attendance_session_id = ? OR r.attendance_session_id IS NULL)
+                          ORDER BY CASE WHEN r.record_id = ? THEN 0 ELSE 1 END, r.record_id DESC
+                          LIMIT 1 FOR UPDATE OF r"
+                    );
+                    $recordStmt->execute([(int) $request['enrollment_id'], $request['session_date'], $request['attendance_session_id'], (int) ($request['record_id'] ?? 0)]);
+                    $record = $recordStmt->fetch(PDO::FETCH_ASSOC);
+                    $newStatus = (string) $request['requested_status'];
+                    $approvalReason = mb_substr('Secretary request approved' . ($request['reason'] !== '' ? ': ' . $request['reason'] : ''), 0, 500);
+                    $previousMethod = null;
+                    if ($record !== false) {
+                        $recordId = (int) $record['record_id'];
+                        $previousStatus = (string) $record['status'];
+                        $previousMethod = $record['verification_method'];
+                        if ($previousStatus !== $newStatus) {
+                            attendance_record_correction_insert($pdo, $recordId, $previousStatus, $newStatus, $approvalReason, (int) $authCtx['user_id'], 'faculty');
+                            $pdo->prepare(
+                                "UPDATE attendance_records
+                                    SET status = ?, verification_method = 'secretary_approved', secretary_user_id = ?, time_recorded = ?,
+                                        override_reason = ?, override_by_user_id = ?, override_at = ?
+                                  WHERE record_id = ?"
+                            )->execute([$newStatus, (int) $request['requested_by_user_id'], $request['requested_at'], $approvalReason, $authCtx['user_id'], $nowSql, $recordId]);
+                        }
+                    } else {
+                        $insert = $pdo->prepare(
+                            "INSERT INTO attendance_records
+                                (enrollment_id, attendance_session_id, session_date, session_code, status, verification_method,
+                                 time_recorded, secretary_user_id, override_reason, override_by_user_id, override_at)
+                             VALUES (?, ?, ?, ?, ?, 'secretary_approved', ?, ?, ?, ?, ?) RETURNING record_id"
+                        );
+                        $insert->execute([
+                            (int) $request['enrollment_id'],
+                            $request['attendance_session_id'] !== null ? (int) $request['attendance_session_id'] : null,
+                            $request['session_date'], $request['session_code'], $newStatus, $request['requested_at'],
+                            (int) $request['requested_by_user_id'], $approvalReason, $authCtx['user_id'], $nowSql,
+                        ]);
+                        $recordId = (int) $insert->fetchColumn();
+                    }
+                    audit_record_action(
+                        $pdo, $config, $authCtx, 'faculty_attendance', 'faculty_attendance_change', 'attendance_record', (string) $recordId,
+                        sprintf(
+                            'Faculty attendance %s for %s on %s: %s (approved Secretary request).',
+                            $record !== false ? 'corrected' : 'recorded',
+                            audit_student_label($pdo, (int) $request['student_id']), $request['session_date'], $newStatus
+                        ),
+                        ['scope_cs_id' => (int) $request['cs_id'], 'reason' => $approvalReason, 'context' => $context,
+                         'before' => $record !== false ? ['recordId' => $recordId, 'status' => $previousStatus, 'verificationMethod' => $previousMethod] : null,
+                         'after' => ['recordId' => $recordId, 'status' => $newStatus, 'verificationMethod' => 'secretary_approved']]
+                    );
+                }
+                $pdo->prepare(
+                    "UPDATE attendance_excused_requests
+                        SET status = ?, decided_by_user_id = ?, decided_at = ?, decision_note = ?, record_id = COALESCE(?, record_id)
+                      WHERE request_id = ? AND status = 'pending'"
+                )->execute([$decision === 'approve' ? 'approved' : 'rejected', $authCtx['user_id'], $nowSql, $note, $recordId, $requestId]);
+                attendance_request_event(
+                    $pdo, $config, $authCtx, $requestId, $decision === 'approve' ? 'approved' : 'rejected', $note,
+                    $decision === 'approve' ? $previousStatus : null, $context
+                );
             }
-            $pdo->prepare(
-                "UPDATE attendance_excused_requests
-                    SET status = ?, decided_by_user_id = ?, decided_at = ?, decision_note = ?, record_id = COALESCE(?, record_id)
-                  WHERE request_id = ? AND status = 'pending'"
-            )->execute([$decision === 'approve' ? 'approved' : 'rejected', $authCtx['user_id'], $nowSql, $note, $recordId, $requestId]);
-            audit_record_action(
-                $pdo, $config, $authCtx, 'faculty_attendance',
-                $decision === 'approve' ? 'excused_approved' : 'excused_rejected',
-                'attendance_excused_request', (string) $requestId,
-                $decision === 'approve'
-                    ? "Excused request approved for student {$request['student_number']} on {$request['session_date']}."
-                    : "Excused request rejected for student {$request['student_number']} on {$request['session_date']}; attendance unchanged.",
-                ['scope_cs_id' => (int) $request['cs_id'], 'reason' => $note, 'context' => $context,
-                 'before' => ['status' => 'pending', 'attendanceStatus' => $previousStatus],
-                 'after' => ['status' => $decision === 'approve' ? 'approved' : 'rejected', 'recordId' => $recordId]]
-            );
             $pdo->commit();
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
         }
-        $rows = attendance_excused_requests_rows($pdo, 'xr.request_id = ?', [$requestId], 1);
+        $rows = [];
+        foreach ($requestIds as $requestId) {
+            $rows[] = attendance_excused_requests_rows($pdo, 'xr.request_id = ?', [$requestId], 1)[0] ?? null;
+        }
         json_response([
             'status' => 'ok',
-            'message' => $decision === 'approve' ? 'Excused request approved; attendance set to Excused.' : 'Excused request rejected; attendance unchanged.',
-            'request' => $rows[0] ?? null,
+            'message' => $decision === 'approve' ? 'Request approved; attendance updated.' : 'Request rejected; attendance unchanged.',
+            'request' => $rows[0],
+            'requests' => $rows,
         ], 200);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
-        error_log('Faculty excused decision error: ' . sanitize_for_log($e));
+        error_log('Faculty attendance request decision error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
     }
 }
@@ -6358,6 +6386,11 @@ function handle_faculty_attendance_override(): void
             'sessionCode' => $target['session_code'],
             'status' => $target['status'],
         ];
+        attendance_requests_auto_close(
+            $pdo, $config, $authCtx, 'Faculty recorded attendance directly',
+            $target['attendance_session_id'] !== null ? (int) $target['attendance_session_id'] : null,
+            (int) $target['enrollment_id'], (string) $target['session_date']
+        );
         $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
         $auditCtx = audit_begin_operation($pdo);
         audit_finish_operation($pdo, $auditCtx, [

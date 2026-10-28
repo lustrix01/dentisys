@@ -24,7 +24,7 @@ type RollCallRow = {
 const recordedByOf = (method?: string | null): RecordedByFilter | null => {
   if (method === 'biometric') return 'biometric';
   if (method === 'manual_faculty' || method === 'faculty_manual') return 'faculty';
-  if (method === 'manual_secretary' || method === 'secretary_manual') return 'secretary';
+  if (method === 'manual_secretary' || method === 'secretary_manual' || method === 'secretary_approved') return 'secretary';
   return null;
 };
 

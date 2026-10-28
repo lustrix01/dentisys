@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Play, AlertCircle } from 'lucide-react';
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
-import { getSecretaryActiveAttendanceSessionApi, getSecretaryDashboardKpisApi, type SecretaryAttendanceSession } from '../../services/apiClient';
+import { getSecretaryActiveAttendanceSessionApi, getSecretaryDashboardKpisApi, getSecretaryExcusedRequestsApi, type SecretaryAttendanceSession } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { meetingVenueLines } from '../../utils/scheduleHelper';
 
@@ -17,6 +17,7 @@ export const Dashboard: React.FC = () => {
   const [activeSession, setActiveSession] = useState<SecretaryAttendanceSession | null>(null);
   const [sessionStatusError, setSessionStatusError] = useState(false);
   const [schoolYear, setSchoolYear] = useState('current');
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -24,6 +25,9 @@ export const Dashboard: React.FC = () => {
     try {
       const dashboard = await getSecretaryDashboardKpisApi(schoolYear);
       setData(dashboard);
+      if (typeof dashboard.kpis.pendingRequests !== 'number') {
+        getSecretaryExcusedRequestsApi().then(res => setPendingCount(res.requests.filter(r => r.status === 'pending').length)).catch(() => setPendingCount(0));
+      }
       const csId = Number(dashboard.assignedClass?.classId);
       if (Number.isFinite(csId) && csId > 0) {
         try {
@@ -52,7 +56,7 @@ export const Dashboard: React.FC = () => {
   const assignedStudentsCount = data?.kpis.assignedStudents ?? 0;
   const attendanceRateVal = data?.kpis.attendanceRate;
   const todayRecordsVal = data?.kpis.todayRecords ?? 0;
-  const overriddenVal = data?.kpis.overriddenCount ?? 0;
+  const pendingVal = data?.kpis.pendingRequests ?? pendingCount ?? 0;
   const assignedClassName = data?.assignedClass?.className || 'No Section Assigned';
   const assignedSection = data?.assignedClasses?.find(sec => sec.classId === data.assignedClass?.classId);
   const venueLines = meetingVenueLines(assignedSection?.meetings, data?.assignedClass?.classroomName);
@@ -149,9 +153,9 @@ export const Dashboard: React.FC = () => {
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 col-span-2 sm:col-span-1 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Overrides</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Pending Requests</span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 whitespace-nowrap">
-                  {overriddenVal}
+                  {pendingVal}
                 </span>
               </div>
             </div>

@@ -829,6 +829,10 @@ function handle_student_attendance_biometric(): void
                 'Recorded biometric attendance for ' . audit_student_label($pdo, $studentId) . '.', null, null,
                 ['record_id' => (int) $recordId, 'student_id' => $studentId, 'status' => $decision['status'], 'verification_method' => 'biometric']
             );
+            attendance_requests_auto_close(
+                $pdo, $config, $authCtx, 'Student checked in by face', $sessionId,
+                (int) $session['enrollment_id'], (string) $session['session_date']
+            );
             student_biometric_complete_challenge($pdo, (int) $challenge['tokenId'], $idempotencyKey);
             $pdo->commit();
             $attendance = [

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/notifications.php';
+
 const ATTENDANCE_GEOFENCE_RADIUS_MIN_METERS = 50;
 const ATTENDANCE_GEOFENCE_RADIUS_MAX_METERS = 2000;
 
@@ -750,7 +752,8 @@ function attendance_excused_requests_rows(PDO $pdo, string $scopeSql, array $par
 {
     $stmt = $pdo->prepare(
         "SELECT xr.request_id, xr.status, xr.reason, xr.session_date, xr.session_code, xr.requested_at,
-                xr.decided_at, xr.decision_note, xr.attendance_session_id,
+                xr.decided_at, xr.decision_note, xr.attendance_session_id, xr.requested_status,
+                xs.present_cutoff_time, xs.late_cutoff_time,
                 requester.display_name AS requested_by, decider.display_name AS decided_by,
                 s.student_id, s.student_number,
                 COALESCE(pi.name_prefix, s.name_prefix) AS name_prefix,
@@ -764,13 +767,20 @@ function attendance_excused_requests_rows(PDO $pdo, string $scopeSql, array $par
                   WHERE r.enrollment_id = xr.enrollment_id AND r.session_date = xr.session_date
                     AND (r.attendance_session_id = xr.attendance_session_id OR r.attendance_session_id IS NULL)
                     AND (rs.session_id IS NULL OR rs.status <> 'revoked')
-                  ORDER BY r.record_id DESC LIMIT 1) AS current_status
+                  ORDER BY r.record_id DESC LIMIT 1) AS current_status,
+                (SELECT r.verification_method FROM attendance_records r
+                   LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
+                  WHERE r.enrollment_id = xr.enrollment_id AND r.session_date = xr.session_date
+                    AND (r.attendance_session_id = xr.attendance_session_id OR r.attendance_session_id IS NULL)
+                    AND (rs.session_id IS NULL OR rs.status <> 'revoked')
+                  ORDER BY r.record_id DESC LIMIT 1) AS current_method
            FROM attendance_excused_requests xr
            JOIN enrollments e ON e.enrollment_id = xr.enrollment_id
            JOIN students s ON s.student_id = e.student_id
            LEFT JOIN person_identities pi ON pi.person_id = s.person_id
            JOIN class_sections cs ON cs.cs_id = e.cs_id
            JOIN courses c ON c.course_id = cs.course_id
+           LEFT JOIN attendance_sessions xs ON xs.session_id = xr.attendance_session_id
            JOIN user_accounts requester ON requester.user_id = xr.requested_by_user_id
            LEFT JOIN user_accounts decider ON decider.user_id = xr.decided_by_user_id
           WHERE {$scopeSql}
@@ -791,6 +801,10 @@ function attendance_excused_requests_rows(PDO $pdo, string $scopeSql, array $par
         'sessionDate' => $row['session_date'],
         'sessionCode' => $row['session_code'],
         'currentStatus' => $row['current_status'],
+        'currentMethod' => $row['current_method'],
+        'requestedStatus' => $row['requested_status'],
+        'presentCutoff' => $row['present_cutoff_time'] !== null ? substr((string) $row['present_cutoff_time'], 0, 5) : null,
+        'lateCutoff' => $row['late_cutoff_time'] !== null ? substr((string) $row['late_cutoff_time'], 0, 5) : null,
         'reason' => $row['reason'],
         'requestedBy' => $row['requested_by'],
         'requestedAt' => attendance_session_timestamp((string) $row['requested_at']),
@@ -849,4 +863,111 @@ function attendance_session_record_audit(
 function attendance_session_code(int $csId, string $sessionDate): string
 {
     return 'CS' . $csId . '-' . str_replace('-', '', $sessionDate) . '-' . strtoupper(bin2hex(random_bytes(3)));
+}
+
+/**
+ * ATT-006 Secretary attendance requests: one place for the audit entry and the in-app
+ * notification of each request event. $event is requested | cancelled | approved |
+ * rejected | auto_closed. $oldStatus is the record status before the event (looked up when null).
+ */
+function attendance_request_event(
+    PDO $pdo,
+    array $config,
+    array $authCtx,
+    int $requestId,
+    string $event,
+    ?string $note = null,
+    ?string $oldStatus = null,
+    ?array $context = null
+): void {
+    $stmt = $pdo->prepare(
+        "SELECT xr.request_id, xr.requested_status, xr.session_date, xr.session_code, xr.requested_by_user_id,
+                e.cs_id, e.student_id, cs.cs_name, cs.instructor_user_id,
+                (SELECT r.status FROM attendance_records r
+                  WHERE r.enrollment_id = xr.enrollment_id AND r.session_date = xr.session_date
+                    AND (r.attendance_session_id = xr.attendance_session_id OR r.attendance_session_id IS NULL)
+                  ORDER BY r.record_id DESC LIMIT 1) AS current_status
+           FROM attendance_excused_requests xr
+           JOIN enrollments e ON e.enrollment_id = xr.enrollment_id
+           JOIN class_sections cs ON cs.cs_id = e.cs_id
+          WHERE xr.request_id = ?"
+    );
+    $stmt->execute([$requestId]);
+    $req = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($req === false) {
+        return;
+    }
+    $student = audit_student_label($pdo, (int) $req['student_id']);
+    $old = $oldStatus ?? ($req['current_status'] ?? null);
+    $detail = sprintf(
+        'for %s in %s, session %s (%s): %s to %s',
+        $student, $req['cs_name'], $req['session_code'] ?? 'no code', $req['session_date'],
+        $old ?? 'no record', $req['requested_status']
+    );
+    [$module, $action, $label] = [
+        'requested' => ['secretary', 'attendance_change_requested', 'Attendance change requested'],
+        'cancelled' => ['secretary', 'attendance_request_cancelled', 'Attendance request cancelled'],
+        'approved' => ['faculty_attendance', 'attendance_request_approved', 'Attendance request approved'],
+        'rejected' => ['faculty_attendance', 'attendance_request_rejected', 'Attendance request rejected'],
+        'auto_closed' => ['attendance_session', 'attendance_request_auto_closed', 'Attendance request closed automatically'],
+    ][$event];
+    audit_record_action(
+        $pdo, $config, $authCtx, $module, $action, 'attendance_excused_request', (string) $requestId,
+        $label . ' ' . $detail . ($note !== null && $note !== '' ? '. ' . $note : '.'),
+        ['scope_cs_id' => (int) $req['cs_id'], 'reason' => $note, 'context' => $context,
+         'before' => ['status' => $old], 'after' => ['requestedStatus' => $req['requested_status'], 'event' => $event]]
+    );
+    if ($event === 'requested' && $req['instructor_user_id'] !== null) {
+        notification_create_idempotent(
+            $pdo, (int) $req['instructor_user_id'], 'attendance_request_created', 'Attendance change requested',
+            "A Secretary asked to mark {$student} {$req['requested_status']} in {$req['cs_name']} ({$req['session_date']}).",
+            'attendance_excused_request', (string) $requestId, "att-request-created:{$requestId}"
+        );
+    } elseif (in_array($event, ['approved', 'rejected', 'auto_closed'], true)) {
+        $outcome = $event === 'approved' ? 'approved' : 'rejected';
+        notification_create_idempotent(
+            $pdo, (int) $req['requested_by_user_id'], 'attendance_request_decided', "Attendance request {$outcome}",
+            "Your request to mark {$student} {$req['requested_status']} in {$req['cs_name']} ({$req['session_date']}) was {$outcome}."
+                . ($note !== null && $note !== '' ? " Note: {$note}" : ''),
+            'attendance_excused_request', (string) $requestId, "att-request-decided:{$requestId}"
+        );
+    }
+}
+
+/**
+ * Closes pending Secretary requests as rejected with $note: for one session (every student),
+ * or for one student on a session day. Called inside the caller's transaction.
+ */
+function attendance_requests_auto_close(
+    PDO $pdo,
+    array $config,
+    array $authCtx,
+    string $note,
+    ?int $sessionId,
+    ?int $enrollmentId = null,
+    ?string $sessionDate = null,
+    ?array $context = null
+): void {
+    $sql = "SELECT request_id FROM attendance_excused_requests WHERE status = 'pending'";
+    $params = [];
+    if ($enrollmentId !== null) {
+        $sql .= ' AND enrollment_id = ? AND session_date = ?';
+        array_push($params, $enrollmentId, $sessionDate);
+    }
+    if ($sessionId !== null) {
+        $sql .= ' AND (attendance_session_id = ?' . ($enrollmentId !== null ? ' OR attendance_session_id IS NULL' : '') . ')';
+        $params[] = $sessionId;
+    }
+    $ids = $pdo->prepare($sql . ' FOR UPDATE');
+    $ids->execute($params);
+    $nowSql = attendance_session_now_utc()->format('Y-m-d H:i:s.u');
+    $close = $pdo->prepare(
+        "UPDATE attendance_excused_requests
+            SET status = 'rejected', decided_by_user_id = ?, decided_at = ?, decision_note = ?
+          WHERE request_id = ? AND status = 'pending'"
+    );
+    foreach ($ids->fetchAll(PDO::FETCH_COLUMN) as $requestId) {
+        $close->execute([(int) $authCtx['user_id'], $nowSql, $note, (int) $requestId]);
+        attendance_request_event($pdo, $config, $authCtx, (int) $requestId, 'auto_closed', $note, null, $context);
+    }
 }

@@ -1325,6 +1325,7 @@ export function getSecretaryDashboardKpisApi(schoolYear?: string): Promise<Schoo
     attendanceRate: number;
     todayRecords: number;
     overriddenCount: number;
+    pendingRequests?: number;
   };
   recentActivity: AuditEntry[];
   assignedClasses?: Array<{ classId: string; className: string; classroomName: string | null; schoolYear?: string; semester?: string; courseCode?: string; courseName?: string; meetings?: ClassMeeting[] }>;
@@ -1398,12 +1399,12 @@ export function getSecretaryAttendanceApi(params?: {
 export function overrideSecretaryAttendanceApi(data: {
   studentId: string;
   status: 'present' | 'late' | 'absent' | 'excused';
-  reason: string;
+  reason?: string;
   recordId?: string | number;
   sessionId?: string | number;
   date?: string;
   subjectCode?: string;
-}): Promise<{ status: string; message: string; record?: { id: string; status: string; overrideReason: string; overrideAt: string } }> {
+}): Promise<{ status: string; message?: string; requestId: string; requestedStatus: string }> {
   return request('POST', '/secretary/attendance/override', data);
 }
 
@@ -1550,7 +1551,11 @@ export interface AttendanceExcusedRequest {
   sessionId: string | null;
   sessionDate: string;
   sessionCode: string | null;
+  requestedStatus?: 'present' | 'late' | 'absent' | 'excused';
   currentStatus: string | null;
+  currentMethod?: string | null;
+  presentCutoff?: string | null;
+  lateCutoff?: string | null;
   reason: string;
   requestedBy: string | null;
   requestedAt: string | null;
@@ -1576,8 +1581,13 @@ export function getFacultyExcusedRequestsApi(): Promise<{ status: string; reques
   return request('GET', '/faculty/excused-requests');
 }
 
+export function cancelSecretaryExcusedRequestApi(id: string): Promise<{ status: string; message?: string }> {
+  return request('DELETE', `/secretary/excused-requests/${encodeURIComponent(id)}`);
+}
+
 export function decideFacultyExcusedRequestApi(data: {
-  requestId: string;
+  requestId?: string;
+  requestIds?: string[];
   decision: 'approve' | 'reject';
   note?: string;
 }): Promise<{ status: string; message: string; request: AttendanceExcusedRequest | null }> {

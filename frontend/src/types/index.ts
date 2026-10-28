@@ -289,7 +289,7 @@ export interface BiometricAttendanceResponse {
   };
 }
 
-export type AttendanceVerificationMethod = 'biometric' | 'faculty_manual' | 'secretary_manual' | 'system_resolution' | 'unknown';
+export type AttendanceVerificationMethod = 'biometric' | 'faculty_manual' | 'secretary_manual' | 'secretary_approved' | 'system_resolution' | 'unknown';
 
 export interface StudentAttendanceLogRecord {
   id: number;

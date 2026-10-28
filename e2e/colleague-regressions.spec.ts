@@ -199,17 +199,22 @@ test('Secretary missing attendance is reachable for an exact session and writes 
   const missing = { id: '', attendanceSessionId: '900', studentId: '42', studentNumber: 'REAL-42', studentName: 'Missing Student', date: session.date, subjectCode: session.subjectCode, status: '' };
   let payload: unknown;
   let saved = false;
+  let cancelled = false;
+  const pendingRequest = { id: '77', status: 'pending', studentId: '42', sessionId: '900', requestedStatus: 'present', studentName: 'Missing Student', decidedAt: null, decisionNote: null };
+  await page.route('**/api/secretary/excused-requests**', route => {
+    if (route.request().method() === 'DELETE') { cancelled = true; saved = false; return route.fulfill({ json: { status: 'ok' } }); }
+    return route.fulfill({ json: { status: 'ok', requests: saved ? [pendingRequest] : [] } });
+  });
   await page.route('**/api/secretary/attendance**', route => {
     if (route.request().method() === 'POST') {
       payload = route.request().postDataJSON();
       saved = true;
-      return route.fulfill({ json: { status: 'ok', record: { id: '501' } } });
+      return route.fulfill({ status: 201, json: { status: 'ok', requestId: '77', requestedStatus: 'present' } });
     }
     const selectedSession = new URL(route.request().url()).searchParams.get('sessionId');
-    const recorded = { ...missing, id: '501', status: 'present' };
-    const records = selectedSession === '900' ? [saved ? recorded : missing]
-      : selectedSession === '901' ? [{ ...missing, attendanceSessionId: '901' }]
-        : saved ? [recorded] : [];
+    const records = selectedSession === '901' ? [{ ...missing, attendanceSessionId: '901' }]
+      : selectedSession === '900' ? [missing]
+        : [];
     return route.fulfill({ json: { status: 'ok', sessions: [session, { ...session, sessionId: '901', sessionCode: 'SESSION-901' }], records } });
   });
   await page.goto('/secretary/override?student=REAL-42&sessionId=900&date=2026-10-03');
@@ -220,15 +225,25 @@ test('Secretary missing attendance is reachable for an exact session and writes 
   const row = page.getByRole('row').filter({ hasText: 'Missing Student' });
   await expect(row).toContainText('Not recorded');
   await row.getByRole('button', { name: 'Mark' }).click();
-  await page.locator('textarea').fill('Verified attendance with Faculty');
-  await page.getByRole('button', { name: 'Confirm override' }).click();
-  await expect.poll(() => payload).toMatchObject({ studentId: '42', sessionId: 900, status: 'present', reason: 'Verified attendance with Faculty' });
-  await expect(row).toContainText('present');
+  await expect(page.getByText('Your class Faculty must approve this before it counts.')).toBeVisible();
+  // A first mark on an unrecorded student needs no reason.
+  await page.getByRole('button', { name: 'Send for approval' }).click();
+  await expect.poll(() => payload).toMatchObject({ studentId: '42', sessionId: 900, status: 'present' });
+  expect(payload).not.toHaveProperty('reason');
+  // The official record stays unrecorded; the row shows the pending request instead.
+  await expect(row).toContainText('Not recorded');
+  await expect(row).toContainText('Present requested');
   await page.getByLabel('Switch Session').selectOption('901');
   await expect(row).toContainText('Not recorded');
-  await expect(row).not.toContainText('present');
+  await expect(row).not.toContainText('Present requested');
   await page.getByLabel('Switch Session').selectOption('900');
-  await expect(row).toContainText('present');
+  await expect(row).toContainText('Present requested');
+  // Cancel goes through an in-app confirmation and clears the chip.
+  await row.getByRole('button', { name: 'Cancel request' }).click();
+  await page.getByRole('button', { name: 'Yes, cancel' }).click();
+  await expect.poll(() => cancelled).toBe(true);
+  await expect(row).not.toContainText('Present requested');
+  await expect(row.getByRole('button', { name: 'Mark' })).toBeVisible();
   await page.getByLabel('Switch Session').selectOption('');
   await expect(page.getByText('Choose a session to manage its attendance.')).toBeVisible();
   await expect(row).toHaveCount(0);
@@ -304,8 +319,7 @@ test('Secretary correction uses a fresh reason, preserves failures for retry, an
         writing = false;
         return route.fulfill({ status: 503, json: { status: 'error', message: 'Temporary save failure.' } });
       }
-      Object.assign(record, { status: 'late' });
-      return route.fulfill({ json: { status: 'ok', record: { id: '501', overrideAt: '2026-10-03T02:00:00+08:00' } } });
+      return route.fulfill({ status: 201, json: { status: 'ok', requestId: '77', requestedStatus: 'late' } });
     }
     return route.fulfill({ json: { status: 'ok', records: [record], sessions: [{ sessionId: '900', subjectCode: 'DENT401', date: '2026-10-03', sessionCode: 'SESSION-900', status: 'active' }] } });
   });
@@ -314,30 +328,30 @@ test('Secretary correction uses a fresh reason, preserves failures for retry, an
   await page.getByRole('row').filter({ hasText: 'Correction Student' }).getByRole('button', { name: 'Override' }).click();
   await expect(page.locator('textarea')).toHaveValue('');
   await page.locator('textarea').fill('New verified correction reason');
-  await expect(page.getByRole('button', { name: 'Confirm override' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Send for approval' })).toBeDisabled();
   expect(payloads).toEqual([]);
   await page.getByRole('button', { name: 'Late', exact: true }).click();
-  await page.getByRole('button', { name: 'Confirm override' }).click();
+  await page.getByRole('button', { name: 'Send for approval' }).click();
   await expect.poll(() => writing).toBe(true);
   await expect(page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true })).toBeDisabled();
   release?.();
   await expect(page.getByRole('main').getByText('Service is temporarily unavailable. Please try again later.', { exact: true })).toBeVisible();
   await expect(page.locator('textarea')).toHaveValue('New verified correction reason');
-  await expect(page.getByRole('button', { name: 'Confirm override' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Send for approval' })).toBeEnabled();
   const row = page.getByRole('row').filter({ hasText: 'Correction Student' });
   await expect(row).toContainText('present');
-  await expect(page.getByText('Attendance override applied successfully.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Request sent to your class Faculty for approval.', { exact: true })).toHaveCount(0);
   const expected = { studentId: '42', recordId: '501', sessionId: 900, date: '2026-10-03', status: 'late', reason: 'New verified correction reason' };
   expect(payloads).toEqual([expected]);
-  await page.getByRole('button', { name: 'Confirm override' }).click();
-  await expect(page.getByRole('main').getByText('Attendance override applied successfully.', { exact: true })).toBeVisible();
-  await expect(row).toContainText('late');
-  await expect(page.getByRole('heading', { name: 'Manual Attendance Override', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Send for approval' }).click();
+  await expect(page.getByRole('main').getByText('Request sent to your class Faculty for approval.', { exact: true })).toBeVisible();
+  await expect(row).toContainText('present'); // the official record is unchanged until Faculty approve
+  await expect(page.getByRole('heading', { name: 'Request Attendance Change', exact: true })).toHaveCount(0);
   expect(payloads).toEqual([expected, expected]);
 });
 
 for (const boundary of [
-  { action: 'override', length: 8, limit: 240 }, { action: 'override', length: 240, limit: 240 },
+  { action: 'override', length: 8, limit: 500 }, { action: 'override', length: 500, limit: 500 },
   { action: 'excused', length: 8, limit: 500 }, { action: 'excused', length: 500, limit: 500 },
 ]) {
   test(`Secretary ${boundary.action} accepts ${boundary.length} characters and rejects a short reason`, async ({ page }) => {
@@ -350,8 +364,7 @@ for (const boundary of [
     await page.route('**/api/secretary/attendance**', route => {
       if (route.request().method() === 'POST') {
         overrides.push(route.request().postDataJSON());
-        Object.assign(record, { status: 'present' });
-        return route.fulfill({ json: { status: 'ok', record: { id: '501' } } });
+        return route.fulfill({ status: 201, json: { status: 'ok', requestId: '77', requestedStatus: 'present' } });
       }
       return route.fulfill({ json: { status: 'ok', records: [record], sessions: [{ sessionId: '900', subjectCode: 'DENT401', date: '2026-10-03', sessionCode: 'SESSION-900', status: 'active' }] } });
     });
@@ -364,9 +377,9 @@ for (const boundary of [
     await openSecretaryWorksheet(page, '2026-10-03');
     const row = page.getByRole('row').filter({ hasText: 'Boundary Student' });
     await row.getByRole('button', { name: 'Override', exact: true }).click();
-    await page.getByRole('button', { name: boundary.action === 'excused' ? 'Request Excused' : 'Present', exact: true }).click();
+    await page.getByRole('button', { name: boundary.action === 'excused' ? 'Excused' : 'Present', exact: true }).click();
     const reason = page.locator('textarea');
-    const submit = page.getByRole('button', { name: boundary.action === 'excused' ? 'Send request' : 'Confirm override', exact: true });
+    const submit = page.getByRole('button', { name: 'Send for approval', exact: true });
     await expect(reason).toHaveAttribute('maxlength', String(boundary.limit));
     await reason.fill('1234567');
     await expect(submit).toBeDisabled();
@@ -381,10 +394,10 @@ for (const boundary of [
       expect(overrides).toEqual([]);
       await expect(row).toContainText('absent');
     } else {
-      await expect(page.getByRole('main').getByText('Attendance override applied successfully.', { exact: true })).toBeVisible();
+      await expect(page.getByRole('main').getByText('Request sent to your class Faculty for approval.', { exact: true })).toBeVisible();
       expect(overrides).toEqual([{ studentId: '42', recordId: '501', sessionId: 900, date: '2026-10-03', status: 'present', reason: text }]);
       expect(requests).toEqual([]);
-      await expect(row).toContainText('present');
+      await expect(row).toContainText('absent');
     }
   });
 }

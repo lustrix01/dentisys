@@ -114,6 +114,11 @@ function audit_catalogue(): array
         'excused_requested' => ['Excused requested', $A, false, false],
         'excused_approved' => ['Excused approved', $A, false, false],
         'excused_rejected' => ['Excused rejected', $A, false, false],
+        'attendance_change_requested' => ['Attendance change requested', $A, false, false],
+        'attendance_request_cancelled' => ['Attendance request cancelled', $A, false, false],
+        'attendance_request_approved' => ['Attendance request approved', $A, false, false],
+        'attendance_request_rejected' => ['Attendance request rejected', $A, false, false],
+        'attendance_request_auto_closed' => ['Attendance request closed automatically', $A, false, false],
         // 5.6 Retention (own view only)
         'retention_remedial_save' => ['Remedial attempt recorded', $R, false, false],
         'cost_recovery_recorded' => ['Cost recovery result recorded', $R, false, false],

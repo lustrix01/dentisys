@@ -1066,13 +1066,56 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Excused request approved; attendance set to Excused.', request: { ...pending, status: 'approved' } }) });
     });
     await page.goto('/attendance');
-    const panel = page.getByRole('region', { name: 'Excused requests' });
+    const panel = page.getByRole('region', { name: 'Secretary requests' });
     await expect(panel).toContainText('Alice Green');
     await expect(panel).toContainText('Medical certificate given to the Secretary');
-    await panel.getByLabel('Decision note for Alice Green').fill('Certificate verified');
-    await panel.getByRole('button', { name: 'Approve' }).click();
-    await expect.poll(() => decision).toEqual({ requestId: '31', decision: 'approve', note: 'Certificate verified' });
+    await panel.getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect.poll(() => decision).toEqual({ requestId: '31', decision: 'approve' });
     await expect(panel).toContainText('Excused request approved');
+  });
+
+  test('Secretary requests: requested vs current status, bulk approve sends a list, reject sends a note', async ({ page }) => {
+    const decisions: Record<string, unknown>[] = [];
+    const base = {
+      status: 'pending', studentNumber: '2024-0001', classId: '1', className: 'Section A', courseCode: 'CLIN401', sessionId: '900',
+      sessionDate: '2026-09-20', sessionCode: 'CS1-20260920', reason: '', requestedBy: 'Bea Alonzo', requestedAt: '2026-09-20T03:00:00Z',
+      decidedBy: null, decidedAt: null, decisionNote: null, presentCutoff: '08:15', lateCutoff: '08:45',
+    };
+    const rows = [
+      { ...base, id: '31', studentId: '1001', studentName: 'Alice Green', requestedStatus: 'present', currentStatus: 'present', currentMethod: 'biometric' },
+      { ...base, id: '32', studentId: '1002', studentName: 'Bob White', requestedStatus: 'late', currentStatus: 'absent', currentMethod: 'system_resolution' },
+      { ...base, id: '33', studentId: '1003', studentName: 'Cara Gray', requestedStatus: 'absent', currentStatus: null, currentMethod: null },
+      { ...base, id: '34', studentId: '1004', studentName: 'Old Decided', status: 'approved', requestedStatus: 'late', currentStatus: 'late', decidedAt: '2026-09-19T03:00:00Z' },
+    ];
+    await page.route('**/api/faculty/excused-requests', route => route.fulfill({ json: { status: 'ok', requests: rows.filter(r => !decisions.some(d => [d.requestId, ...((d.requestIds as string[]) ?? [])].includes(r.id))) } }));
+    await page.route('**/api/faculty/excused-requests/decide', route => {
+      decisions.push(route.request().postDataJSON() as Record<string, unknown>);
+      return route.fulfill({ json: { status: 'ok', message: 'Decision saved.', request: null } });
+    });
+    await page.goto('/attendance');
+    const panel = page.getByRole('region', { name: 'Secretary requests' });
+    await expect(panel).toContainText('Secretary requests (3)');
+    await expect(panel).toContainText('Sent by class Secretaries. Approving applies the requested status; rejecting leaves the record unchanged.');
+    const alice = panel.getByRole('listitem').filter({ hasText: 'Alice Green' });
+    await expect(alice).toContainText('Requested: Present');
+    await expect(alice).toContainText('Now: Present (face check-in)');
+    await expect(alice).toContainText('Present until 08:15');
+    await expect(alice).toContainText('Late until 08:45');
+    await expect(panel.getByRole('listitem').filter({ hasText: 'Bob White' })).toContainText('Now: Absent');
+    await expect(panel).not.toContainText('Old Decided');
+    // Reject one with a note.
+    const cara = panel.getByRole('listitem').filter({ hasText: 'Cara Gray' });
+    await cara.getByLabel('Decision note for Cara Gray').fill('Student was absent');
+    await cara.getByRole('button', { name: 'Reject' }).click();
+    await expect.poll(() => decisions).toEqual([{ requestId: '33', decision: 'reject', note: 'Student was absent' }]);
+    // Bulk approve two.
+    await panel.getByLabel('Select Alice Green').check();
+    await panel.getByLabel('Select Bob White').check();
+    await panel.getByRole('button', { name: 'Approve selected' }).click();
+    await expect.poll(() => decisions[1]).toEqual({ requestIds: ['31', '32'], decision: 'approve' });
+    // History filter shows decided rows the GET returns.
+    await panel.getByLabel('Show requests').selectOption('approved');
+    await expect(panel).toContainText('Old Decided');
   });
 
   test('worksheet: API failure renders error and retry button without injecting mock data', async ({ page }) => {
@@ -1364,7 +1407,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
     await page.getByRole('button', { name: 'Save Override', exact: true }).click();
     await expect.poll(() => writing).toBe(true);
-    await page.getByRole('region', { name: 'Excused requests' }).getByRole('button', { name: 'Approve', exact: true }).dispatchEvent('click'); // the Save Override modal overlay now really covers the page (styles on)
+    await page.getByRole('region', { name: 'Secretary requests' }).getByRole('button', { name: 'Approve', exact: true }).dispatchEvent('click'); // the Save Override modal overlay now really covers the page (styles on)
     await expect(page.getByText('Bob approval saved.', { exact: true })).toBeVisible();
     expect(reads).toBe(1);
     releaseWrite();

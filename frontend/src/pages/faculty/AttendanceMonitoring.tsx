@@ -22,7 +22,7 @@ import {
 import { Card } from '../../components/Card';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { LocationPicker } from '../../components/LocationPicker';
-import { FacultyExcusedRequestsPanel } from '../../components/FacultyExcusedRequestsPanel';
+import { FacultyExcusedRequestsPanel, PendingRequestsBadge, openSecretaryRequest } from '../../components/FacultyExcusedRequestsPanel';
 import { Modal } from '../../components/Modal';
 import { StartSessionModal, type StartSessionValues } from '../../components/StartSessionModal';
 import { RevokedSessionsSwitch } from '../../components/RevokedSessionsSwitch';
@@ -87,6 +87,8 @@ const attendanceMethodLabel = (method?: string | null, overrideReason?: string |
     case 'manual_secretary':
     case 'secretary_manual':
       return 'Secretary Manual Entry';
+    case 'secretary_approved':
+      return 'Secretary (approved by Faculty)';
     case 'system_resolution':
       return 'System Resolution';
     default:
@@ -197,6 +199,8 @@ export const AttendanceMonitoring: React.FC = () => {
   // Row mutation states
   const [savingStudentId, setSavingStudentId] = useState<string | null>(null);
   const [notification, setNotificationState] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  // Pending Secretary requests, by "studentId:sessionId" (chip in the roll call; the panel owns Approve/Reject).
+  const [pendingByRow, setPendingByRow] = useState<Record<string, string>>({});
   // Also raise the corner notice: the banner is off-screen when the page is scrolled.
   const setNotification = (n: { type: 'success' | 'error'; message: string } | null) => {
     setNotificationState(n);
@@ -891,7 +895,7 @@ export const AttendanceMonitoring: React.FC = () => {
   return (
     <div className="space-y-6">
 
-      <FacultyExcusedRequestsPanel onDecided={() => {
+      <FacultyExcusedRequestsPanel onLoaded={rows => setPendingByRow(Object.fromEntries(rows.filter(r => r.status === 'pending').map(r => [`${r.studentId}:${r.sessionId ?? ''}`, r.id])))} onDecided={() => {
         const csIdNum = parseInt(selectedCsId, 10);
         if (csIdNum > 0) void loadWorksheet(csIdNum, selectedDate);
       }} />
@@ -1197,6 +1201,7 @@ export const AttendanceMonitoring: React.FC = () => {
               <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-900 dark:text-slate-50 tracking-tight">
                 {selectedClass?.courseName || 'Class Attendance Worksheet'}
               </h1>
+              <PendingRequestsBadge count={Object.keys(pendingByRow).length} className="mt-2" />
 
               <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-slate-500 dark:text-slate-400">
                 <div className="flex items-center gap-1.5">
@@ -1646,6 +1651,15 @@ export const AttendanceMonitoring: React.FC = () => {
                               <span className="text-sm leading-none">•</span>
                               <span>Not recorded</span>
                             </span>
+                          )}
+                          {pendingByRow[`${item.studentId}:${item.attendanceSessionId ?? ''}`] && (
+                            <button
+                              type="button"
+                              onClick={() => openSecretaryRequest(pendingByRow[`${item.studentId}:${item.attendanceSessionId ?? ''}`])}
+                              className="mt-1 block rounded-full border border-dashed border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 px-2.5 py-0.5 text-[11px] font-bold text-sky-700 dark:text-sky-300 cursor-pointer"
+                            >
+                              Request pending
+                            </button>
                           )}
                         </td>
 

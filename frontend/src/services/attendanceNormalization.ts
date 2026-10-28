@@ -55,7 +55,7 @@ export function normalizeStudentAttendanceLogRecord(value: unknown): StudentAtte
       ? 'secretary_manual'
       : verificationValue;
   const verificationMethod: StudentAttendanceLogRecord['verificationMethod'] =
-    normalizedVerificationValue === 'biometric' || normalizedVerificationValue === 'faculty_manual' || normalizedVerificationValue === 'secretary_manual' || normalizedVerificationValue === 'system_resolution'
+    normalizedVerificationValue === 'biometric' || normalizedVerificationValue === 'faculty_manual' || normalizedVerificationValue === 'secretary_manual' || normalizedVerificationValue === 'secretary_approved' || normalizedVerificationValue === 'system_resolution'
       ? normalizedVerificationValue
       : 'unknown';
   const parsedId = Number(row.id ?? row.recordId ?? 0);

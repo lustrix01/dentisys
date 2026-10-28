@@ -354,7 +354,7 @@ $correctionSocket = integration_http_async_json('/api/secretary/attendance/overr
 try {
     $waitingForRecord = false;
     for ($attempt = 0; $attempt < 100; $attempt++) {
-        $waitingForRecord = (int) $pdo->query("SELECT COUNT(*) FROM pg_stat_activity WHERE pid <> pg_backend_pid() AND wait_event_type = 'Lock' AND query LIKE '%r.record_id, r.attendance_session_id, r.status, cs.cs_id%'")->fetchColumn() > 0;
+        $waitingForRecord = (int) $pdo->query("SELECT COUNT(*) FROM pg_stat_activity WHERE pid <> pg_backend_pid() AND wait_event_type = 'Lock' AND query LIKE '%r.record_id, r.enrollment_id, r.attendance_session_id%'")->fetchColumn() > 0;
         if ($waitingForRecord) break;
         usleep(10000);
     }
@@ -370,7 +370,7 @@ try {
     $correctionLockPdo->rollBack();
 }
 [$correctionLockStatus] = integration_http_async_read($correctionSocket);
-expect_same(200, $correctionLockStatus, 'Secretary correction completes and audits after the record lock is released');
+expect_same(201, $correctionLockStatus, 'Secretary correction request completes and audits after the record lock is released');
 [$scopedRequestStatus, $scopedRequestBody] = integration_http_json('/api/secretary/excused-requests', $secretaryAccessToken, ['studentId' => '26', 'sessionId' => $excuseSessions['A'], 'reason' => 'Excused fixture session A']);
 expect_same(201, $scopedRequestStatus, 'Secretary requests Excused for one session before its attendance row exists');
 $scopedRequestId = (int) $scopedRequestBody['request']['id'];
