@@ -1,6 +1,6 @@
 import { filterPersonNameInput, preventInvalidPersonNameKey } from '../../utils/personNameValidation';
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import {
   BookOpen,
   Search,
@@ -15,13 +15,12 @@ import {
   Info,
   BookMarked,
   CalendarDays,
-  Download,
+  FileSpreadsheet,
   Plus,
   Upload,
   FileText,
   Mail,
   Send,
-  Printer,
   CheckCircle2,
   UserPlus,
   Trash2,
@@ -75,7 +74,7 @@ import { recordAudit } from '../../services/auditService';
 import { createSecretaryInvitation, fetchSecretaryInvitations, type SecretaryInvitation } from '../../services/authService';
 import { useAuth } from '../../context/AuthContext';
 import { downloadXlsx } from '../../utils/xlsxDownload';
-import { buildClassList } from '../../utils/reportWorkbook';
+import { buildClassList, termLine } from '../../utils/reportWorkbook';
 
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
 
@@ -207,11 +206,13 @@ export const ClassesAndRosters: React.FC = () => {
 
   // Selected Class & Modals
   const [selectedClass, setSelectedClass] = useState<FacultyClassItem | null>(null);
+  const [isPrintingClassList, setIsPrintingClassList] = useState(false);
   const [isCreateClassOpen, setIsCreateClassOpen] = useState(false);
 
   // Student Enrollment Modal States
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
-  const [isImportRosterOpen, setIsImportRosterOpen] = useState(false);
+  const [isClassRosterImportOpen, setIsClassRosterImportOpen] = useState(false);
+  const [isStudentsImportOpen, setIsStudentsImportOpen] = useState(false);
   const [targetEnrollCsId, setTargetEnrollCsId] = useState<number>(0);
   const [enrollTab, setEnrollTab] = useState<'directory' | 'manual'>('directory');
   const [openStudentMenuId, setOpenStudentMenuId] = useState<string | null>(null);
@@ -1299,23 +1300,48 @@ export const ClassesAndRosters: React.FC = () => {
     }
   };
 
-  // Class list .xlsx for the open class (contract official-exports X14-X17); archived classes export too.
-const handleExportClassList = async () => {
-  if (!selectedClass) return;
-  const cls = selectedClass;
-  const enrolled = studentsList.filter(st => st.classSections?.some(sec => String(sec.classId) === String(cls.csId)) || String(st.classId) === String(cls.csId));
-  recordAudit({ action: 'Exported class list', module: 'Classes & Rosters', description: `Exported class list for ${cls.courseCode} ${cls.csName}.`, status: 'Success' });
-  try {
-    const { fileName, sheet } = buildClassList({
-      courseCode: cls.courseCode, courseTitle: cls.courseName, section: cls.csName, yearLevel: cls.yearLevel, units: cls.units,
-      lectureUnits: cls.lectureUnits, labUnits: cls.labUnits, faculty: cls.instructorName, schedules: cls.schedule,
-      semester: cls.semester, schoolYear: cls.schoolYear, students: enrolled,
-    });
-    await downloadXlsx(fileName, [sheet]);
-  } catch (err) {
-    showFeedback(err instanceof Error ? err.message : 'Could not export the class list.', 'info');
-  }
-};
+  const classListExportInput = (cls: FacultyClassItem) => ({
+    courseCode: cls.courseCode, courseTitle: cls.courseName, section: cls.csName, yearLevel: cls.yearLevel, units: cls.units,
+    lectureUnits: cls.lectureUnits, labUnits: cls.labUnits, faculty: cls.instructorName, schedules: cls.schedule,
+    semester: cls.semester, schoolYear: cls.schoolYear,
+    students: studentsList.filter(st => st.classSections?.some(sec => String(sec.classId) === String(cls.csId)) || String(st.classId) === String(cls.csId)),
+  });
+
+  // Class list Excel and printable PDF use the same enrolled-student data.
+  const handleExportClassList = async () => {
+    if (!selectedClass) return;
+    const cls = selectedClass;
+    recordAudit({ action: 'Exported class list', module: 'Classes & Rosters', description: `Exported class list for ${cls.courseCode} ${cls.csName} as Excel.`, status: 'Success' });
+    try {
+      const { fileName, sheet } = buildClassList(classListExportInput(cls));
+      await downloadXlsx(fileName, [sheet]);
+    } catch (err) {
+      showFeedback(err instanceof Error ? err.message : 'Could not export the class list.', 'info');
+    }
+  };
+
+  const handleExportClassListPDF = () => {
+    if (!selectedClass) return;
+    const cls = selectedClass;
+    const { fileName } = buildClassList(classListExportInput(cls));
+    const originalTitle = document.title;
+    const printTitle = fileName.replace(/\.xlsx$/i, '.pdf');
+    const restoreAfterPrint = () => {
+      setIsPrintingClassList(false);
+      document.title = originalTitle;
+      window.removeEventListener('afterprint', restoreAfterPrint);
+    };
+    recordAudit({ action: 'Exported class list', module: 'Classes & Rosters', description: `Exported class list for ${cls.courseCode} ${cls.csName} as PDF.`, status: 'Success' });
+    window.addEventListener('afterprint', restoreAfterPrint);
+    document.title = printTitle;
+    flushSync(() => setIsPrintingClassList(true));
+    try {
+      window.print();
+    } catch {
+      restoreAfterPrint();
+      showFeedback('Could not open the print dialog for the class list.', 'info');
+    }
+  };
 
 const handleSendAllStudentInvites = async () => {
     setIsSendingInvitations(true);
@@ -1512,6 +1538,75 @@ const handleSendAllStudentInvites = async () => {
                 );
   };
 
+  if (isPrintingClassList && selectedClass) {
+    const cls = selectedClass;
+    const printData = classListExportInput(cls);
+    const printStudents = [...printData.students].sort((a, b) =>
+      (a.lastName ?? a.name).localeCompare(b.lastName ?? b.name) || a.name.localeCompare(b.name));
+    const program = cls.csName.split('-')[0];
+    const units = cls.lectureUnits != null && cls.labUnits != null
+      ? `Academic ${cls.lectureUnits.toFixed(1)} · Lab ${cls.labUnits.toFixed(1)} · Credit ${cls.units.toFixed(1)}`
+      : `Credit ${cls.units.toFixed(1)}`;
+
+    return (
+      <main className="hidden print-only print-area bg-white text-slate-900">
+        <style>{'@page { size: A4 landscape; margin: 12mm; }'}</style>
+        <div className="mx-auto max-w-6xl px-6 py-5">
+          <header className="mb-5 border-b-2 border-slate-800 pb-4 text-center">
+            <p className="text-xs">Republic of the Philippines</p>
+            <p className="text-sm font-bold tracking-wide">BICOL UNIVERSITY</p>
+            <p className="text-sm font-bold tracking-wide">COLLEGE OF DENTAL MEDICINE</p>
+            <h1 className="mt-3 text-lg font-extrabold">OFFICIAL LIST OF ENROLLED STUDENTS</h1>
+            <p className="mt-1 text-sm font-semibold">{termLine(cls.semester, cls.schoolYear)}</p>
+          </header>
+
+          <section className="mb-5 grid grid-cols-2 gap-x-10 gap-y-1 text-xs leading-5">
+            <p><strong>Course Code:</strong> {cls.courseCode}</p>
+            <p><strong>Course Title:</strong> {cls.courseName}</p>
+            <p><strong>Class Section:</strong> {cls.csName}</p>
+            <p><strong>Year Level:</strong> {cls.yearLevel}</p>
+            <p><strong>Units:</strong> {units}</p>
+            <p><strong>Faculty:</strong> {cls.instructorName || ''}</p>
+            <p className="col-span-2"><strong>Schedules:</strong> {cls.schedule || ''}</p>
+          </section>
+
+          <table className="w-full border-collapse text-xs">
+            <thead className="bg-slate-100">
+              <tr className="border-y border-slate-700 text-left">
+                {['#', 'Student No.', 'Program', 'Name', 'Gender', 'Year Level', 'Contact #'].map(label => (
+                  <th key={label} className="px-2.5 py-2 font-bold">{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {printStudents.map((student, index) => {
+                const studentDetails = student as Student & { gender?: string | null; contact?: string | null };
+                const name = student.lastName
+                  ? `${student.lastName}, ${[student.firstName, student.middleName].filter(Boolean).join(' ')}`.trim()
+                  : student.name;
+                return (
+                  <tr key={student.id} className="border-b border-slate-300 align-top">
+                    <td className="px-2.5 py-1.5">{index + 1}</td>
+                    <td className="px-2.5 py-1.5">{student.studentId}</td>
+                    <td className="px-2.5 py-1.5">{program}</td>
+                    <td className="px-2.5 py-1.5">
+                      <div className="font-semibold">{name}</div>
+                      <div className="text-slate-600">{student.email || 'No University Email'}</div>
+                    </td>
+                    <td className="px-2.5 py-1.5">{studentDetails.gender || ''}</td>
+                    <td className="px-2.5 py-1.5">{student.yearLevel ?? ''}</td>
+                    <td className="px-2.5 py-1.5">{studentDetails.contact || ''}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="mt-4 text-xs font-bold">Total Number of Students: {printStudents.length}</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <div className="space-y-6">
 
@@ -1616,11 +1711,11 @@ const handleSendAllStudentInvites = async () => {
               </button>
 
               <button
-                onClick={() => setIsImportRosterOpen(true)}
+                onClick={() => setIsClassRosterImportOpen(true)}
                 className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-700 px-2.5 py-2 text-[11px] font-bold text-white shadow-md shadow-emerald-700/20 transition-all hover:bg-emerald-800 active:scale-[0.99] cursor-pointer whitespace-nowrap sm:min-h-0 sm:w-auto sm:px-3.5 sm:text-xs"
               >
                 <Upload className="w-4 h-4 shrink-0" />
-                <span>Import Roster</span>
+                <span>Import Class and Roster</span>
               </button>
             </div>
           </div>
@@ -1801,45 +1896,64 @@ const handleSendAllStudentInvites = async () => {
                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                   {selectedClass?.courseName ? `${selectedClass.courseName} • ` : ''}Room: {(selectedClass && (venueSummary(selectedClass, 'Lecture', selectedClass.lecRoom) || venueSummary(selectedClass, 'Laboratory', selectedClass.labRoom))) || 'N/A'}
                 </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => handleOpenAddStudent()}
+                    className="inline-flex items-center gap-1.5 px-3.5 max-[374px]:px-2.5 py-2 whitespace-nowrap rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>Add Student</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsStudentsImportOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 max-[374px]:px-2.5 py-2 whitespace-nowrap rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                    title="Import student roster from registrar CSV or PDF file"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Import Students</span>
+                  </button>
+
+                  <button
+                    onClick={handleSendAllStudentInvites}
+                    disabled={isSendingInvitations || filteredStudents.length === 0}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 whitespace-nowrap rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>Send Invites to All</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="flex max-sm:flex-wrap items-center gap-2">
-              <button
-                onClick={() => handleOpenAddStudent()}
-                className="inline-flex items-center gap-1.5 px-3.5 max-[374px]:px-2.5 py-2 whitespace-nowrap rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>Add Student</span>
-              </button>
-
-              <button
-                onClick={() => setIsImportRosterOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 max-[374px]:px-2.5 py-2 whitespace-nowrap rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-xs font-bold transition-all cursor-pointer shadow-xs"
-                title="Import student roster from registrar CSV or PDF file"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Import Students</span>
-              </button>
-
-              <button
-                onClick={handleExportClassList}
-                disabled={!selectedClass}
-                className="inline-flex items-center gap-1.5 px-3.5 max-[374px]:px-2.5 py-2 whitespace-nowrap rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-xs font-bold transition-all cursor-pointer shadow-xs disabled:opacity-50"
-                title="Download the class list as an Excel file"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Export class list</span>
-              </button>
-
-              <button
-                onClick={handleSendAllStudentInvites}
-                disabled={isSendingInvitations || filteredStudents.length === 0}
-                className="inline-flex items-center gap-1.5 px-3.5 max-[374px]:px-2.5 py-2 whitespace-nowrap rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Mail className="w-3.5 h-3.5" />
-                <span>Send Invites to All</span>
-              </button>
+            <div className="flex w-full max-sm:flex-wrap items-center justify-between gap-3 sm:flex-1">
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                <div className="flex items-center bg-white p-0.5 rounded-xl border border-slate-200/90 shadow-2xs dark:bg-slate-900 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={handleExportClassList}
+                    disabled={!selectedClass}
+                    aria-label="Export class list as Excel"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                    title="Download the class list as an Excel workbook"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <span>Export Excel</span>
+                  </button>
+                  <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
+                  <button
+                    type="button"
+                    onClick={handleExportClassListPDF}
+                    disabled={!selectedClass}
+                    aria-label="Export class list as PDF"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                    title="Open a styled class list for printing or saving as PDF"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                    <span>Export PDF</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2067,7 +2181,7 @@ const handleSendAllStudentInvites = async () => {
                   type="button"
                   onClick={() => {
                     setIsAddStudentOpen(false);
-                    setIsImportRosterOpen(true);
+                    setIsStudentsImportOpen(true);
                   }}
                   className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 flex items-center gap-1.5 cursor-pointer hover:underline"
                 >
@@ -3060,13 +3174,31 @@ const handleSendAllStudentInvites = async () => {
         </Modal>
       )}
 
-      {/* Modal: Import Student Roster from Registrar (CSV or PDF) */}
-      {isImportRosterOpen && (
+      {/* Modal: Import a class and its roster from a file */}
+      {isClassRosterImportOpen && (
         <RosterImportModal
-          isOpen={isImportRosterOpen}
-          onClose={() => setIsImportRosterOpen(false)}
+          key="class-roster-import"
+          isOpen={isClassRosterImportOpen}
+          onClose={() => setIsClassRosterImportOpen(false)}
           classes={classes}
           defaultClassId={selectedClassFilterId !== 'all' ? Number(selectedClassFilterId) : (classes.find(c => !isHistoricalClass(c))?.csId || 0)}
+          currentSchoolYear={newSchoolYear}
+          existingStudents={studentsList}
+          courses={courses}
+          academicTerms={academicTerms}
+          onSuccess={fetchData}
+        />
+      )}
+
+      {/* Modal: Import student rows into the selected class */}
+      {isStudentsImportOpen && (
+        <RosterImportModal
+          key="students-only-import"
+          isOpen={isStudentsImportOpen}
+          onClose={() => setIsStudentsImportOpen(false)}
+          classes={classes}
+          defaultClassId={selectedClass?.csId || targetEnrollCsId || 0}
+          studentsOnly
           currentSchoolYear={newSchoolYear}
           existingStudents={studentsList}
           courses={courses}

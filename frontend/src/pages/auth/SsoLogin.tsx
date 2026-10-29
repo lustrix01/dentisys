@@ -229,55 +229,28 @@ export function SsoLogin() {
   };
 
   return (
-    <div className="min-h-screen min-h-[100dvh] w-full md:h-screen md:overflow-hidden flex flex-col md:flex-row bg-white font-sans text-slate-800 select-none">
+    <div className="min-h-screen min-h-[100dvh] w-full bg-slate-100 flex items-center justify-center px-4 py-8 font-sans text-slate-800">
+      <div className="w-full max-w-4xl min-h-[500px] md:h-[min(580px,calc(100dvh-3rem))] md:min-h-0 md:flex overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
 
-      {/* LEFT PANE: Full-Height Clean White Authentication Panel */}
-      <div className="w-full md:w-1/2 lg:w-5/12 min-h-[100dvh] md:min-h-0 md:h-full bg-slate-50 md:bg-white flex flex-col justify-between p-5 sm:p-8 lg:p-12 overflow-y-auto">
+      <main className="w-full md:order-2 md:w-1/2 min-h-0 bg-white p-5 sm:p-7 lg:p-8 flex flex-col justify-between overflow-y-auto">
         
-        {/* Top: Logo & Back Link - Connected directly to Landing Page */}
-        <div className="-mx-5 -mt-5 mb-2 border-b border-slate-200 bg-white px-5 pt-[calc(env(safe-area-inset-top)+1.25rem)] pb-5 text-slate-800 shadow-sm sm:-mx-8 sm:-mt-8 sm:px-8 md:mx-0 md:mt-0 md:mb-0 md:border-0 md:bg-none md:p-0 md:shadow-none">
-          <div className="flex items-center justify-between gap-3">
-          <div
-            className="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer group min-w-0"
-            onClick={() => navigate('/')}
-          >
-            <img
-              src="/bu-cdm-logo.png"
-              alt="BU CDM Seal"
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover shadow-sm group-hover:scale-105 transition-transform flex-shrink-0"
-            />
-            <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-1.5">
-                  <span className="font-heading font-extrabold text-sm sm:text-base lg:text-lg text-slate-900 tracking-tight">
-                  BUCDM
-                </span>
-                  <span className="font-heading font-extrabold text-sm sm:text-base lg:text-lg text-purple-600 tracking-tight">
-                  DentiSYS
-                </span>
-              </div>
-              <span className="hidden sm:block text-[10px] sm:text-[11px] font-semibold text-slate-500 font-heading tracking-wide">
-                Bicol University College of Dental Medicine
-              </span>
-            </div>
-          </div>
-
+        <div className="flex justify-start">
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="whitespace-nowrap text-xs font-semibold text-slate-500 hover:text-slate-900 flex items-center gap-1 sm:gap-1.5 transition-colors cursor-pointer px-2.5 py-1.5 rounded-lg hover:bg-slate-100 flex-shrink-0"
+            className="whitespace-nowrap text-sm font-medium text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition-colors cursor-pointer px-2 py-1.5 rounded-md hover:bg-white"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <ArrowLeft className="w-4 h-4" />
             <span>Back to site</span>
           </button>
-          </div>
         </div>
 
         {/* Center: Main Form Block */}
-        <div className="max-w-md w-full mx-auto my-4 rounded-3xl border border-slate-200/80 bg-white p-5 shadow-lg shadow-slate-900/5 space-y-5 sm:p-6 md:my-auto md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none md:space-y-6">
+        <div className="w-full max-w-sm mx-auto my-auto py-5 space-y-5">
 
-          {/* Heading with Clean, Natural Typography */}
+          {/* Login heading */}
           <div className="space-y-1">
-            <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-slate-900 font-heading">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-heading">
               Login
             </h1>
             <p className="text-sm text-slate-500">
@@ -399,7 +372,7 @@ export function SsoLogin() {
             <button
               type="submit"
               disabled={isLoading}
-              className="whitespace-nowrap w-full py-2.5 px-4 rounded-xl font-semibold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.99] transition-all shadow-md shadow-purple-600/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+              className="whitespace-nowrap w-full py-2.5 px-4 rounded-xl font-semibold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.99] transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             >
               {isLoading ? (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -425,7 +398,7 @@ export function SsoLogin() {
                   <>
                     <div
                       ref={googleButtonRef}
-                      className={googleLoadState === 'ready' ? 'w-full flex justify-center' : 'hidden'}
+                      className="flex min-h-11 w-full justify-center"
                       aria-label="Sign in with Google"
                     />
                     {googleLoadState === 'loading' && (
@@ -475,75 +448,31 @@ export function SsoLogin() {
 
         {/* Bottom institutional mark */}
         <div className="text-center text-xs text-slate-500 dark:text-slate-400">
-          <span>© 2026 Bicol University College of Dental Medicine</span>
+          <span>&copy; 2026 Bicol University College of Dental Medicine</span>
         </div>
 
-      </div>
+      </main>
 
       {/* RIGHT PANE: Full-Height Vibrant Purple Hero Section */}
-      <div className="hidden md:flex md:w-1/2 lg:w-7/12 h-full bg-[#8B5CF6] p-8 sm:p-12 lg:p-16 flex-col justify-between relative overflow-hidden text-white select-none">
+      <div className="hidden md:order-1 md:flex md:w-1/2 h-full bg-[#8B5CF6] p-6 lg:p-8 flex-col justify-between relative overflow-hidden text-white select-none">
 
-        {/* Soft Organic Background Accents */}
-        <div className="absolute -top-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-purple-900/30 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] h-[480px] bg-purple-400/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -top-20 -right-20 w-72 h-72 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-20 -left-20 w-72 h-72 bg-purple-900/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[360px] h-[360px] bg-purple-300/20 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Top Header Text (Professional Single Line, Academic Account) */}
-        <div className="relative z-10 space-y-2">
-          <h2 className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-extrabold tracking-tight text-white whitespace-nowrap font-heading">
+        <div className="relative z-10 flex h-full flex-col items-center justify-center px-4 text-center">
+          <div className="flex h-44 w-44 items-center justify-center">
+            <img src="/bu-cdm-logo.png" alt="Bicol University College of Dental Medicine seal" className="h-40 w-40 object-contain drop-shadow-sm" />
+          </div>
+          <h2 className="mt-6 text-2xl font-bold tracking-tight text-white font-heading">DentiSYS</h2>
+          <p className="mt-2 max-w-xs text-sm leading-6 text-purple-100">
             Bicol University College of Dental Medicine
-          </h2>
-          <p className="text-sm sm:text-base text-purple-100/90 font-normal">
-            Login to access your academic account
           </p>
         </div>
-
-        {/* Center: Original clinic checklist and student illustration */}
-        <div className="relative z-10 flex items-center justify-center my-auto py-8">
-          <svg viewBox="0 0 500 420" className="w-full max-w-[440px] h-auto drop-shadow-xl" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M440 220C440 310 360 380 260 380C160 380 90 320 90 220C90 120 170 60 270 60C370 60 440 130 440 220Z" fill="white" fillOpacity="0.12" />
-            <rect x="180" y="140" width="160" height="200" rx="14" fill="white" stroke="#1E1B4B" strokeWidth="3" />
-            <rect x="200" y="165" width="80" height="8" rx="4" fill="#8B5CF6" />
-            <rect x="200" y="185" width="120" height="6" rx="3" fill="#E2E8F0" />
-            <rect x="200" y="200" width="105" height="6" rx="3" fill="#E2E8F0" />
-            <rect x="200" y="215" width="90" height="6" rx="3" fill="#E2E8F0" />
-            <circle cx="210" cy="270" r="32" fill="white" stroke="#1E1B4B" strokeWidth="4" />
-            <path d="M234 294 L255 315" stroke="#1E1B4B" strokeWidth="5" strokeLinecap="round" />
-            <path d="M202 262 C198 254 206 250 210 254 C214 250 222 254 218 262 C217 272 220 280 216 284 C214 286 211 285 210 280 C209 285 206 286 204 284 C200 280 203 272 202 262 Z" fill="#8B5CF6" />
-            <g id="left-student">
-              <circle cx="150" cy="180" r="14" fill="#1E1B4B" />
-              <circle cx="151" cy="183" r="12" fill="#FEF08A" />
-              <path d="M140 178 C140 168 158 168 162 178 C160 182 145 184 140 178 Z" fill="#1E1B4B" />
-              <path d="M140 196 L162 196 L168 260 L136 260 Z" fill="white" stroke="#1E1B4B" strokeWidth="3" strokeLinejoin="round" />
-              <path d="M151 196 L151 224" stroke="#8B5CF6" strokeWidth="3" strokeLinecap="round" />
-              <path d="M142 205 L125 228 L142 232" fill="none" stroke="#1E1B4B" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              <rect x="138" y="222" width="10" height="16" rx="2" fill="#1E1B4B" />
-              <path d="M142 260 L135 340 L125 340" fill="none" stroke="#1E1B4B" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M162 260 L172 336 L184 336" fill="none" stroke="#1E1B4B" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-            </g>
-            <g id="right-student">
-              <circle cx="340" cy="115" r="13" fill="#1E1B4B" />
-              <circle cx="339" cy="118" r="11" fill="#FEF08A" />
-              <path d="M330 114 C330 104 348 104 352 114 C348 118 335 120 330 114 Z" fill="#1E1B4B" />
-              <path d="M328 130 C328 130 354 130 358 165 C345 170 330 170 322 165 Z" fill="white" stroke="#1E1B4B" strokeWidth="3" strokeLinejoin="round" />
-              <rect x="350" y="148" width="28" height="18" rx="2" transform="rotate(-15 350 148)" fill="#1E1B4B" />
-              <line x1="346" y1="165" x2="378" y2="165" stroke="#1E1B4B" strokeWidth="3" strokeLinecap="round" />
-              <path d="M324 165 L315 185 L352 185 L360 230 L372 230" fill="none" stroke="#1E1B4B" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-            </g>
-            <path d="M380 340 C380 290 415 270 415 270 C415 270 425 310 405 340 Z" fill="#22C55E" />
-            <path d="M395 340 C395 305 435 295 435 295 C435 295 438 325 418 340 Z" fill="#16A34A" />
-            <rect x="375" y="340" width="55" height="24" rx="4" fill="#1E1B4B" />
-          </svg>
-        </div>
-
-        {/* Bottom Subtitle / Info */}
-        <div className="relative z-10 flex items-center justify-between text-xs text-purple-100/80 pt-4 border-t border-white/15">
-          <span>DentiSYS Academic System</span>
-          <span>Bicol University</span>
-        </div>
-
       </div>
 
+
+      </div>
     </div>
   );
 }

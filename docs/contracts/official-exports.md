@@ -37,8 +37,8 @@ The class list is a PDF: a header block (Course Code, Title, Section, Year Level
 
 | # | Rule |
 |---|---|
-| X1 | Grade Computation → Export and Reports → Academic → Export download the same workbook. |
-| X2 | Sheets `LEC`, `LAB`, `TFG`, `DATA`. A lecture-only course has no `LAB` sheet. Layout as §2: title rows, header rows 7–9 (merged as the sample), `No. \| Names`, panes frozen at C10, bold lilac `#E1BEE8` header, the sample's column widths, landscape. |
+| X1 | Grade Computation → Export downloads the official grade workbook. Faculty Reports → Grades & Assessments → Export Excel downloads the five-sheet report bundle in X28 and does not replace the Grade Computation workbook. |
+| X2 | The official Grade Computation workbook has sheets `LEC`, `LAB`, `TFG`, `DATA`. A lecture-only course has no `LAB` sheet. Layout as §2: title rows, header rows 7–9 (merged as the sample), `No. \| Names`, panes frozen at C10, bold lilac `#E1BEE8` header, the sample's column widths, landscape. |
 | X3 | LEC/LAB rows 1–6: `Republic of the Philippines` / `BICOL UNIVERSITY` / `COLLEGE OF DENTAL MEDICINE` / course title in capitals + ` (LEC)` or ` (LAB)` / `1ST SEMESTER, AY 2026-2027` / the section (e.g. `DMD-3A`). Rows 4–5 match what the importer checks (G9). |
 | X4 | One item column (plus its `%` column) per real DentiSys assessment, in each period, component and category; no empty `0` slots. Categories in Grade Weights order. Row 9 holds each item's max; Recitation and Lab Performance have none. |
 | X5 | Every split the sheet prints comes from the class's saved Grade Weights: category weight cells (`0.1`), `Midterm 50%`, `Final 50%`, `MG (50%)`, `TFG (50%)`, and the Lec/Lab shares in `TFG`. |
@@ -55,7 +55,7 @@ The class list is a PDF: a header block (Course Code, Title, Section, Year Level
 
 | # | Rule |
 |---|---|
-| X14 | Classes & Rosters gets an **Export class list** button for the selected class. Only the Faculty assigned to that class can use it. |
+| X14 | Classes & Rosters gets class-list **Export Excel** and **Export PDF** controls for the selected class. Only the Faculty assigned to that class can use them. |
 | X15 | One `.xlsx` sheet laid out like the official PDF: the header block (Course Code, Course Title, Class Section, Year Level, units, Faculty, Schedules, term), then `# \| Student No. \| Program \| Name \| Gender \| Year Level \| Contact #`. The Name cell holds `Last, First Middle` and the institutional email on a second line. |
 | X16 | Program comes from the section name (`DMD-1A` → `DMD`). Gender and Contact # come from the student record when stored, else blank. The class-list import is not changed. |
 | X17 | File: `<Course>_<Section>_Class_List_<School year>_<Semester>.xlsx`. |
@@ -72,7 +72,9 @@ The class list is a PDF: a header block (Course Code, Title, Section, Year Level
 | X23 | Row 8 of LEC/LAB holds each assessment's DentiSys title over its score and `%` columns (the official sheet leaves row 8 empty). Row 7 holds the category name over its first item. The importer uses a row-8 title when present and otherwise behaves as today, so official files import unchanged and an exported file re-imports with no changes (X12). |
 | X24 | In Lecture + Laboratory classes, the LEC and LAB sheets' `Midterm 50%`, `Final 50%` and `Over All FG` columns show that component alone, in whole percents (`Over All FG` = round(round(Midterm × share) + round(Final × share))), as the official Lab sheet does. They are for reading only; the course grade is on `TFG`. |
 | X25 | `TFG`'s `MIDTERM LEC GRADE`, `MIDTERM LAB GRADE`, `FINAL LEC GRADE` and `FINAL LAB GRADE` hold the component grade × its share (e.g. Lecture × 60%) with 2 decimals, as the official TFG, so `TOTAL` adds up. |
-| X26 | Export buttons say "Export Excel" instead of "Export CSV" (tooltips and aria labels too). The new class-list button says "Export class list". |
+| X26 | Export buttons say "Export Excel" instead of "Export CSV" (tooltips and aria labels too). Class-list exports use the grouped **Export Excel** and **Export PDF** controls. |
+| X27 | **Export PDF** opens a styled, landscape class list with the same header details and roster columns as X15. The browser print dialog lets Faculty save the styled document as PDF, named `<Course>_<Section>_Class_List_<School year>_<Semester>.pdf`. The existing `.xlsx` export and filename in X17 remain available. |
+| X28 | **Faculty Reports → Grades & Assessments** downloads a report-only `.xlsx` workbook with five sheets, in this order: (1) `Assessment Scores` — a Grade Computation-style student-by-assessment matrix for enrolled students and non-archived assessments in the selected class, grouped by Midterm/Finals, component, and category; each assessment shows its maximum score, saved score, and score percentage, with missing scores blank; (2) `Grade Summary` — Student Number, Student Name, Midterm period percentage, Finals period percentage, overall Final Course Grade, and Remarks, using the existing server-computed period and course results; (3) `Midterm Watchlist` — selected-class records flagged at risk by the server, including student, class, complete midterm percentage/grade, risk standing and computed status; (4) `Attendance Register` — the selected class, attendance date and session roster/status; (5) `Interactive Analytics` — visual graphs for retention standings, grade distribution, and assessment averages, followed by the labeled source data. The workbook is scoped to the selected class and current report filters. **Export PDF** prints the same five report sections, in the same order, with the assessment matrix and analytics graphs. The Faculty Reports bundle is not the Grade Computation import-compatible workbook; the Grade Computation export remains unchanged. |
 
 ## 4. Next steps
 

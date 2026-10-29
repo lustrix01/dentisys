@@ -347,21 +347,22 @@ export const DeanReports: React.FC = () => {
   };
 
   const exportPrintControls = (
-    <div className="flex items-center gap-2 no-print flex-shrink-0">
+    <div className="no-print inline-flex flex-shrink-0 items-center rounded-xl border border-slate-200/90 bg-white p-0.5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
       <button
         type="button"
         onClick={handleExportExcel}
-        className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white font-bold text-xs transition-all shadow-sm cursor-pointer whitespace-nowrap"
+        className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-700 dark:text-slate-200 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-300"
       >
-        <Download className="w-3.5 h-3.5" />
+        <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
         <span>Export Excel</span>
       </button>
+      <div className="mx-0.5 h-3.5 w-px bg-slate-200 dark:bg-slate-800" />
       <button
         type="button"
         onClick={handlePrint}
-        className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-xs transition-all cursor-pointer bg-white dark:bg-slate-950 whitespace-nowrap"
+        className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:bg-rose-50 hover:text-rose-700 dark:text-slate-200 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
       >
-        <Printer className="w-3.5 h-3.5" />
+        <Printer className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
         <span>Print PDF</span>
       </button>
     </div>

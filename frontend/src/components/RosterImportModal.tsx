@@ -57,6 +57,7 @@ interface RosterImportModalProps {
   onClose: () => void;
   classes: FacultyClassItem[];
   defaultClassId?: number;
+  studentsOnly?: boolean;
   currentSchoolYear: string;
   existingStudents: Array<{ id: string; studentId: string; classSections?: Array<{ classId: string }> }>;
   courses: CourseCatalogItem[];
@@ -76,7 +77,7 @@ interface NewClassDraft {
   notRead: string[];
 }
 
-const labelCls = 'text-xs font-semibold text-slate-600 dark:text-slate-300 block';
+const labelCls = 'block text-xs font-semibold leading-5 text-slate-600 dark:text-slate-300';
 const fieldCls = 'w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500';
 const invalidFieldCls = '!border-rose-500 !bg-rose-50/70 dark:!border-rose-400 dark:!bg-rose-950/30 focus:!ring-rose-500';
 
@@ -85,6 +86,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
   onClose,
   classes,
   defaultClassId,
+  studentsOnly = false,
   currentSchoolYear,
   existingStudents,
   courses,
@@ -181,7 +183,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
     setDraft(null);
     setMatchPrompt('');
     setPickedFromFile(false);
-    setSelectedClassId(id => id === NEW_CLASS ? (defaultClassId || availableClasses[0]?.csId || 0) : id);
+    setSelectedClassId(studentsOnly ? (defaultClassId || 0) : id => id === NEW_CLASS ? (defaultClassId || availableClasses[0]?.csId || 0) : id);
 
     try {
       const fileName = selectedFile.name.toLowerCase();
@@ -197,7 +199,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
         } else {
           setParsedStudents(parsed);
           setPdfInfo({ ...info, read: parsed.length });
-          if (info.official && info.header.courseCode && info.header.section && info.header.schoolYear && info.header.semester) {
+          if (!studentsOnly && info.official && info.header.courseCode && info.header.section && info.header.schoolYear && info.header.semester) {
             // N1: Step 1 is always set from the file (a header with course, section, school year and semester): the Faculty own matching class, else a new one.
             const match = findClassMatchingHeader(info.header, availableClasses);
             setDraft(buildDraft(info.header));
@@ -257,7 +259,12 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
   };
 
   const handleExecuteImport = async () => {
-    if (isImporting || runtime.loading || !targetReviewed || (isNewClass ? newClassProblems.length > 0 : !availableClasses.some(cls => cls.csId === selectedClassId))) {
+    if (isImporting || runtime.loading) return;
+    if (!targetReviewed) {
+      showFeedback(studentsOnly ? 'Please review the student rows before importing.' : 'Please select and review a target class section before importing.', 'error');
+      return;
+    }
+    if (isNewClass ? newClassProblems.length > 0 : !availableClasses.some(cls => cls.csId === selectedClassId)) {
       showFeedback('Please select a target class section to import students into.', 'error');
       return;
     }
@@ -425,14 +432,19 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
       s.email.toLowerCase().includes(q)
     );
   });
-  const selectablePreview = filteredPreview.filter(student => student.status !== 'error' && !student.possibleCrossedOut && !student.requiresNameReview);
-  const allVisibleSelected = selectablePreview.length > 0 && selectablePreview.every(student => student.included);
-  const handleSelectVisibleStudents = () => {
-    const selected = !allVisibleSelected;
-    const visibleKeys = new Set(selectablePreview.map(student => student.tempKey));
-    setParsedStudents(previous => previous.map(student => visibleKeys.has(student.tempKey)
-      ? { ...student, included: selected, reviewed: selected }
-      : student));
+  const orderedPreview = [...filteredPreview].sort((a, b) => Number(b.status === 'error') - Number(a.status === 'error'));
+  const selectableStudents = validatedStudents.filter(student => student.status !== 'error');
+  const allSelectableStudentsSelected = selectableStudents.length > 0 && selectableStudents.every(student => student.included);
+  const handleSelectAllStudents = () => {
+    const selected = !allSelectableStudentsSelected;
+    const selectableKeys = new Set(selectableStudents.map(student => student.tempKey));
+    const erroredKeys = new Set(validatedStudents.filter(student => student.status === 'error').map(student => student.tempKey));
+    setParsedStudents(previous => previous.map(student => {
+      if (erroredKeys.has(student.tempKey)) return { ...student, included: false, reviewed: false };
+      if (!selected) return { ...student, included: false, reviewed: false };
+      if (!selectableKeys.has(student.tempKey)) return student;
+      return { ...student, included: true, reviewed: true };
+    }));
   };
 
   return (
@@ -441,18 +453,18 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
       onClose={() => {
         if (!isImporting) onClose();
       }}
-      title="Class Details & Student Roster Import"
+      title={studentsOnly ? 'Import Students' : 'Import Class and Roster'}
       size="xl"
     >
       <div className="space-y-5 font-sans text-sm max-h-[80vh] overflow-y-auto pr-1">
         <fieldset disabled={isImporting} className="space-y-4 min-w-0 text-left">
         {file && (
           <div role="note" className="space-y-0.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left text-xs leading-5 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-            <p>{pdfInfo?.official && <strong className="mr-1">Official class list.</strong>}Review the class details and student rows before saving. The original file stays in this browser; only selected student fields are sent to DentiSys. Invitations are sent separately.</p>
+            <p>{pdfInfo?.official && <strong className="mr-1">Official class list.</strong>}{studentsOnly ? `Review the student rows before adding them to ${targetClass ? `${targetClass.courseCode} (${targetClass.block})` : 'this class'}.` : 'Review the class details and student rows before saving.'} The original file stays in this browser; only selected student fields are sent to DentiSys. Invitations are sent separately.</p>
             <p>Required for each imported row: complete student number, first name, last name and a valid institutional email. Missing emails must be corrected in preview.</p>
           </div>
         )}
-        {parsedStudents.length > 0 && (
+        {parsedStudents.length > 0 && !studentsOnly && !isNewClass && (
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
             <label className={labelCls}>
               Target class section *
@@ -477,7 +489,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
             </p>
           </div>
         )}
-        {matchPrompt && (
+        {matchPrompt && !studentsOnly && (
           <div role="alert" className="p-2.5 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
             This file matches <b>{matchPrompt}</b>. Import into it?
             <div className="mt-1.5 flex flex-wrap gap-2">
@@ -499,7 +511,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
 
         {isNewClass && draft && (
           <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 space-y-2">
-            <span className={labelCls}>New class from this file</span>
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">New class from this file</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <label className={labelCls}>Course code
                 <input type="text" value={draft.code} onChange={e => updateDraft({ code: e.target.value.toUpperCase() })} aria-invalid={Boolean(problemFor('Enter a course code.'))} className={`mt-1 ${fieldCls} ${problemFor('Enter a course code.') ? invalidFieldCls : ''}`} />
@@ -539,8 +551,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
             </div>
             {unitsNote
               ? <div role="alert" className="p-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{unitsNote}</div>
-              : Number(labUnits) === 0 && Number(lectureUnits) > 0 && <p className="text-[11px] text-slate-500 dark:text-slate-400">Laboratory units 0: this class is graded <b>Lecture only</b>.</p>}
-            <span className={`${labelCls} pt-1`}>Meetings</span>
+              : Number(labUnits) === 0 && Number(lectureUnits) > 0 && <p className="text-xs text-slate-500 dark:text-slate-400">Laboratory units 0: this class is graded <b>Lecture only</b>.</p>}
+            <h4 className="pt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">Meetings</h4>
             {draft.meetings.map((meeting, index) => {
               const meetingHasOverlap = Boolean(overlapMatch && [Number(overlapMatch[2]), Number(overlapMatch[4])].includes(index + 1));
               const roomIsMissing = !meeting.room.trim() && Boolean(problemFor('Every meeting needs a room.'));
@@ -569,7 +581,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
               );
             })}
             {isNewClass && scheduleGuidance && !problemFor('Every meeting needs a room.') && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{scheduleGuidance}</p>}
-            <button type="button" onClick={() => setDraft(previous => previous && { ...previous, meetings: [...previous.meetings, newMeeting('Lecture', 'Mon', '08:00 AM', '09:00 AM', '')] })} className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer">
+            <button type="button" onClick={() => setDraft(previous => previous && { ...previous, meetings: [...previous.meetings, newMeeting('Lecture', 'Mon', '08:00 AM', '09:00 AM', '')] })} className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer">
               <Plus className="w-3.5 h-3.5" />
               Add meeting
             </button>
@@ -591,7 +603,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
             <button
               type="button"
               onClick={handleDownloadSample}
-              className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+              className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               Download Sample CSV
@@ -623,7 +635,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                 <p className="font-extrabold text-sm text-slate-800 dark:text-slate-100">
                   {file ? file.name : 'Click to select a roster file'}
                 </p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Official class list PDFs, or CSV, TSV and TXT. Scans and Excel workbooks are not supported.
                 </p>
               </div>
@@ -649,19 +661,18 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                 <span className="font-semibold text-slate-800 dark:text-slate-100 text-sm">
                   Parsed Students ({parsedStudents.length})
                 </span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold">
+                <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 text-xs font-bold">
                   {readyStudents.length} Selected and ready
                 </span>
               </div>
 
               <button
                 type="button"
-                onClick={handleSelectVisibleStudents}
-                disabled={selectablePreview.length === 0}
-                aria-pressed={allVisibleSelected}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/40"
+                onClick={handleSelectAllStudents}
+                aria-pressed={allSelectableStudentsSelected}
+                className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors hover:border-emerald-300 hover:bg-emerald-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/40"
               >
-                {allVisibleSelected ? 'Clear visible selection' : 'Select all visible'}
+                {allSelectableStudentsSelected ? 'Clear all selections' : 'Select all students'}
               </button>
 
               <div className="relative w-full sm:w-52">
@@ -671,62 +682,60 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                   placeholder="Filter preview..."
                   value={searchFilter}
                   onChange={(e) => setSearchFilter(e.target.value)}
-                  className="w-full pl-8 pr-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="w-full pl-8 pr-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">Select all applies to the rows shown by the filter. Rows with errors or flagged for review stay unselected; tick those one by one.</p>
-
             {pdfInfo?.total != null && (pdfInfo.total === pdfInfo.read
-              ? <p role="status" className="font-bold text-emerald-700 dark:text-emerald-300">✓ {pdfInfo.read} of {pdfInfo.total} students read</p>
+              ? <p role="status" className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">✓ {pdfInfo.read} of {pdfInfo.total} students read</p>
               : <p role="alert" className="p-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">The file lists {pdfInfo.total} students, but {pdfInfo.read} {pdfInfo.read === 1 ? 'was' : 'were'} read. Check the PDF before saving.</p>)}
             {headerDiffs.length > 0 && (
-              <div role="alert" className="p-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <div role="alert" className="p-2.5 rounded-xl border border-amber-200 bg-amber-50 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
                 <strong>This file may be for a different class. Check you chose the right file.</strong>
-                <ul className="list-disc pl-4">{headerDiffs.map(diff => <li key={diff}>{diff}</li>)}</ul>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">{headerDiffs.map(diff => <li key={diff}>{diff}</li>)}</ul>
               </div>
             )}
-            <p className="text-amber-700 dark:text-amber-300">Selecting a row confirms you reviewed its source and name split. Possible red strike-throughs are flagged; markings in other colors may not be detected. Check the original PDF for exclusions.</p>
+            <p className="text-xs text-amber-700 dark:text-amber-300">Check student names and exclusions against the original PDF before importing. Red strike-throughs are flagged; other colors may not be detected.</p>
             <div role="table" aria-label="Student roster preview" className="max-h-96 overflow-y-auto overflow-x-hidden rounded-xl border border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/30">
               <div role="rowgroup" className="divide-y divide-slate-200 dark:divide-slate-800">
-                {filteredPreview.map(st => (
+                {orderedPreview.map(st => (
                   <div role="row" key={st.tempKey} className="grid grid-cols-2 gap-x-3 gap-y-2.5 bg-white p-4 transition-colors hover:bg-emerald-50/40 dark:bg-slate-900 dark:hover:bg-slate-800/50 sm:grid-cols-6 lg:grid-cols-12 lg:gap-x-4">
                     <div role="cell" className="col-span-2 flex items-center gap-2 sm:col-span-1 lg:col-span-1">
                       <input type="checkbox" aria-label={`Include student ${st.studentId}`} checked={st.included} disabled={st.status === 'error'} onChange={event => handleUpdateStudentField(st.tempKey, 'included', event.target.checked)} />
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Include</span>
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Include</span>
                     </div>
                     <label role="cell" className="col-span-2 block min-w-0 sm:col-span-2 lg:col-span-2">
-                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Student ID</span>
-                      <input type="text" value={st.studentId} aria-label={`Student number row ${st.tempKey}`} onChange={event => handleUpdateStudentField(st.tempKey, 'studentId', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 font-mono text-xs font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" />
+                      <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Student ID</span>
+                      <input type="text" value={st.studentId} aria-label={`Student number row ${st.tempKey}`} onChange={event => handleUpdateStudentField(st.tempKey, 'studentId', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-mono text-sm font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" />
                     </label>
                     <div role="cell" className="col-span-2 min-w-0 sm:col-span-3 lg:col-span-8">
-                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Name</span>
-                      {st.originalName && <p className="mb-1 truncate text-[10px] text-slate-500" title={st.originalName}>Source: {st.originalName}</p>}
+                      <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Name</span>
+                      {st.originalName && <p className="mb-1 truncate text-xs text-slate-500" title={st.originalName}>Source: {st.originalName}</p>}
                       <div className="grid min-w-0 grid-cols-2 gap-1.5">
-                        <input type="text" value={st.firstName} placeholder="First name" aria-label={`First name for ${st.studentId}`} onChange={event => handleUpdateStudentField(st.tempKey, 'firstName', filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => handleUpdateStudentField(st.tempKey, 'firstName', filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" />
-                        <input type="text" value={st.lastName} placeholder="Last name" aria-label={`Last name for ${st.studentId}`} onChange={event => handleUpdateStudentField(st.tempKey, 'lastName', filterPersonNameInput('lastName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => handleUpdateStudentField(st.tempKey, 'lastName', filterPersonNameInput('lastName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('lastName', event)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" />
-                        <input type="text" value={st.middleName ?? ''} placeholder="Middle name" aria-label={`Middle name for ${st.studentId}`} onChange={event => handleUpdateStudentField(st.tempKey, 'middleName', filterPersonNameInput('middleName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => handleUpdateStudentField(st.tempKey, 'middleName', filterPersonNameInput('middleName', event.currentTarget.value))} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" />
-                        <input type="text" value={st.prefix ?? ''} placeholder="Prefix" aria-label={`Prefix for ${st.studentId}`} onChange={event => handleUpdateStudentField(st.tempKey, 'prefix', filterPersonNameInput('prefix', event.target.value))} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" />
-                        <input type="text" value={st.suffix ?? ''} placeholder="Suffix" aria-label={`Suffix for ${st.studentId}`} onChange={event => handleUpdateStudentField(st.tempKey, 'suffix', filterPersonNameInput('suffix', event.target.value))} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" />
+                        <input type="text" value={st.firstName} placeholder="First name" aria-label={`First name for ${st.studentId}`} onChange={event => handleUpdateStudentField(st.tempKey, 'firstName', filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => handleUpdateStudentField(st.tempKey, 'firstName', filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                        <input type="text" value={st.lastName} placeholder="Last name" aria-label={`Last name for ${st.studentId}`} onChange={event => handleUpdateStudentField(st.tempKey, 'lastName', filterPersonNameInput('lastName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => handleUpdateStudentField(st.tempKey, 'lastName', filterPersonNameInput('lastName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('lastName', event)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                        <input type="text" value={st.middleName ?? ''} placeholder="Middle name" aria-label={`Middle name for ${st.studentId}`} onChange={event => handleUpdateStudentField(st.tempKey, 'middleName', filterPersonNameInput('middleName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => handleUpdateStudentField(st.tempKey, 'middleName', filterPersonNameInput('middleName', event.currentTarget.value))} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                        <input type="text" value={st.prefix ?? ''} placeholder="Prefix" aria-label={`Prefix for ${st.studentId}`} onChange={event => handleUpdateStudentField(st.tempKey, 'prefix', filterPersonNameInput('prefix', event.target.value))} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                        <input type="text" value={st.suffix ?? ''} placeholder="Suffix" aria-label={`Suffix for ${st.studentId}`} onChange={event => handleUpdateStudentField(st.tempKey, 'suffix', filterPersonNameInput('suffix', event.target.value))} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" />
                       </div>
                     </div>
                     <label role="cell" className="col-span-2 block min-w-0 sm:col-span-4 lg:col-span-6">
-                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Institutional email *</span>
-                      <input type="text" value={st.email} aria-label={`Email for ${st.studentId}`} required onChange={event => handleUpdateStudentField(st.tempKey, 'email', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" />
+                      <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Institutional email *</span>
+                      <input type="text" value={st.email} aria-label={`Email for ${st.studentId}`} required onChange={event => handleUpdateStudentField(st.tempKey, 'email', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" />
                     </label>
                     <label role="cell" className="col-span-1 block min-w-0 sm:col-span-1 lg:col-span-2">
-                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Year level</span>
-                      <input type="number" min="1" max="6" value={st.yearLevel !== null && Number.isFinite(st.yearLevel) ? st.yearLevel : ''} aria-label={`Year level for ${st.studentId}`} onChange={event => handleUpdateStudentField(st.tempKey, 'yearLevel', event.target.value === '' ? null : Number(event.target.value))} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-center text-xs font-semibold dark:border-slate-700 dark:bg-slate-900" />
+                      <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Year level</span>
+                      <input type="number" min="1" max="6" value={st.yearLevel !== null && Number.isFinite(st.yearLevel) ? st.yearLevel : ''} aria-label={`Year level for ${st.studentId}`} onChange={event => handleUpdateStudentField(st.tempKey, 'yearLevel', event.target.value === '' ? null : Number(event.target.value))} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-center text-sm font-semibold dark:border-slate-700 dark:bg-slate-900" />
                     </label>
                     <div role="cell" className="col-span-2 min-w-0 sm:col-span-3 lg:col-span-4">
-                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Sex and contact</span>
+                      <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Sex and contact</span>
                       <div className="grid min-w-0 grid-cols-2 gap-1.5">
-                        <select aria-label={`Sex for ${st.studentId}`} value={st.sex ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'sex', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900">
+                        <select aria-label={`Sex for ${st.studentId}`} value={st.sex ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'sex', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900">
                           <option value="">—</option>
                           <option value="M">Male</option>
                           <option value="F">Female</option>
                         </select>
-                        <input type="text" aria-label={`Contact for ${st.studentId}`} placeholder="Contact" value={st.contact ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'contact', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900" />
+                        <input type="text" aria-label={`Contact for ${st.studentId}`} placeholder="Contact" value={st.contact ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'contact', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" />
                       </div>
                     </div>
                     <div role="cell" className="col-span-2 flex items-center justify-end sm:col-span-2 lg:col-span-1 lg:row-start-1 lg:col-start-12">
@@ -734,11 +743,11 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    {(st.sourcePage || st.possibleCrossedOut || st.validationMessage) && (
-                      <div role="cell" className="col-span-2 space-y-0.5 border-t border-slate-100 pt-2 text-[10px] sm:col-span-6 lg:col-span-12">
+                    {(st.sourcePage || st.possibleCrossedOut || (st.validationMessage && st.status === 'error')) && (
+                      <div role="cell" className="col-span-2 space-y-0.5 border-t border-slate-100 pt-2 text-xs sm:col-span-6 lg:col-span-12">
                         {st.sourcePage && <span className="mr-2 text-slate-500">Page {st.sourcePage}, row {st.sourceRow}</span>}
                         {st.possibleCrossedOut && <span className="mr-2 font-semibold text-amber-700 dark:text-amber-300">Possible crossed-out row</span>}
-                        {st.validationMessage && <span role="status" className={st.status === 'error' ? 'text-rose-600' : 'text-amber-700 dark:text-amber-300'}>{st.validationMessage}</span>}
+                        {st.validationMessage && st.status === 'error' && <span role="status" className="text-rose-600">{st.validationMessage}</span>}
                       </div>
                     )}
                   </div>
@@ -748,7 +757,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
           </div>
         )}
 
-        {parsedStudents.length > 0 && <label className="flex items-start gap-2"><input type="checkbox" checked={targetReviewed} onChange={event => setTargetReviewed(event.target.checked)} />{isNewClass ? 'I reviewed the class details and student rows from this file.' : 'I reviewed the source course, section, semester and school year against the selected target class.'}</label>}
+        {parsedStudents.length > 0 && <label className="flex items-start gap-2 text-xs leading-5 text-slate-700 dark:text-slate-300"><input type="checkbox" checked={targetReviewed} onChange={event => setTargetReviewed(event.target.checked)} />{isNewClass ? 'I reviewed the class details and student rows from this file.' : studentsOnly ? 'I reviewed the student rows for this class.' : 'I reviewed the source course, section, semester and school year against the selected target class.'}</label>}
         {classNotice && <p role="alert" className="text-rose-600 font-bold">{classNotice}</p>}
         {importErrors.length > 0 && <div role="alert" className="text-rose-600"><strong>Rows requiring correction</strong><ul>{importErrors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>}
 
@@ -775,7 +784,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
 
         {/* Action Buttons */}
         <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
-          {isNewClass && pdfInfo && !isParsing && !parsedStudents.some(st => st.status !== 'error') && <span className="text-slate-500 dark:text-slate-400 text-[11px] mr-auto">No students are ready to add. To make an empty class, use Create Class.</span>}
+          {isNewClass && pdfInfo && !isParsing && !parsedStudents.some(st => st.status !== 'error') && <span className="text-slate-500 dark:text-slate-400 text-xs mr-auto">No students are ready to add. To make an empty class, use Create Class.</span>}
           <button
             type="button"
             onClick={onClose}
@@ -795,7 +804,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
             <span>
               {isImporting
                 ? `Importing (${importProgress?.current || 0}/${importProgress?.total || 0})...`
-                : isNewClass ? `Create class and add ${readyStudents.length} students` : `Confirm & Import (${readyStudents.length}) Students`}
+                : isNewClass ? `Create class and add ${readyStudents.length} students` : studentsOnly ? `Import ${readyStudents.length} students` : `Confirm & Import (${readyStudents.length}) Students`}
             </span>
           </button>
         </div>

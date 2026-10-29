@@ -57,7 +57,12 @@ import { ResetPassword } from './pages/auth/ResetPassword';
 import { MfaVerify } from './pages/auth/MfaVerify';
 import { RecoveryCodes } from './pages/auth/RecoveryCodes';
 
-import { LandingPage } from './pages/LandingPage';
+import { LandingShell } from './pages/landing/LandingShell';
+import { LandingPage } from './pages/landing/LandingPage';
+import { AboutPage } from './pages/landing/AboutPage';
+import { FeaturesPage } from './pages/landing/FeaturesPage';
+import { FaqPage } from './pages/landing/FaqPage';
+import { ContactPage } from './pages/landing/ContactPage';
 
 function RoleDashboard() {
   const { user } = useAuth();
@@ -170,7 +175,7 @@ function RootRoute() {
     );
   }
 
-  return <LandingPage />;
+  return <LandingShell><LandingPage /></LandingShell>;
 }
 
 function App() {
@@ -182,7 +187,11 @@ function App() {
               <Routes>
             {/* Public Root Route: Landing page for guests, Role Dashboard for authenticated users */}
             <Route path="/" element={<RootRoute />} />
-            <Route path="/landing" element={<LandingPage />} />
+            <Route path="/landing" element={<LandingShell><LandingPage /></LandingShell>} />
+            <Route path="/about" element={<LandingShell><AboutPage /></LandingShell>} />
+            <Route path="/features" element={<LandingShell><FeaturesPage /></LandingShell>} />
+            <Route path="/faqs" element={<LandingShell><FaqPage /></LandingShell>} />
+            <Route path="/contact" element={<LandingShell><ContactPage /></LandingShell>} />
 
             {/* Primary SSO Login & Dev Password Login */}
             <Route path="/login" element={<SsoLogin />} />

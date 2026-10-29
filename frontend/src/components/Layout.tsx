@@ -944,7 +944,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
         {/* Scrollable Content Body */}
         <main className={`flex-1 min-w-0 p-4 sm:p-5 xl:p-8 print:!p-0 ${currentUser.role === 'student' ? 'pt-3 sm:pt-4 xl:pt-8' : ''}`}>
-          <div className={`md:hidden flex items-center gap-3 ${currentUser.role === 'student' ? 'mb-3' : 'mb-5'}`} aria-label="Current page">
+          <div className={`md:hidden print:hidden flex items-center gap-3 ${currentUser.role === 'student' ? 'mb-3' : 'mb-5'}`} aria-label="Current page">
             <span className={`w-9 h-9 shrink-0 rounded-xl border flex items-center justify-center ${
               currentUser.role === 'admin'
                 ? 'bg-accent-50 dark:bg-accent-950/40 border-accent-200/70 dark:border-accent-900/60 text-accent-600 dark:text-accent-400'

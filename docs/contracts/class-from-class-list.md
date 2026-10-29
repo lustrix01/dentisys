@@ -8,7 +8,8 @@ Builds on: [official imports](official-imports.md) (PDF reading rules P1–P7, u
 
 ## What exists today
 
-- Classes & Rosters has two page-level buttons: **Create Class** and **Import Roster**. Import Roster asks for the target class first (Step 1), then the file (Step 2). A header that differs from the chosen class only warns (P5).
+- Classes & Rosters has two page-level buttons: **Create Class** and **Import Class and Roster**. Import Class and Roster asks for the target class first (Step 1), then the file (Step 2). A header that differs from the chosen class only warns (P5).
+- In a class roster view, **Import Students** opens a separate modal, uses that class as the fixed destination and only imports student rows; it does not show class-creation details or a target-class selector. **Import Class and Roster** continues to use its own modal for file-based class and roster imports.
 - The PDF reader takes only Course Code, Class Section, school year and semester from the header.
 - Create Class asks for: course code and title, Dean term (current school year only), year level, section (`block`; the class name becomes `<course code>-<section>`), Lecture/Laboratory units, and meetings (component, day, start, end, room; a room is required and meetings may not overlap on a day). An existing catalog course is reused for a known code; its units change only while unrecorded or by the course's creator.
 
@@ -33,7 +34,7 @@ Seen in the samples: DM 100 is a real lecture-only course (Lab Units 0.0); one l
 
 | # | Rule |
 |---|---|
-| N1 | **Where it starts.** Inside the existing **Import Roster** dialog; no new button. Step 1's class list gets a first option **"New class from this file"** (official PDF only). Step order stays (class, then file). After an official PDF is read, Step 1 is **always** set from the file: the matching class (N2) or "New class from this file". A line under it reads "Picked from the file. Change it if this is wrong." Picking another existing class keeps today's P5 warning. (Q1, Q8) |
+| N1 | **Where it starts.** Inside the existing **Import Class and Roster** dialog; no new button. Step 1's class list gets a first option **"New class from this file"** (official PDF only). Step order stays (class, then file). After an official PDF is read, Step 1 is **always** set from the file: the matching class (N2) or "New class from this file". For a matching class, a line under the selector reads "Picked from the file. Change it if this is wrong." When no class matches, the target-class selector is hidden; this path creates a new class from the file. (Q1, Q8, Owner 2026-10-29) |
 | N1a | **CSV import** is unchanged: no "New class" option (no header). (Q12) |
 | N2 | **Class already exists.** A match is the signed-in Faculty's **own** current-year class with the same course code, section, school year and semester; another Faculty's class does not count. The dialog says "This file matches **DM 100-DMD-1A**. Import into it?" with **Import into this class** (today's flow continues) and **Cancel**. No duplicate class is created from a matching file. (Q2) |
 | N3 | **New class form.** "New class from this file" shows the Create Class fields inside the dialog, prefilled from the header and editable: course code, course title, section, year level ("1st Year" → 1), Lecture units (= Academic Units), Laboratory units (= Lab Units), Dean term (from "AY … Semester") and meetings. The Academic term defaults to the Dean-defined term matching the file header when one exists. The Faculty may select a different Dean-defined term to correct a misread year or semester. Creating a class requires a term in the current school year. Same validation as Create Class. A file with Laboratory units 0 makes a lecture-only class. (Owner 2026-10-28)
@@ -45,13 +46,15 @@ Seen in the samples: DM 100 is a real lecture-only course (Lab Units 0.0); one l
 | N6b | **Success.** The dialog closes with "Class DM 100-DMD-1A created and 25 students added." and the new class shows in the list. Invitations stay a separate step. (Q9) |
 | N7 | **Faculty name in the header** is ignored; the signed-in Faculty owns the new class. (Q4) |
 | N8 | **Unchanged:** reading rules P1–P7, crossed-out rows, email rules, existing-student matching, invitations sent separately, the file stays in the browser, importing into an existing class, Create Class itself. |
+| N8a | **Select all students** remains available whenever the preview has rows and selects every row without validation errors, independent of the preview search filter. Rows with validation errors appear first and remain excluded. Bulk selection includes rows with name-review or possible crossed-out warnings; the required roster confirmation still applies before import. |
+| N10 | **Import Students from a class roster.** The selected class is the fixed destination. The dialog reviews and imports student rows only; it does not show class details or offer class creation or target selection. Official PDF header differences warn against the selected class and require Faculty review. |
 | N9 | **Test data.** Real class lists stay out of the repo and off the demo site. Tests and the demo live check use a made-up PDF in the official layout (lecture-only "DM 100 · DMD-1A", fake students, "Mon (09:00 AM - 11:00 AM) \| Lecture \| CDM 1"); the class it creates stays on the demo as test data. (Q13) |
 
 ## Owner answers (grill, 2026-10-27)
 
 | # | Question | Answer |
 |---|---|---|
-| Q1 | Entry point | Inside Import Roster, automatic pick (N1) |
+| Q1 | Entry point | Inside Import Class and Roster, automatic pick (N1) |
 | Q2 | What counts as existing | Only the Faculty's own classes (N2) |
 | Q3 | Students fail after the class is created | Keep the class, retry (N6a) |
 | Q4 | Header Faculty name | Ignore (N7) |
@@ -72,6 +75,6 @@ IMP-001: added the Owner decision (2026-10-27) after "File headers are checked a
 
 ## Implementation impact (after demo approval)
 
-- Frontend: header parsing for title, year level, units and schedules (`utils/rosterImportHelper.ts`); Import Roster dialog (`components/RosterImportModal.tsx`): new option, auto-pick, match prompt, prefilled form and meeting rows, messages, button, create-then-import with retry.
+- Frontend: header parsing for title, year level, units and schedules (`utils/rosterImportHelper.ts`); Import Class and Roster dialog (`components/RosterImportModal.tsx`): new option, auto-pick, match prompt, prefilled form and meeting rows, messages, button, create-then-import with retry.
 - Backend: none expected; the existing Create Class and enrollment endpoints are reused (confirm during the build that the class list and catalog responses carry what the match and N3a need).
 - Tests: header and schedule parsing on made-up text (two days per line, `---` room, unreadable line), auto-pick and match, N3a note, N5 messages, button states, partial-failure retry; mocked e2e for the new-class path; live spec with the made-up PDF.
