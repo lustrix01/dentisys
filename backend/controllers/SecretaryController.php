@@ -156,17 +156,6 @@ function handle_secretary_invite(): void
             safe_error_response('This canonical Student identity already has an account or cannot be safely linked.', 409);
             return;
         }
-        $pendingInvite = $pdo->prepare(
-            "SELECT 1 FROM security_tokens
-              WHERE purpose = 'secretary_invitation' AND related_student_id = ?
-                AND used_at IS NULL AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP(6)
-              LIMIT 1"
-        );
-        $pendingInvite->execute([(int) $assignment['student_id']]);
-        if ($pendingInvite->fetchColumn() !== false) {
-            safe_error_response('This Student already has a pending Secretary invitation. Appoint them here after they accept it.', 409);
-            return;
-        }
         $studentName = $persistedName;
         $email = $persistedEmail;
         $className = (string) $assignment['cs_name'];
@@ -493,7 +482,11 @@ function handle_secretary_activate(): void
         $stmt->execute([$tokenHash]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($row === false || $row['revoked_at'] !== null || $row['used_at'] !== null) {
+        if ($row !== false && $row['revoked_at'] === null && $row['used_at'] !== null) {
+            safe_error_response('This invitation was already accepted. Sign in with your DentiSys account.', 409);
+            return;
+        }
+        if ($row === false || $row['revoked_at'] !== null) {
             safe_error_response('Invalid or expired invitation token.', 400);
             return;
         }
@@ -528,8 +521,10 @@ function handle_secretary_activate(): void
             );
             $tokenLock->execute([(int) $row['token_id']]);
             $lockedToken = $tokenLock->fetch(PDO::FETCH_ASSOC);
+            if ($lockedToken !== false && $lockedToken['revoked_at'] === null && $lockedToken['used_at'] !== null) {
+                throw new DomainException('This invitation was already accepted. Sign in with your DentiSys account.');
+            }
             if ($lockedToken === false
-                || $lockedToken['used_at'] !== null
                 || $lockedToken['revoked_at'] !== null
                 || !in_array($lockedToken['is_live'], [true, 't', '1', 1], true)) {
                 throw new DomainException('Invalid or expired invitation token.');
@@ -626,26 +621,68 @@ function handle_secretary_activate(): void
                 throw new DomainException('Invalid or expired invitation token.');
             }
 
-            audit_finish_operation($pdo, $auditCtx, [
-                'module_code' => 'secretary',
-                'action_code' => 'secretary_activated',
-                'event_status' => 'Success',
-                'actor_user_id' => $userId,
-                'actor_username' => $email,
-                'actor_role' => 'secretary',
-                'actor_display_name' => $displayName,
-                'session_id' => null,
-                'scope_cs_id' => (int) $row['related_cs_id'],
-                'target_type' => 'user_account',
-                'target_id' => (string) $userId,
-                'description' => "Class Secretary account activated for {$displayName} ({$email}).",
-                'reason' => null,
-                'http_method' => $context['http_method'],
-                'endpoint' => $context['endpoint'],
-                'request_id' => $context['request_id'],
-                'ip_address' => $context['ip_address'],
-                'user_agent' => $context['user_agent'],
-            ], $macKey);
+            // REG-006: also appoint the Student in every other section with a live pending invitation.
+            $clickedName = $pdo->prepare("SELECT cs_name FROM class_sections WHERE cs_id = ?");
+            $clickedName->execute([(int) $row['related_cs_id']]);
+            $appointed = [['cs_id' => (int) $row['related_cs_id'], 'cs_name' => (string) $clickedName->fetchColumn()]];
+            $others = $pdo->prepare(
+                "SELECT token_id, related_cs_id FROM security_tokens
+                  WHERE purpose = 'secretary_invitation' AND related_student_id = ? AND token_id <> ?
+                    AND used_at IS NULL AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP(6)
+                  ORDER BY token_id FOR UPDATE"
+            );
+            $others->execute([(int) $row['related_student_id'], (int) $row['token_id']]);
+            $sectionLock = $pdo->prepare(
+                "SELECT cs.cs_name, cs.secretary_user_id,
+                        EXISTS (SELECT 1 FROM enrollments e WHERE e.cs_id = cs.cs_id AND e.student_id = ?) AS enrolled
+                   FROM class_sections cs WHERE cs.cs_id = ? FOR UPDATE"
+            );
+            $appointOther = $pdo->prepare("UPDATE class_sections SET secretary_user_id = ? WHERE cs_id = ?");
+            $closeOther = $pdo->prepare("UPDATE security_tokens SET used_at = ? WHERE token_id = ?");
+            $freeOther = $pdo->prepare(
+                "UPDATE security_tokens SET revoked_at = ?, revocation_reason = 'Section no longer available' WHERE token_id = ?"
+            );
+            foreach ($others->fetchAll(PDO::FETCH_ASSOC) as $other) {
+                $otherCsId = (int) $other['related_cs_id'];
+                $sectionLock->execute([(int) $row['related_student_id'], $otherCsId]);
+                $sec = $sectionLock->fetch(PDO::FETCH_ASSOC);
+                $enrolled = $sec !== false && in_array($sec['enrolled'], [true, 't', '1', 1], true);
+                if ($sec !== false && $sec['secretary_user_id'] === null && $enrolled
+                    && !academic_class_section_is_past($pdo, $otherCsId)) {
+                    $appointOther->execute([$userId, $otherCsId]);
+                    $closeOther->execute([$nowSql, (int) $other['token_id']]);
+                    $appointed[] = ['cs_id' => $otherCsId, 'cs_name' => (string) $sec['cs_name']];
+                } else {
+                    $freeOther->execute([$nowSql, (int) $other['token_id']]);
+                }
+            }
+
+            // One audit row per appointed class so each class's faculty sees it; shared batch ID.
+            $batchId = uuid_v4_string();
+            foreach ($appointed as $i => $app) {
+                if ($i > 0) { $auditCtx = audit_begin_operation($pdo); }
+                audit_finish_operation($pdo, $auditCtx, [
+                    'module_code' => 'secretary',
+                    'action_code' => 'secretary_activated',
+                    'event_status' => 'Success',
+                    'actor_user_id' => $userId,
+                    'actor_username' => $email,
+                    'actor_role' => 'secretary',
+                    'actor_display_name' => $displayName,
+                    'session_id' => null,
+                    'scope_cs_id' => $app['cs_id'],
+                    'target_type' => 'user_account',
+                    'target_id' => (string) $userId,
+                    'description' => "Class Secretary account activated for {$displayName} ({$email}) for {$app['cs_name']}.",
+                    'reason' => null,
+                    'http_method' => $context['http_method'],
+                    'endpoint' => $context['endpoint'],
+                    'request_id' => $context['request_id'],
+                    'ip_address' => $context['ip_address'],
+                    'user_agent' => $context['user_agent'],
+                    'operation_uuid' => $batchId,
+                ], $macKey);
+            }
 
             $pdo->commit();
         } catch (\Throwable $e) {
@@ -653,9 +690,12 @@ function handle_secretary_activate(): void
             throw $e;
         }
 
+        $names = array_column($appointed, 'cs_name');
+        $last = array_pop($names);
+        $nameList = $names ? implode(', ', $names) . ' and ' . $last : $last;
         json_response([
             'status' => 'ok',
-            'message' => 'Class Secretary account activated successfully. You may now sign in.',
+            'message' => "Class Secretary account activated for {$nameList}. You may now sign in.",
         ], 200);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());

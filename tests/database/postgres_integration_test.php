@@ -2342,6 +2342,100 @@ expect_same(410, $secInviteRevokedGetStatus, 'Revoked Secretary invitation canno
     'password' => 'SecretaryInvite123!',
 ]);
 expect_same(400, $secInviteRevokedActivateStatus, 'Revoked Secretary invitation cannot be activated');
+// REG-006: a Student without an account can hold pending invitations for several sections; one activation appoints them all.
+$multiSecSectionStmt = $pdo->prepare(
+    "INSERT INTO class_sections (cs_name, course_id, instructor_user_id, semester, school_year, block, status)
+     SELECT ?, course_id, instructor_user_id, semester, school_year, ?, status FROM class_sections WHERE cs_id = ?
+     RETURNING cs_id"
+);
+$multiSecIds = [];
+foreach (['B', 'C'] as $multiSecLetter) {
+    $multiSecSectionStmt->execute(['MULTISEC-' . $multiSecLetter . '-' . strtoupper(bin2hex(random_bytes(2))), 'M' . $multiSecLetter . strtoupper(bin2hex(random_bytes(2))), $studentClassId]);
+    $multiSecIds[] = (int) $multiSecSectionStmt->fetchColumn();
+}
+[$multiSecIdB, $multiSecIdC] = $multiSecIds;
+$multiSecName = static function (int $csId) use ($pdo): string {
+    $q = $pdo->prepare('SELECT cs_name FROM class_sections WHERE cs_id = ?');
+    $q->execute([$csId]);
+    return (string) $q->fetchColumn();
+};
+$multiSecEmail = 'multi-sec-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
+$multiSecNumber = 'MSC-' . bin2hex(random_bytes(4));
+$invitedStudentInsert->execute([$multiSecNumber, 'Multi', 'Section', $multiSecEmail, 'active']);
+$multiSecStudentId = (int) $invitedStudentInsert->fetchColumn();
+foreach ([$studentClassId, $multiSecIdB, $multiSecIdC] as $multiSecCs) {
+    $invitedEnrollmentInsert->execute([$multiSecStudentId, $multiSecCs]);
+}
+$multiSecInvite = static function (int $csId) use ($facultyAccessToken, $pdo, $multiSecNumber, $multiSecEmail): array {
+    [$status, $body] = integration_http_json('/api/secretary/invite', $facultyAccessToken, [
+        'student_name' => 'Multi Section', 'student_number' => $multiSecNumber, 'cs_id' => $csId, 'email' => $multiSecEmail,
+    ]);
+    $known = bin2hex(random_bytes(16));
+    if ($status === 201) {
+        $pdo->prepare('UPDATE security_tokens SET secret_hash = ? WHERE token_id = ?')
+            ->execute([hash('sha256', $known), (int) $body['invitationId']]);
+    }
+    return [$status, (int) ($body['invitationId'] ?? 0), $known];
+};
+[$multiStatus1, $multiTokenId1, $multiKnown1] = $multiSecInvite($studentClassId);
+[$multiStatus2, $multiTokenId2, $multiKnown2] = $multiSecInvite($multiSecIdB);
+[$multiStatus3, $multiTokenId3, $multiKnown3] = $multiSecInvite($multiSecIdC);
+expect_same([201, 201, 201], [$multiStatus1, $multiStatus2, $multiStatus3], 'A Student without an account can be invited as Secretary of several sections (REG-006)');
+[$multiDupStatus] = integration_http_json('/api/secretary/invite', $facultyAccessToken, [
+    'student_name' => 'Multi Section', 'student_number' => $multiSecNumber, 'cs_id' => $multiSecIdB, 'email' => $multiSecEmail,
+]);
+expect_same(409, $multiDupStatus, 'A section with a pending Secretary invitation still refuses a second one');
+// The Student leaves section C before accepting, so that section cannot be appointed.
+$pdo->prepare('DELETE FROM enrollments WHERE student_id = ? AND cs_id = ?')->execute([$multiSecStudentId, $multiSecIdC]);
+[$multiActStatus, $multiActBody] = integration_http_json('/api/secretary/activate', '', [
+    'token' => $multiKnown1,
+    'password' => 'SecretaryInvite123!',
+]);
+expect_same(200, $multiActStatus, 'Activating one of several Secretary invitations succeeds');
+expect_same(
+    'Class Secretary account activated for ' . $multiSecName($studentClassId) . ' and ' . $multiSecName($multiSecIdB) . '. You may now sign in.',
+    $multiActBody['message'] ?? null,
+    'Activation message names every class appointed'
+);
+$multiUserStmt = $pdo->prepare('SELECT user_id FROM user_accounts WHERE lower(login_email) = ?');
+$multiUserStmt->execute([$multiSecEmail]);
+$multiUserId = (int) $multiUserStmt->fetchColumn();
+expect_true($multiUserId > 0, 'Activation created the Secretary account');
+$multiOwnerStmt = $pdo->prepare('SELECT secretary_user_id FROM class_sections WHERE cs_id = ?');
+foreach ([$studentClassId, $multiSecIdB] as $multiSecCs) {
+    $multiOwnerStmt->execute([$multiSecCs]);
+    expect_same($multiUserId, (int) $multiOwnerStmt->fetchColumn(), 'Activation appoints the new Secretary to every invited section still available');
+}
+$multiOwnerStmt->execute([$multiSecIdC]);
+expect_same(null, $multiOwnerStmt->fetchColumn() ?: null, 'A section the Student is no longer enrolled in is not appointed');
+$multiTokenState = $pdo->prepare('SELECT used_at IS NOT NULL AS used, revoked_at IS NOT NULL AS revoked FROM security_tokens WHERE token_id = ?');
+foreach ([$multiTokenId1, $multiTokenId2] as $multiTokenId) {
+    $multiTokenState->execute([$multiTokenId]);
+    $multiTokenRow = $multiTokenState->fetch(PDO::FETCH_ASSOC);
+    expect_same([true, false], [(bool) $multiTokenRow['used'], (bool) $multiTokenRow['revoked']], 'Accepted Secretary invitations are marked used');
+}
+$multiTokenState->execute([$multiTokenId3]);
+$multiTokenRow = $multiTokenState->fetch(PDO::FETCH_ASSOC);
+expect_same([false, true], [(bool) $multiTokenRow['used'], (bool) $multiTokenRow['revoked']], 'An invitation whose section became unavailable is revoked');
+$multiAuditStmt = $pdo->prepare(
+    "SELECT scope_cs_id, operation_uuid FROM audit_events
+      WHERE action_code = 'secretary_activated' AND target_id = ? ORDER BY scope_cs_id"
+);
+$multiAuditStmt->execute([(string) $multiUserId]);
+$multiAuditRows = $multiAuditStmt->fetchAll(PDO::FETCH_ASSOC);
+$multiExpectedScopes = [$studentClassId, $multiSecIdB];
+sort($multiExpectedScopes);
+expect_same($multiExpectedScopes, array_map(static fn(array $r): int => (int) $r['scope_cs_id'], $multiAuditRows), 'Activation is audited once per appointed class');
+expect_true(count($multiAuditRows) === 2 && $multiAuditRows[0]['operation_uuid'] !== null && $multiAuditRows[0]['operation_uuid'] === $multiAuditRows[1]['operation_uuid'], 'The per-class activation audit rows share one batch ID');
+[$multiAgainStatus, $multiAgainBody] = integration_http_json('/api/secretary/activate', '', [
+    'token' => $multiKnown2,
+    'password' => 'SecretaryInvite123!',
+]);
+expect_same(409, $multiAgainStatus, 'An already accepted Secretary invitation is refused with 409');
+expect_same('This invitation was already accepted. Sign in with your DentiSys account.', $multiAgainBody['message'] ?? $multiAgainBody['error'] ?? null, 'Already accepted invitation names the next step');
+[$multiRevokedStatus] = integration_http_json('/api/secretary/activate', '', ['token' => $multiKnown3, 'password' => 'SecretaryInvite123!']);
+expect_same(400, $multiRevokedStatus, 'A freed (revoked) Secretary invitation stays invalid');
+integration_retire_fixture_classes($pdo, [$multiSecIdB, $multiSecIdC], []);
 $facultyRosterAccountStatus = static function (string $accessToken, int $studentId): ?string {
     [, $rosterBody] = integration_http_get_json('/api/faculty/students', $accessToken);
     foreach (is_array($rosterBody) ? $rosterBody : [] as $rosterRow) {
