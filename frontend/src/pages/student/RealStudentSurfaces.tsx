@@ -159,6 +159,20 @@ export const RealStudentDashboard: React.FC = () => {
   }
 
   const { student, summary, classes } = data;
+  const standingChip = (cls: (typeof classes)[number]) => {
+    const retentionKey = cls.retentionState?.toLowerCase();
+    return (
+      <span
+        className={`inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
+          retentionKey === 'remedial'
+            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60'
+            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
+        }`}
+      >
+        {cls.grade === null && (!cls.retentionState || retentionKey === 'active') ? 'No grade yet' : cls.retentionState || 'Good Standing'}
+      </span>
+    );
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
@@ -301,7 +315,8 @@ export const RealStudentDashboard: React.FC = () => {
               No active course enrollments recorded for this term.
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="hidden sm:block lg:hidden xl:block overflow-x-auto">
               <table className="w-full text-xs text-left">
                 <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 uppercase text-[10px] font-bold border-b border-slate-100 dark:border-slate-800">
                   <tr>
@@ -315,8 +330,6 @@ export const RealStudentDashboard: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {classes.map((cls) => {
-                    const retentionKey = cls.retentionState?.toLowerCase();
-                    const isAtRisk = retentionKey === 'remedial';
                     return (
                       <tr key={cls.enrollmentId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                         <td className="py-3 px-4">
@@ -341,15 +354,7 @@ export const RealStudentDashboard: React.FC = () => {
                           {cls.percentage !== null ? `${cls.percentage}%` : '—'}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
-                              isAtRisk
-                                ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60'
-                                : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
-                            }`}
-                          >
-                            {cls.grade === null && (!cls.retentionState || retentionKey === 'active') ? 'No grade yet' : cls.retentionState || 'Good Standing'}
-                          </span>
+                          {standingChip(cls)}
                         </td>
                       </tr>
                     );
@@ -357,6 +362,43 @@ export const RealStudentDashboard: React.FC = () => {
                 </tbody>
               </table>
             </div>
+            {/* Stacked rows where the card is too narrow for the table: phones, and landscape tablets (two-column dashboard). */}
+            <ul className="sm:hidden lg:block xl:hidden divide-y divide-slate-100 dark:divide-slate-800">
+              {classes.map((cls) => (
+                <li key={cls.enrollmentId} className="p-4 space-y-1.5 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="font-mono font-bold text-blue-600 dark:text-blue-400 mr-2 whitespace-nowrap">
+                        {cls.courseCode}
+                      </span>
+                      <span className="font-medium text-slate-800 dark:text-slate-200">{cls.courseName}</span>
+                      {cls.isClinical && (
+                        <span className="ml-2 inline-flex items-center whitespace-nowrap px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200/60">
+                          Clinical
+                        </span>
+                      )}
+                    </div>
+                    <span className="shrink-0">{standingChip(cls)}</span>
+                  </div>
+                  <p className="text-slate-500 dark:text-slate-400">{cls.className} · {cls.units} units</p>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-0.5">
+                    <span className="whitespace-nowrap">
+                      <span className="text-slate-500 dark:text-slate-400 mr-1">Grade</span>
+                      <span className="font-mono font-bold">
+                        {cls.grade !== null ? <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue> : (
+                          <span className="text-slate-500 dark:text-slate-400 font-normal">Pending</span>
+                        )}
+                      </span>
+                    </span>
+                    <span className="whitespace-nowrap">
+                      <span className="text-slate-500 dark:text-slate-400 mr-1">Score</span>
+                      <span className="font-mono">{cls.percentage !== null ? `${cls.percentage}%` : '—'}</span>
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            </>
           )}
         </CardContent>
       </Card>

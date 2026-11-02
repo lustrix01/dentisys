@@ -48,7 +48,7 @@ for (const [name, file] of [['Faculty', '../pages/faculty/AttendanceMonitoring.t
     assert.match(source, /visibleSessions\(/);
     assert.match(source, /View-only/);
     assert.match(source, /REVOKED_SESSION_VIEW_ONLY_NOTE/);
-    assert.match(source, /aria-label="Overridden"/);
+    assert.ok(source.includes(`aria-label="${name === 'Faculty' ? 'Overridden' : 'Changed'}"`));
     assert.match(source, /aria-label="Recorded by"/);
     assert.match(source, /<RevokedSessionsSwitch /);
     assert.ok(!source.includes('localStorage.setItem(\'show') && !/localStorage[^\n]*[Rr]evoked/.test(source));

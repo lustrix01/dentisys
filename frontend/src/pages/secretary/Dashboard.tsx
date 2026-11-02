@@ -78,7 +78,7 @@ export const Dashboard: React.FC = () => {
             Welcome back, {user?.display_name || 'Class Secretary'}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
-            Manage section attendance registers, start live class sessions, and submit manual overrides.
+            Manage section attendance registers, start live class sessions, and send attendance change requests for Faculty approval.
           </p>
         </div>
         <SchoolYearFilter

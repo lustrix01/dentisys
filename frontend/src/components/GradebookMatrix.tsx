@@ -326,6 +326,8 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
       <td key={assessment.id} className="px-1.5 py-2 text-center">
         <input
           id={inputId}
+          data-score-key={`${student.id}|${assessment.id}`}
+          aria-invalid={!valid ? true : undefined}
           type="number"
           min="0"
           max={assessment.maxScore}
@@ -337,7 +339,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
           onKeyDown={handleKeyDown}
           title={pendingClearKeys?.has(`${student.id}|${assessment.id}`) ? 'Cleared — click Save to apply' : undefined}
           className={`w-16 px-1.5 py-1 rounded-lg border text-xs text-center font-bold focus:outline-none ${!valid
-            ? 'border-rose-500 bg-rose-50/50'
+            ? 'border-rose-500 bg-rose-50/50 dark:border-rose-400 dark:bg-rose-950/30'
             : pendingClearKeys?.has(`${student.id}|${assessment.id}`)
               ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-600'
               : value === ''

@@ -94,6 +94,7 @@ import type {
 } from '../../utils/periodGradingHelper';
 import GradeValue from '../../components/GradeValue';
 import { isViewOnlyClass, isArchivedCurrentYear, orderCurrentYearClasses } from '../../utils/classArchiving';
+import { invalidScoresMessage, focusInvalidScore, type InvalidScoreEntry } from './gradeScoreErrors';
 
 export interface EditorCategoryRow {
   tempId: string;
@@ -1265,6 +1266,7 @@ export const GradeComputation: React.FC = () => {
     }
 
     let invalidCount = 0;
+    const invalidEntries: InvalidScoreEntry[] = [];
     const saveList: FacultyScoreEntry[] = [];
     const cleared = new Set<string>();
     const currentScores = singleScoresRef.current;
@@ -1281,6 +1283,7 @@ export const GradeComputation: React.FC = () => {
       const num = parseFloat(val.score);
       if (isNaN(num) || num < 0 || num > activeAssessment.maxScore) {
         invalidCount++;
+        invalidEntries.push({ key: studentId, name: activeStudents.find(s => s.id === studentId)?.name ?? studentId, value: val.score, max: activeAssessment.maxScore });
       } else {
         saveList.push({
           studentId,
@@ -1292,7 +1295,10 @@ export const GradeComputation: React.FC = () => {
 
     // Auto-save skips invalid scores (kept as typed, dirty stays true); manual save refuses outright.
     if (invalidCount > 0 && isManual) {
-      showFeedback('Some scores are invalid. Scores cannot exceed the assessment maximum.', 'error');
+      const rowOrder = (key: string) => activeStudents.findIndex(s => s.id === key);
+      invalidEntries.sort((a, b) => rowOrder(a.key) - rowOrder(b.key));
+      showFeedback(invalidScoresMessage(invalidEntries), 'error');
+      focusInvalidScore(invalidEntries[0].key);
       return;
     }
 
@@ -1473,6 +1479,7 @@ export const GradeComputation: React.FC = () => {
     }
 
     let invalidCount = 0;
+    const invalidEntries: InvalidScoreEntry[] = [];
     let saveCount = 0;
     let clearedCount = 0;
     const cleared = new Set<string>();
@@ -1498,6 +1505,7 @@ export const GradeComputation: React.FC = () => {
         const num = parseFloat(valStr);
         if (isNaN(num) || num < 0 || num > ass.maxScore) {
           invalidCount++;
+          invalidEntries.push({ key: `${student.id}|${ass.id}`, name: student.name, value: valStr, max: ass.maxScore });
         } else {
           scores.push({ studentId: student.id, score: num, remarks: existingMatch?.remarks || '' });
           saveCount++;
@@ -1508,7 +1516,8 @@ export const GradeComputation: React.FC = () => {
 
     // Auto-save skips invalid cells (kept as typed, dirty stays true); manual save refuses outright.
     if (invalidCount > 0 && isManual) {
-      showFeedback('Some scores in the matrix are invalid (exceed max score or negative).', 'error');
+      showFeedback(invalidScoresMessage(invalidEntries), 'error');
+      focusInvalidScore(invalidEntries[0].key);
       return;
     }
     if (batches.length === 0) {
@@ -3640,6 +3649,8 @@ export const GradeComputation: React.FC = () => {
                               <div className="relative">
                                 <input
                                   id={`score-input-${idx}`}
+                                  data-score-key={student.id}
+                                  aria-invalid={!isValid ? true : undefined}
                                   type="number"
                                   min="0"
                                   max={activeAssessment?.maxScore || 100}
@@ -3665,7 +3676,7 @@ export const GradeComputation: React.FC = () => {
                                   onChange={(e) => handleScoreChange(student.id, e.target.value, 'score')}
                                   title={singlePendingClears.has(student.id) ? 'Cleared — click Save to apply' : undefined}
                                   className={`w-28 px-3 py-1.5 rounded-xl border text-xs text-center font-bold focus:outline-none ${!isValid
-                                    ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/50'
+                                    ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/50 dark:border-rose-400 dark:bg-rose-950/30'
                                     : singlePendingClears.has(student.id)
                                     ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-600'
                                     : row.score === ''

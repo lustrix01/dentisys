@@ -443,6 +443,19 @@ test('mocked Google direct login completes normal authentication', async ({ page
     await expect(page.getByText('This Google account is outside the approved institutional domains.')).toBeVisible();
   });
 
+  test('reset password without a link asks for a new link instead of showing the form', async ({ page }) => {
+    await page.goto('/reset-password');
+    await expect(page.getByRole('heading', { name: 'Reset link needed' })).toBeVisible();
+    await expect(page.getByText('This page only works from the reset link in your email. Request a new link to continue.')).toBeVisible();
+    await expect(page.locator('input[id="password"]')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Send a new link' })).toHaveAttribute('href', '/forgot-password');
+    await expect(page.getByRole('link', { name: 'Back to login' })).toBeVisible();
+
+    await page.goto('/reset-password?token=x');
+    await expect(page.locator('input[id="password"]')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Reset link needed' })).toHaveCount(0);
+  });
+
   test('password reset and login lifecycle remains available', async ({ page }) => {
     const testEmail = 'testfaculty_reset@bicol-u.edu.ph';
     const testPassword = 'NewFacultyPass123!';

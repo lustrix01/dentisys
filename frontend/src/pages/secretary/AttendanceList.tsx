@@ -1134,14 +1134,14 @@ export const AttendanceList: React.FC = () => {
 
                 <div className="w-full sm:w-44 shrink-0">
                   <select
-                    aria-label="Overridden"
+                    aria-label="Changed"
                     value={overriddenFilter}
                     onChange={(e) => setOverriddenFilter(e.target.value as OverriddenFilter)}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500 cursor-pointer"
                   >
-                    <option value="all">Overridden: All</option>
-                    <option value="overridden">Overridden</option>
-                    <option value="original">Original</option>
+                    <option value="all">Changed: All</option>
+                    <option value="overridden">Changed</option>
+                    <option value="original">Unchanged</option>
                   </select>
                 </div>
 

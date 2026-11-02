@@ -193,6 +193,22 @@ test.describe('Faculty Module E2E Tests', () => {
     }
   });
 
+  test('Attendance Monitoring cards show Live for a class with a running session, Idle for others and Past term for old years', async ({ page }) => {
+    const base = { courseId: 1, courseCode: 'CLIN401', units: 3, isHistorical: false, semester: '1st Semester', yearLevel: 5, block: 'A', schedule: null, lecRoom: '', labRoom: '', enrolledCount: 0, instructorName: 'Prof. Jane Doe', status: 'Active' };
+    const classes = [
+      { ...base, id: '1', csId: 1, csName: 'LIVE-A', courseName: 'Live Course', schoolYear: '2026-2027', isCurrentSchoolYear: true, liveSession: true },
+      { ...base, id: '2', csId: 2, csName: 'QUIET-B', courseName: 'Quiet Course', schoolYear: '2026-2027', isCurrentSchoolYear: true, liveSession: false },
+      { ...base, id: '3', csId: 3, csName: 'OLD-C', courseName: 'Old Course', schoolYear: '2025-2026', isCurrentSchoolYear: false, isHistorical: true, liveSession: false },
+    ];
+    await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes }) }));
+    await page.click('a[href="/attendance"]');
+    const card = (section: string) => page.locator('div.group').filter({ has: page.getByText(section, { exact: true }) });
+    await expect(card('LIVE-A').getByText('Live', { exact: true })).toBeVisible();
+    await expect(card('QUIET-B').getByText('Idle', { exact: true })).toBeVisible();
+    await page.getByLabel('Attendance school year').selectOption('2025-2026');
+    await expect(card('OLD-C').getByText('Past term', { exact: true })).toBeVisible();
+  });
+
   test('Add Student fills in an existing student by ID number and enrolls them instead of registering a duplicate', async ({ page }) => {
     const currentClass = { id: '77', csId: 77, csName: 'CLIN401-A', courseId: 1, courseCode: 'CLIN401', courseName: 'Clinical Dentistry I', units: 3, schoolYear: '2026-2027', isCurrentSchoolYear: true, isHistorical: false, semester: '1st Semester', yearLevel: 5, block: 'A', schedule: null, lecRoom: '', labRoom: '', enrolledCount: 0, instructorName: 'Prof. Jane Doe', status: 'Active' };
     await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [currentClass] }) }));

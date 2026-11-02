@@ -349,8 +349,8 @@ export const AttendanceMonitoring: React.FC = () => {
     || submittingSession || submittingEnd || submittingRevocation || submittingEdit || worksheetMutationCount > 0;
 
   // Load Faculty-owned classes on mount
-  const loadClasses = useCallback(async () => {
-    setLoadingClasses(true);
+  const loadClasses = useCallback(async (silent = false) => {
+    if (!silent) setLoadingClasses(true);
     setClassesError(null);
     try {
       const res = await getFacultyClassesApi();
@@ -365,7 +365,7 @@ export const AttendanceMonitoring: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadClasses();
+    void loadClasses();
   }, [loadClasses]);
 
   // Derive unique courses represented by Faculty-owned classes
@@ -770,6 +770,7 @@ export const AttendanceMonitoring: React.FC = () => {
       if (csIdNum > 0 && worksheetScope.current === writeScope) {
         await loadWorksheet(csIdNum, selectedDate);
       }
+      void loadClasses(true); // refresh the class cards' Live/Idle chip
     } catch (err) {
       setRevokeError(err instanceof Error ? err.message : 'Failed to revoke attendance session.');
     } finally {
@@ -793,6 +794,7 @@ export const AttendanceMonitoring: React.FC = () => {
       if (csIdNum > 0 && worksheetScope.current === writeScope) {
         await loadWorksheet(csIdNum, selectedDate);
       }
+      void loadClasses(true);
     } catch (err) {
       setEndError(err instanceof Error ? err.message : 'Failed to end the attendance session.');
     } finally {
@@ -834,6 +836,7 @@ export const AttendanceMonitoring: React.FC = () => {
         setSelectedSessionId(response.session.sessionId);
         await loadWorksheet(csId, sessionDate, response.session.sessionId);
       }
+      void loadClasses(true);
     } finally {
       setSubmittingSession(false);
       finishWorksheetMutation(writeScope);
@@ -990,7 +993,7 @@ export const AttendanceMonitoring: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
             {scopedClasses.map(c => {
               const isSelected = String(c.csId) === selectedCsId;
-              const hasActiveSession = isSelected && Boolean(liveCurrentSession);
+              const hasActiveSession = isSelected ? Boolean(liveCurrentSession) : Boolean(c.liveSession);
               const isPastClass = Boolean(currentSchoolYear && c.schoolYear !== currentSchoolYear);
               const isArchivedClass = !isPastClass && isViewOnlyClass(c);
 
@@ -1031,7 +1034,7 @@ export const AttendanceMonitoring: React.FC = () => {
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium text-slate-500 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50">
                             <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />
-                            {isPastClass ? 'Archived' : 'Idle'}
+                            {isPastClass ? 'Past term' : 'Idle'}
                           </span>
                         )}
                       </div>

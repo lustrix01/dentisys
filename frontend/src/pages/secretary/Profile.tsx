@@ -122,7 +122,7 @@ export const Profile: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                You can review class attendance, submit manual overrides, and view your assigned classroom camera. Class assignment changes require an administrator.
+                You can review class attendance and send attendance change requests, which your class Faculty approve. Class assignment changes require an administrator.
               </CardContent>
             </Card>
           </div>
@@ -168,7 +168,7 @@ export const Profile: React.FC = () => {
             <div>
               <h4 className="font-bold text-slate-800 dark:text-slate-100">Secretary Attendance Operations</h4>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Class Secretaries supervise room attendance and manual overrides. Student self-service biometrics are managed under Student view.
+                Class Secretaries supervise room attendance and request attendance changes for Faculty approval. Student self-service biometrics are managed under Student view.
               </p>
             </div>
             <span className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
@@ -182,7 +182,7 @@ export const Profile: React.FC = () => {
               <span>Data Privacy Act of 2012 (RA 10173) Compliance</span>
             </div>
             <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11px]">
-              Your consent record is retained for audit compliance. Attendance records and manual overrides are cryptographically signed and immutable.
+              Your consent record is retained for audit compliance. Attendance records and approved changes are kept in the tamper-evident audit log.
             </p>
           </div>
         </div>

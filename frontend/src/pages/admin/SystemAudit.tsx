@@ -479,7 +479,7 @@ export const DeanReports: React.FC = () => {
                 </button>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full sm:w-auto">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5 w-full sm:w-auto">
                 <div className="relative w-full sm:w-auto">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
@@ -498,7 +498,7 @@ export const DeanReports: React.FC = () => {
                     onChange={value => { setSchoolYear(value); setSelectedClassId(null); setClassFilter('all'); }}
                   />
                 </div>
-                <div className="hidden sm:block h-5 w-px bg-slate-200 dark:bg-slate-800" />
+                <div className="hidden 2xl:block h-5 w-px bg-slate-200 dark:bg-slate-800" />
                 {exportPrintControls}
               </div>
             </div>

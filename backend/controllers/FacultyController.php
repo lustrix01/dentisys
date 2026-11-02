@@ -7776,6 +7776,14 @@ function handle_faculty_classes_get(): void
                 sec.display_name AS secretary_name,
                 (SELECT COUNT(*) FROM attendance_sessions sx WHERE sx.cs_id = cs.cs_id AND sx.status = 'scheduled') AS scheduled_session_count,
                 (SELECT COUNT(*) FROM enrollments e WHERE e.cs_id = cs.cs_id) AS enrolled_count,
+                EXISTS (SELECT 1 FROM attendance_sessions lv
+                         WHERE lv.cs_id = cs.cs_id
+                           AND lv.status NOT IN ('revoked', 'ended')
+                           AND lv.revoked_at IS NULL
+                           AND (lv.status = 'active'
+                                OR (lv.session_date = (NOW() AT TIME ZONE 'Asia/Manila')::date
+                                    AND (NOW() AT TIME ZONE 'Asia/Manila')::time
+                                        BETWEEN COALESCE(lv.opening_time, TIME '00:00') AND COALESCE(lv.class_end_time, TIME '23:59')))) AS live_session,
                 (EXISTS (SELECT 1 FROM assessment_scores sc JOIN assessments a ON a.assessment_id = sc.assessment_id WHERE a.cs_id = cs.cs_id)
                  OR EXISTS (SELECT 1 FROM enrollments eg WHERE eg.cs_id = cs.cs_id AND (eg.final_gwa IS NOT NULL OR eg.final_percentage IS NOT NULL))) AS has_grades
             FROM class_sections cs
@@ -7814,6 +7822,7 @@ function handle_faculty_classes_get(): void
                 'archivedAt' => $cls['archived_at'],
                 'isArchived' => $cls['archive_reason'] !== null || strcasecmp((string) $cls['school_year'], $currentSchoolYear) !== 0,
                 'scheduledSessionCount' => $cls['archive_reason'] !== null || strcasecmp((string) $cls['school_year'], $currentSchoolYear) !== 0 ? 0 : (int) $cls['scheduled_session_count'],
+                'liveSession' => $cls['archive_reason'] === null && strcasecmp((string) $cls['school_year'], $currentSchoolYear) === 0 && filter_var($cls['live_session'], FILTER_VALIDATE_BOOLEAN),
                 'secretaryName' => $cls['secretary_name'],
                 'semester' => $cls['semester'],
                 'yearLevel' => (int) ($cls['year_level'] ?? 1),

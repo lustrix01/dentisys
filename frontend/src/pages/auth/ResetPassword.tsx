@@ -88,6 +88,25 @@ export function ResetPassword() {
           </div>
 
           <div className="w-full max-w-sm mx-auto my-auto py-5 space-y-4">
+            {!token ? (
+              <>
+                <div className="space-y-1">
+                  <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-heading">
+                    Reset link needed
+                  </h1>
+                  <p className="text-sm text-slate-500">
+                    This page only works from the reset link in your email. Request a new link to continue.
+                  </p>
+                </div>
+                <Link
+                  to="/forgot-password"
+                  className="whitespace-nowrap w-full py-2.5 px-4 rounded-xl font-semibold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.99] transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer mt-2"
+                >
+                  Send a new link
+                </Link>
+              </>
+            ) : (
+              <>
             <div className="space-y-1">
               <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-heading">
                 Create new password
@@ -207,6 +226,8 @@ export function ResetPassword() {
                 )}
               </button>
             </form>
+              </>
+            )}
           </div>
 
           {/* Bottom institutional mark */}

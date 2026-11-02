@@ -1635,6 +1635,7 @@ export interface FacultyClassItem {
   archivedAt?: string | null;
   isArchived?: boolean;
   scheduledSessionCount?: number;
+  liveSession?: boolean;
   secretaryName?: string | null;
   id: string;
   csId: number;

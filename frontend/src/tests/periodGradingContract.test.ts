@@ -17,6 +17,7 @@ import {
   generateGradeSummaryCSV,
   isValidCalendarDate,
 } from '../utils/periodGradingHelper.ts';
+import { invalidScoresMessage } from '../pages/faculty/gradeScoreErrors.ts';
 import { percentageToGWAExact, matchesActivityFilters, saveStatusBadge } from '../utils/gradeHelper.ts';
 import type { FacultyLegacyComputedResult, FacultyPeriodModeComputedResult, FacultyPeriodModeIncompleteResult } from '../services/apiClient.ts';
 
@@ -1101,6 +1102,7 @@ function scoreSaveHarness(mode: 'single' | 'matrix' = 'single', autoSaveEnabled 
   const calls: Array<Array<{ studentId: string; score: number | null }>> = [];
   const statuses: string[] = [];
   const feedback: string[] = [];
+  const focused: string[] = [];
   const prompts: string[][] = [];
   const filters: string[][] = [];
   let confirmAnswer = true;
@@ -1116,7 +1118,9 @@ function scoreSaveHarness(mode: 'single' | 'matrix' = 'single', autoSaveEnabled 
     selectedClassId: 'class',
     availableClasses: [],
     activeAssessments: [{ id: 'assessment', maxScore: 100 }],
-    activeStudents: [{ id: 'student' }, { id: 'other' }],
+    activeStudents: [{ id: 'student', name: 'Reyes, Ana' }, { id: 'other', name: 'Cruz, Ben' }],
+    invalidScoresMessage,
+    focusInvalidScore: (key: string) => { focused.push(key); },
     assessmentScores: [{ assessmentId: 'assessment', studentId: 'student', score: 10, remarks: '' }],
     matrixSavingRef: { current: false },
     matrixQueuedRef: { current: null as { manual: boolean } | null },
@@ -1165,7 +1169,7 @@ function scoreSaveHarness(mode: 'single' | 'matrix' = 'single', autoSaveEnabled 
   const settle = () => new Promise<void>(resolve => setImmediate(resolve));
   const fire = (ms: number) => { for (const timer of timers.splice(0)) if (timer.ms === ms && !timer.cancelled) timer.fn(); };
   const pending = (ms: number) => timers.filter(timer => timer.ms === ms && !timer.cancelled).length;
-  return { actions, context, calls, notices, statuses, feedback, prompts, filters, answer: (value: boolean) => { confirmAnswer = value; }, settle, fire, pending, setSave: (next: () => Promise<unknown>) => { save = next; } };
+  return { actions, context, calls, notices, statuses, feedback, focused, prompts, filters, answer: (value: boolean) => { confirmAnswer = value; }, settle, fire, pending, setSave: (next: () => Promise<unknown>) => { save = next; } };
 }
 
 test('Switching assessment, class or course asks first only when scores are unsaved', async () => {
@@ -1427,11 +1431,12 @@ test('Matrix auto-save skips invalid cells and keeps them dirty; manual Save sti
 
   const manual = scoreSaveHarness('matrix');
   manual.actions.handleCellChange('student', '150');
-  manual.actions.handleCellChange('other', '70');
+  manual.actions.handleCellChange('other', '-5');
   await manual.actions.handleManualSaveScores();
   await manual.settle();
   assert.equal(manual.calls.length, 0);
-  assert.deepEqual(manual.feedback, ['Some scores in the matrix are invalid (exceed max score or negative).']);
+  assert.deepEqual(manual.feedback, ['2 scores need fixing: Reyes, Ana 150 (max 100), Cruz, Ben -5 (cannot be negative).']);
+  assert.deepEqual(manual.focused, ['student|assessment']);
 });
 
 test('Single auto-save skips invalid scores and keeps them dirty; manual Save still refuses; switching prompts', async () => {
@@ -1456,11 +1461,18 @@ test('Single auto-save skips invalid scores and keeps them dirty; manual Save st
 
   const manual = scoreSaveHarness('single');
   manual.actions.handleScoreChange('student', '150', 'score');
-  manual.actions.handleScoreChange('other', '70', 'score');
+  manual.actions.handleScoreChange('other', '-5', 'score');
   await manual.actions.handleManualSaveScores();
   await manual.settle();
   assert.equal(manual.calls.length, 0);
-  assert.deepEqual(manual.feedback, ['Some scores are invalid. Scores cannot exceed the assessment maximum.']);
+  assert.deepEqual(manual.feedback, ['2 scores need fixing: Reyes, Ana 150 (max 100), Cruz, Ben -5 (cannot be negative).']);
+  assert.deepEqual(manual.focused, ['student']);
+
+  const one = scoreSaveHarness('single');
+  one.actions.handleScoreChange('student', '150', 'score');
+  await one.actions.handleManualSaveScores();
+  await one.settle();
+  assert.deepEqual(one.feedback, ['1 score needs fixing: Reyes, Ana 150 (max 100).']);
 });
 
 test('Evaluation Extraction: legacy results expose server retention state and exact percentage', () => {
