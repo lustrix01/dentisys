@@ -736,6 +736,7 @@ test.describe('P03 Student identity and authentication', () => {
     await page.goto('/admin/audit-trail');
     await expect(page.getByText('Student sign-in denied').first()).toBeVisible();
     await expect(page.getByText('Profile updated').first()).toBeVisible();
+    await page.getByRole('button', { name: 'More filters' }).click();
     await page.getByLabel('Role', { exact: true }).selectOption('student');
     await expect(page.getByText('Student sign-in denied').first()).toBeVisible();
     await expect(page.getByText('Profile updated')).toHaveCount(0);

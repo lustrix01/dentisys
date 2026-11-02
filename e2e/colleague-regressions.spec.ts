@@ -464,7 +464,7 @@ test('Faculty Midterm Watchlist uses the server flag and drops courses once a fi
   await expect(strong).not.toContainText('At Risk');
   await expect(page.getByRole('row').filter({ hasText: 'Final Graded' })).toHaveCount(0);
   await expect(page.getByRole('row').filter({ hasText: 'Remedial Started' })).toHaveCount(0);
-  await page.getByRole('button', { name: /^Watchlist\s*\d*$/ }).click();
+  await page.getByRole('button', { name: /^Retention Status\s*\d*$/ }).click();
   await expect(page.getByRole('columnheader', { name: 'Risk', exact: true })).toHaveCount(0);
 });
 

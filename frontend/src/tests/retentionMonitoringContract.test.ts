@@ -87,7 +87,7 @@ test('Midterm Watchlist uses the server rule and shows At Risk with no levels', 
   assert.match(retentionPage, /isMidtermAtRisk\(record\) && \(/);
   // Names and wording.
   assert.match(retentionPage, /<span>Midterm Watchlist<\/span>/);
-  assert.match(retentionPage, /Students whose midterm is fully graded and whose weighted midterm grade is 2\.5 or worse \(84% or below on the BUCDM table\)\. Students with a final course grade move to Retention Watchlist\./);
+  assert.match(retentionPage, /Students whose midterm is fully graded and whose weighted midterm grade is 2\.5 or worse \(84% or below on the BUCDM table\)\. Students with a final course grade move to Retention Status\./);
   assert.doesNotMatch(retentionPage, /Midterm Risk|Midterm Standing & Risk Evaluation/);
   // No levels, no projection badge, no Risk column on the Retention Watchlist.
   assert.doesNotMatch(retentionPage, /RiskBadge|record\.risk|'High'|Not enough data|assumedAssessments/);

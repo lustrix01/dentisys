@@ -40,8 +40,8 @@ async function setup(page: Page, failEmail = '') {
   await page.locator('button[type="submit"]').click();
   await expect(page).toHaveURL('/');
   await page.locator('a[href="/classes"]').click();
-  await page.getByRole('button', { name: 'Import Roster', exact: true }).click();
-  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Import Class and Roster', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Import Class and Roster', exact: true })).toBeVisible();
   await expect(page.getByLabel('Target class section')).toHaveCount(0);
   return { creates, enrolls, classCreates };
 }
@@ -57,10 +57,11 @@ test('provisional PDF keeps all rows unselected, flags marks, preserves fields a
   await expect(page.getByLabel('Middle name for 2099-1234-56789', { exact: true })).toHaveValue('Reyes');
   await expect(page.getByLabel('Email for 2099-1234-56789', { exact: true })).toHaveValue('actual.fixture@bicol-u.edu.ph');
   // Every row here is flagged for review or has an error, so bulk select has nothing to select.
-  await expect(page.getByRole('button', { name: 'Select all visible' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Select all students' })).toBeDisabled();
   await expect(page.getByLabel('Include student 2099-01-12345', { exact: true })).not.toBeChecked();
   await expect(page.getByLabel('Year level for 2099-01-12345', { exact: true })).toHaveValue('2');
-  // This file has a course/section/term header, so Step 1 is picked from it ("New class from this file"); the Faculty changes it.
+  // This file has a course/section/term header that matches none of the Faculty's classes, so a new class is proposed; the Faculty switches to an existing one.
+  await page.getByRole('button', { name: 'Import into one of my existing classes instead' }).click();
   await expect(page.getByLabel('Target class section')).toBeVisible();
   await expect(page.getByLabel('Target class section').locator('option')).toHaveCount(2);
   await expect(page.getByLabel('Target class section').locator('option').nth(1)).toHaveText(/1ST, 2099-2100/);
@@ -74,7 +75,7 @@ test('provisional PDF keeps all rows unselected, flags marks, preserves fields a
   await expect(page.getByRole('button', { name: 'Confirm & Import (1) Students' })).toBeDisabled();
   await page.getByRole('checkbox', { name: /I reviewed the source course/ }).check();
   await page.getByRole('button', { name: 'Confirm & Import (1) Students' }).click();
-  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).not.toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Import Class and Roster', exact: true })).not.toBeVisible();
   expect(creates).toHaveLength(0);
   expect(enrolls).toEqual([{ csId: 11, studentIds: [7001] }]);
 });
@@ -92,7 +93,7 @@ test('partial CSV failure remains visible and retry does not repeat successful r
   expect(creates[1]).not.toHaveProperty('yearLevel');
   await page.getByLabel('Email for 2099-5555-66666', { exact: true }).fill('bea.fixture@bicol-u.edu.ph');
   await page.getByRole('button', { name: 'Confirm & Import (1) Students' }).click();
-  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).not.toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Import Class and Roster', exact: true })).not.toBeVisible();
   expect(creates.filter(row => row.studentId === '2099-3333-44444')).toHaveLength(1);
   expect(creates).toHaveLength(3);
 });
@@ -114,7 +115,7 @@ test('retry resolves a committed student after the creation response is lost', a
   await expect(page.getByRole('alert').filter({ hasText: 'Rows requiring correction' })).toContainText('2099-8888-99999');
   expect(creates).toHaveLength(1);
   await page.getByRole('button', { name: 'Confirm & Import (1) Students' }).click();
-  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).not.toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Import Class and Roster', exact: true })).not.toBeVisible();
   expect(creates).toHaveLength(2);
   expect(enrolls).toEqual([{ csId: 11, studentIds: [8002] }]);
 });
@@ -133,7 +134,7 @@ test('missing institutional email blocks saves until a valid allowed email is su
   await expect(page.getByRole('button', { name: 'Confirm & Import (0) Students' })).toBeDisabled();
   await page.getByLabel('Email for 2099-2222-33333', { exact: true }).fill('ana.required@bicol-u.edu.ph');
   await page.getByRole('button', { name: 'Confirm & Import (1) Students' }).click();
-  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).not.toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Import Class and Roster', exact: true })).not.toBeVisible();
   expect(creates).toHaveLength(1);
   expect(creates[0]).toMatchObject({ studentId: '2099-2222-33333', email: 'ana.required@bicol-u.edu.ph' });
 });
@@ -149,9 +150,8 @@ test('official class list for a class that does not exist creates it, then adds 
   const { creates, enrolls, classCreates } = await setup(page);
   await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'fictional-class-list.pdf', mimeType: 'application/pdf', buffer: pdf });
   await expect(page.getByText('Parsed Students (2)', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Target class section')).toHaveValue('-1');
-  await expect(page.getByLabel('Target class section').locator('option').first()).toHaveText('New class from this file');
-  await expect(page.getByText('Picked from the file. Change it if this is wrong.', { exact: true })).toBeVisible();
+  await expect(page.getByText('None of your classes matches this file, so a new class is created from it.', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Target class section')).toHaveCount(0);
   await expect(page.getByLabel('Course code', { exact: true })).toHaveValue('NEW 200');
   await expect(page.getByLabel('Course title', { exact: true })).toHaveValue('Fictional Studies');
   await expect(page.getByLabel('Section', { exact: true })).toHaveValue('DMD-1A');
@@ -172,7 +172,7 @@ test('official class list for a class that does not exist creates it, then adds 
   await expect(page.getByText('No students are ready to add. To make an empty class, use Create Class.')).toHaveCount(0);
   await page.getByRole('checkbox', { name: /I reviewed the class details/ }).check();
   await page.getByRole('button', { name: 'Create class and add 2 students' }).click();
-  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).not.toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Import Class and Roster', exact: true })).not.toBeVisible();
   expect(classCreates).toHaveLength(1);
   expect(classCreates[0]).toMatchObject({ csName: 'NEW 200-DMD-1A', block: 'DMD-1A', courseCode: 'NEW 200', courseName: 'Fictional Studies', academicTermId: 5, yearLevel: 1, lectureUnits: 2, labUnits: null, lecRoom: 'CDM 1' });
   expect(classCreates[0].meetings).toEqual([
@@ -197,8 +197,49 @@ test("official class list for one of the Faculty's own classes asks to import in
   await page.getByLabel('Include student 2099-0001-00003', { exact: true }).check();
   await page.getByRole('checkbox', { name: /I reviewed the source course/ }).check();
   await page.getByRole('button', { name: 'Confirm & Import (1) Students' }).click();
-  await expect(page.getByText('Class Details & Student Roster Import', { exact: true })).not.toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Import Class and Roster', exact: true })).not.toBeVisible();
   expect(classCreates).toHaveLength(0);
   expect(creates).toHaveLength(1);
   expect(creates[0]).toMatchObject({ studentId: '2099-0001-00003', classId: '11' });
+});
+
+const mixedNames = () => classList({ students: [
+  { id: '2099-0002-00001', name: 'Reyes, Ana Maria', email: 'ana.mixed@bicol-u.edu.ph' },
+  { id: '2099-0002-00002', name: 'Santos, Ben', email: 'ben.mixed@bicol-u.edu.ph' },
+  { id: '2099-0002-00003', name: 'Lim, Ana Maria Teresa', email: 'teresa.mixed@bicol-u.edu.ph' },
+  { id: '2099-0002-00004', name: 'Garcia, Jose Mari Jr.', email: 'jose.mixed@bicol-u.edu.ph' },
+] });
+
+test('Select all students ticks only plain names; ambiguous splits stay unticked, flagged and counted', async ({ page }) => {
+  const pdf = await makeClassListPdf(page, mixedNames());
+  await setup(page);
+  await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'fictional-mixed.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await expect(page.getByText('Parsed Students (4)', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Select all students' }).click();
+  await expect(page.getByLabel('Include student 2099-0002-00001', { exact: true })).toBeChecked();
+  await expect(page.getByLabel('Include student 2099-0002-00002', { exact: true })).toBeChecked();
+  await expect(page.getByLabel('Include student 2099-0002-00003', { exact: true })).not.toBeChecked();
+  await expect(page.getByLabel('Include student 2099-0002-00004', { exact: true })).not.toBeChecked();
+  await expect(page.getByText('Review the source and name fields before selecting this row.', { exact: true })).toHaveCount(2);
+  await expect(page.getByLabel('Include student 2099-0002-00003', { exact: true })).toHaveAccessibleDescription(/Review the source and name fields/);
+  await expect(page.getByRole('status').filter({ hasText: 'Left for you to tick after checking the PDF' })).toHaveText('Left for you to tick after checking the PDF: 2 names to check.');
+  await expect(page.getByRole('button', { name: 'Clear selection' })).toBeVisible();
+  // (b) Editing a field other than a name keeps the row ticked.
+  await page.getByLabel('Email for 2099-0002-00001', { exact: true }).fill('ana.edited@bicol-u.edu.ph');
+  await expect(page.getByLabel('Include student 2099-0002-00001', { exact: true })).toBeChecked();
+  // With a filter, the button speaks about the rows shown only.
+  await page.getByPlaceholder('Filter preview...').fill('Lim');
+  await expect(page.getByRole('button', { name: 'Select the 0 shown' })).toBeDisabled();
+  await expect(page.getByRole('status').filter({ hasText: 'Left for you to tick after checking the PDF' })).toContainText('2 names to check');
+});
+
+test('a class list that matches none of the Faculty classes can switch to an existing class', async ({ page }) => {
+  const pdf = await makeClassListPdf(page, classList());
+  await setup(page);
+  await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'fictional-class-list.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await expect(page.getByText('None of your classes matches this file, so a new class is created from it.', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Target class section')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Import into one of my existing classes instead' }).click();
+  await expect(page.getByLabel('Target class section')).toHaveValue('11');
+  await expect(page.getByText('Picked from the file. Change it if this is wrong.', { exact: true })).toHaveCount(0);
 });

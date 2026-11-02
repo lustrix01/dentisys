@@ -4273,7 +4273,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/reports');
-      await expect(page.getByRole('heading', { name: 'Class Course Grade Reports' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Grades & Assessment Summary' })).toBeVisible();
       await expect(page.getByRole('columnheader', { name: 'Midterm Lecture', exact: true })).toBeVisible();
       await expect(page.getByRole('columnheader', { name: 'Midterm Laboratory', exact: true })).toBeVisible();
       await expect(page.getByRole('columnheader', { name: 'Finals Lecture', exact: true })).toBeVisible();
@@ -4299,14 +4299,12 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const downloadPromise = page.waitForEvent('download');
       await page.getByRole('button', { name: 'Export Excel' }).click();
       const download = await downloadPromise;
-      expect(download.suggestedFilename()).toMatch(/^CLIN401_.*_Grade_Sheet_2026-2027_1st\.xlsx$/);
+      expect(download.suggestedFilename()).toMatch(/^CLIN401_.*_Grades_Assessments_2026-2027_1st_Semester\.xlsx$/);
       const xlsx = await readDownloadedXlsxText(download);
-      for (const name of ['Alice Reyes', 'Bea Santos', 'Caleb Reyes', 'MIDTERM LEC GRADE', 'FINAL LAB GRADE']) expect(xlsx).toContain(name);
-      // Alice: saved Lecture and Laboratory grades x their shares, Midterm 87 / Final 89, course grade 88.4 = 2.1
-      for (const value of ['48.6', '36.4', '55.8', '33.2', '87', '89', '88.4', '2.1']) expect(xlsx).toContain(`<v>${value}</v>`);
-      // Bea (older combined result): period grades 72 and 84 and course grade 79.2 = 2.8; no Lecture/Laboratory split, so those cells are INC
-      for (const value of ['72', '84', '79.2', '2.8']) expect(xlsx).toContain(`<v>${value}</v>`);
-      expect(xlsx).toContain('INC');
+      for (const name of ['Alice Reyes', 'Bea Santos', 'Caleb Reyes', 'GRADES & ASSESSMENT SCORES', 'MIDTERM, FINALS & COURSE GRADE SUMMARY']) expect(xlsx).toContain(name);
+      // The summary sheet stores periods as fractions: Alice Midterm 87% / Final 89%, grade 2.1; Bea (older combined result) 72% / 84%, grade 2.8.
+      // The workbook no longer carries Lecture/Laboratory columns (the redesigned export has one summary sheet), so the split is checked in the table above.
+      for (const value of ['0.87', '0.89', '2.1', '0.72', '0.84', '2.8']) expect(xlsx).toContain(`<v>${value}</v>`);
     });
   });
 });

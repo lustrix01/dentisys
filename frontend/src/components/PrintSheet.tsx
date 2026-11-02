@@ -51,6 +51,15 @@ export const PrintStyle: React.FC<{ title: string; running: string; generated: s
 .ps td.ph { color: #64748b; font-style: italic; font-size: var(--ps-fs-xs); }
 .ps td.bad { font-weight: 800; color: #9f1239; }
 .ps td.cap { text-transform: capitalize; }
+.ps .assessment-matrix { table-layout: auto; font-size: 7px; }
+.ps .assessment-matrix th { background: #e1bee8; }
+.ps .assessment-matrix th, .ps .assessment-matrix td { padding: 2px 3px; font-size: 7px; }
+.ps .report-analytics-group { margin: 0 0 14px; break-inside: avoid; }
+.ps .report-analytics-group h3, .ps .analytics-data-heading { margin: 0 0 6px; font-size: var(--ps-fs-md); font-weight: 700; }
+.ps .report-analytics-row { display: grid; grid-template-columns: 220px 1fr 85px; align-items: center; gap: 10px; margin: 5px 0; font-size: var(--ps-fs-sm); }
+.ps .report-analytics-track { height: 11px; background: #e2e8f0; border-radius: 6px; overflow: hidden; }
+.ps .report-analytics-track > div { height: 100%; border-radius: inherit; }
+.ps .report-analytics-row strong { text-align: right; }
 `}</style>
 );
 

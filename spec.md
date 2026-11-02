@@ -486,6 +486,10 @@ Owner decision (2026-10-28): Students see their own period and final grades, not
 
 Owner decision (2026-10-27): Grade sheets, class lists and report exports are Excel (.xlsx) files in the Dean's official layouts; see docs/contracts/official-exports.md.
 
+Owner-approved amendment (2026-10-29): Faculty Reports → Grades & Assessments exports a five-sheet Excel report and matching five-section PDF (Grade Computation-style assessment matrix, grade summary, Midterm Watchlist, attendance register, and interactive analytics graphs with source data). This report bundle is separate from the import-compatible Grade Computation workbook, which keeps its official `LEC`, `LAB`, `TFG`, and `DATA` sheets. See docs/contracts/official-exports.md X28.
+
+Owner decision (2026-10-29): Class lists keep their Excel export and also offer a styled PDF with the same class header details and roster columns. Faculty save the PDF from the browser print dialog.
+
 ---
 
 ## GRD-003 - Separate Lecture and Laboratory grading
@@ -1062,6 +1066,10 @@ audit history, account eligibility and separate invitation authority. Process th
 original file locally and send only selected Student fields to existing APIs.
 Owner decision (2026-10-26): The BU College of Dental Medicine "Official List of Enrolled Students" PDF and the official grade sheet workbook (.xlsx) are the official import layouts. Faculty upload them unchanged; DentiSys adapts to them. Owner decision (2026-10-28): imports are confirmed; no import file shows an "Official format not confirmed" label. Grade sheet import saves raw scores only, never computed grades, through the existing score rules; it never changes Grade Weights, never turns a blank into zero, and never overwrites a saved score without the Faculty's confirmation. File headers are checked against the selected class and differences are warnings. Owner decision (2026-10-27): When no existing class of the Faculty matches the official class list's course code, section, school year and semester, the Faculty may create the class from the file inside the roster import. The header prefills the Create Class fields (course, section, year level, Lecture and Laboratory units, Dean term and meetings); the Faculty confirms or corrects every field before saving, and Create Class validation applies. A matching existing class is offered instead of creating a duplicate. Owner decision (2026-10-28): The Academic term defaults to the Dean-defined term matching the file header when one exists. The Faculty may select a different Dean-defined term to correct a misread year or semester. Creating a class requires selecting a Dean-defined term in the current school year; class creation is blocked while the selected term is in a past school year. The selected term determines the new class school year. Importing into an existing class is unaffected. Detailed rules: docs/contracts/official-imports.md.
 
+Owner decision (2026-10-29): **Import Students** from a class roster view opens a separate modal that imports students into that already selected class. It does not ask for class details or a target class and cannot create a class. An official PDF header that differs from the selected class remains a warning for Faculty review. **Import Class and Roster** remains a separate modal for the file-based class and roster flow.
+
+Owner decision (2026-11-02): On an official class-list PDF, a name split is ambiguous when the name has no comma, a suffix (Jr., Sr., II–V), a surname particle (such as Dela, De Los, San) or three or more given names. Only ambiguous splits are flagged for the Faculty's review; other names follow the 2026-10-28 rule (the last given word is the middle name). Select all students ticks rows without errors that are neither flagged for name review nor possible crossed-out rows; those stay unselected until the Faculty ticks each one after checking the source. Students correct their own name after activation through Change Name. When the class list matches none of the Faculty's current-year classes, the dialog says a new class will be created and offers a link to import into one of the Faculty's existing classes instead. This supersedes the 2026-10-28 rule that the Faculty reviews every split.
+
 Each selected import row MUST supply a complete Student number, first name,
 last name and a valid institutional email from the server-configured allowed
 domains. Extract supplied emails from supported source files; missing or
@@ -1095,11 +1103,13 @@ Allow a blank due date for activities without a deadline. The Owner clarified on
 
 Explain overall Midterm/Final contributions and each period's category weights clearly, identify the target offering, and show totals. Preserve GRD-002's calculation, saved-configuration, and 100% validation rules; screenshot examples do not override saved values.
 
-## UI-003 - Watchlist and retention (PDF pages 4 and 6)
+## UI-003 - Midterm Watchlist and retention status (PDF pages 4 and 6)
 
 The Midterm Watchlist stays locked while the applicable student's midterm grades are incomplete and becomes accessible when complete. Authorized Faculty may manually unlock it for every student in the selected class, as clarified by the Owner on 2026-09-24. Unlocking changes visibility, not missing grades or academic completeness. Persist the class, actor, and timestamp; do not unlock another class implicitly.
 
 Retention uses final grades, scores, and applicable approved BUCDM policy. Clickable Policy Status displays the student's current stage and progression through the BUCDM retention flow. Distinguish midterm warning from final retention decisions. Do not approve numeric thresholds or policy tracks solely from screenshot examples; unresolved policy-to-stage mapping must be clarified before authoritative wiring.
+
+Owner-approved naming update (2026-10-29): The Faculty retention page labels its computed final-grade view "Retention Status". "Midterm Watchlist" remains the separate early warning list.
 
 Owner decision (2026-09-28): For the professional-course final-grade trigger, 1.0 is best. The authoritative final grade is compared at its established precision, without rounding to one decimal first. A final grade below 2.50 passes, including 2.40-2.49. A final grade of 2.50 or worse requires remediation. This course-grade trigger is distinct from the remedial-exam percentage passing threshold. This trigger is fixed college policy. It is not an Admin setting and changes only by amending this specification. Missing or incomplete grades remain unresolved, and this clarification does not create a separate warning band or authorize any other unanswered BUCDM policy decision.
 

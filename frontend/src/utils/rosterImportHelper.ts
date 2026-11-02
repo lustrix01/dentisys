@@ -46,6 +46,15 @@ export function splitFullName(rawName: string) {
   return { firstName: tokens.slice(0, at).join(' '), middleName: tokens.slice(at).join(' '), lastName, suffix };
 }
 
+/** A split needs the Faculty's check when it could go more than one way: no comma, a suffix, a surname particle, or three or more given names. */
+export function nameSplitIsAmbiguous(rawName: string) {
+  const cleaned = rawName.normalize('NFC').trim().replace(/\s+/g, ' ');
+  const comma = cleaned.indexOf(',');
+  if (comma < 0) return true;
+  const tokens = cleaned.slice(comma + 1).trim().split(' ').filter(Boolean);
+  return tokens.length > 2 || tokens.some(token => NAME_SUFFIX.test(token) || SURNAME_PARTICLE.test(token));
+}
+
 export function parseRosterYear(value: string): number | null {
   if (!value.trim()) return null;
   const match = value.trim().match(/^([1-6])(?:st|nd|rd|th)?(?:\s*year)?$/i);
@@ -382,7 +391,7 @@ export function parsePDFRoster(pages: RosterPDFPage[]): RosterPDFResult {
         tempKey: `pdf-${page.page}-${i}`, studentId: anchor.studentId, ...splitFullName(originalName),
         email: email.toLowerCase(), contact: cell('contact') || undefined, sex: cell('sex') || undefined,
         yearLevel: parseRosterYear(cell('year')), originalName, sourcePage: page.page, sourceRow: cell('#'),
-        possibleCrossedOut, requiresNameReview: true, reviewed: false, included: false, status: 'warning',
+        possibleCrossedOut, requiresNameReview: nameSplitIsAmbiguous(originalName), reviewed: false, included: false, status: 'warning',
       });
     }
   }

@@ -124,6 +124,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
   const [sort, setSort] = useState<'newest' | 'oldest'>('newest');
   const [preset, setPreset] = useState<DatePreset>('all');
   const [custom, setCustom] = useState({ from: '', to: '' });
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [page, setPage] = useState(1);
 
   const [data, setData] = useState<AuditListResponse | null>(null);
@@ -186,6 +187,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const groups = useMemo(() => groupByDay(entries), [entries]);
   const filtersActive = Boolean(q || area || status || roleFilter || card || cls || signins || preset !== 'all' || sort !== 'newest');
+  const moreFilterCount = [area, status, role === 'admin' ? roleFilter : '', role === 'faculty' ? cls : '', signins ? 'signins' : '', preset === 'custom' ? 'custom' : ''].filter(Boolean).length;
 
   const change = (fn: () => void) => { fn(); setPage(1); };
   const clearFilters = () => {
@@ -300,69 +302,77 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
 
       <Card className="no-print">
         <CardContent className="p-4">
-          <div className="grid min-w-0 grid-cols-2 sm:grid-cols-3 xl:flex xl:flex-wrap items-center gap-2 pb-1">
-            <Filter className={`hidden xl:block w-4 h-4 ${theme.icon} shrink-0`} />
-            <div className="relative col-span-2 min-w-0 sm:col-span-1 xl:shrink-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="relative min-w-[190px] flex-1 basis-48">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input type="search" value={qInput} onChange={e => setQInput(e.target.value)} maxLength={100} aria-label="Search" placeholder="Search who, what, record, student"
-                className={`${control} w-full pl-8 xl:w-36`} />
+                className={`${control} w-full pl-8`} />
             </div>
-            <select aria-label="Date" value={preset} onChange={e => change(() => setPreset(e.target.value as DatePreset))} className={`${control} max-xl:pl-2 max-xl:pr-5 w-full xl:w-auto`}>
+            <select aria-label="Date" value={preset} onChange={e => change(() => setPreset(e.target.value as DatePreset))} className={`${control} min-w-[130px]`}>
               <option value="all">All dates</option>
               <option value="today">Today</option>
               <option value="7">Last 7 days</option>
               {term && <option value="term">This term</option>}
               <option value="custom">Custom range</option>
             </select>
-            {preset === 'custom' && (
-              <>
-                <input type="date" aria-label="From date" value={custom.from} max={custom.to || undefined} onChange={e => change(() => setCustom(c => ({ ...c, from: e.target.value })))} className={`${control} w-full xl:w-32`} />
-                <input type="date" aria-label="To date" value={custom.to} min={custom.from || undefined} onChange={e => change(() => setCustom(c => ({ ...c, to: e.target.value })))} className={`${control} w-full xl:w-32`} />
-              </>
-            )}
-            <select aria-label="Area" value={area} onChange={e => change(() => setArea(e.target.value))} className={`${control} max-xl:pl-2 max-xl:pr-5 w-full xl:w-auto`}>
-              <option value="">All areas</option>
-              {(data?.areas ?? []).map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-            <select aria-label="Status" value={status} onChange={e => change(() => setStatus(e.target.value))} className={`${control} max-xl:pl-2 max-xl:pr-5 w-full xl:w-auto`}>
-              <option value="">All statuses</option>
-              {['Success', 'Warning', 'Failed'].map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            {role === 'admin' && (
-              <select aria-label="Role" value={roleFilter} onChange={e => change(() => setRoleFilter(e.target.value))} className={`${control} max-xl:pl-2 max-xl:pr-5 w-full xl:w-auto`}>
-                {ROLE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            )}
-            {role === 'faculty' && (
-              <select aria-label="Class" value={cls} onChange={e => change(() => setCls(e.target.value))} className={`${control} max-xl:pl-2 pr-6 w-full xl:w-36`}>
-                <option value="">All classes</option>
-                {classes.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-              </select>
-            )}
-            <button type="button" aria-pressed={signins} onClick={() => change(() => setSignins(v => !v))}
-              className={`flex w-full xl:w-auto justify-center items-center gap-1.5 px-3 py-2 min-h-[44px] xl:min-h-0 rounded-xl border text-xs font-bold ${signins ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300' : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}>
-              Sign-ins
+            <button type="button" aria-expanded={showMoreFilters} onClick={() => setShowMoreFilters(value => !value)}
+              className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold ${theme.surface} ${theme.icon}`}>
+              <Filter className="h-3.5 w-3.5" />
+              More filters
+              {moreFilterCount > 0 && <span className="rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] text-slate-700 dark:bg-slate-900 dark:text-slate-200">{moreFilterCount}</span>}
             </button>
-            <button type="button" onClick={() => change(() => setSort(sort === 'newest' ? 'oldest' : 'newest'))} className={`flex w-full xl:w-auto justify-center items-center gap-1.5 whitespace-nowrap px-3 py-2 min-h-[44px] xl:min-h-0 rounded-xl border text-xs font-bold ${theme.surface}`}>
-              <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
+            <button type="button" onClick={() => change(() => setSort(sort === 'newest' ? 'oldest' : 'newest'))} className={`inline-flex min-h-[44px] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-bold ${theme.surface}`}>
+              <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
               {sort === 'newest' ? 'Newest first' : 'Oldest first'}
             </button>
-            {filtersActive && (
-              <button type="button" onClick={clearFilters} className="flex justify-center items-center gap-1 min-h-[44px] xl:min-h-0 text-xs font-bold underline hover:opacity-80">Clear filters</button>
-            )}
-            <span className="col-span-2 sm:col-span-1 xl:ml-auto text-center sm:text-left xl:text-right whitespace-nowrap text-[10px] text-slate-500 dark:text-slate-400 font-semibold">{total} logs</span>
-            <div className="col-span-2 sm:col-span-3 xl:col-span-1 flex w-full xl:w-auto items-center justify-center xl:justify-start bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-                <button onClick={exportExcel} disabled={working} className="flex flex-1 xl:flex-initial items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer disabled:opacity-50">
-                  <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  Export Excel
-                </button>
-                <div className="w-px h-4 bg-slate-200 dark:bg-slate-800 mx-0.5" />
-                <button onClick={handlePrint} disabled={working} className="flex flex-1 xl:flex-initial items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer disabled:opacity-50">
-                  <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-                  Print PDF
-                </button>
+            <div className="inline-flex items-center rounded-xl border border-slate-200/90 bg-white p-0.5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+              <button onClick={exportExcel} disabled={working} className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-300">
+                <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                Export Excel
+              </button>
+              <div className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-800" />
+              <button onClick={handlePrint} disabled={working} className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-rose-950/40 dark:hover:text-rose-300">
+                <FileText className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+                Print PDF
+              </button>
             </div>
+            <span className="ml-auto whitespace-nowrap text-[10px] font-semibold text-slate-500 dark:text-slate-400">{total} logs</span>
           </div>
+
+          {showMoreFilters && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+              {preset === 'custom' && (
+                <>
+                  <input type="date" aria-label="From date" value={custom.from} max={custom.to || undefined} onChange={e => change(() => setCustom(c => ({ ...c, from: e.target.value })))} className={`${control} w-full sm:w-36`} />
+                  <input type="date" aria-label="To date" value={custom.to} min={custom.from || undefined} onChange={e => change(() => setCustom(c => ({ ...c, to: e.target.value })))} className={`${control} w-full sm:w-36`} />
+                </>
+              )}
+              <select aria-label="Area" value={area} onChange={e => change(() => setArea(e.target.value))} className={`${control} w-full sm:w-auto`}>
+                <option value="">All areas</option>
+                {(data?.areas ?? []).map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+              <select aria-label="Status" value={status} onChange={e => change(() => setStatus(e.target.value))} className={`${control} w-full sm:w-auto`}>
+                <option value="">All statuses</option>
+                {['Success', 'Warning', 'Failed'].map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              {role === 'admin' && (
+                <select aria-label="Role" value={roleFilter} onChange={e => change(() => setRoleFilter(e.target.value))} className={`${control} w-full sm:w-auto`}>
+                  {ROLE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              )}
+              {role === 'faculty' && (
+                <select aria-label="Class" value={cls} onChange={e => change(() => setCls(e.target.value))} className={`${control} w-full sm:w-48`}>
+                  <option value="">All classes</option>
+                  {classes.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+              )}
+              <button type="button" aria-pressed={signins} onClick={() => change(() => setSignins(value => !value))}
+                className={`flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold sm:w-auto ${signins ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300' : 'border-slate-200 text-slate-600 dark:border-slate-800 dark:text-slate-300'}`}>
+                Sign-ins
+              </button>
+              {filtersActive && <button type="button" onClick={clearFilters} className="flex min-h-[44px] items-center justify-center gap-1 px-2 text-xs font-bold underline hover:opacity-80">Clear filters</button>}
+            </div>
+          )}
         </CardContent>
       </Card>
 

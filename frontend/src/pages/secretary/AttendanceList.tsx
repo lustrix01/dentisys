@@ -1064,7 +1064,7 @@ export const AttendanceList: React.FC = () => {
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700">
                   <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Worksheet Date:</span>
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Attendance date:</span>
                   <input
                     type="date"
                     value={date}

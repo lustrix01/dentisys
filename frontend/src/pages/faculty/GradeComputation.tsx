@@ -5141,9 +5141,9 @@ export const GradeComputation: React.FC = () => {
                 type="button"
                 onClick={() => setIsRecomputeConfirmOpen(true)}
                 disabled={isRecomputing || !selectedClassId}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
+                className="flex items-center gap-1.5 rounded-xl bg-clinical-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-clinical-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinical-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Zap className={`w-3.5 h-3.5 ${isRecomputing ? 'animate-spin' : 'text-amber-400'}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${isRecomputing ? 'animate-spin' : ''}`} />
                 <span>{isRecomputing ? 'Recomputing...' : 'Recompute Grades'}</span>
               </button>}
 

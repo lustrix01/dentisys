@@ -817,7 +817,7 @@ export const RetentionMonitoring: React.FC = () => {
                 : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
           >
-            <span>Watchlist</span>
+            <span>Retention Status</span>
             <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
               activeTab === 'watchlist' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
             }`}>
@@ -929,7 +929,7 @@ export const RetentionMonitoring: React.FC = () => {
         <p className="font-bold">Showing {visibleStudentCount} student{visibleStudentCount === 1 ? '' : 's'} across {filteredRecords.length} course enrollment{filteredRecords.length === 1 ? '' : 's'} · {selectedSchoolYear === 'all' ? 'All school years' : `S.Y. ${selectedSchoolYear}`}</p>
         <p className="mt-1">{currentAttentionStudents} student{currentAttentionStudents === 1 ? ' needs' : 's need'} attention in the current school year ({currentSchoolYear || 'unavailable'}). Course enrollments and pending exams are counted separately in the tabs.</p>
         {currentAttentionStudents > 0 && <button type="button" onClick={() => { setSelectedSchoolYear(currentSchoolYear); setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); setActiveTab('watchlist'); }} className="mt-2 font-bold text-emerald-700 dark:text-emerald-400">View current-year students needing attention</button>}
-        {activeTab === 'midterm' && <p className="mt-1">Current retention alerts appear in Retention Watchlist. Midterm Watchlist shows students whose fully graded midterm is 2.5 or worse.</p>}
+        {activeTab === 'midterm' && <p className="mt-1">Current retention alerts appear in Retention Status. Midterm Watchlist shows students whose fully graded midterm is 2.5 or worse.</p>}
         {(selectedClassId !== 'all' || selectedSubjectCode !== 'all' || searchQuery.trim() !== '') && <button type="button" onClick={() => { setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); }} className="mt-2 font-bold text-emerald-700 dark:text-emerald-400">Clear course, section and search filters</button>}
       </div>}
 
@@ -941,7 +941,7 @@ export const RetentionMonitoring: React.FC = () => {
                 Midterm Watchlist
               </h2>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                Students whose midterm is fully graded and whose weighted midterm grade is 2.5 or worse (84% or below on the BUCDM table). Students with a final course grade move to Retention Watchlist.
+                Students whose midterm is fully graded and whose weighted midterm grade is 2.5 or worse (84% or below on the BUCDM table). Students with a final course grade move to Retention Status.
               </p>
             </div>
 
@@ -1035,14 +1035,14 @@ export const RetentionMonitoring: React.FC = () => {
               )}
             </div>
           )}
-          <p className="text-[11px] text-slate-500">Midterm scores provide an early review. Final retention decisions remain in Retention Watchlist.</p>
+          <p className="text-[11px] text-slate-500">Midterm scores provide an early review. Final retention decisions appear in Retention Status.</p>
         </Card>
       )}
 
       {activeTab === 'watchlist' && (
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Retention Watchlist ({watchlistRecords.length})</h2><p className="text-xs text-slate-500 dark:text-slate-400">Final grades and computed retention status. Select a status to view policy progression.</p></div>
+            <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Retention Status ({watchlistRecords.length})</h2><p className="text-xs text-slate-500 dark:text-slate-400">Final grades and computed retention status. Select a status to view policy progression.</p></div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">

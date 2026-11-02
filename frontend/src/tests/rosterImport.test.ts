@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { catalogUnitsNote, compareRosterHeader, findClassMatchingHeader, newClassBlockers, parseCSVText, parsePDFRoster, parseScheduleLines, termForHeader, parsePDFRosterPages, splitFullName, validateRosterStudents, type RosterPDFPage } from '../utils/rosterImportHelper.ts';
+import { catalogUnitsNote, compareRosterHeader, findClassMatchingHeader, newClassBlockers, parseCSVText, parsePDFRoster, parseScheduleLines, termForHeader, parsePDFRosterPages, splitFullName, nameSplitIsAmbiguous, validateRosterStudents, type RosterPDFPage } from '../utils/rosterImportHelper.ts';
 
 const domains = ['bicol-u.edu.ph', 'example.edu'];
 
@@ -320,4 +320,9 @@ test('Last, First Middle splits the last given token (with surname particles) in
   assert.deepEqual(split('Cruz, Juan Jr.'), ['Cruz', 'Juan', '', 'Jr.']);
   assert.deepEqual(split('Reyes, Ana Maria'), ['Reyes', 'Ana', 'Maria', '']);
   assert.deepEqual(split('Ana Maria Reyes'), ['', 'Ana Maria Reyes', '', '']);
+});
+
+test('nameSplitIsAmbiguous flags only splits that could go more than one way', () => {
+  for (const plain of ['Reyes, Juan Santos', 'Tan, Mark', 'Reyes, Ana Maria']) assert.equal(nameSplitIsAmbiguous(plain), false, plain);
+  for (const risky of ['Lim, Ana Maria Teresa', 'Cruz, Maria Clara Dela Rosa', 'Garcia, Jose Mari Jr.', 'Juan Santos Reyes']) assert.equal(nameSplitIsAmbiguous(risky), true, risky);
 });

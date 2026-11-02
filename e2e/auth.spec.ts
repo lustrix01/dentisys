@@ -256,7 +256,7 @@ test.describe('Auth Module E2E Tests', () => {
     // The reset link is delivered by email only, never shown on the page.
     await expect(page.locator('body')).not.toContainText(/Development Mode Reset Link/i);
     await expect(page.locator('a', { hasText: /Reset Password Now/i })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /Resend email in \d+s/ })).toBeDisabled();
+    await expect(page.getByRole('button', { name: /Resend in \d+s/ })).toBeDisabled();
   });
 
   test('forgot password flow hides development reset link when reset_link is null', async ({ page }) => {
