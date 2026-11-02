@@ -847,6 +847,8 @@ Owner decision (2026-10-09): For the DEL-001 VPS demonstration deployment only, 
 
 Owner decision (2026-10-17): The production deployment is used only by the DentiSys team until BIO-002 is complete. Real biometrics stay off by default there and MAY be enabled manually with `BIOMETRIC_SIDECAR_ENABLED=true`; only team members enroll.
 
+Owner decision (2026-11-02): Production is a public test deployment. Accounts come only by invitation from the Dean or Faculty, with an email on the allowed domain list. Invited Students and Faculty may test DentiSys there, but it is not used for real attendance, grades or retention decisions, and the site and the face-enrollment consent say so. Real biometrics are on by default in production, with the existing BIO-002 consent, revocation and manual alternative. This stands in for the BIO-002 institutional review for this test deployment only; real institutional use still requires BIO-002. This supersedes the 2026-10-17 production decision.
+
 ## BIO-009 — Audit, information minimization, and accepted limits
 
 **Status: APPROVED**
@@ -982,6 +984,8 @@ Students see scheduled and open attendance sessions for their own active class e
 Owner decision (2026-10-09): A demonstration deployment on one cloud VPS is approved for testing by the DentiSys team and invited volunteer Faculty and Students. It is not a production deployment and not the BIO-002 real Student deployment.
 
 Owner decision (2026-10-14): Two VPS environments. **Demo** (this DEL-001 deployment): Claude builds and pushes `:demo` images through a dedicated GitHub bot account that can write only the demo image packages, and may operate the demo VPS, including a loopback-only test entrance reached by SSH tunnel. **Production**: a separate VPS set up with the same scripts and hardening, running separate image packages (`dentisys-*-prod`, tag `:prod`). Production images are never rebuilt: after the Owner and Claude both approve the demo, the Owner promotes the exact demo images of the approved commit with one script. Claude has no access to the production VPS, its credentials or the `-prod` packages. Production keeps real biometrics disabled until the BIO-002 review and pgAdmin off by default.
+
+Owner decision (2026-11-02): The two environments of 2026-10-14 stay, on any VPS provider (currently Vultr, one account) instead of AWS. Both servers use their automatic `<ip>.sslip.io` address for now; production will move to its own domain later, which needs no amendment. Server requirements, versions, hardening and domains are in docs/hosting-requirements.md. Colleagues work up to pushing their own branch; only the Owner's PC merges, publishes images and operates the demo. All other 2026-10-14 rules are unchanged, including the promotion of exact tested demo images and Claude having no access to production.
 
 Approved infrastructure, and nothing beyond it:
 

@@ -1,6 +1,8 @@
 # VPS demonstration deployment
 
 > For day-to-day releases (demo and production) follow the [release guide](release-guide.md). This file is the detailed reference for the server setup.
+>
+> **Since 2026-11-02** both servers run on Vultr (spec DEL-001), and production is a public test site with real biometrics on by default. This reference was written on AWS: where it says Security Group, Elastic IP, EC2 console or Session Manager, use the provider equivalents in [hosting-requirements.md](hosting-requirements.md), and pass `-InitialUser root` on Vultr. The demonstration rules below still apply to the demo server.
 
 This is the Owner-approved DEL-001 demonstration on one Ubuntu LTS VPS for the
 team and invited volunteer Faculty and Students. It is not production or the

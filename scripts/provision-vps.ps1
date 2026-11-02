@@ -12,7 +12,10 @@ param(
     [switch]$NoDbTunnel,
     [switch]$Production,
     [switch]$NewInstance,
-    [string]$User = 'devops'
+    [string]$User = 'devops',
+    # First login on a fresh server: ubuntu (AWS) or root (Vultr and most other providers).
+    [ValidateSet('ubuntu', 'root')]
+    [string]$InitialUser = 'ubuntu'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -78,7 +81,7 @@ function Show-ProbeFailure {
         throw "If you rebuilt this instance on the same IP, rerun: $newInstanceCommand"
     }
     elseif ($detail -match '(?i)timed out|no route to host|network is unreachable') {
-        Write-Host "SSH $target : connection timed out or unreachable. Check that the instance is running, the IP is correct, and the Security Group/network firewall allows TCP $Port from your IP."
+        Write-Host "SSH $target : connection timed out or unreachable. Check that the server is running, the IP is correct, and the cloud firewall (AWS Security Group / Vultr Firewall Group) and network allow TCP $Port from your IP."
     }
     elseif ($detail -match '(?i)connection refused') {
         Write-Host "SSH $target : connection refused. The host is reachable but nothing accepts SSH on TCP $Port; check the SSH listener and port."
@@ -110,8 +113,8 @@ function Reset-InstanceHostKeys {
         Write-Host "New SSH host key fingerprints for ${Ip}:$port :"
         Write-Host $fingerprints.Output.Trim()
     }
-    if (-not $scanned) { throw 'No replacement host key was obtained. Check the instance, IP and Security Group; known_hosts was left unchanged.' }
-    Write-Host 'Compare these fingerprints with the EC2 console: Actions > Monitor and troubleshoot > Get system log > BEGIN SSH HOST KEY FINGERPRINTS.'
+    if (-not $scanned) { throw 'No replacement host key was obtained. Check the server, IP and cloud firewall; known_hosts was left unchanged.' }
+    Write-Host 'Compare these fingerprints with the provider console (EC2: Actions > Monitor and troubleshoot > Get system log > BEGIN SSH HOST KEY FINGERPRINTS; Vultr: View Console, run: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub).'
     Write-Host 'Cancel if they do not match. -NewInstance removes the old entries; the next connection accepts the newly presented key.'
     Invoke-Native 'ssh-keygen' @('-R', $Ip)
     Invoke-Native 'ssh-keygen' @('-R', "[$Ip]:$SshPort")
@@ -157,6 +160,7 @@ try {
     foreach ($command in 'git', 'ssh', 'scp') { Get-Command $command -ErrorAction Stop | Out-Null }
     $keyArgs = @('-i', $identity, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=10')
     $newInstanceCommand = ".\scripts\provision-vps.ps1 -Ip $Ip -KeyFile '" + $identity.Replace("'", "''") + "'"
+    if ($InitialUser -ne 'ubuntu') { $newInstanceCommand += " -InitialUser $InitialUser" }
     if ($Domain) { $newInstanceCommand += " -Domain '$Domain'" }
     if ($SshPort -ne 2202) { $newInstanceCommand += " -SshPort $SshPort" }
     if ($Production) { $newInstanceCommand += ' -Production' }
@@ -166,9 +170,9 @@ try {
     if ($NewInstance) { Reset-InstanceHostKeys }
     # Probes never prompt. Changed host keys stop with a rebuild command.
     $probeCommand = 'id -un; if [ -f /opt/dentisys/.env ]; then echo ENV_EXISTS; grep -E ''^(APP_DOMAIN|GHCR_USERNAME)='' /opt/dentisys/.env; fi; if [ -d /opt/dentisys ]; then echo DEPLOY_OWNER=$(stat -c %U /opt/dentisys); fi; grep -E ''^AllowUsers[[:space:]]'' /etc/ssh/sshd_config.d/99-hardening.conf 2>/dev/null; true'
-    $probeResult = Invoke-SshProbe 'ubuntu' 22
+    $probeResult = Invoke-SshProbe $InitialUser 22
     $fresh = $probeResult.ExitCode -eq 0
-    $loginUser = 'ubuntu'
+    $loginUser = $InitialUser
     $loginPort = 22
     if (-not $fresh) {
         $probeResult = Invoke-SshProbe $User $SshPort
@@ -186,7 +190,7 @@ try {
     }
     $otherUsers = @($existingUsers | Where-Object { $_ -cne $User } | Sort-Object -Unique)
     if ($otherUsers.Count -gt 0) { throw "This server is already set up for sudo account '$($otherUsers -join ', ')', not '$User'. Rerun with -User $($otherUsers[0]); nothing was uploaded or changed." }
-    if ($fresh) { Write-Host 'Mode: fresh server (ubuntu on 22).' }
+    if ($fresh) { Write-Host "Mode: fresh server ($InitialUser on 22)." }
     else { Write-Host "Mode: already hardened server ($User on $SshPort)." }
     if (-not $fresh -and -not $envExists) { Write-Host 'Resuming setup: server .env is missing; collect the fresh environment answers now.' }
 
@@ -252,6 +256,8 @@ try {
         SG_CONFIRMED = 'true'
     }
     if ($Production) { $answers.IMAGE_SET = 'prod' }
+    # Only a fresh server is reached as the first-login user; reruns connect as the sudo account.
+    if ($fresh -and $InitialUser -eq 'root') { $answers.INITIAL_USER = 'root' }
     $password = Read-Secret "$User sudo password"
     $passwordAgain = $null
     if ($fresh) {
@@ -291,11 +297,6 @@ try {
         if ($answers.FIRST_DEAN_EMAIL -notmatch '^[^@\s]+@([^@\s]+)$' -or $Matches[1].ToLowerInvariant() -notin $allowed) { throw 'First Dean email must use an allowed domain.' }
         $answers.GOOGLE_CLIENT_ID = Read-Answer 'GOOGLE_CLIENT_ID' $defaults['GOOGLE_CLIENT_ID'] -Optional
         foreach ($name in 'STUDENT_AUTH_ENABLED', 'BIOMETRIC_SIDECAR_ENABLED') {
-            if ($Production -and $name -eq 'BIOMETRIC_SIDECAR_ENABLED') {
-                $answers[$name] = 'false'
-                Write-Host 'BIOMETRIC_SIDECAR_ENABLED=false: real biometrics stay off in production until the BIO-002 review (spec).'
-                continue
-            }
             $answers[$name] = (Read-Answer $name 'true').ToLowerInvariant()
             if ($answers[$name] -notin @('true', 'false')) { throw "$name must be true or false." }
         }
@@ -312,20 +313,20 @@ try {
     }
 
     Write-Host "`n=== Confirm provisioning ==="
-    if ($Production) { Write-Host 'Environment: PRODUCTION (images ghcr.io/<namespace>/dentisys-*-prod:prod; pgAdmin off; biometrics off; no database tunnel).' }
+    if ($Production) { Write-Host 'Environment: PRODUCTION (images ghcr.io/<namespace>/dentisys-*-prod:prod; pgAdmin off; real biometrics on by default (BIOMETRIC_SIDECAR_ENABLED prompt); no database tunnel).' }
     else { Write-Host 'Environment: demo (images ghcr.io/<namespace>/dentisys-*:demo).' }
     Write-Host "Server: $Ip; SSH: $loginUser on $loginPort -> $User on $SshPort; site: https://$siteDomain"
     Write-Host "Loopback database/Mailpit tunnels: $(-not $NoDbTunnel); existing server .env retained: $envExists"
     Write-Host "$User password: ********; GHCR token: ********"
     foreach ($entry in $answers.GetEnumerator()) {
         if ($entry.Value -is [Security.SecureString]) { if ($entry.Key -ne 'GHCR_TOKEN') { Write-Host "$($entry.Key): ********" }; continue }
-        if ($entry.Key -notin @('MODE', 'SUDO_USER_NAME', 'IP', 'DOMAIN', 'SSH_PORT', 'NO_DB_TUNNEL', 'SG_CONFIRMED', 'IMAGE_SET')) { Write-Host "$($entry.Key): $($entry.Value)" }
+        if ($entry.Key -notin @('MODE', 'SUDO_USER_NAME', 'IP', 'DOMAIN', 'SSH_PORT', 'NO_DB_TUNNEL', 'SG_CONFIRMED', 'IMAGE_SET', 'INITIAL_USER')) { Write-Host "$($entry.Key): $($entry.Value)" }
     }
     $imageNote = 'images :demo already published'
     if ($Production) { $imageNote = 'images :prod already promoted with promote-prod.ps1' }
-    Write-Host "AWS checklist: TCP $SshPort from your IP and 80/443 open; hostname resolves to the Elastic IP; $imageNote."
-    Write-Host 'Have Session Manager or configured Instance Connect recovery ready. This command changes only the VPS.'
-    $confirmation = Read-Host 'Press Enter to confirm the AWS checklist and start (anything else cancels)'
+    Write-Host "Cloud firewall checklist (AWS Security Group / Vultr Firewall Group, if you use one): TCP $SshPort from your IP and 80/443 open; hostname resolves to the fixed public IP (AWS Elastic IP; a Vultr server keeps its IP); $imageNote."
+    Write-Host "Have the provider's web console ready for recovery (Vultr View Console, AWS Session Manager / EC2 Instance Connect). This command changes only the VPS."
+    $confirmation = Read-Host 'Press Enter to confirm the cloud firewall checklist and start (anything else cancels)'
     if ($confirmation -ne '') { throw 'Cancelled before upload or server changes.' }
 
     # The only local staging is the clean-HEAD, non-secret bundle and models.
@@ -426,7 +427,7 @@ try {
         Write-Host 'Server log: /var/log/dentisys-provision.log (root only).'
         Write-Host "Read it: ssh -i $quotedKey -o IdentitiesOnly=yes -t -p $SshPort ${User}@$Ip 'sudo tail -n 80 /var/log/dentisys-provision.log'"
         if ($ShowUbuntuLog) {
-            Write-Host "If SSH has not switched yet: ssh -i $quotedKey -o IdentitiesOnly=yes -t -p 22 ubuntu@$Ip 'sudo tail -n 80 /var/log/dentisys-provision.log'"
+            Write-Host "If SSH has not switched yet: ssh -i $quotedKey -o IdentitiesOnly=yes -t -p 22 ${InitialUser}@$Ip 'sudo tail -n 80 /var/log/dentisys-provision.log'"
         }
         $reason = "Server provisioning failed (exit $($Session.ExitCode))."
         if ($Session.InputFailed) { $reason += ' SSH stdin transmission did not complete.' }
@@ -454,7 +455,7 @@ try {
             else { Write-Host "  $stamp SSH down; waiting for the server to come back." }
         }
         if (-not $back) {
-            throw "The server did not come back on SSH ${User}@${Ip}:$SshPort within 5 minutes after the reboot. Check the instance in the EC2 console (status checks, system log), then rerun this command to verify."
+            throw "The server did not come back on SSH ${User}@${Ip}:$SshPort within 5 minutes after the reboot. Check the server in the provider console (EC2 status checks/system log, Vultr View Console), then rerun this command to verify."
         }
         Write-Host 'SSH is back after the reboot. Waiting 30 s before reconnecting (ufw rate-limits new SSH connections).'
         Start-Sleep -Seconds 30
@@ -470,9 +471,9 @@ try {
         $health = Invoke-RestMethod -Uri "https://$siteDomain/api/health" -TimeoutSec 20
         if ($health.status -ne 'ok') { throw 'Unhealthy API.' }
     }
-    catch { throw 'FAIL: public HTTPS/API health from the PC; check DNS, certificate and Security Group access.' }
+    catch { throw 'FAIL: public HTTPS/API health from the PC; check DNS, certificate and cloud firewall access.' }
     Write-Host 'PASS: public HTTPS and API health from the PC.'
-    if ($fresh) { Write-Host 'Manual: remove TCP 22 from the AWS Security Group after checking the new login.' }
+    if ($fresh) { Write-Host 'Manual: if a cloud firewall allows TCP 22 (AWS Security Group / Vultr Firewall Group), remove it after checking the new login.' }
     $quotedKey = "'" + $identity.Replace("'", "''") + "'"
     Write-Host "Login: ssh -i $quotedKey -o IdentitiesOnly=yes -p $SshPort ${User}@$Ip"
     Write-Host "Site: https://$siteDomain"

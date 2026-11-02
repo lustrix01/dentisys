@@ -2,12 +2,13 @@
 set +x
 set -euo pipefail
 
-# Owner's Ubuntu 26.04 guide, steps 1-6; AWS keys replace ssh-copy-id.
+# Owner's Ubuntu 26.04 guide, steps 1-6; the key added at server creation replaces ssh-copy-id.
 no_db_tunnel=false
 non_interactive=false
 sg_confirmed=false
 password_stdin=false
 check_only=false
+initial_user=''
 ssh_port=2202
 admin_user=devops
 fail() { echo "ERROR: $*" >&2; exit 1; }
@@ -18,10 +19,11 @@ while [[ $# -gt 0 ]]; do
     --password-stdin) password_stdin=true; shift ;;
     --check-only) check_only=true; shift ;;
     --ssh-port) [[ $# -ge 2 && "$2" =~ ^[0-9]+$ ]] || fail "--ssh-port needs a port."; ssh_port="$2"; shift 2 ;;
+    --initial-user) [[ $# -ge 2 && "$2" == root ]] || fail "--initial-user only accepts root (Vultr-style first login); omit it for ubuntu."; initial_user=root; shift 2 ;;
     --user) [[ $# -ge 2 ]] || fail "--user needs a username."; admin_user="$2"; shift 2 ;;
     --no-db-tunnel) no_db_tunnel=true; shift ;;
     --help|-h)
-      echo 'Usage: sudo bash harden-vps.sh [--user devops] [--ssh-port 2202] [--no-db-tunnel] [--non-interactive --sg-confirmed --password-stdin]'
+      echo 'Usage: sudo bash harden-vps.sh [--user devops] [--ssh-port 2202] [--initial-user root] [--no-db-tunnel] [--non-interactive --sg-confirmed --password-stdin]'
       exit 0
       ;;
     *) fail "Unknown argument: $1" ;;
@@ -32,13 +34,19 @@ done
 admin_home="/home/$admin_user"
 [[ "$EUID" -eq 0 ]] || fail 'Run this script with sudo.'
 invoking_user="${SUDO_USER:-}"
-[[ "$invoking_user" =~ ^[a-z_][a-z0-9_-]{0,31}$ && "$invoking_user" != root ]] || fail 'Run sudo from the SSH login user; direct root invocation is refused.'
-[[ "$(id -u "$invoking_user")" -ne 0 ]] || fail 'The invoking account must not be root.'
+if [[ "$initial_user" == root ]]; then
+  # Providers such as Vultr give root the key chosen at server creation; run from that root login.
+  [[ -z "$invoking_user" || "$invoking_user" == root ]] || fail '--initial-user root must run from the root login, not from another account.'
+  invoking_user=root
+else
+  [[ "$invoking_user" =~ ^[a-z_][a-z0-9_-]{0,31}$ && "$invoking_user" != root ]] || fail 'Run sudo from the SSH login user; direct root invocation is refused (use --initial-user root for a root first login).'
+  [[ "$(id -u "$invoking_user")" -ne 0 ]] || fail 'The invoking account must not be root.'
+fi
 . /etc/os-release
 [[ "${ID:-}" == ubuntu && "${VERSION_ID:-}" == 26.04 ]] || fail 'This script supports fresh Ubuntu 26.04 LTS hosts only.'
 export PATH="/usr/sbin:/sbin:$PATH"
 if [[ "$non_interactive" == false && "$check_only" == false ]]; then
-  [[ -t 0 ]] || fail 'A TTY is required for passwd and the Security Group confirmation. Reconnect with ssh -t.'
+  [[ -t 0 ]] || fail 'A TTY is required for passwd and the cloud firewall confirmation. Reconnect with ssh -t.'
 elif [[ "$check_only" == false ]]; then
   [[ "$sg_confirmed" == true && "$password_stdin" == true ]] || fail 'Non-interactive hardening requires --sg-confirmed and --password-stdin.'
 fi
@@ -140,9 +148,14 @@ EOF
   fi
 }
 
-# Read and check the invoking user's AWS keys, never root's authorized_keys.
+# Read and check the invoking user's keys. Root's keys only with --initial-user root;
+# validate_keys still refuses command= keys (the AWS root login trap).
 invoking_home="$(getent passwd "$invoking_user" | cut -d: -f6)"
-[[ "$invoking_home" == /* && "$invoking_home" != /root && "$invoking_home" != /root/* ]] || fail 'Refusing to read SSH keys from a root home directory.'
+if [[ "$initial_user" == root ]]; then
+  [[ "$invoking_home" == /root ]] || fail 'Unexpected root home directory.'
+else
+  [[ "$invoking_home" == /* && "$invoking_home" != /root && "$invoking_home" != /root/* ]] || fail 'Refusing to read SSH keys from a root home directory.'
+fi
 source_keys="$invoking_home/.ssh/authorized_keys"
 [[ -s "$source_keys" ]] || fail "No authorized_keys found for the invoking user: $source_keys"
 tr -d '\r' < "$source_keys" > "$work_dir/authorized_keys"
@@ -211,12 +224,12 @@ else
   echo "$admin_user already has a usable password; it will be retained."
 fi
 unset password
-echo 'Keep this session open. Have an AWS recovery route ready (Session Manager, or configured EC2 Instance Connect).'
+echo "Keep this session open. Have a recovery route ready: the provider's web console (Vultr View Console, AWS Session Manager / EC2 Instance Connect)."
 if [[ "$sg_confirmed" == false ]]; then
-  read -r -p "Does the AWS Security Group already allow TCP $ssh_port from your IP and TCP 80/443 for the web server? Type yes to continue: " security_group_ready
-  [[ "$security_group_ready" == yes ]] || fail 'Security Group confirmation declined. No live host settings were changed.'
+  read -r -p "Does any cloud firewall (AWS Security Group / Vultr Firewall Group) already allow TCP $ssh_port from your IP and TCP 80/443 for the web server? Type yes to continue: " security_group_ready
+  [[ "$security_group_ready" == yes ]] || fail 'Cloud firewall confirmation declined. No live host settings were changed.'
 else
-  echo 'Security Group readiness was confirmed at the launcher summary.'
+  echo 'Cloud firewall readiness was confirmed at the launcher summary.'
 fi
 exec </dev/null
 export DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=none NEEDRESTART_MODE=a
@@ -233,7 +246,7 @@ APT::Periodic::Unattended-Upgrade "1";
 EOF
 chmod 644 /etc/apt/apt.conf.d/20auto-upgrades
 
-# Step 2: create the sudo account and copy the invoking user's AWS public keys.
+# Step 2: create the sudo account and copy the invoking user's public keys.
 if ! id "$admin_user" >/dev/null 2>&1; then
   adduser --disabled-password --gecos "" "$admin_user"
 fi
@@ -281,7 +294,7 @@ if ! sshd -t || ! systemctl stop ssh.socket || ! systemctl disable ssh.socket ||
       systemctl restart ssh.service || echo 'WARNING: Could not restart SSH with the previous configuration.' >&2
     fi
   fi
-  fail 'SSH switch failed; restored the previous drop-in. Keep this session open and use AWS EC2 Instance Connect / Session Manager if recovery is needed.'
+  fail 'SSH switch failed; restored the previous drop-in. Keep this session open and use the provider web console (Vultr View Console, AWS EC2 Instance Connect / Session Manager) if recovery is needed.'
 fi
 
 # Step 4: firewall policies and only the guide's SSH/HTTP/HTTPS rules.
@@ -291,6 +304,13 @@ ufw default allow outgoing
 ufw limit "$ssh_port/tcp" comment "SSH"
 ufw allow 80/tcp comment "HTTP"
 ufw allow 443/tcp comment "HTTPS"
+# Some provider images (e.g. Vultr) ship with 22 allowed; SSH now listens only on $ssh_port. The open session survives (established traffic stays allowed).
+if [[ "$ssh_port" != 22 ]]; then
+  for rule in 22/tcp 22 OpenSSH; do
+    ufw --force delete allow "$rule" >/dev/null 2>&1 || true
+    ufw --force delete limit "$rule" >/dev/null 2>&1 || true
+  done
+fi
 ufw --force enable
 ufw status verbose
 
@@ -350,10 +370,10 @@ else
 cat <<EOF
 Hardening complete. Keep this session open until the second login succeeds.
 In a SECOND window, test: ssh -i <key> -p $ssh_port $admin_user@<ip>
-Use the same AWS .pem and public IP/hostname as your original login.
-After a successful login, remove TCP 22 from the AWS Security Group, then continue with the bundle/deploy steps.
-Recovery: AWS EC2 -> instance -> Connect -> Session Manager (requires configured SSM Agent/IAM).
-EC2 Instance Connect is another route when configured for $admin_user on $ssh_port with network access; the default port-22 browser connection cannot reach the hardened SSH listener.
+Use the same SSH key and public IP/hostname as your original login.
+After a successful login, if a cloud firewall allows TCP 22 (AWS Security Group / Vultr Firewall Group), remove that rule, then continue with the bundle/deploy steps.
+Recovery: the provider's web console (Vultr View Console; AWS EC2 -> Connect -> Session Manager, which requires a configured SSM Agent/IAM).
+EC2 Instance Connect is another AWS route when configured for $admin_user on $ssh_port with network access; a default port-22 browser connection cannot reach the hardened SSH listener.
 EOF
 fi
 if [[ -f /var/run/reboot-required ]]; then

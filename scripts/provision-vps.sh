@@ -49,7 +49,7 @@ declare -A input=()
 while IFS= read -r -d '' key; do
   [[ "$key" != END ]] || break
   case "$key" in
-    MODE|SUDO_USER_NAME|IP|DOMAIN|SSH_PORT|NO_DB_TUNNEL|SG_CONFIRMED|GHCR_USERNAME|GHCR_TOKEN|SMTP_USER|SMTP_PASS|TRAEFIK_ACME_EMAIL|FIRST_DEAN_FIRST_NAME|FIRST_DEAN_LAST_NAME|FIRST_DEAN_EMAIL|PGADMIN_DEFAULT_EMAIL|PGADMIN_DEFAULT_PASSWORD|PGADMIN_ENABLED|IMAGE_SET|ALLOWED_EMAIL_DOMAINS|GOOGLE_CLIENT_ID|STUDENT_AUTH_ENABLED|BIOMETRIC_SIDECAR_ENABLED|BIOMETRIC_YUNET_SCORE_THRESHOLD|BIOMETRIC_MIN_FACE_PX|BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE|BIOMETRIC_SFACE_COSINE_THRESHOLD|BIOMETRIC_MATCH_COUNT|BIOMETRIC_BLINK_THRESHOLD|BIOMETRIC_HEAD_TURN_RATIO|BIOMETRIC_CHALLENGE_TTL_SECONDS) ;;
+    MODE|SUDO_USER_NAME|INITIAL_USER|IP|DOMAIN|SSH_PORT|NO_DB_TUNNEL|SG_CONFIRMED|GHCR_USERNAME|GHCR_TOKEN|SMTP_USER|SMTP_PASS|TRAEFIK_ACME_EMAIL|FIRST_DEAN_FIRST_NAME|FIRST_DEAN_LAST_NAME|FIRST_DEAN_EMAIL|PGADMIN_DEFAULT_EMAIL|PGADMIN_DEFAULT_PASSWORD|PGADMIN_ENABLED|IMAGE_SET|ALLOWED_EMAIL_DOMAINS|GOOGLE_CLIENT_ID|STUDENT_AUTH_ENABLED|BIOMETRIC_SIDECAR_ENABLED|BIOMETRIC_YUNET_SCORE_THRESHOLD|BIOMETRIC_MIN_FACE_PX|BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE|BIOMETRIC_SFACE_COSINE_THRESHOLD|BIOMETRIC_MATCH_COUNT|BIOMETRIC_BLINK_THRESHOLD|BIOMETRIC_HEAD_TURN_RATIO|BIOMETRIC_CHALLENGE_TTL_SECONDS) ;;
     *) fail 'Unexpected input field.' ;;
   esac
   [[ ! -v "input[$key]" ]] || fail 'Duplicate input field.'
@@ -74,7 +74,7 @@ fi
 if [[ "$mode" == verify ]]; then
   [[ -f "$env_file" ]] || fail 'Verify-only mode needs the existing server .env.'
 else
-  [[ "${input[SG_CONFIRMED]:-}" == true ]] || fail 'Confirm the AWS checklist before provisioning.'
+  [[ "${input[SG_CONFIRMED]:-}" == true ]] || fail 'Confirm the cloud firewall checklist before provisioning.'
   [[ "${input[NO_DB_TUNNEL]:-}" == true || "${input[NO_DB_TUNNEL]:-}" == false ]] || fail 'Invalid tunnel switch.'
   [[ -n "${input[GHCR_TOKEN]:-}" ]] || fail 'A GHCR read token is required.'
 fi
@@ -104,7 +104,7 @@ fi
 export DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=none NEEDRESTART_MODE=a
 
 # Once SSH accepts only the sudo account, hand the fixed upload paths to that
-# user so its next SCP and extraction can replace the first ubuntu-owned bundle.
+# user so its next SCP and extraction can replace the first (ubuntu- or root-owned) bundle.
 handoff_staging() {
   [[ "$source_dir" == /tmp/dentisys-deploy ]] || return 0
   id "$admin_user" >/dev/null 2>&1 || return 0
@@ -112,7 +112,7 @@ handoff_staging() {
   grep -Fxq "Port $ssh_port" /etc/ssh/sshd_config.d/99-hardening.conf || return 0
   grep -Fxq "AllowUsers $admin_user" /etc/ssh/sshd_config.d/99-hardening.conf || return 0
   chown -R "$admin_user:$(id -gn "$admin_user")" /tmp/dentisys-deploy
-  for upload_file in /tmp/dentisys-deploy.tar.gz /tmp/face_landmarker.task; do
+  for upload_file in /tmp/dentisys-deploy.tar.gz /tmp/face_landmarker.task /tmp/face_detection_yunet_2023mar.onnx /tmp/face_recognition_sface_2021dec.onnx; do
     [[ ! -f "$upload_file" || -L "$upload_file" ]] || chown "$admin_user:$(id -gn "$admin_user")" "$upload_file"
   done
 }
@@ -142,6 +142,8 @@ else
 phase 'A. Host hardening (guide steps 1-6)'
 harden_flags=(--non-interactive --sg-confirmed --ssh-port "$ssh_port" --user "$admin_user")
 [[ "${input[NO_DB_TUNNEL]}" != true ]] || harden_flags+=(--no-db-tunnel)
+[[ "${input[INITIAL_USER]:-ubuntu}" =~ ^(ubuntu|root)$ ]] || fail 'Invalid INITIAL_USER.'
+[[ "${input[INITIAL_USER]:-ubuntu}" != root ]] || harden_flags+=(--initial-user root)
 if bash "$source_dir/scripts/harden-vps.sh" "${harden_flags[@]}" --check-only </dev/null >/dev/null 2>&1; then
   echo "SKIP: hardening drop-in already matches; $admin_user keys and SSH configuration passed pre-checks."
 else

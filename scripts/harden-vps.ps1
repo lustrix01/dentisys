@@ -9,13 +9,16 @@ param(
     [ValidateRange(1, 65535)]
     [int]$Port = 22,
     [switch]$NoDbTunnel,
-    [string]$User = 'devops'
+    [string]$User = 'devops',
+    # First login on a fresh server: ubuntu (AWS) or root (Vultr and most other providers).
+    [ValidateSet('ubuntu', 'root')]
+    [string]$InitialUser = 'ubuntu'
 )
 
 $ErrorActionPreference = 'Stop'
 if ($User -cnotmatch '^[a-z_][a-z0-9_-]{0,31}\z' -or $User -in @('root', 'ubuntu')) { throw 'User must be a lowercase Linux username other than root or ubuntu.' }
 $loginUser, $serverName = $Server.Split('@')
-if ($loginUser -eq 'root') { throw "Connect as ubuntu initially, or as $User on port 2202 when rerunning." }
+if ($loginUser -eq 'root' -and $InitialUser -ne 'root') { throw "Connect as ubuntu initially (or pass -InitialUser root on a provider whose first login is root), or as $User on port 2202 when rerunning." }
 $key = Get-Item -LiteralPath $KeyFile
 if ($key.PSProvider.Name -ne 'FileSystem' -or $key.PSIsContainer) { throw 'KeyFile must be a local private-key file.' }
 $identity = $key.FullName
@@ -69,6 +72,7 @@ $keyArgs = @('-i', $identity, '-o', 'IdentitiesOnly=yes')
 $scpArgs = @('-P', "$Port") + $keyArgs + @($serverScript, "${Server}:$remoteScript")
 Invoke-Native scp $scpArgs
 $flags = " --user $User"
+if ($loginUser -eq 'root') { $flags += ' --initial-user root' }
 if ($NoDbTunnel) { $flags += ' --no-db-tunnel' }
 # The remote shell removes this invocation's upload even if hardening fails.
 $remoteCommand = "trap 'rm -f -- $remoteScript' EXIT; sudo bash $remoteScript$flags"
@@ -78,6 +82,6 @@ $quotedKey = "'" + $identity.Replace("'", "''") + "'"
 Write-Host 'Keep the original SSH session open until the second login succeeds.'
 Write-Host "In a SECOND window: ssh -i $quotedKey -p 2202 ${User}@${serverName}"
 Write-Host 'Add -o IdentitiesOnly=yes if your SSH agent offers other keys.'
-Write-Host 'After the login succeeds, remove TCP 22 from the AWS Security Group.'
+Write-Host 'After the login succeeds, if a cloud firewall allows TCP 22 (AWS Security Group / Vultr Firewall Group), remove that rule.'
 Write-Host "Then follow docs/vps-deployment.md: publish tested images, create/upload the bundle and model as $User on 2202, then run bash scripts/deploy-vps.sh on the server."
-Write-Host "Recovery: AWS EC2 -> instance -> Connect -> Session Manager (configured SSM Agent/IAM), or EC2 Instance Connect configured for $User on 2202. The default port-22 browser connection cannot reach this listener."
+Write-Host "Recovery: the provider's web console (Vultr View Console; AWS EC2 -> Connect -> Session Manager with a configured SSM Agent/IAM, or EC2 Instance Connect configured for $User on 2202). A default port-22 browser connection cannot reach this listener."

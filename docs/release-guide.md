@@ -1,17 +1,17 @@
 # Release guide: from approved change to production
 
 The checklist for shipping a change. It covers who does each step, the exact commands, and what to do when something fails.
-Server setup itself is in [deploy-from-scratch.md](deploy-from-scratch.md). The rules behind this guide are in `spec.md` DEL-001 (Owner decision 2026-10-14).
+Server setup itself is in [deploy-from-scratch.md](deploy-from-scratch.md). The rules behind this guide are in `spec.md` DEL-001 (Owner decisions 2026-10-14 and 2026-11-02). Server requirements are in [hosting-requirements.md](hosting-requirements.md).
 
 ## Where work happens: localhost → demo → production
 
 | Place | Address | Used for |
 |---|---|---|
 | Localhost | `http://localhost:5173` (Docker stack on the PC) | Building new features and changing existing ones. Code changes show up here immediately. |
-| Demo | `https://52-76-136-13.sslip.io` | Testing the finished, pushed version live in the cloud, with fictional data. The Owner and Claude approve it here. |
-| Production | The production `sslip.io` address | Real use with real data. It only receives versions approved on the demo. |
+| Demo | The demo server's `sslip.io` address (in `~\.dentisys\demo.env`) | Testing the finished, pushed version live in the cloud, with fictional data, to catch defects before production. The Owner and Claude approve it here. |
+| Production | The production `sslip.io` address (a real domain later) | A public test site: invited users try DentiSys there, but it is not used for real attendance, grades or retention. It only receives versions approved on the demo. |
 
-Nothing is edited directly on the demo or production. They only receive versions that came through localhost.
+Nothing is edited directly on the demo or production. They only receive versions that came through localhost. Colleagues work up to pushing their own branch; only the Owner's PC merges, publishes images and operates the demo.
 
 ## Who does what
 
@@ -35,8 +35,9 @@ Claude never runs `promote-prod.ps1` and never touches the production server, it
 | 5 | Wait until the demo runs the new version | Claude | `.\scripts\demo-vps.ps1 wait-deploy <sha>`. It waits up to 15 minutes for every container to run that sha and be healthy. |
 | 6 | Test the demo | Claude | `.\scripts\demo-test.ps1` signs in as each role through the tunnel at `http://localhost:15180`, plus any checks specific to the feature. For the grade-rules release, Claude first shows you the list of grades that change (`.\scripts\demo-vps.ps1 recompute-grades preview`, writes nothing), then applies it on the demo (`... recompute-grades apply`). |
 | 7 | Report | Claude → Owner | Pass/fail in chat, ending with the approved sha and the exact command: `.\scripts\promote-prod.ps1 -Sha <sha>`. The change doc is updated only when the Owner asks. |
-| 8 | Approve the demo | Owner, then Claude | Both say "approved". Open the demo yourself: `https://52-76-136-13.sslip.io`. |
+| 8 | Approve the demo | Owner, then Claude | Both say "approved". Open the demo yourself at its address. |
 | 9 | Promote to production | **Owner** | See below. |
+| 10 | Check production | **Owner** | `.\scripts\demo-test.ps1 -Prod`, about 2 minutes. See below. |
 
 ### Step 9: promote to production (Owner)
 
@@ -67,6 +68,20 @@ git checkout lighthal9-responsive
   The last line reads `Production now runs sha-<sha>`.
 - A failure before step 2 leaves production untouched. Fix the cause the message names and rerun.
 
+### Step 10: check production (Owner)
+
+The local demo-test cannot see production, so the Owner runs the same read-only sign-in check against it after each promote:
+
+```powershell
+.\scripts\demo-test.ps1 -Prod
+```
+
+It reads `~\.dentisys\prod-test.env` (yours only: `PROD_BASE_URL` and an email and password for each role's test account), signs in as each role, and checks the audit chain over SSH with your `prod.env` settings. Claude has no access to either file.
+
+### Rolling back
+
+To go back to the previous version, promote the previous approved sha the same way (step 9). Database migrations only ever add, so older code runs on the newer database. Keep the sha of the last good release from Claude's report.
+
 ## Things the Owner renews or keeps safe
 
 | Item | Where | When |
@@ -75,6 +90,26 @@ git checkout lighthal9-responsive
 | `lighthal-dev` read token used by the demo server | Demo VPS: rerun `provision-vps.ps1` with the same `-User` (it asks only for the sudo password and the GHCR token) | Before it expires. Symptom: step 5 fails with "cannot pull". |
 | Owner read token used by the production server | Production VPS: rerun `provision-vps.ps1 -Production` the same way | Before it expires. Symptom: step 9 fails with "cannot pull". |
 | Production SSH key | Has a passphrase; keep it off this PC between releases if you can | Always |
+
+## Emails not arriving
+
+Both servers send through a dedicated Gmail account with 2-Step Verification and an App Password (about 500 emails a day). If invitations stop arriving:
+1. Faculty → **Email Management** shows each email as sent or failed.
+2. Failed: the App Password was revoked, or the Gmail password or 2-Step Verification changed. Create a new App Password, put it in the `SMTP_PASS=` line of `/opt/dentisys/.env` on the server (`sudo nano /opt/dentisys/.env`; a rerun of `provision-vps.ps1` keeps the old value), then restart the stack: `cd /opt/dentisys && sudo docker compose --env-file .env -p dentisys -f docker-compose.web.yml -f docker-compose.database.yml -f docker-compose.vps.yml up -d`. Claude does this on the demo; the Owner on production.
+3. Sent but not received: ask the person to check spam.
+
+## A new release PC
+
+What lives outside Git on this PC, and what to do if the PC is replaced (about an hour):
+
+| Item | Where | On a new PC |
+|---|---|---|
+| Docker login of the bot `lighthal-dev` | Docker Desktop | `docker login ghcr.io -u lighthal-dev` with the publishing token |
+| Demo settings and test passwords | `~\.dentisys\demo.env` | Copy it over, or recreate it as in *Setting up a new server* |
+| Demo SSH key | `~\.ssh\` | Copy it over, or add a new key to the demo server's `devops` account |
+| Production settings, key and test logins | `~\.dentisys\prod.env`, `prod-test.env`, the production key | Owner only: keep them backed up somewhere safe |
+
+Then install Docker Desktop, Node.js and Git, clone the repository, and run `npm ci` in the repository and in `frontend/`.
 
 ## Setting up a new server
 
