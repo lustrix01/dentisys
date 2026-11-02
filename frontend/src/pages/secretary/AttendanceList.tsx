@@ -792,7 +792,7 @@ export const AttendanceList: React.FC = () => {
               {/* Term Selector */}
               {currentSchoolYear && (
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">School year</span>
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">S.Y.:</span>
                   <div className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 shadow-xs">
                     {currentSchoolYear} (Current)
                   </div>

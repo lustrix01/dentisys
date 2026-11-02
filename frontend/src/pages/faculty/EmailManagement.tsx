@@ -465,23 +465,22 @@ export const EmailManagement: React.FC = () => {
           </div>
 
           {/* School Year Selector Filter Dropdown */}
-          <label className="w-full xl:w-80 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+          <div className="w-full xl:w-56 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
             <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
-            <span className="shrink-0 text-xs font-semibold text-slate-500 dark:text-slate-400">School year</span>
             <select
               value={selectedSchoolYear}
               onChange={(e) => setSelectedSchoolYear(e.target.value)}
               aria-label="School year"
               className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
+              <option value="all">All School Years</option>
               {availableSchoolYears.map(sy => (
                 <option key={sy} value={sy}>
-                  {sy === currentSchoolYear ? `Current (${sy})` : sy}
+                  S.Y. {sy}{sy === currentSchoolYear ? ' (Current)' : ''}
                 </option>
               ))}
-              <option value="all">All school years</option>
             </select>
-          </label>
+          </div>
 
           {/* Search Bar */}
           <div className="relative w-full xl:w-56">

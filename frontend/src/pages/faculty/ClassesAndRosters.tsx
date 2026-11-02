@@ -1671,21 +1671,20 @@ const handleSendAllStudentInvites = async () => {
             {/* School Year Selector Filter Pill (Archived Classes tab only) */}
             {activeTab === 'archived' && (
               <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
-                <label className="flex items-center gap-2 flex-1 min-w-0">
-                  <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
-                  <span className="shrink-0 text-xs font-semibold text-slate-500 dark:text-slate-400">School year</span>
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <select
                     value={archivedSchoolYear}
                     onChange={(e) => setArchivedSchoolYear(e.target.value)}
                     aria-label="School year"
                     className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer w-full truncate pr-1"
                   >
+                    <option value="all">All School Years</option>
                     {availableSchoolYears.map(sy => (
-                      <option key={sy} value={sy}>{sy === newSchoolYear ? `Current (${sy})` : sy}</option>
+                      <option key={sy} value={sy}>S.Y. {sy}</option>
                     ))}
-                    <option value="all">All school years</option>
                   </select>
-                </label>
+                </div>
               </div>
             )}
 

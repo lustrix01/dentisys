@@ -1022,7 +1022,7 @@ export const AttendanceMonitoring: React.FC = () => {
 
           {/* School Year / Term Selector */}
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">School year</span>
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">S.Y.:</span>
             <select
               aria-label="Attendance school year"
               value={selectedSchoolYear}
