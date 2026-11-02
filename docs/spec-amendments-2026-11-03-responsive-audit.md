@@ -1,6 +1,8 @@
-# Proposed specification amendment: responsive audit
+# Approved specification amendment: responsive audit
 
-**Status: PROPOSED, awaiting Owner approval of the exact text below. Not yet applied to `spec.md`.**
+**Status: APPROVED and applied to `spec.md` (amendments 1–4).**
+
+Owner approval: 2026-11-03, "Approved spec amendment".
 
 The Owner approved the responsive-audit changes on branch `lighthal9-responsive-audit` after a Before/After demo (2026-11-03). Three of them change behaviour that `spec.md` states as Owner decisions, so under AGENTS.md they must be recorded there before merge. Each amendment below is a new dated paragraph inserted directly after the decision it narrows; the earlier paragraph stays as history, as `spec.md` already does elsewhere.
 
@@ -33,7 +35,3 @@ None of these contradicts `spec.md`. Recording them keeps later work from undoin
 > Owner decision (2026-11-03): Interface wording: buttons that start an attendance session say "Start session" (a future date says "Schedule session") and the session list is "Sessions", on Faculty and Secretary pages alike; a class with no grade yet shows the state "No grade yet" in a neutral grey pill, while a missing grade value reads "Pending"; school-year filters use "S.Y."; sign-in and password-reset forms label the field "University email"; the roll-call filter for rows without attendance reads "Not recorded" on both roll calls.
 
 The UI-001 sentence that names "Start Attendance Session" (currently line 1166) describes the feature, not a button label, and needs no change.
-
-## After approval
-
-Apply amendments 1–3 (and 4 if chosen) to `spec.md` with the Owner's approval quoted at the top of this file, change the status line to APPROVED, and run `git diff --check`.
