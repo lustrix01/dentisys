@@ -2011,15 +2011,16 @@ const handleSendAllStudentInvites = async () => {
                     return (
                       <tr key={st.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
                         <td className="py-3.5 px-4 whitespace-nowrap font-mono font-bold text-slate-700 dark:text-slate-200 max-md:order-2 max-md:p-0">
-                          {st.studentId}
+                          <span className="sr-only md:hidden">Student ID: </span>{st.studentId}
                         </td>
                         <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm">
-                          {st.name}
+                          <span className="sr-only md:hidden">Full name: </span>{st.name}
                         </td>
                         <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 max-md:order-4 max-md:w-full max-md:p-0 max-md:break-all">
-                          {st.email}
+                          <span className="sr-only md:hidden">BU email address: </span>{st.email}
                         </td>
                         <td className="py-3.5 px-4 max-md:order-5 max-md:p-0">
+                          <span className="sr-only md:hidden">Enrolled class section: </span>
                           <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 font-extrabold text-[10px] uppercase tracking-wider border border-accent-200/60 dark:border-accent-800/40">
                             {assignedClassLabel}
                           </span>

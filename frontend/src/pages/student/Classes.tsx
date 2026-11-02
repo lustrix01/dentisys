@@ -594,7 +594,7 @@ export const Classes: React.FC = () => {
           <tbody>{otherClasses.map(cls => <tr key={cls.enrollmentId}>
             <td className="p-2">{cls.courseCode} · {cls.courseName} · {cls.className}</td>
             <td className="p-2">{cls.schoolYear || 'Unavailable'}</td>
-            <td className="p-2">{cls.grade === null ? 'No grade yet' : <GradeValue percentage={cls.percentage} grade={cls.grade} lecture={cls.gradingComponentMode === 'lecture' ? lectureHoverSteps(cls.gradeComponents) : null}>{formatGrade(cls.grade)}</GradeValue>}</td>
+            <td className="p-2">{cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage} grade={cls.grade} lecture={cls.gradingComponentMode === 'lecture' ? lectureHoverSteps(cls.gradeComponents) : null}>{formatGrade(cls.grade)}</GradeValue>}</td>
             <td className="p-2">{cls.percentage === null ? 'Pending' : `${cls.percentage}%`}</td>
             <td className="p-2">{cls.clinicHoursCompleted} hrs</td>
             <td className="p-2">{cls.retentionState || 'Unavailable'}</td>

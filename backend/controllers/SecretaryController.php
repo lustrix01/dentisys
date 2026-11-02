@@ -1054,6 +1054,21 @@ function handle_secretary_dashboard_kpis(): void
         $totalRecords = count($attRecords);
         $attendanceRate = $totalRecords > 0 ? (int) round(($presentOrLate / $totalRecords) * 100) : null;
 
+        // Active enrollments per assigned section, so each class card shows its real class size
+        // (the attendance worksheet used to count only students with attendance rows).
+        $enrolledStmt = $pdo->prepare(
+            "SELECT e.cs_id, COUNT(DISTINCT e.student_id) AS enrolled
+             FROM enrollments e
+             JOIN class_sections cs ON cs.cs_id = e.cs_id
+             WHERE cs.secretary_user_id = ? AND LOWER(e.status) = 'active'
+             GROUP BY e.cs_id"
+        );
+        $enrolledStmt->execute([$authCtx['user_id']]);
+        $enrolledBySection = [];
+        foreach ($enrolledStmt->fetchAll(PDO::FETCH_ASSOC) as $countRow) {
+            $enrolledBySection[(string) $countRow['cs_id']] = (int) $countRow['enrolled'];
+        }
+
         $assignedClasses = array_map(fn(array $row): array => [
             'classId' => (string) $row['cs_id'],
             'className' => $row['cs_name'],
@@ -1063,6 +1078,7 @@ function handle_secretary_dashboard_kpis(): void
             'schoolYear' => $row['school_year'],
             'classroomName' => $row['lab_room'] ?: ($row['lec_room'] ?: null),
             'meetings' => class_meetings_read($pdo, $row),
+            'enrolledCount' => $enrolledBySection[(string) $row['cs_id']] ?? 0,
         ], $assignedClassRows);
 
         json_response($schoolYearScope + [

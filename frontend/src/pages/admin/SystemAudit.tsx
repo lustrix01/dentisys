@@ -1590,7 +1590,7 @@ export const DeanReports: React.FC = () => {
                       <td className={`l ${printCellClass(s.className || '—')}`}>{s.className || '—'}</td>
                       <td>Year {s.yearLevel}</td>
                       <td className={`grade ${printCellClass(gradeStr)}`}>{gradeStr}</td>
-                      <td className={`cap ${standingBad(s) ? 'bad' : ''}`}>{STANDING_LABELS[s.status] ?? s.status}</td>
+                      <td className={`${STANDING_LABELS[s.status] ? '' : 'cap'} ${standingBad(s) ? 'bad' : ''}`}>{STANDING_LABELS[s.status] ?? s.status}</td>
                       <td>{s.faceEnrolled ? 'Enrolled' : 'Not enrolled'}</td>
                       <td>{pending(s)}</td>
                     </tr>
@@ -1608,7 +1608,7 @@ export const DeanReports: React.FC = () => {
                       <td className="nm">{s.name}</td>
                       <td className={`l ${printCellClass(s.className || '—')}`}>{s.className || '—'}</td>
                       <td className={`grade ${standingBad(s) ? 'bad' : printCellClass(gradeStr)}`}>{gradeStr}</td>
-                      <td className={`cap ${standingBad(s) ? 'bad' : ''}`}>{STANDING_LABELS[s.status] ?? s.status}</td>
+                      <td className={`${STANDING_LABELS[s.status] ? '' : 'cap'} ${standingBad(s) ? 'bad' : ''}`}>{STANDING_LABELS[s.status] ?? s.status}</td>
                       <td>{s.clinicHoursCompleted}h</td>
                       <td className={pend > 0 ? 'bad' : ''}>{pend > 0 ? `${pend} Pending` : 'None'}</td>
                       <td className={flagged > 0 ? 'bad' : ''}>{flagged > 0 ? `${flagged} Subject${flagged > 1 ? 's' : ''}` : 'Clear'}</td>

@@ -13,6 +13,7 @@ interface ModalProps {
 }
 
 const openModals: object[] = [];
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export const Modal: React.FC<ModalProps> = ({
   isOpen,
@@ -35,12 +36,23 @@ export const Modal: React.FC<ModalProps> = ({
     const opener = document.activeElement as HTMLElement | null;
     document.body.style.overflow = 'hidden';
     panelRef.current?.focus();
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && openModals[openModals.length - 1] === token) onCloseRef.current();
+    const handleKeys = (e: KeyboardEvent) => {
+      if (openModals[openModals.length - 1] !== token) return;
+      if (e.key === 'Escape') { onCloseRef.current(); return; }
+      // aria-modal promises the page behind is out of reach, so Tab and Shift+Tab wrap inside the panel.
+      const panel = panelRef.current;
+      if (e.key !== 'Tab' || !panel) return;
+      const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(el => el.offsetParent !== null || el === document.activeElement);
+      if (focusable.length === 0) { e.preventDefault(); panel.focus(); return; }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === panel || !panel.contains(active))) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && (active === last || !panel.contains(active))) { e.preventDefault(); first.focus(); }
     };
-    window.addEventListener('keydown', handleEscape);
+    window.addEventListener('keydown', handleKeys);
     return () => {
-      window.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('keydown', handleKeys);
       openModals.splice(openModals.indexOf(token), 1);
       if (openModals.length === 0) document.body.style.overflow = '';
       opener?.focus?.();

@@ -12,7 +12,7 @@ The frontend is a React 19, TypeScript, Vite, React Router and Tailwind app in `
 | Upright tablets, 768–1023 px | Starts as a collapsed icon rail when the user has not chosen (Owner decision, spec UI-001); a saved open or collapsed choice wins. |
 | 1024 px and wider | Full sidebar with names; the user can collapse it to the rail. |
 
-Below 1280 px every control, card and text must stay inside its box, and columns and data formats match desktop (never merged, reordered or dropped). Desktop (1280 px and wider) keeps its layout.
+Below 1280 px every control, card and text must stay inside its box, and columns and data formats match desktop (never merged, reordered or dropped), except for the phone blocks below. Desktop (1280 px and wider) keeps its layout.
 
 The phone and desktop top bars share one `ProfileMenu` (inside `Layout.tsx`), so both show the same menu items for each role.
 
@@ -24,7 +24,7 @@ The phone and desktop top bars share one `ProfileMenu` (inside `Layout.tsx`), so
 
 ## Phone blocks
 
-On phones (below 768 px) a few wide tables show each row as a stacked block instead of a table that scrolls sideways, for example Email Management, Secretary Attendance List, Student Attendance Logs and Faculty Invitations. A block shows the same fields as the desktop row, in the same order and format; tablets and desktop keep the table. Other tables scroll sideways inside their card on phones, never the whole page.
+On phones (below 768 px) these lists show each row as a stacked block instead of a table that scrolls sideways: Student Dashboard enrolled subjects, Student Attendance Logs, the Faculty and Secretary roll calls, the Faculty roster, the Reports grade summary, Email Management invitation lists, Faculty Invitations and the Audit Trail. A block shows every field of the desktop row in the same data format; it may put the name or date first, join two related fields on one line and leave out a field that is empty for that row. Fields without a visible label get a screen-reader label. Tablets and desktop keep the table. Other tables scroll sideways inside their card on phones, never the whole page. The rule is recorded in `spec.md` UI-001 once the Owner approves [the proposed amendment](spec-amendments-2026-11-03-responsive-audit.md).
 
 ## Authentication routes
 

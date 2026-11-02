@@ -740,6 +740,10 @@ expect_same((string) $secretarySessionClassId, (string) ($sessionAuditRows[0]['s
 [$secretaryKpiStatus, $secretaryKpiBody] = integration_http_get_json('/api/secretary/dashboard/kpis', $secretaryAccessToken);
 expect_same(200, $secretaryKpiStatus, 'Secretary KPI read returns HTTP 200');
 $secretaryAssignedBefore = count($secretaryKpiBody['assignedClasses'] ?? []);
+foreach ($secretaryKpiBody['assignedClasses'] ?? [] as $assignedClass) {
+    $expectedEnrolled = (int) $pdo->query("SELECT COUNT(DISTINCT student_id) FROM enrollments WHERE LOWER(status) = 'active' AND cs_id = " . (int) $assignedClass['classId'])->fetchColumn();
+    expect_same($expectedEnrolled, $assignedClass['enrolledCount'] ?? null, 'Secretary KPI reports each assigned section\'s active enrollment count');
+}
 $secretaryFixtureUserId = (int) $pdo->query("SELECT user_id FROM user_accounts WHERE login_email = 'secretary@bicol-u.edu.ph'")->fetchColumn();
 $secretarySecondClassCourseId = (int) $pdo->query('SELECT course_id FROM class_sections WHERE cs_id = ' . $secretarySessionClassId)->fetchColumn();
 $secretarySecondClassInsert = $pdo->prepare(

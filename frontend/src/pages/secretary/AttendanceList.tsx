@@ -53,7 +53,7 @@ import {
 type AttendanceItem = Awaited<ReturnType<typeof getSecretaryAttendanceApi>>['records'][number];
 type SessionItem = NonNullable<Awaited<ReturnType<typeof getSecretaryAttendanceApi>>['sessions']>[number];
 
-type Section = { classId: string; className: string; courseCode?: string; courseName?: string; semester?: string; schoolYear?: string; classroomName?: string | null; meetings?: ClassMeeting[] };
+type Section = { classId: string; className: string; courseCode?: string; courseName?: string; semester?: string; schoolYear?: string; classroomName?: string | null; meetings?: ClassMeeting[]; enrolledCount?: number };
 
 const semesterLabel = (value?: string | null) => {
   const v = (value ?? '').toLowerCase();
@@ -592,7 +592,8 @@ export const AttendanceList: React.FC = () => {
         courseTitle: [sec.courseCode, sec.courseName].filter(Boolean).join(' — ') || sec.className,
         term: [semesterLabel(sec.semester), sec.schoolYear].filter(Boolean),
         venue: meetingVenueLines(sec.meetings, sec.classroomName),
-        enrolledCount: new Set(subRecords.map(r => r.studentId)).size,
+        // Server count of active enrollments; attendance rows only as a fallback for older responses.
+        enrolledCount: typeof sec.enrolledCount === 'number' ? sec.enrolledCount : new Set(subRecords.map(r => r.studentId)).size,
         hasLiveSession: Boolean(liveCurrentSession && inSection(scope, liveCurrentSession)),
         yearLevel: subRecords[0]?.yearLevel,
       };
@@ -1127,7 +1128,7 @@ export const AttendanceList: React.FC = () => {
                     <option value="late">Late ({late})</option>
                     <option value="absent">Absent ({absent})</option>
                     <option value="excused">Excused ({excused})</option>
-                    <option value="unrecorded">Unresolved ({filtered.length - recorded})</option>
+                    <option value="unrecorded">Not recorded ({filtered.length - recorded})</option>
                   </select>
                 </div>
 
