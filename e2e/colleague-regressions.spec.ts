@@ -37,6 +37,17 @@ test('Student pending standing stays unresolved and past-only courses never beco
   await expect(page.getByText('DENT401', { exact: true })).toBeVisible();
 });
 
+test('Student standing reads "Grades pending", not "No grade yet", once one current subject is graded', async ({ page }) => {
+  await studentIdentity(page);
+  await page.route('**/api/student/retention', route => route.fulfill({ json: { status: 'ok', retention: {
+    currentSchoolYear: '2026-2027', atRiskCount: 0, midtermAtRiskCount: 0, hasPendingGrades: true,
+    records: [{ ...course, grade: 1.75, percentage: 88.5 }, { ...course, enrollmentId: '42', courseCode: 'DENT402' }],
+  } } }));
+  await page.goto('/student/retention');
+  await expect(page.getByText('Grades pending', { exact: true })).toBeVisible();
+  await expect(page.getByText('Active Standing · Cleared')).toHaveCount(0);
+});
+
 test('Student Classes reads canonical meetings including Sunday and avoids fabricating identity/year', async ({ page }) => {
   await studentIdentity(page);
   await page.route('**/api/student/classes', route => route.fulfill({ json: { status: 'ok', currentSchoolYear: '2027-2028', classes: [{

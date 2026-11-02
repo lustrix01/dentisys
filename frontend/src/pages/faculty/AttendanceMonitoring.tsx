@@ -1601,12 +1601,12 @@ export const AttendanceMonitoring: React.FC = () => {
                       <div className="shrink-0">{actionControl(item)}</div>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                      <div data-testid="attendance-status">{statusChip(item)}</div>
+                      <div data-testid="attendance-status"><span className="sr-only">Attendance status: </span>{statusChip(item)}</div>
                       <div className="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200">
                         <Clock className="w-4 h-4 text-slate-400 stroke-[2.2]" />
-                        <span>{item.timeRecorded ? formatCheckInTime(item.timeRecorded) : '—'}</span>
+                        <span><span className="sr-only">Check-in time: </span>{item.timeRecorded ? formatCheckInTime(item.timeRecorded) : '—'}</span>
                       </div>
-                      {item.status && methodChip(item)}
+                      {item.status && <div><span className="sr-only">Verification method: </span>{methodChip(item)}</div>}
                     </div>
                   </div>
                 ))

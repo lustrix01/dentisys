@@ -293,18 +293,19 @@ export const AttendanceLogs: React.FC = () => {
                   <li key={rec.id} className="py-3.5 space-y-1.5 text-xs">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <span className="font-bold text-slate-800 dark:text-slate-100">{rec.date}</span>
-                        {rec.time && <span className="text-slate-500 dark:text-slate-400"> · {rec.time}</span>}
+                        <span className="sr-only">Date: </span><span className="font-bold text-slate-800 dark:text-slate-100">{rec.date}</span>
+                        {rec.time && <span className="text-slate-500 dark:text-slate-400"> · <span className="sr-only">Check-in time: </span>{rec.time}</span>}
                       </div>
-                      <StatusPill status={rec.status} />
+                      <span className="shrink-0"><span className="sr-only">Status: </span><StatusPill status={rec.status} /></span>
                     </div>
                     <div className="min-w-0">
+                      <span className="sr-only">Class subject: </span>
                       <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{rec.courseCode}</span>
                       <span className="text-slate-600 dark:text-slate-300"> · {rec.courseName}</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
-                      <span className="inline-flex items-center gap-1"><MethodIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />{methodInfo.label}</span>
-                      {rec.room && <span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3 text-blue-600" />{rec.room}</span>}
+                      <span className="inline-flex items-center gap-1"><MethodIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /><span className="sr-only">Verification method: </span>{methodInfo.label}</span>
+                      {rec.room && <span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3 text-blue-600" /><span className="sr-only">Session location: </span>{rec.room}</span>}
                       {rec.instructorName && <span>By {rec.instructorName}</span>}
                     </div>
                   </li>

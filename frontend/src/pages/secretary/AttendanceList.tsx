@@ -1275,14 +1275,14 @@ export const AttendanceList: React.FC = () => {
                           <span className="block break-words font-bold text-slate-800 dark:text-slate-100 text-sm">{record.studentName}</span>
                           <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{record.studentNumber} • Year {record.yearLevel || 1}</span>
                         </div>
-                        <div className="shrink-0 text-right" data-testid="attendance-status">{statusChip(record)}</div>
+                        <div className="shrink-0 text-right" data-testid="attendance-status"><span className="sr-only">Attendance status: </span>{statusChip(record)}</div>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                         <div className="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200">
                           <Clock className="w-4 h-4 text-slate-400 stroke-[2.2]" />
-                          <span>{formatCheckInTime(record.timeRecorded)}</span>
+                          <span><span className="sr-only">Check-in time: </span>{formatCheckInTime(record.timeRecorded)}</span>
                         </div>
-                        {methodChip(record)}
+                        <div><span className="sr-only">Verification method: </span>{methodChip(record)}</div>
                       </div>
                       <div className="flex justify-end">{actionControl(record)}</div>
                     </div>

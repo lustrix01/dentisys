@@ -340,6 +340,8 @@ export const RetentionMonitoring: React.FC = () => {
 
   const isStandingAtRisk = atRiskCount > 0;
   const standingPending = hasPendingGrades || currentRecords.length === 0 || currentRecords.some(record => record.grade === null);
+  // "No grade yet" names a class with no grade; once any current subject is graded, the overall standing is only pending.
+  const noGradeYet = currentRecords.every(record => record.grade === null);
 
   return (
     <div className="space-y-5">
@@ -358,7 +360,7 @@ export const RetentionMonitoring: React.FC = () => {
                 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60'
                 : standingPending ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
           }`}>
-            {isStandingAtRisk ? 'Retention Warning' : midtermAtRiskCount > 0 ? 'Midterm Advisory' : standingPending ? 'No grade yet' : 'Active Standing · Cleared'}
+            {isStandingAtRisk ? 'Retention Warning' : midtermAtRiskCount > 0 ? 'Midterm Advisory' : standingPending ? (noGradeYet ? 'No grade yet' : 'Grades pending') : 'Active Standing · Cleared'}
           </span>
           <span className="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-xl font-bold text-slate-600 dark:text-slate-300">
             Limit: 2.50
