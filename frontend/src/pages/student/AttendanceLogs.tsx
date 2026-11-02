@@ -20,6 +20,23 @@ import { StudentUnavailable } from './RealStudentSurfaces';
 import { getStudentAttendanceLogs } from '../../services/apiClient';
 import type { StudentAttendanceLogRecord, AttendanceVerificationMethod } from '../../types';
 
+function StatusPill({ status }: { status: string }) {
+  const tone = status === 'present'
+    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
+    : status === 'late'
+      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
+      : status === 'excused'
+        ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300'
+        : status === 'absent'
+          ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
+          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+  return (
+    <span className={`inline-flex shrink-0 items-center whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${tone}`}>
+      {status === 'unresolved' ? 'Pending' : status}
+    </span>
+  );
+}
+
 function formatVerificationMethod(method: AttendanceVerificationMethod): { label: string; icon: React.ComponentType<{ className?: string }> } {
   switch (method) {
     case 'biometric':
@@ -190,6 +207,7 @@ export const AttendanceLogs: React.FC = () => {
           <input
             type="text"
             placeholder="Search by course code, name, date…"
+            aria-label="Search attendance logs"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -204,6 +222,7 @@ export const AttendanceLogs: React.FC = () => {
 
           {/* Subject Filter */}
           <select
+            aria-label="Filter by course"
             value={selectedSubject}
             onChange={(e) => setSelectedSubject(e.target.value)}
             className="w-full min-w-0 pl-3 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
@@ -216,6 +235,7 @@ export const AttendanceLogs: React.FC = () => {
 
           {/* Status Filter */}
           <select
+            aria-label="Filter by status"
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
             className="w-full min-w-0 pl-3 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
@@ -262,7 +282,37 @@ export const AttendanceLogs: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {isAuthoritative && (
+            // Phones and portrait tablets: one block per entry, status first, instead of a six-column table.
+            <ul className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+              {(displayRecords as StudentAttendanceLogRecord[]).map((rec) => {
+                const methodInfo = formatVerificationMethod(rec.verificationMethod);
+                const MethodIcon = methodInfo.icon;
+                return (
+                  <li key={rec.id} className="py-3.5 space-y-1.5 text-xs">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="font-bold text-slate-800 dark:text-slate-100">{rec.date}</span>
+                        {rec.time && <span className="text-slate-500 dark:text-slate-400"> · {rec.time}</span>}
+                      </div>
+                      <StatusPill status={rec.status} />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{rec.courseCode}</span>
+                      <span className="text-slate-600 dark:text-slate-300"> · {rec.courseName}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      <span className="inline-flex items-center gap-1"><MethodIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />{methodInfo.label}</span>
+                      {rec.room && <span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3 text-blue-600" />{rec.room}</span>}
+                      {rec.instructorName && <span>By {rec.instructorName}</span>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <div className={`overflow-x-auto ${isAuthoritative ? 'hidden md:block' : ''}`}>
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -282,14 +332,11 @@ export const AttendanceLogs: React.FC = () => {
                     return (
                       <tr key={rec.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
                         <td className="py-3.5">
-                          <span className="font-bold text-slate-800 dark:text-slate-100 block">{rec.date}</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100 block whitespace-nowrap">{rec.date}</span>
                         </td>
                         <td className="py-3.5">
                           <span className="font-mono font-bold text-blue-600 dark:text-blue-400 block">{rec.courseCode}</span>
                           <span className="text-slate-600 dark:text-slate-300 text-[11px] block">{rec.courseName}</span>
-                          {rec.room && (
-                            <span className="text-slate-500 dark:text-slate-400 text-[10px] block mt-0.5">{rec.room}</span>
-                          )}
                         </td>
                         <td className="py-3.5 text-slate-500">
                           {rec.time}
@@ -309,18 +356,7 @@ export const AttendanceLogs: React.FC = () => {
                           ) : '—'}
                         </td>
                         <td className="py-3.5 text-right">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${rec.status === 'present'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
-                            : rec.status === 'late'
-                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
-                              : rec.status === 'excused'
-                                ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300'
-                                : rec.status === 'absent'
-                                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
-                                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                            }`}>
-                            {rec.status === 'unresolved' ? 'Pending' : rec.status}
-                          </span>
+                          <StatusPill status={rec.status} />
                         </td>
                       </tr>
                     );
@@ -328,7 +364,7 @@ export const AttendanceLogs: React.FC = () => {
                   : (displayRecords as typeof mockStudentRecords).map((rec) => (
                     <tr key={rec.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="py-3.5">
-                        <span className="font-bold text-slate-800 dark:text-slate-100 block">{rec.date}</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-100 block whitespace-nowrap">{rec.date}</span>
                         <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
                           <Clock className="w-3 h-3" />
                           {rec.verifiedAt?.split(' ')[1] || '08:15 AM'}
@@ -367,6 +403,7 @@ export const AttendanceLogs: React.FC = () => {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 

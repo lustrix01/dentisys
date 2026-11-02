@@ -427,9 +427,6 @@ export const AcademicTermsSettings: React.FC = () => {
       >
         {draft && (
           <form
-            role="dialog"
-            aria-modal="true"
-            aria-label={draft.id ? 'Edit academic term' : 'Set academic term dates'}
             className="space-y-4"
             onSubmit={(event) => {
               event.preventDefault();
@@ -527,7 +524,7 @@ export const AcademicTermsSettings: React.FC = () => {
         }}
         title="Delete unused academic term"
       >
-        <div role="dialog" aria-modal="true" aria-label="Delete unused academic term" className="space-y-4">
+        <div className="space-y-4">
           <p className="text-sm text-slate-700 dark:text-slate-200">
             Delete the {deleteTerm ? semesterLabel(deleteTerm.semester) : ''} of {deleteTerm?.schoolYear}?
           </p>
@@ -574,7 +571,7 @@ export const AcademicTermsSettings: React.FC = () => {
         }}
         title="Copy to next school year"
       >
-        <div role="dialog" aria-modal="true" aria-label="Copy to next school year" className="space-y-4">
+        <div className="space-y-4">
           <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
             Copy the latest defined school year ({latestYear}) into the next school year, shifting dates by one year? February 29 becomes February 28. Existing terms are kept. Review and adjust the copied dates afterwards.
           </p>

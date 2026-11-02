@@ -248,6 +248,14 @@ export const AttendanceMonitoring: React.FC = () => {
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
   const [sessionModalTab, setSessionModalTab] = useState<'current' | 'upcoming'>('current');
   const [viewMode, setViewMode] = useState<'classes' | 'worksheet'>('classes');
+  // Phones get stacked roll-call rows instead of the sideways-scrolling table (same as Secretary).
+  const [isPhone, setIsPhone] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const onChange = () => setIsPhone(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   const handleOpenClassSessionModal = (classItem: FacultyClassItem) => {
     setSelectedCourseId(classItem.courseId);
@@ -895,6 +903,69 @@ export const AttendanceMonitoring: React.FC = () => {
     }
   };
 
+  type RosterItem = FacultyAttendanceWorksheet['roster'][number];
+  // Roll-call cell content shared by the desktop table and the phone rows.
+  const methodChip = (item: RosterItem) => item.status ? (
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">
+      {item.verificationMethod === 'biometric' && !item.overrideReason
+        ? <Camera className="w-3.5 h-3.5 stroke-[2.2]" />
+        : <UserCheck className="w-3.5 h-3.5 stroke-[2.2]" />}
+      <span>{attendanceMethodLabel(item.verificationMethod, item.overrideReason)}</span>
+    </span>
+  ) : (
+    <span className="text-slate-500 dark:text-slate-400 text-xs">—</span>
+  );
+  const statusChip = (item: RosterItem) => (
+    <>
+      {item.status ? (
+        <span
+          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+            item.status === 'present'
+              ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+              : item.status === 'late'
+              ? 'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
+              : item.status === 'absent'
+              ? 'border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
+              : 'border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300'
+          }`}
+        >
+          <span className="text-sm leading-none">•</span>
+          <span>{STATUS_LABELS[item.status as SupportedStatus] ?? item.status}</span>
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+          <span className="text-sm leading-none">•</span>
+          <span>Not recorded</span>
+        </span>
+      )}
+      {pendingByRow[`${item.studentId}:${item.attendanceSessionId ?? ''}`] && (
+        <button
+          type="button"
+          onClick={() => openSecretaryRequest(pendingByRow[`${item.studentId}:${item.attendanceSessionId ?? ''}`])}
+          className="mt-1 block rounded-full border border-dashed border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 px-2.5 py-0.5 text-[11px] font-bold text-sky-700 dark:text-sky-300 cursor-pointer"
+        >
+          Request pending
+        </button>
+      )}
+    </>
+  );
+  const actionControl = (item: RosterItem) => revokedSessionOpen ? (
+    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">View-only</span>
+  ) : (
+    <button
+      type="button"
+      onClick={() => handleOpenOverride(item)}
+      disabled={worksheetIsReadOnly || savingStudentId === item.enrollmentId || bulkMarking}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      <Pencil className="w-3.5 h-3.5 text-slate-500" />
+      <span>{item.status ? 'Override' : 'Mark'}</span>
+    </button>
+  );
+  const emptyRosterText = worksheet?.roster.length === 0
+    ? 'No enrolled students found in this class section.'
+    : 'No students match the current filter.';
+
   return (
     <div className="space-y-6">
 
@@ -951,7 +1022,7 @@ export const AttendanceMonitoring: React.FC = () => {
 
           {/* School Year / Term Selector */}
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Term:</span>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">School year</span>
             <select
               aria-label="Attendance school year"
               value={selectedSchoolYear}
@@ -1077,10 +1148,10 @@ export const AttendanceMonitoring: React.FC = () => {
                         }}
                         disabled={isPastClass}
                         className="inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 xl:max-[1439px]:px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/50 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-                        title={isPastClass ? 'Past school-year classes are view-only.' : 'View and Manage Sessions'}
+                        title={isPastClass ? 'Past school-year classes are view-only.' : 'Sessions for this class'}
                       >
                         <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>View Session</span>
+                        <span>Sessions</span>
                       </button>}
 
                       <button
@@ -1153,7 +1224,7 @@ export const AttendanceMonitoring: React.FC = () => {
                     className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 border border-purple-200/70 dark:border-purple-800/50 text-xs font-bold transition-all cursor-pointer shadow-xs"
                   >
                     <Clock className="w-3.5 h-3.5 text-purple-600 dark:text-purple-300" />
-                    <span>View / Manage Sessions</span>
+                    <span>Sessions</span>
                   </button>
                 )}
 
@@ -1166,7 +1237,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
                 >
                   <Play className="w-3.5 h-3.5 fill-white" />
-                  <span>Start Session</span>
+                  <span>Start session</span>
                 </button>}
 
                 <button
@@ -1325,7 +1396,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   <option value="late">Late{worksheet ? ` (${stats.late})` : ''}</option>
                   <option value="absent">Absent{worksheet ? ` (${stats.absent})` : ''}</option>
                   <option value="excused">Excused{worksheet ? ` (${stats.excused})` : ''}</option>
-                  <option value="unrecorded">Unresolved{worksheet ? ` (${stats.total - stats.recorded})` : ''}</option>
+                  <option value="unrecorded">Not recorded{worksheet ? ` (${stats.total - stats.recorded})` : ''}</option>
                 </select>
               </div>
             </div>
@@ -1340,45 +1411,16 @@ export const AttendanceMonitoring: React.FC = () => {
         </Card>
       </div>
 
-      {/* 4. Summary Count Cards (Rule 4: straightforward counts) */}
+      {/* 4. One count summary for the roll call */}
       {worksheet && (
-        <>
         <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-3 shadow-xs">
           <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100 mr-2">Class Roll Call ({stats.total} students)</span>
-          <span className="rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-600 dark:text-slate-300">All: {stats.total}</span>
           <span className="rounded-lg bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">Present: {stats.present}</span>
           <span className="rounded-lg bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">Late: {stats.late}</span>
           <span className="rounded-lg bg-rose-500/10 px-2.5 py-1 text-[10px] font-bold text-rose-700 dark:text-rose-300">Absent: {stats.absent}</span>
           <span className="rounded-lg bg-sky-500/10 px-2.5 py-1 text-[10px] font-bold text-sky-700 dark:text-sky-300">Excused: {stats.excused}</span>
-          <span className="ml-auto text-[10px] font-bold text-slate-500 dark:text-slate-400">{stats.total ? Math.round((stats.recorded / stats.total) * 100) : 0}% recorded</span>
+          <span className="ml-auto text-[10px] font-bold text-slate-500 dark:text-slate-400">{stats.recorded} of {stats.total} recorded</span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Enrolled</span>
-            <span className="text-xl font-extrabold font-heading text-slate-800 dark:text-slate-100">{stats.total}</span>
-          </div>
-          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Recorded</span>
-            <span className="text-xl font-extrabold font-heading text-slate-700 dark:text-slate-300">{stats.recorded}</span>
-          </div>
-          <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shadow-xs">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block">Present</span>
-            <span className="text-xl font-extrabold font-heading text-emerald-600 dark:text-emerald-300">{stats.present}</span>
-          </div>
-          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 shadow-xs">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-400 block">Late</span>
-            <span className="text-xl font-extrabold font-heading text-amber-600 dark:text-amber-300">{stats.late}</span>
-          </div>
-          <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 shadow-xs">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-rose-700 dark:text-rose-400 block">Absent</span>
-            <span className="text-xl font-extrabold font-heading text-rose-600 dark:text-rose-300">{stats.absent}</span>
-          </div>
-          <div className="p-3.5 rounded-xl bg-sky-500/10 border border-sky-500/20 shadow-xs">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-sky-700 dark:text-sky-400 block">Excused</span>
-            <span className="text-xl font-extrabold font-heading text-sky-600 dark:text-sky-300">{stats.excused}</span>
-          </div>
-        </div>
-        </>
       )}
 
       {/* 5. Main Worksheet Register */}
@@ -1505,33 +1547,9 @@ export const AttendanceMonitoring: React.FC = () => {
           </div>
 
           {!allSessionsHidden && (<>
-          {/* Controls Bar: Search & Status Filter */}
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <div className="relative flex-1 max-w-full md:max-w-sm">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by student name or ID..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-
+          {/* Controls Bar: extra filters & bulk action (search and status filter live in the worksheet controls above) */}
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-end gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
             <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
-              <label className="text-xs font-bold text-slate-500 whitespace-nowrap hidden sm:inline">Filter Status:</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="flex-1 sm:flex-initial px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer"
-              >
-                <option value="all">All ({worksheet.roster.length})</option>
-                <option value="unrecorded">Not recorded ({worksheet.roster.filter(r => r.status === null).length})</option>
-                <option value="present">Present ({stats.present})</option>
-                <option value="late">Late ({stats.late})</option>
-                <option value="absent">Absent ({stats.absent})</option>
-                <option value="excused">Excused ({stats.excused})</option>
-              </select>
               <select
                 aria-label="Overridden"
                 value={overriddenFilter}
@@ -1567,7 +1585,35 @@ export const AttendanceMonitoring: React.FC = () => {
             </div>
           </div>
 
-          {/* Roster Table: Bounded Scroll Container with Sticky Header & Mobile Horizontal Scroll */}
+          {isPhone ? (
+            // Phones: one stacked block per student instead of a sideways-scrolling table (matches Secretary).
+            <div className="max-h-[560px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60 border border-slate-200/80 dark:border-slate-800 rounded-xl">
+              {filteredRoster.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-500 dark:text-slate-400">{emptyRosterText}</div>
+              ) : (
+                filteredRoster.map(item => (
+                  <div key={item.enrollmentId} className="space-y-3 p-4 text-xs">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="block break-words font-bold text-slate-800 dark:text-slate-100 text-sm">{item.studentName}</span>
+                        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{item.studentNumber} • Year {item.yearLevel || 1}</span>
+                      </div>
+                      <div className="shrink-0">{actionControl(item)}</div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <div data-testid="attendance-status">{statusChip(item)}</div>
+                      <div className="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200">
+                        <Clock className="w-4 h-4 text-slate-400 stroke-[2.2]" />
+                        <span>{item.timeRecorded ? formatCheckInTime(item.timeRecorded) : '—'}</span>
+                      </div>
+                      {item.status && methodChip(item)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+          /* Roster Table: Bounded Scroll Container with Sticky Header */
           <div className="max-h-[560px] overflow-y-auto overflow-x-auto border border-slate-200/80 dark:border-slate-800 rounded-xl">
             <table className="w-full min-w-[640px] text-left text-xs border-collapse">
               <thead className="sticky top-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-xs border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
@@ -1583,112 +1629,58 @@ export const AttendanceMonitoring: React.FC = () => {
                 {filteredRoster.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-12 text-center text-slate-500 dark:text-slate-400">
-                      {worksheet.roster.length === 0
-                        ? 'No enrolled students found in this class section.'
-                        : 'No students match the current filter.'}
+                      {emptyRosterText}
                     </td>
                   </tr>
                 ) : (
-                  filteredRoster.map(item => {
-                    const isSaving = savingStudentId === item.enrollmentId;
-                    return (
-                      <tr
-                        key={item.enrollmentId}
-                        className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
-                      >
-                        {/* Column 1: STUDENT DETAILS */}
-                        <td className="py-3 px-4 sm:py-4 sm:px-6">
-                          <span className="font-bold text-slate-800 dark:text-slate-100 block text-xs sm:text-sm">
-                            {item.studentName}
+                  filteredRoster.map(item => (
+                    <tr
+                      key={item.enrollmentId}
+                      className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
+                    >
+                      {/* Column 1: STUDENT DETAILS */}
+                      <td className="py-3 px-4 sm:py-4 sm:px-6">
+                        <span className="font-bold text-slate-800 dark:text-slate-100 block text-xs sm:text-sm">
+                          {item.studentName}
+                        </span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                          {item.studentNumber} • Year {item.yearLevel || 1}
+                        </span>
+                      </td>
+
+                      {/* Column 2: CHECK-IN TIME */}
+                      <td className="py-3 px-4 sm:py-4 sm:px-6">
+                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-bold text-xs sm:text-sm">
+                          <Clock className="w-4 h-4 text-slate-400 stroke-[2.2]" />
+                          <span>
+                            {item.timeRecorded
+                              ? formatCheckInTime(item.timeRecorded)
+                              : '—'}
                           </span>
-                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                            {item.studentNumber} • Year {item.yearLevel || 1}
-                          </span>
-                        </td>
+                        </div>
+                      </td>
 
-                        {/* Column 2: CHECK-IN TIME */}
-                        <td className="py-3 px-4 sm:py-4 sm:px-6">
-                          <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-bold text-xs sm:text-sm">
-                            <Clock className="w-4 h-4 text-slate-400 stroke-[2.2]" />
-                            <span>
-                              {item.timeRecorded
-                                ? formatCheckInTime(item.timeRecorded)
-                                : '—'}
-                            </span>
-                          </div>
-                        </td>
+                      {/* Column 3: VERIFICATION METHOD */}
+                      <td className="py-3 px-4 sm:py-4 sm:px-6">
+                        {methodChip(item)}
+                      </td>
 
-                        {/* Column 3: VERIFICATION METHOD */}
-                        <td className="py-3 px-4 sm:py-4 sm:px-6">
-                          {item.status ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">
-                              {item.verificationMethod === 'biometric' && !item.overrideReason
-                                ? <Camera className="w-3.5 h-3.5 stroke-[2.2]" />
-                                : <UserCheck className="w-3.5 h-3.5 stroke-[2.2]" />}
-                              <span>{attendanceMethodLabel(item.verificationMethod, item.overrideReason)}</span>
-                            </span>
-                          ) : (
-                            <span className="text-slate-500 dark:text-slate-400 text-xs">—</span>
-                          )}
-                        </td>
+                      {/* Column 4: ATTENDANCE STATUS */}
+                      <td className="py-3 px-4 sm:py-4 sm:px-6" data-testid="attendance-status">
+                        {statusChip(item)}
+                      </td>
 
-                        {/* Column 4: ATTENDANCE STATUS */}
-                        <td className="py-3 px-4 sm:py-4 sm:px-6" data-testid="attendance-status">
-                          {item.status ? (
-                            <span
-                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
-                                item.status === 'present'
-                                  ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
-                                  : item.status === 'late'
-                                  ? 'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
-                                  : item.status === 'absent'
-                                  ? 'border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
-                                  : 'border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300'
-                              }`}
-                            >
-                              <span className="text-sm leading-none">•</span>
-                              <span>{STATUS_LABELS[item.status as SupportedStatus] ?? item.status}</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                              <span className="text-sm leading-none">•</span>
-                              <span>Not recorded</span>
-                            </span>
-                          )}
-                          {pendingByRow[`${item.studentId}:${item.attendanceSessionId ?? ''}`] && (
-                            <button
-                              type="button"
-                              onClick={() => openSecretaryRequest(pendingByRow[`${item.studentId}:${item.attendanceSessionId ?? ''}`])}
-                              className="mt-1 block rounded-full border border-dashed border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 px-2.5 py-0.5 text-[11px] font-bold text-sky-700 dark:text-sky-300 cursor-pointer"
-                            >
-                              Request pending
-                            </button>
-                          )}
-                        </td>
-
-                        {/* Column 5: ACTIONS */}
-                        <td className="py-3 px-4 sm:py-4 sm:px-6 text-right">
-                          {revokedSessionOpen ? (
-                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">View-only</span>
-                          ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenOverride(item)}
-                            disabled={worksheetIsReadOnly || isSaving || bulkMarking}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Pencil className="w-3.5 h-3.5 text-slate-500" />
-                            <span>{item.status ? 'Override' : 'Mark'}</span>
-                          </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
+                      {/* Column 5: ACTIONS */}
+                      <td className="py-3 px-4 sm:py-4 sm:px-6 text-right">
+                        {actionControl(item)}
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
           </div>
+          )}
           </>)}
         </Card>
       ) : null}
@@ -2329,7 +2321,7 @@ export const AttendanceMonitoring: React.FC = () => {
                       className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5 fill-white text-white" />
-                      <span>New Attendance Session</span>
+                      <span>Start session</span>
                     </button>
                   </div>
                 )}
@@ -2348,7 +2340,7 @@ export const AttendanceMonitoring: React.FC = () => {
                     onClick={() => setIsStartSessionOpen(true)}
                     className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 cursor-pointer"
                   >
-                    <span>+ Schedule New</span>
+                    <span>Schedule session</span>
                   </button>
                 </div>
 

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   Camera,
@@ -44,6 +43,7 @@ import {
   type GuidedCapturePhase,
 } from '../../utils/guidedCapture';
 import { GuidedCaptureStatus } from '../../components/GuidedCaptureStatus';
+import { Modal } from '../../components/Modal';
 import { playGuidanceSuccessTone, primeGuidanceAudio } from '../../utils/guidanceAudio';
 
 function formatAction(action: LivenessAction): { title: string; instruction: string } {
@@ -1188,52 +1188,55 @@ export const FaceRegistration: React.FC = () => {
       )}
 
       {/* REVOCATION CONFIRMATION MODAL */}
-      {showRevokeModal && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 max-w-md w-full border border-slate-200 dark:border-slate-800 space-y-5 shadow-2xl max-h-[90dvh] overflow-y-auto">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="w-10 h-10 rounded-2xl bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100">
-                Revoke Face Registration?
-              </h3>
-            </div>
+      <Modal
+        isOpen={showRevokeModal}
+        onClose={() => { if (!isRevoking) setShowRevokeModal(false); }}
+        size="sm"
+        title={
+          <span className="flex items-center gap-3">
+            <span className="w-10 h-10 shrink-0 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 flex items-center justify-center">
+              <Trash2 className="w-5 h-5" />
+            </span>
+            Revoke Face Registration?
+          </span>
+        }
+      >
+        <div className="space-y-5">
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+            Are you sure you want to revoke your facial biometric registration? Your encrypted reference model will be permanently deleted from biometric storage.
+          </p>
 
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Are you sure you want to revoke your facial biometric registration? Your encrypted reference model will be permanently deleted from biometric storage.
-            </p>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Past verified attendance records will remain preserved. After revoking you can register again from this page, or use Secretary/Faculty manual attendance for future sessions.
+          </p>
 
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Past verified attendance records will remain preserved. After revoking you can register again from this page, or use Secretary/Faculty manual attendance for future sessions.
-            </p>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                onClick={() => setShowRevokeModal(false)}
-                disabled={isRevoking}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => { void handleConfirmRevocation(); }}
-                disabled={isRevoking}
-                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-all shadow-md shadow-rose-600/20 flex items-center gap-2 cursor-pointer"
-              >
-                {isRevoking ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Revoking…</span>
-                  </>
-                ) : (
-                  <span>Yes, Revoke Registration</span>
-                )}
-              </button>
-            </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowRevokeModal(false)}
+              disabled={isRevoking}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => { void handleConfirmRevocation(); }}
+              disabled={isRevoking}
+              className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-all shadow-md shadow-rose-600/20 flex items-center gap-2 cursor-pointer"
+            >
+              {isRevoking ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Revoking…</span>
+                </>
+              ) : (
+                <span>Yes, Revoke Registration</span>
+              )}
+            </button>
           </div>
         </div>
-      , document.body)}
+      </Modal>
 
     </div>
   );

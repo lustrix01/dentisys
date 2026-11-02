@@ -47,6 +47,7 @@ type NavItem = {
   icon: typeof LayoutDashboard;
   badge?: string;
   sectionHeader?: string;
+  short?: string; // label under the icon in the collapsed rail (tablets have no hover)
 };
 
 const ROLE_TITLES: Record<string, string> = {
@@ -54,6 +55,62 @@ const ROLE_TITLES: Record<string, string> = {
   faculty: 'Dental Faculty Member',
   secretary: 'Class Secretary',
   student: 'Dental Student',
+};
+
+// One profile menu for the phone header and the desktop header, so both show the same labels.
+// viewRole is the role being shown (a linked Secretary in Student view shows 'student');
+// accountRole is the signed-in account's role, which decides where "My Profile" goes.
+const ProfileMenu: React.FC<{
+  email: string;
+  viewRole: string;
+  accountRole?: string;
+  onClose: () => void;
+  onLogout: () => void;
+}> = ({ email, viewRole, accountRole, onClose, onLogout }) => {
+  const profilePath = viewRole === 'admin' ? '/admin/profile'
+    : accountRole === 'secretary' ? '/secretary/profile'
+    : viewRole === 'student' ? '/student/profile'
+    : '/faculty/profile';
+  const profileLabel = viewRole === 'admin' ? 'My Dean Profile'
+    : (accountRole === 'secretary' || viewRole === 'student') ? 'My Profile'
+    : 'My Faculty Profile';
+  const itemClass = 'flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-slate-100/50 dark:hover:bg-slate-900/50 dark:hover:text-slate-100 text-xs font-semibold transition-all';
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="absolute right-0 mt-3 w-56 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-2.5 z-50 space-y-1">
+        <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 pb-2 mb-1.5">
+          <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Signed in as</p>
+          <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5">{email}</p>
+        </div>
+
+        <Link to={profilePath} onClick={onClose} className={itemClass}>
+          <User className="w-4 h-4 text-slate-400" />
+          <span>{profileLabel}</span>
+        </Link>
+
+        {viewRole !== 'student' && (
+          <Link
+            to={viewRole === 'admin' ? '/admin/settings' : viewRole === 'secretary' ? '/secretary/settings' : '/faculty/settings'}
+            onClick={onClose}
+            className={itemClass}
+          >
+            <SettingsIcon className="w-4 h-4 text-slate-400" />
+            <span>{viewRole === 'admin' ? 'System Settings' : 'My Settings'}</span>
+          </Link>
+        )}
+
+        <button
+          onClick={onLogout}
+          className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 text-xs font-bold transition-all border-t border-slate-100 dark:border-slate-800 pt-2 cursor-pointer"
+        >
+          <LogOut className="w-4 h-4 text-rose-500" />
+          <span>Sign Out</span>
+        </button>
+      </div>
+    </>
+  );
 };
 
 const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
@@ -130,6 +187,12 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const config = useRuntimeConfig();
   const studentPrototypeEnabled = isStudentPrototypeAllowed(user, config, 'dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  useEffect(() => {
+    if (!isSidebarOpen) return undefined;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsSidebarOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isSidebarOpen]);
   const [savedSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     // Owner decision: upright tablets (768-1023px) start collapsed unless the user has chosen before.
     const tabletDefault = typeof window !== 'undefined' && window.innerWidth >= 768 && window.innerWidth < 1024;
@@ -200,18 +263,18 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     if (currentUser.role === 'admin') {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-        { name: 'Academic Terms', path: '/admin/terms', icon: CalendarDays },
-        { name: 'Faculty Invitations', path: '/admin/faculty-invite', icon: UserPlus },
-        { name: 'Reports & Analytics', path: '/admin/reports', icon: FileSpreadsheet },
-        { name: 'Audit Trail', path: '/admin/audit-trail', icon: ListChecks },
+        { name: 'Academic Terms', path: '/admin/terms', icon: CalendarDays, short: 'Terms' },
+        { name: 'Faculty Invitations', path: '/admin/faculty-invite', icon: UserPlus, short: 'Invites' },
+        { name: 'Reports & Analytics', path: '/admin/reports', icon: FileSpreadsheet, short: 'Reports' },
+        { name: 'Audit Trail', path: '/admin/audit-trail', icon: ListChecks, short: 'Audit' },
       ];
     }
     
     if (currentUser.role === 'secretary') {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-        { name: 'Attendance Monitoring', path: '/secretary/attendance', icon: CalendarDays },
-        { name: 'My Activity Log', path: '/secretary/audit-trail', icon: ListChecks },
+        { name: 'Attendance Monitoring', path: '/secretary/attendance', icon: CalendarDays, short: 'Attendance' },
+        { name: 'My Activity Log', path: '/secretary/audit-trail', icon: ListChecks, short: 'Activity' },
       ];
     }
 
@@ -221,18 +284,18 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         items.push({ name: 'Dashboard', path: '/student/dashboard', icon: LayoutDashboard });
       }
       if (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'attendance')) {
-        items.push({ name: 'Daily Attendance', path: '/student/attendance', icon: Camera });
+        items.push({ name: 'Daily Attendance', path: '/student/attendance', icon: Camera, short: 'Check-in' });
       }
       if (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'attendance_logs')) {
-        items.push({ name: 'Attendance Logs', path: '/student/attendance-logs', icon: History });
+        items.push({ name: 'Attendance Logs', path: '/student/attendance-logs', icon: History, short: 'Logs' });
       }
       if (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'face')) {
-        items.push({ name: 'Face Registration', path: '/student/face-registration', icon: UserCheck });
+        items.push({ name: 'Face Registration', path: '/student/face-registration', icon: UserCheck, short: 'Face' });
       }
       if (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'academic')) {
         items.push(
-          { name: 'My Classes', path: '/student/classes', icon: BookOpen },
-          { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
+          { name: 'My Classes', path: '/student/classes', icon: BookOpen, short: 'Classes' },
+          { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle, short: 'Retention' },
         );
       }
       return items;
@@ -241,13 +304,13 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     // Faculty (default)
     return [
       { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-      { name: 'My Classes & Rosters', path: '/classes', icon: BookOpen },
-      { name: 'Grade Computation', path: '/grades', icon: Calculator },
-      { name: 'Retention Monitoring', path: '/retention', icon: AlertTriangle, badge: 'retention' },
-      { name: 'Attendance Monitoring', path: '/attendance', icon: CalendarDays },
-      { name: 'Reports & Export', path: '/reports', icon: FileSpreadsheet },
-      { name: 'Email Management', path: '/email-management', icon: Mail },
-      { name: 'My Activity Log', path: '/faculty/audit-trail', icon: ListChecks },
+      { name: 'My Classes & Rosters', path: '/classes', icon: BookOpen, short: 'Classes' },
+      { name: 'Grade Computation', path: '/grades', icon: Calculator, short: 'Grades' },
+      { name: 'Retention Monitoring', path: '/retention', icon: AlertTriangle, badge: 'retention', short: 'Retention' },
+      { name: 'Attendance Monitoring', path: '/attendance', icon: CalendarDays, short: 'Attendance' },
+      { name: 'Reports & Export', path: '/reports', icon: FileSpreadsheet, short: 'Reports' },
+      { name: 'Email Management', path: '/email-management', icon: Mail, short: 'Email' },
+      { name: 'My Activity Log', path: '/faculty/audit-trail', icon: ListChecks, short: 'Activity' },
     ];
   };
 
@@ -554,56 +617,25 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             </button>
 
             {isProfileOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setIsProfileOpen(false)} />
-                <div className="absolute right-0 mt-3 w-56 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-2.5 z-50 space-y-1">
-                  
-                  <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 pb-2 mb-1.5">
-                    <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Signed in as</p>
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5">{currentUser.email}</p>
-                  </div>
-
-                  <Link
-                    to={currentUser.role === 'admin' ? '/admin/profile' : user?.role === 'secretary' ? '/secretary/profile' : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
-                    onClick={() => setIsProfileOpen(false)}
-                    className="flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-slate-100/50 dark:hover:bg-slate-900/50 dark:hover:text-slate-100 text-xs font-semibold transition-all"
-                  >
-                    <User className="w-4 h-4 text-slate-400" />
-                    <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? 'My Secretary Profile' : currentUser.role === 'student' ? 'My Profile' : 'My Faculty Profile'}</span>
-                  </Link>
-
-                  {currentUser.role !== 'student' && (
-                    <Link
-                      to={currentUser.role === 'admin' ? '/admin/settings' : currentUser.role === 'secretary' ? '/secretary/settings' : '/faculty/settings'}
-                      onClick={() => setIsProfileOpen(false)}
-                      className="flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-slate-100/50 dark:hover:bg-slate-900/50 dark:hover:text-slate-100 text-xs font-semibold transition-all"
-                    >
-                      <SettingsIcon className="w-4 h-4 text-slate-400" />
-                      <span>{currentUser.role === 'admin' ? 'System Settings' : 'My Settings'}</span>
-                    </Link>
-                  )}
-
-                  <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 text-xs font-bold transition-all border-t border-slate-100 dark:border-slate-800 pt-2 cursor-pointer"
-                  >
-                    <LogOut className="w-4 h-4 text-rose-500" />
-                    <span>Sign Out</span>
-                  </button>
-
-                </div>
-              </>
+              <ProfileMenu
+                email={currentUser.email}
+                viewRole={currentUser.role}
+                accountRole={user?.role}
+                onClose={() => setIsProfileOpen(false)}
+                onLogout={handleLogout}
+              />
             )}
           </div>
 
           {/* Hamburger Menu Toggle */}
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            aria-label="Open menu"
+            aria-label={isSidebarOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={isSidebarOpen}
             className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
           >
-            {isSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {/* Stays a menu icon: the open drawer has its own X, so two close buttons never show at once. */}
+            <Menu className="w-6 h-6" />
           </button>
         </div>
       </header>
@@ -611,7 +643,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       {/* Sidebar Navigation — fixed on desktop, drawer on mobile */}
       <aside
         className={`print:hidden fixed inset-y-0 left-0 z-50 bg-gradient-to-b ${colors.sidebarGradient} border-r border-slate-200/80 dark:border-slate-800 flex flex-col transition-all duration-300 ease-out ${
-          isSidebarCollapsed ? 'px-3 py-5 md:w-20 overflow-visible' : 'p-5 md:w-72 overflow-y-auto'
+          isSidebarCollapsed ? 'px-3 py-5 md:w-20 overflow-visible' : 'p-5 w-72 max-w-[85vw] md:max-w-none overflow-y-auto'
         } ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
       >
         {/* Brand Logo & Desktop Collapse Toggle */}
@@ -627,7 +659,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                 <h1 className="font-heading font-extrabold text-xl tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-1.5 truncate">
                   DentiSYS
                 </h1>
-                <p className="text-[9px] font-bold text-slate-500 dark:text-slate-500 tracking-wide uppercase whitespace-nowrap">
+                <p className="text-[9px] font-bold text-slate-500 dark:text-slate-500 tracking-wide uppercase md:whitespace-nowrap">
                   BU College of Dental Medicine
                 </p>
               </div>
@@ -698,7 +730,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
               <UserCheck className="w-4 h-4 shrink-0" />
               {!isSidebarCollapsed && <span>Secretary</span>}
               {isSidebarCollapsed && (
-                <div className="pointer-events-none absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 text-white text-xs font-bold rounded-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap shadow-xl border border-slate-700/50 flex items-center">
+                <div className="pointer-events-none absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 text-white text-xs font-bold rounded-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap shadow-xl border border-slate-700/50 flex items-center">
                   Secretary View
                   <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
                 </div>
@@ -724,7 +756,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
               <User className="w-4 h-4 shrink-0" />
               {!isSidebarCollapsed && <span>Student</span>}
               {isSidebarCollapsed && (
-                <div className="pointer-events-none absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 text-white text-xs font-bold rounded-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap shadow-xl border border-slate-700/50 flex items-center">
+                <div className="pointer-events-none absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 text-white text-xs font-bold rounded-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap shadow-xl border border-slate-700/50 flex items-center">
                   Student View
                   <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
                 </div>
@@ -758,7 +790,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                   onClick={() => setIsSidebarOpen(false)}
                   className={`relative group flex items-center transition-all duration-150 ${
                     isSidebarCollapsed
-                      ? 'w-10 h-10 mx-auto justify-center rounded-xl'
+                      ? 'w-14 py-1.5 mx-auto flex-col justify-center rounded-xl'
                       : 'justify-between px-3.5 py-2.5 rounded-xl'
                   } ${
                     isActive
@@ -775,6 +807,11 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                       <span className={`text-sm truncate transition-opacity duration-300 ${isActive ? 'font-bold' : 'font-medium'}`}>{item.name}</span>
                     )}
                   </div>
+                  {isSidebarCollapsed && (
+                    <span aria-hidden="true" className={`mt-1 max-w-full truncate text-[10px] leading-none tracking-tight ${isActive ? 'font-bold' : 'font-medium'}`}>
+                      {item.short ?? item.name}
+                    </span>
+                  )}
 
                   {/* Normal badge when expanded */}
                   {badgeValue !== undefined && !isSidebarCollapsed && (
@@ -787,13 +824,13 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                   {badgeValue !== undefined && isSidebarCollapsed && (
                     <span
                       aria-label={item.badge === 'retention' ? `${badgeValue} students needing attention in the current school year` : undefined}
-                      className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900 animate-pulse"
+                      className="absolute top-1 right-2 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900 animate-pulse"
                     />
                   )}
 
                   {/* Instant Floating Flyout Tooltip when collapsed (Raycast/Linear style) */}
                   {isSidebarCollapsed && (
-                    <div className="pointer-events-none absolute left-full ml-3 px-3 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white text-xs font-bold rounded-xl shadow-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap flex items-center gap-2 border border-slate-700/50">
+                    <div className="pointer-events-none absolute left-full ml-3 px-3 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white text-xs font-bold rounded-xl shadow-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap flex items-center gap-2 border border-slate-700/50">
                       <span>{item.name}</span>
                       {badgeValue !== undefined && (
                         <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-rose-500 text-white">
@@ -897,45 +934,13 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
               </button>
 
               {isProfileOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setIsProfileOpen(false)} />
-                  <div className="absolute right-0 mt-3 w-56 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-2.5 z-50 space-y-1">
-                    
-                    <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 pb-2 mb-1.5">
-                      <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Signed in as</p>
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5">{currentUser.email}</p>
-                    </div>
-
-                    <Link
-                      to={currentUser.role === 'admin' ? '/admin/profile' : user?.role === 'secretary' ? '/secretary/profile' : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
-                      onClick={() => setIsProfileOpen(false)}
-                      className="flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-slate-100/50 dark:hover:bg-slate-900/50 dark:hover:text-slate-100 text-xs font-semibold transition-all"
-                    >
-                      <User className="w-4 h-4 text-slate-400" />
-                      <span>{currentUser.role === 'admin' ? 'My Dean Profile' : (user?.role === 'secretary' || currentUser.role === 'student') ? 'My Profile' : 'My Faculty Profile'}</span>
-                    </Link>
-
-                    {currentUser.role !== 'student' && (
-                      <Link
-                        to={currentUser.role === 'admin' ? '/admin/settings' : currentUser.role === 'secretary' ? '/secretary/settings' : '/faculty/settings'}
-                        onClick={() => setIsProfileOpen(false)}
-                        className="flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-slate-100/50 dark:hover:bg-slate-900/50 dark:hover:text-slate-100 text-xs font-semibold transition-all"
-                      >
-                        <SettingsIcon className="w-4 h-4 text-slate-400" />
-                        <span>{currentUser.role === 'admin' ? 'System Settings' : 'My Settings'}</span>
-                      </Link>
-                    )}
-
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 text-xs font-bold transition-all border-t border-slate-100 dark:border-slate-800 pt-2 cursor-pointer"
-                    >
-                      <LogOut className="w-4 h-4 text-rose-500" />
-                      <span>Sign Out</span>
-                    </button>
-
-                  </div>
-                </>
+                <ProfileMenu
+                  email={currentUser.email}
+                  viewRole={currentUser.role}
+                  accountRole={user?.role}
+                  onClose={() => setIsProfileOpen(false)}
+                  onLogout={handleLogout}
+                />
               )}
             </div>
 

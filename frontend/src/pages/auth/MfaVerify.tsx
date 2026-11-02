@@ -67,7 +67,7 @@ export function MfaVerify() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4 sm:p-6">
+    <div className="min-h-dvh bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-md">
         <div className="bg-white dark:bg-slate-900 rounded-[32px] shadow-xl border border-slate-200/30 dark:border-slate-800/80 overflow-hidden">
           <div className="bg-[#EAE5F8] dark:bg-accent-950/20 p-6 text-center">

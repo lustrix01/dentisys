@@ -1671,19 +1671,21 @@ const handleSendAllStudentInvites = async () => {
             {/* School Year Selector Filter Pill (Archived Classes tab only) */}
             {activeTab === 'archived' && (
               <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <label className="flex items-center gap-2 flex-1 min-w-0">
+                  <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
+                  <span className="shrink-0 text-xs font-semibold text-slate-500 dark:text-slate-400">School year</span>
                   <select
                     value={archivedSchoolYear}
                     onChange={(e) => setArchivedSchoolYear(e.target.value)}
+                    aria-label="School year"
                     className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer w-full truncate pr-1"
                   >
-                    <option value="all">All School Years</option>
                     {availableSchoolYears.map(sy => (
-                      <option key={sy} value={sy}>S.Y. {sy}</option>
+                      <option key={sy} value={sy}>{sy === newSchoolYear ? `Current (${sy})` : sy}</option>
                     ))}
+                    <option value="all">All school years</option>
                   </select>
-                </div>
+                </label>
               </div>
             )}
 
@@ -1700,7 +1702,8 @@ const handleSendAllStudentInvites = async () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-shrink-0 sm:items-center">
+            {/* 320px phones: one button per row so "Import Class and Roster" is not cut off. */}
+            <div className="grid w-full grid-cols-1 min-[360px]:grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-shrink-0 sm:items-center">
               <button
                 onClick={handleOpenCreateClassModal}
                 disabled={!newSchoolYear}
@@ -1957,9 +1960,10 @@ const handleSendAllStudentInvites = async () => {
             </div>
           </div>
 
+          {/* Phones (<768px): each table row is shown as a stacked block (name first, then ID, year, email, section, actions). */}
           <div className="overflow-x-auto min-h-[220px]">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
+            <table className="w-full text-left text-xs border-collapse max-md:block">
+              <thead className="max-md:hidden">
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                   <th className="py-3 px-4">Student ID</th>
                   <th className="py-3 px-4">Full Name</th>
@@ -1969,17 +1973,17 @@ const handleSendAllStudentInvites = async () => {
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
                 {loading ? (
-                  <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400 font-semibold">
+                  <tr className="max-md:block">
+                    <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400 font-semibold max-md:block">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-emerald-600" />
                       Loading student roster...
                     </td>
                   </tr>
                 ) : filteredStudents.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400 font-semibold">
+                  <tr className="max-md:block">
+                    <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400 font-semibold max-md:block">
                       <Users className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
                       <p className="text-xs text-slate-500 dark:text-slate-400">
                         {searchQuery
@@ -2006,25 +2010,25 @@ const handleSendAllStudentInvites = async () => {
                     const assignedClassLabel = displayedSections.map(s => s.className).join(', ') || 'No class section';
 
                     return (
-                      <tr key={st.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="py-3.5 px-4 whitespace-nowrap font-mono font-bold text-slate-700 dark:text-slate-200">
+                      <tr key={st.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
+                        <td className="py-3.5 px-4 whitespace-nowrap font-mono font-bold text-slate-700 dark:text-slate-200 max-md:order-2 max-md:p-0">
                           {st.studentId}
                         </td>
-                        <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">
+                        <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm">
                           {st.name}
                         </td>
-                        <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
+                        <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 max-md:order-4 max-md:w-full max-md:p-0 max-md:break-all">
                           {st.email}
                         </td>
-                        <td className="py-3.5 px-4">
+                        <td className="py-3.5 px-4 max-md:order-5 max-md:p-0">
                           <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 font-extrabold text-[10px] uppercase tracking-wider border border-accent-200/60 dark:border-accent-800/40">
                             {assignedClassLabel}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 text-slate-500">
+                        <td className="py-3.5 px-4 text-slate-500 max-md:order-3 max-md:p-0">
                           Year {st.yearLevel}
                         </td>
-                        <td className="py-3.5 px-4 text-right">
+                        <td className="py-3.5 px-4 text-right max-md:order-6 max-md:ml-auto max-md:p-0">
                           <div className="relative inline-flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                             {displayedSections.some(sec => sec.isSecretary) && (
                               <span className="whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 border border-accent-200/60 dark:border-accent-800/40">Class Secretary</span>
@@ -2176,7 +2180,7 @@ const handleSendAllStudentInvites = async () => {
             {/* Target Class Selector & Import File Action */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="font-bold text-slate-700 dark:text-slate-300 block">Target Class Section</label>
+                <label htmlFor="add-student-class" className="font-bold text-slate-700 dark:text-slate-300 block">Target Class Section</label>
                 <button
                   type="button"
                   onClick={() => {
@@ -2190,6 +2194,7 @@ const handleSendAllStudentInvites = async () => {
                 </button>
               </div>
               <select
+                id="add-student-class"
                 value={targetEnrollCsId}
                 onChange={(e) => {
                   const idNum = Number(e.target.value);
@@ -2213,8 +2218,9 @@ const handleSendAllStudentInvites = async () => {
 
             <form onSubmit={handleRegisterNewStudent} className="space-y-4">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Student ID Number *</label>
+                <label htmlFor="add-student-id" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Student ID Number *</label>
                 <input
+                  id="add-student-id"
                   type="text"
                   required
                   value={studentIdInput}
@@ -2241,8 +2247,9 @@ const handleSendAllStudentInvites = async () => {
                     className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-xs" />
                 </label>
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">First Name *</label>
+                  <label htmlFor="add-student-first" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">First Name *</label>
                   <input
+                    id="add-student-first"
                     type="text"
                     required
                     value={studentFirstName}
@@ -2253,8 +2260,9 @@ const handleSendAllStudentInvites = async () => {
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Middle Name</label>
+                  <label htmlFor="add-student-middle" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Middle Name</label>
                   <input
+                    id="add-student-middle"
                     type="text"
                     value={studentMiddleName}
                     readOnly={studentAutofilled}
@@ -2264,8 +2272,9 @@ const handleSendAllStudentInvites = async () => {
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Last Name *</label>
+                  <label htmlFor="add-student-last" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Last Name *</label>
                   <input
+                    id="add-student-last"
                     type="text"
                     required
                     value={studentLastName}
@@ -2290,9 +2299,10 @@ const handleSendAllStudentInvites = async () => {
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Official Bicol University Email</label>
+                <label htmlFor="add-student-email" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Official Bicol University Email</label>
                 <div className="flex items-center gap-2">
                 <input
+                  id="add-student-email"
                   type="text"
                   inputMode="email"
                   required
@@ -2307,8 +2317,9 @@ const handleSendAllStudentInvites = async () => {
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Year Level</label>
+                <label htmlFor="add-student-year" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Year Level</label>
                 <select
+                  id="add-student-year"
                   value={studentYearInput}
                   disabled={studentAutofilled}
                   onChange={(e) => setStudentYearInput(Number(e.target.value))}

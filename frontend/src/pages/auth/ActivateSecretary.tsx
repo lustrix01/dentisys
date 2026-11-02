@@ -45,7 +45,7 @@ export function ActivateSecretary() {
 
   useEffect(() => {
     if (!token) {
-      setInvitationError('No invitation token provided. Please use the complete activation link provided in your invitation email.');
+      setInvitationError('This invitation link is incomplete. Open the full link from your email, or ask your Faculty to send a new one.');
       return;
     }
 

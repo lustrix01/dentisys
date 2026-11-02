@@ -244,7 +244,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     const missingNameRetentionRow = retentionTable.getByRole('row').filter({ hasText: 'Missing Class Name' });
     await expect(missingNameRetentionRow.getByRole('cell').nth(1)).toHaveText('—');
     await expect(missingNameRetentionRow.getByRole('cell').nth(2)).toHaveText('—');
-    await expect(missingNameRetentionRow.getByRole('cell').nth(3)).toContainText('No Grade Yet');
+    await expect(missingNameRetentionRow.getByRole('cell').nth(3)).toContainText('No grade yet');
 
     await page.getByRole('button', { name: 'Attendance Reports' }).click();
     await openClassCard(page, 'CLINIC');
@@ -272,7 +272,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     let download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/^Student_Summary_.*\.xlsx$/);
     const summary = await readDownloadedXlsxText(download);
-    for (const text of ['STUDENT SUMMARY', 'Student Number', 'Face Enrolled', '2023-0101', 'Alex Example', '2023-0102', 'Missing Class Name', 'Remedial', 'No Grade Yet']) expect(summary).toContain(text);
+    for (const text of ['STUDENT SUMMARY', 'Student Number', 'Face Enrolled', '2023-0101', 'Alex Example', '2023-0102', 'Missing Class Name', 'Remedial', 'No grade yet']) expect(summary).toContain(text);
     expect(summary).toContain('CLINIC, "4A"\nSpecial');
     // Formula-looking class names stay plain text (no formula cell, no guard apostrophe).
     for (const text of ['=1+1', '+SUM(1,1)', '-1+1', '@SUM(1,1)']) expect(summary).toContain(text);

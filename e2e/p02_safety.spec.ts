@@ -121,12 +121,12 @@ test.describe('P02 development safety seams', () => {
     await expect(page).toHaveURL('/');
     await page.click('a[href="/secretary/attendance"]');
     await openSecretaryWorksheet(page);
-    await page.getByRole('button', { name: 'Start Session', exact: true }).click();
+    await page.getByRole('button', { name: 'Start session', exact: true }).click();
     const form = page.locator('form').filter({ hasText: 'Selected class' });
     await form.getByRole('checkbox', { name: /Geofence/ }).check();
     await form.getByRole('button', { name: /Use device location/i }).click();
     await expect(page.getByText(/Location acquired: 13\.1436, 123\.7438/)).toBeVisible();
-    await form.getByRole('button', { name: 'Start Session', exact: true }).click();
+    await form.getByRole('button', { name: 'Start session', exact: true }).click();
     await expect(page.getByText(/Attendance session started\. The class roll call is now live\. Session code: /).first()).toBeVisible();
   });
 });

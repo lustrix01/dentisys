@@ -864,22 +864,23 @@ export const RetentionMonitoring: React.FC = () => {
 
         <Card className="order-1 no-print p-4 flex flex-col xl:flex-row gap-4 xl:items-center">
           {/* School Year Selector Filter Pill (Defaults to Current School Year) */}
-          <div className="w-full xl:w-56 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+          <label className="w-full xl:w-72 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
             <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
+            <span className="shrink-0 text-xs font-semibold text-slate-500 dark:text-slate-400">School year</span>
             <select
               value={selectedSchoolYear}
               onChange={(event) => setSelectedSchoolYear(event.target.value)}
               aria-label="School year"
               className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
-              <option value="all">All School Years</option>
               {availableSchoolYears.map(sy => (
                 <option key={sy} value={sy}>
-                  S.Y. {sy}{sy === currentSchoolYear ? ' (Current)' : ''}
+                  {sy === currentSchoolYear ? `Current (${sy})` : sy}
                 </option>
               ))}
+              <option value="all">All school years</option>
             </select>
-          </div>
+          </label>
 
           <div className="w-full xl:flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
             <Filter className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
@@ -904,7 +905,7 @@ export const RetentionMonitoring: React.FC = () => {
           </div>
           <div className="relative w-full xl:w-56">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input type="text" placeholder="Search..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-xs" />
+            <input type="text" placeholder="Search..." aria-label="Search students" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-xs" />
           </div>
         </Card>
       </div>
@@ -1044,11 +1045,15 @@ export const RetentionMonitoring: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Retention Status ({watchlistRecords.length})</h2><p className="text-xs text-slate-500 dark:text-slate-400">Final grades and computed retention status. Select a status to view policy progression.</p></div>
           </div>
+          {watchlistRecords.length === 0 ? (
+            // Outside the table so the message is not centred across a table wider than a phone screen.
+            <p className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">{isLoading ? 'Loading authoritative retention records...' : (selectedClassId !== 'all' || selectedSubjectCode !== 'all' || searchQuery.trim() ? 'No students needing retention action match these filters.' : 'No students need retention action in this school year.')}</p>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Student Number</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center">Course Grade</th><th className="py-3 px-4">State</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {watchlistRecords.length === 0 ? <tr><td colSpan={7} className="py-10 text-center text-slate-500 dark:text-slate-400">{isLoading ? 'Loading authoritative retention records...' : 'No students match these filters.'}</td></tr> : watchlistRecords.map(record => (
+                {watchlistRecords.map(record => (
                   <tr key={record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(record.studentName, 'Student name unavailable')}</td>
                     <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-mono">{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
@@ -1062,6 +1067,7 @@ export const RetentionMonitoring: React.FC = () => {
               </tbody>
             </table>
           </div>
+          )}
         </Card>
       )}
 
@@ -1070,11 +1076,15 @@ export const RetentionMonitoring: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Remedial Progression ({remedialRows.length})</h2><p className="text-xs text-slate-500 dark:text-slate-400">Attempt stages, scores and outcomes are read from the authoritative retention API. Removal is unavailable because no approved authoritative delete contract exists.</p></div>
           </div>
+          {remedialRows.length === 0 ? (
+            // Outside the table so the message is not centred across a table wider than a phone screen.
+            <p className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">{isLoading ? 'Loading authoritative remedial records...' : 'No remedial records match the selected filters.'}</p>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Original grade</th><th className="py-3 px-4">Attempts</th><th className="py-3 px-4">Current stage</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {remedialRows.length === 0 ? <tr><td colSpan={6} className="py-10 text-center text-slate-500 dark:text-slate-400">{isLoading ? 'Loading authoritative remedial records...' : 'No persisted remedial records match the selected filters.'}</td></tr> : remedialRows.map(row => (
+                {remedialRows.map(row => (
                   <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-500 dark:text-slate-400 font-mono">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
                     <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-500 dark:text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
@@ -1188,6 +1198,7 @@ export const RetentionMonitoring: React.FC = () => {
               </tbody>
             </table>
           </div>
+          )}
         </Card>
       )}
 

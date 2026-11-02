@@ -49,8 +49,8 @@ export function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen min-h-[100dvh] w-full bg-slate-100 flex items-center justify-center px-4 py-8 font-sans text-slate-800">
-      <div className="w-full max-w-4xl md:min-h-[480px] md:flex overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+    <div className="min-h-dvh w-full bg-slate-100 dark:bg-slate-950 flex items-center justify-center px-4 py-8 font-sans text-slate-800 dark:text-slate-100">
+      <div className="w-full max-w-4xl md:min-h-[480px] md:flex overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg dark:shadow-none">
 
         {/* LEFT PANE: Full-Height Vibrant Purple Hero Section matching Login */}
         <div className="hidden md:order-1 md:flex md:w-1/2 bg-[#8B5CF6] p-8 lg:p-10 flex-col justify-between relative overflow-hidden text-white select-none">
@@ -76,11 +76,11 @@ export function ResetPassword() {
         </div>
 
         {/* RIGHT PANE: Main Content matching Login */}
-        <main className="w-full md:order-2 md:w-1/2 min-h-0 bg-white p-7 sm:p-8 lg:p-9 flex flex-col justify-between">
+        <main className="w-full md:order-2 md:w-1/2 min-h-0 bg-white dark:bg-slate-900 p-7 sm:p-8 lg:p-9 flex flex-col justify-between">
           <div className="flex justify-start">
             <Link
               to="/login"
-              className="whitespace-nowrap text-sm font-medium text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition-colors cursor-pointer px-2 py-1.5 rounded-md hover:bg-slate-50"
+              className="whitespace-nowrap text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer px-2 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to login</span>
@@ -91,10 +91,10 @@ export function ResetPassword() {
             {!token ? (
               <>
                 <div className="space-y-1">
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-heading">
+                  <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-heading">
                     Reset link needed
                   </h1>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
                     This page only works from the reset link in your email. Request a new link to continue.
                   </p>
                 </div>
@@ -108,23 +108,23 @@ export function ResetPassword() {
             ) : (
               <>
             <div className="space-y-1">
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-heading">
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-heading">
                 Create new password
               </h1>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 Choose a strong password for your account
               </p>
             </div>
 
             {success && (
-              <div role="alert" className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-medium text-emerald-800 flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <div role="alert" className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl text-xs font-medium text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                 <span>{success}</span>
               </div>
             )}
 
             {error && (
-              <div role="alert" className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-medium text-rose-700 flex items-center gap-2">
+              <div role="alert" className="p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 rounded-xl text-xs font-medium text-rose-700 dark:text-rose-400 flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
                 <span>{error}</span>
               </div>
@@ -132,7 +132,7 @@ export function ResetPassword() {
 
             <form className="space-y-3.5" onSubmit={handleSubmit}>
               <div>
-                <label htmlFor="password" className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="password" className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
                   New password
                 </label>
                 <div className="relative rounded-xl">
@@ -143,14 +143,14 @@ export function ResetPassword() {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-3.5 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-purple-600/10 focus:border-purple-600 transition-all text-sm outline-none text-slate-900 placeholder-slate-400"
+                    className="w-full px-3.5 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-purple-600/10 focus:border-purple-600 transition-all text-sm outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
                     placeholder="••••••••"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -158,29 +158,29 @@ export function ResetPassword() {
 
                 {/* Password Criteria Checklist */}
                 {password.length > 0 && (
-                  <div className="mt-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
-                    <div className="font-semibold text-slate-600 text-[11px] mb-1">
+                  <div className="mt-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-xs space-y-1">
+                    <div className="font-semibold text-slate-600 dark:text-slate-300 text-[11px] mb-1">
                       Password requirements:
                     </div>
                     <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
-                      <div className={`flex items-center gap-1.5 ${passwordCriteria.hasMinLength ? 'text-emerald-700 font-medium' : 'text-slate-400'}`}>
-                        {passwordCriteria.hasMinLength ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <XCircle className="w-3.5 h-3.5" />}
+                      <div className={`flex items-center gap-1.5 ${passwordCriteria.hasMinLength ? 'text-emerald-700 dark:text-emerald-400 font-medium' : 'text-slate-400 dark:text-slate-500'}`}>
+                        {passwordCriteria.hasMinLength ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <XCircle className="w-3.5 h-3.5" />}
                         <span>8+ characters</span>
                       </div>
-                      <div className={`flex items-center gap-1.5 ${passwordCriteria.hasUppercase ? 'text-emerald-700 font-medium' : 'text-slate-400'}`}>
-                        {passwordCriteria.hasUppercase ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <XCircle className="w-3.5 h-3.5" />}
+                      <div className={`flex items-center gap-1.5 ${passwordCriteria.hasUppercase ? 'text-emerald-700 dark:text-emerald-400 font-medium' : 'text-slate-400 dark:text-slate-500'}`}>
+                        {passwordCriteria.hasUppercase ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <XCircle className="w-3.5 h-3.5" />}
                         <span>1+ uppercase</span>
                       </div>
-                      <div className={`flex items-center gap-1.5 ${passwordCriteria.hasLowercase ? 'text-emerald-700 font-medium' : 'text-slate-400'}`}>
-                        {passwordCriteria.hasLowercase ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <XCircle className="w-3.5 h-3.5" />}
+                      <div className={`flex items-center gap-1.5 ${passwordCriteria.hasLowercase ? 'text-emerald-700 dark:text-emerald-400 font-medium' : 'text-slate-400 dark:text-slate-500'}`}>
+                        {passwordCriteria.hasLowercase ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <XCircle className="w-3.5 h-3.5" />}
                         <span>1+ lowercase</span>
                       </div>
-                      <div className={`flex items-center gap-1.5 ${passwordCriteria.hasNumber ? 'text-emerald-700 font-medium' : 'text-slate-400'}`}>
-                        {passwordCriteria.hasNumber ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <XCircle className="w-3.5 h-3.5" />}
+                      <div className={`flex items-center gap-1.5 ${passwordCriteria.hasNumber ? 'text-emerald-700 dark:text-emerald-400 font-medium' : 'text-slate-400 dark:text-slate-500'}`}>
+                        {passwordCriteria.hasNumber ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <XCircle className="w-3.5 h-3.5" />}
                         <span>1+ number</span>
                       </div>
-                      <div className={`flex items-center gap-1.5 ${passwordCriteria.hasSpecial ? 'text-emerald-700 font-medium' : 'text-slate-400'} col-span-2`}>
-                        {passwordCriteria.hasSpecial ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <XCircle className="w-3.5 h-3.5" />}
+                      <div className={`flex items-center gap-1.5 ${passwordCriteria.hasSpecial ? 'text-emerald-700 dark:text-emerald-400 font-medium' : 'text-slate-400 dark:text-slate-500'} col-span-2`}>
+                        {passwordCriteria.hasSpecial ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <XCircle className="w-3.5 h-3.5" />}
                         <span>1+ special character (!@#$%^&*)</span>
                       </div>
                     </div>
@@ -189,7 +189,7 @@ export function ResetPassword() {
               </div>
 
               <div>
-                <label htmlFor="confirm-password" className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label htmlFor="confirm-password" className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
                   Confirm new password
                 </label>
                 <div className="relative rounded-xl">
@@ -200,14 +200,14 @@ export function ResetPassword() {
                     required
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-3.5 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-purple-600/10 focus:border-purple-600 transition-all text-sm outline-none text-slate-900 placeholder-slate-400"
+                    className="w-full px-3.5 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-purple-600/10 focus:border-purple-600 transition-all text-sm outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
                     placeholder="••••••••"
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     aria-label={showConfirmPassword ? 'Hide password confirmation' : 'Show password confirmation'}
-                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
                   >
                     {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -231,7 +231,7 @@ export function ResetPassword() {
           </div>
 
           {/* Bottom institutional mark */}
-          <div className="text-center text-xs text-slate-500">
+          <div className="text-center text-xs text-slate-500 dark:text-slate-400">
             <span>&copy; 2026 Bicol University College of Dental Medicine</span>
           </div>
         </main>

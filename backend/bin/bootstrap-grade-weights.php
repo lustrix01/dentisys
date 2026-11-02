@@ -128,6 +128,20 @@ foreach ($offerings as $offering) {
             ? $e->getMessage() . ' Supply an explicit assessment, period, and component mapping, then retry.'
             : $e->getMessage();
         echo "FAILED: {$label}: {$message}\n";
+        // Name the assessments that blocked this class so Faculty know which ones to map.
+        $reasons = [
+            'no_matching_category' => 'no category matches its type',
+            'ambiguous_component_mapping' => 'matches more than one Lecture/Laboratory category',
+            'linked_category_period_missing' => 'its linked category is not in this period',
+            'category_component_missing' => 'its category has no Lecture/Laboratory component',
+        ];
+        foreach ($e->details['assessments'] ?? [] as $item) {
+            $title = ($item['title'] ?? null) !== null ? "\"{$item['title']}\"" : "assessment #{$item['assessmentId']}";
+            $facts = array_filter([$item['legacyType'] ?? null, $item['gradingPeriod'] ?? null]);
+            $reason = $reasons[$item['mappingReason'] ?? ''] ?? ($item['mappingReason'] ?? '');
+            echo "  - {$title}" . ($facts !== [] ? ' (' . implode(', ', $facts) . ')' : '')
+                . ($reason !== '' ? " — {$reason}" : '') . "\n";
+        }
     }
 }
 

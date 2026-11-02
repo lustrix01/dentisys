@@ -3247,10 +3247,17 @@ export const GradeComputation: React.FC = () => {
               {index > 0 && <span aria-hidden="true">&rarr;</span>}
               {step.done ? (
                 <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400"><Check className="w-3.5 h-3.5" />{index + 1} {step.label}</span>
-              ) : step.next ? (
-                <button type="button" onClick={() => setActiveSubTab(step.tab)} className="rounded-lg bg-clinical-600 px-2.5 py-1 text-white hover:bg-clinical-700">{index + 1} {step.label}</button>
               ) : (
-                <span>{index + 1} {step.label}</span>
+                // Incomplete steps use the warning style so they never read as done; each opens its tab.
+                <button
+                  type="button"
+                  onClick={() => setActiveSubTab(step.tab)}
+                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40 ${step.next ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40' : 'border-dashed border-amber-200 dark:border-amber-900/60'}`}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
+                  {index + 1} {step.label}
+                  <span className="font-normal">({step.tab === 'components' ? 'not set' : 'none yet'})</span>
+                </button>
               )}
             </React.Fragment>
           ))}
@@ -3960,9 +3967,9 @@ export const GradeComputation: React.FC = () => {
                       </td>
                       <td className="px-5 py-3.5 font-semibold text-slate-700 dark:text-slate-300">{ass.gradingPeriod}</td>
                       <td className="px-5 py-3.5 text-center font-extrabold text-slate-800 dark:text-slate-100">{ass.maxScore} pts</td>
-                      <td className="px-5 py-3.5 font-mono dark:text-slate-500">{ass.dueDate || 'No deadline'}</td>
+                      <td className="px-5 py-3.5 font-mono whitespace-nowrap text-slate-600 dark:text-slate-400">{ass.dueDate || 'No deadline'}</td>
                       <td className="px-5 py-3.5">
-                        <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase ${ass.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100'
+                        <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase ${ass.status === 'Active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
                           }`}>
                           {ass.status}
                         </span>
@@ -5657,10 +5664,11 @@ export const GradeComputation: React.FC = () => {
       >
         <form onSubmit={handleAssessmentSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
+            <label htmlFor="assessment-title" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
               Assessment Title / Activity Name
             </label>
             <input
+              id="assessment-title"
               type="text"
               required
               placeholder="e.g. Molar Crown Prep quiz"
@@ -5687,10 +5695,11 @@ export const GradeComputation: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
+              <label htmlFor="assessment-period" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Grading Period
               </label>
               <select
+                id="assessment-period"
                 value={assPeriod}
                 onChange={(e) => handlePeriodChange(e.target.value as any)}
                 className="w-full pl-4 pr-10 truncate py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
@@ -5701,7 +5710,7 @@ export const GradeComputation: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
+              <label htmlFor="assessment-category" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Category Type
               </label>
               {modalConfigStatus === 'loading' && (
@@ -5739,6 +5748,7 @@ export const GradeComputation: React.FC = () => {
                     </div>
                   )}
                   <select
+                    id="assessment-category"
                     value={assGradingCategoryId || assType}
                     onChange={(e) => {
                       const selectedVal = e.target.value;
@@ -5820,10 +5830,11 @@ export const GradeComputation: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
+              <label htmlFor="assessment-max-score" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Maximum Score (Points)
               </label>
               <input
+                id="assessment-max-score"
                 type="number"
                 min="1"
                 required
@@ -5843,10 +5854,11 @@ export const GradeComputation: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
+              <label htmlFor="assessment-due-date" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Due Date
               </label>
               <input
+                id="assessment-due-date"
                 type="date"
                 value={assDueDate}
                 onChange={(e) => setAssDueDate(e.target.value)}
@@ -5970,10 +5982,11 @@ export const GradeComputation: React.FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
+            <label htmlFor="assessment-instructions" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
               Instructions
             </label>
             <textarea
+              id="assessment-instructions"
               rows={2}
               placeholder="Instructions details..."
               value={assInstructions}
@@ -5984,10 +5997,11 @@ export const GradeComputation: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
+              <label htmlFor="assessment-remarks" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Remarks / Metadata
               </label>
               <input
+                id="assessment-remarks"
                 type="text"
                 placeholder="Remarks..."
                 value={assRemarks}
@@ -5997,10 +6011,11 @@ export const GradeComputation: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
+              <label htmlFor="assessment-status" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
                 Assessment Status
               </label>
               <select
+                id="assessment-status"
                 value={assStatus}
                 onChange={(e) => setAssStatus(e.target.value as any)}
                 className="w-full pl-4 pr-10 truncate py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"

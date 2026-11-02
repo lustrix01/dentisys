@@ -465,22 +465,23 @@ export const EmailManagement: React.FC = () => {
           </div>
 
           {/* School Year Selector Filter Dropdown */}
-          <div className="w-full xl:w-56 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+          <label className="w-full xl:w-80 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
             <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
+            <span className="shrink-0 text-xs font-semibold text-slate-500 dark:text-slate-400">School year</span>
             <select
               value={selectedSchoolYear}
               onChange={(e) => setSelectedSchoolYear(e.target.value)}
               aria-label="School year"
               className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
-              <option value="all">All School Years</option>
               {availableSchoolYears.map(sy => (
                 <option key={sy} value={sy}>
-                  S.Y. {sy}{sy === currentSchoolYear ? ' (Current)' : ''}
+                  {sy === currentSchoolYear ? `Current (${sy})` : sy}
                 </option>
               ))}
+              <option value="all">All school years</option>
             </select>
-          </div>
+          </label>
 
           {/* Search Bar */}
           <div className="relative w-full xl:w-56">
@@ -488,6 +489,7 @@ export const EmailManagement: React.FC = () => {
             <input
               type="text"
               placeholder="Search student ID, name..."
+              aria-label="Search students by ID, name or email"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-xs"
@@ -536,28 +538,33 @@ export const EmailManagement: React.FC = () => {
             </div>
           </div>
 
+          {/* Phones (<768px): each row is shown as a stacked block (name first, then section, status and preview). */}
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4 w-10">
-                    <input
-                      type="checkbox"
-                      checked={selected.length > 0 && selected.length === filteredStudents.length}
-                      onChange={toggleSelectAll}
-                      className="w-4 h-4 accent-emerald-600 cursor-pointer"
-                    />
+            <table className="w-full text-left text-xs border-collapse max-md:block">
+              <thead className="max-md:block">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] max-md:block">
+                  <th className="py-3 px-4 w-10 max-md:block max-md:w-auto max-md:px-0">
+                    <label className="inline-flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selected.length > 0 && selected.length === filteredStudents.length}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all students"
+                        className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                      />
+                      <span className="md:hidden">Select all</span>
+                    </label>
                   </th>
-                  <th className="py-3 px-4">Student Details</th>
-                  <th className="py-3 px-4">Enrolled Class Section</th>
-                  <th className="py-3 px-4 text-center">Roster Invitation Status</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  <th className="py-3 px-4 max-md:hidden">Student Details</th>
+                  <th className="py-3 px-4 max-md:hidden">Enrolled Class Section</th>
+                  <th className="py-3 px-4 text-center max-md:hidden">Roster Invitation Status</th>
+                  <th className="py-3 px-4 text-right max-md:hidden">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
                 {filteredStudents.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-10 text-center text-slate-500 dark:text-slate-400">
+                  <tr className="max-md:block">
+                    <td colSpan={5} className="py-10 text-center text-slate-500 dark:text-slate-400 max-md:block">
                       No enrolled students match current section filter.
                     </td>
                   </tr>
@@ -565,28 +572,29 @@ export const EmailManagement: React.FC = () => {
                   filteredStudents.map(student => {
                     const isChecked = selected.includes(student.id);
                     return (
-                      <tr key={student.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="py-3.5 px-4">
+                      <tr key={student.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:relative max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-2 max-md:py-3.5 max-md:pl-7">
+                        <td className="py-3.5 px-4 max-md:p-0 max-md:absolute max-md:left-0 max-md:top-4">
                           <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => toggleSelect(student.id)}
+                            aria-label={`Select ${student.name}`}
                             className="w-4 h-4 accent-emerald-600 cursor-pointer"
                           />
                         </td>
 
-                        <td className="py-3.5 px-4">
+                        <td className="py-3.5 px-4 max-md:p-0 max-md:w-full max-md:min-w-0">
                           <span className="font-bold text-slate-800 dark:text-slate-100 block">{student.name}</span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId} • {student.email}</span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId}<span className="max-md:hidden"> • </span><span className="max-md:block max-md:break-words">{student.email}</span></span>
                         </td>
 
-                        <td className="py-3.5 px-4">
+                        <td className="py-3.5 px-4 max-md:p-0">
                           <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-[11px] text-slate-700 dark:text-slate-300">
                             {student.classSections?.[0]?.className || 'Section 4-A'}
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-4 text-center">
+                        <td className="py-3.5 px-4 text-center max-md:p-0">
                           {(() => {
                             const invitation = studentInvitationStates[student.email.toLowerCase()];
                             const accountStatus = student.accountStatus ?? 'none';
@@ -608,7 +616,7 @@ export const EmailManagement: React.FC = () => {
                           })()}
                         </td>
 
-                        <td className="py-3.5 px-4 text-right">
+                        <td className="py-3.5 px-4 text-right max-md:p-0 max-md:ml-auto">
                           <button
                             type="button"
                             onClick={() => {
@@ -659,8 +667,8 @@ export const EmailManagement: React.FC = () => {
 
           {/* Student selection for Secretary appointment */}
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
+            <table className="w-full text-left text-xs border-collapse max-md:block">
+              <thead className="max-md:hidden">
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                   <th className="py-3 px-4 w-10">Select</th>
                   <th className="py-3 px-4">Student Details</th>
@@ -668,34 +676,35 @@ export const EmailManagement: React.FC = () => {
                   <th className="py-3 px-4 text-center">Role Standing</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
                 {secretaryRows.map(({ key, student, section }) => {
                   const isChecked = selected.includes(key);
                   const sectionTaken = sectionHasSecretary(section.classId, section.className);
                   return (
-                    <tr key={key} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3.5 px-4">
+                    <tr key={key} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:relative max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-2 max-md:py-3.5 max-md:pl-7">
+                      <td className="py-3.5 px-4 max-md:p-0 max-md:absolute max-md:left-0 max-md:top-4">
                         <input
                           type="checkbox"
                           checked={isChecked}
                           disabled={sectionTaken}
                           onChange={() => toggleSecretarySelect(key)}
+                          aria-label={`Select ${student.name} for ${section.className || 'this section'}`}
                           className="w-4 h-4 accent-emerald-600 cursor-pointer"
                         />
                       </td>
 
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 max-md:p-0 max-md:w-full max-md:min-w-0">
                         <span className="font-bold text-slate-800 dark:text-slate-100 block">{student.name}</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId} • {student.email}</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId}<span className="max-md:hidden"> • </span><span className="max-md:block max-md:break-words">{student.email}</span></span>
                       </td>
 
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 max-md:p-0">
                         <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-[11px] text-slate-700 dark:text-slate-300">
                           {section.className || '—'}
                         </span>
                       </td>
 
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3.5 px-4 text-center max-md:p-0 max-md:text-left">
                         {section.isSecretary ? (
                           <span className="inline-flex items-center gap-2">
                             <span className="whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">Class Secretary</span>

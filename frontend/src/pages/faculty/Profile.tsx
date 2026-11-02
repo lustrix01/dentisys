@@ -16,6 +16,8 @@ export const Profile: React.FC = () => {
   const [email, setEmail] = useState(user?.login_email || '');
   const [authenticatorEnabled, setAuthenticatorEnabled] = useState(false);
   const [subjects, setSubjects] = useState<string[]>([]);
+  // Stored job title from the Faculty profile (e.g. "Department Chair, ..."); falls back to the role title the header shows.
+  const [title, setTitle] = useState('');
 
   useEffect(() => {
     getFacultyProfileApi()
@@ -24,6 +26,7 @@ export const Profile: React.FC = () => {
           setNameParts({ prefix: res.profile.prefix || '', firstName: res.profile.firstName || '', middleName: res.profile.middleName || '', lastName: res.profile.lastName || '', suffix: res.profile.suffix || '' });
           if (res.profile.name) setName(res.profile.name);
           if (res.profile.email) setEmail(res.profile.email);
+          if (res.profile.title) setTitle(res.profile.title);
         }
       })
       .catch(() => {});
@@ -36,7 +39,8 @@ export const Profile: React.FC = () => {
       })
       .catch(() => {});
   }, []);
-  const initials = name.split(' ').filter(Boolean).slice(0, 2).map((part: string) => part[0]).join('').toUpperCase() || 'F';
+  // Same rule as the header avatar: skip a leading honorific ("Dr.") before taking two initials.
+  const initials = name.replace(/^(Dr\.|Mr\.|Mrs\.|Ms\.|Miss)\s+/i, '').split(' ').filter(Boolean).slice(0, 2).map((part: string) => part[0]).join('').toUpperCase() || 'F';
 
   const saveName = (parts: PersonNameParts, code?: string) => updateFacultyProfileApi({ ...parts, ...(code ? { code } : {}) });
   const applyName = (response: NameChangeResponse) => {
@@ -59,8 +63,8 @@ export const Profile: React.FC = () => {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <div className="lg:col-span-4 space-y-5">
-          <Card className="p-0 overflow-hidden"><div className="h-20 bg-gradient-to-r from-clinical-600 to-accent-500" /><CardContent className="relative pt-0 pb-5"><div className="-mt-10 w-20 h-20 rounded-2xl bg-white dark:bg-slate-900 p-1 shadow-lg"><div className="w-full h-full rounded-xl bg-gradient-to-tr from-clinical-200 to-accent-200 dark:from-clinical-800 dark:to-accent-900 flex items-center justify-center text-xl font-extrabold text-clinical-700 dark:text-clinical-300">{initials}</div></div><h2 className="mt-3 text-base font-bold text-slate-800 dark:text-slate-100">{name}</h2><ChangeNameDialog currentParts={nameParts} authenticatorEnabled={authenticatorEnabled} onSave={saveName} onSuccess={applyName} /><p className="text-xs text-clinical-600 dark:text-clinical-400 font-semibold mt-0.5">{'Faculty Clinician'}</p></CardContent></Card>
-          <Card><CardHeader><CardTitle className="flex items-center gap-2 text-sm"><BookOpen className="w-4.5 h-4.5 text-accent-500" />Assigned subjects</CardTitle></CardHeader><CardContent className="flex flex-wrap gap-2">{subjects.length === 0 ? <span className="text-xs text-slate-500 dark:text-slate-400">No assigned subjects.</span> : subjects.map((subject: string) => <span key={subject} className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 text-[10px] font-extrabold text-slate-600 dark:text-slate-400">{subject}</span>)}</CardContent></Card>
+          <Card className="p-0 overflow-hidden"><div className="h-20 bg-gradient-to-r from-clinical-600 to-accent-500" /><CardContent className="relative pt-0 pb-5"><div className="-mt-10 w-20 h-20 rounded-2xl bg-white dark:bg-slate-900 p-1 shadow-lg"><div className="w-full h-full rounded-xl bg-gradient-to-tr from-clinical-200 to-accent-200 dark:from-clinical-800 dark:to-accent-900 flex items-center justify-center text-xl font-extrabold text-clinical-700 dark:text-clinical-300">{initials}</div></div><h2 className="mt-3 text-base font-bold text-slate-800 dark:text-slate-100">{name}</h2><ChangeNameDialog currentParts={nameParts} authenticatorEnabled={authenticatorEnabled} onSave={saveName} onSuccess={applyName} /><p className="text-xs text-clinical-600 dark:text-clinical-400 font-semibold mt-0.5">{title || 'Dental Faculty Member'}</p></CardContent></Card>
+          <Card><CardHeader><CardTitle className="flex items-center gap-2 text-sm"><BookOpen className="w-4.5 h-4.5 text-accent-500" />Assigned subjects</CardTitle><span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">All school years</span></CardHeader><CardContent className="flex flex-wrap gap-2">{subjects.length === 0 ? <span className="text-xs text-slate-500 dark:text-slate-400">No assigned subjects.</span> : subjects.map((subject: string) => <span key={subject} className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 text-[10px] font-extrabold text-slate-600 dark:text-slate-400">{subject}</span>)}</CardContent></Card>
         </div>
         <div className="lg:col-span-8 space-y-5">
           <Card className="p-0 overflow-hidden">

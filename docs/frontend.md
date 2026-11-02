@@ -1,11 +1,33 @@
 # Frontend Overview
 
-The current UI migration follows [UI-first migration plan](archive/ui-migration-plan.md): copy the complete frozen `owhie_backend` interface into `lighthal5`, reconcile UI Changes.pdf, then normalize data and complete wiring. Existing functionality described below is the protected starting point, not evidence that every migrated screen is integrated. Preserve authentication/role boundaries while recording intermediate UI and test gaps.
+The frontend is a React 19, TypeScript, Vite, React Router and Tailwind app in `frontend/`. Client state lives in React context (`context/`), and every API call goes through Vite's `/api` proxy to the PHP backend. Approved product behaviour is in `spec.md`; this page only maps the code.
 
-The frontend is a React 19, TypeScript, Vite, React Router, and Tailwind application in `frontend/`. It uses context for client state and calls the PHP API through Vite's `/api` proxy.
+## Layout and breakpoints
 
-Authentication routes include password login, authenticator 2FA verification at `/2fa/verify`, invitation activation, password reset, and recovery-code display. Public signup URLs redirect to login with an invitation-required notice. The removed `/mfa/select` email/authenticator choice no longer exists.
+`components/Layout.tsx` wraps every signed-in page: sidebar navigation, the top bar (page title, notifications, theme, profile menu) and the main scroll area.
 
-P03 keeps `/login` as the sole login implementation. `/login/dev` and `/dev-login` redirect to it. Student activation at `/activate-student` requires a Faculty-issued, class-scoped invitation and rechecks canonical identity and active enrollment; `/activate-faculty` accepts an Admin-issued invitation, which is the Faculty approval. Both pages require a DentiSys password and may optionally verify the invited institutional identity through Google. Development Student access, when explicitly enabled, calls the backend mock-session endpoint and consumes only server-issued credentials. Student browser prototypes additionally require the server-issued `authentication_source=development_mock`; password- and Google-authenticated Students follow real Student routing. When `GOOGLE_CLIENT_ID` is configured, the page dynamically loads Google's GIS client and renders the official popup button for login, linking, and invitation acceptance.
+| Width | Sidebar |
+|---|---|
+| Phones, below 768 px | Hidden. The top-bar menu button opens it as a drawer over the page; it closes with its X, the backdrop, Escape or a link. |
+| Upright tablets, 768–1023 px | Starts as a collapsed icon rail when the user has not chosen (Owner decision, spec UI-001); a saved open or collapsed choice wins. |
+| 1024 px and wider | Full sidebar with names; the user can collapse it to the rail. |
 
-Role-specific pages remain available for admin, faculty, and secretary workflows. Preserve existing layouts, routes, mock-compatible storage keys, and role checks unless a task explicitly changes behavior.
+Below 1280 px every control, card and text must stay inside its box, and columns and data formats match desktop (never merged, reordered or dropped). Desktop (1280 px and wider) keeps its layout.
+
+The phone and desktop top bars share one `ProfileMenu` (inside `Layout.tsx`), so both show the same menu items for each role.
+
+## Shared components
+
+- `components/Modal.tsx`: every dialog. Renders in a portal with `role="dialog"`, a labelled title, a 44 px close button, Escape to close and focus returned to the opener; `fullScreenOnMobile` fills the screen on phones.
+- `components/Card.tsx`: the rounded panel used for page sections, with optional hover and glow colours.
+- `components/SchoolYearFilter.tsx`: the "School year" dropdown on dashboards (current year by default, a past year, or all years).
+
+## Phone blocks
+
+On phones (below 768 px) a few wide tables show each row as a stacked block instead of a table that scrolls sideways, for example Email Management, Secretary Attendance List, Student Attendance Logs and Faculty Invitations. A block shows the same fields as the desktop row, in the same order and format; tablets and desktop keep the table. Other tables scroll sideways inside their card on phones, never the whole page.
+
+## Authentication routes
+
+`/login` is the only login page (`/login/dev` and `/dev-login` redirect to it). Authenticator 2FA is verified at `/2fa/verify`; there is no email-code 2FA. Faculty, Secretary and Student accounts are activated from invitations (`/activate-faculty`, `/activate-secretary`, `/activate-student`); public signup URLs redirect to login. When `GOOGLE_CLIENT_ID` is configured, Google's sign-in button is shown on login, linking and invitation pages.
+
+Preserve existing routes, localStorage keys and role checks unless a task explicitly changes behaviour.

@@ -314,10 +314,10 @@ export function SsoLogin() {
 
           {/* 1. TOP: Credentials Form */}
           <form className="space-y-4" onSubmit={handleLogin}>
-            {/* Username / Email */}
+            {/* University email */}
             <div>
               <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Username
+                University email
               </label>
               <div className="relative rounded-xl">
                 <div className="flex">

@@ -26,7 +26,7 @@ export function ActivateFaculty() {
   useEffect(() => {
     let active = true;
     if (!token) {
-      setError('This Faculty invitation link is missing its token.');
+      setError("This invitation link is incomplete. Open the full link from your email, or ask the Dean's office to send a new one.");
       setLoading(false);
       return () => { active = false; };
     }

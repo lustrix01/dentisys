@@ -94,7 +94,7 @@ export const Dashboard: React.FC = () => {
           className="flex items-center justify-center gap-2.5 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
         >
           <Play className="w-4 h-4 fill-white" />
-          <span>Start Class Session</span>
+          <span>Start session</span>
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>

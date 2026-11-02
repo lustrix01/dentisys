@@ -374,17 +374,17 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
 
   // 2. Open Attendance Monitoring (the old /secretary/start-session address now redirects here)
   await page.goto('/secretary/attendance?view=worksheet');
-  const startSessionButton = page.getByRole('button', { name: 'Start Session', exact: true });
-  const sessionsModalButton = page.getByRole('button', { name: 'View / Manage Sessions' });
+  const startSessionButton = page.getByRole('button', { name: 'Start session', exact: true });
+  const sessionsModalButton = page.getByRole('button', { name: 'Sessions', exact: true });
 
   // 4. Verify initial state: Start Session is offered, no live session badge
   await expect(startSessionButton).toBeVisible({ timeout: 15000 });
   await expect(page.getByText('Live Session')).toHaveCount(0);
 
-  // Open the Start Attendance Session pop-up and verify the assigned class is shown (CLINIC-4B)
+  // Open the Start session pop-up and verify the assigned class is shown (CLINIC-4B)
   await startSessionButton.click();
   const form = page.locator('form').filter({ hasText: 'Selected class' });
-  await expect(page.getByRole('heading', { name: 'Start Attendance Session' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Start session' })).toBeVisible();
   await expect(form.getByText('CLINIC-4B')).toBeVisible();
 
   // Verify localStorage has no active session key
@@ -403,7 +403,7 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   await form.getByLabel('Late cutoff').fill(sessionWindow.lateCutoff);
   // Open the session in the past while keeping its same-day end time ahead.
   await form.getByLabel('Class End Time').fill('23:59');
-  await form.getByRole('button', { name: 'Start Session', exact: true }).click();
+  await form.getByRole('button', { name: 'Start session', exact: true }).click();
 
   const startResponse = await startPromise;
   expect(startResponse.status()).toBe(201);
@@ -449,7 +449,7 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   await page.getByRole('link', { name: 'Attendance Monitoring', exact: true }).click();
   await page.goto('/secretary/start-session');
   await expect(page).toHaveURL('/secretary/attendance');
-  await expect(page.getByRole('heading', { name: 'Start Attendance Session' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Start session' })).toBeVisible();
   await page.keyboard.press('Escape');
   await page.goto('/secretary/attendance?view=worksheet');
 

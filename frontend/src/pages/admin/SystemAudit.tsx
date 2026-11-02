@@ -368,10 +368,11 @@ export const DeanReports: React.FC = () => {
     </div>
   );
 
-  const tabs: { id: ReportTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'students', label: 'Student Summaries', icon: <Users className="w-3.5 h-3.5" /> },
-    { id: 'retention', label: 'Retention Reports', icon: <ShieldAlert className="w-3.5 h-3.5" /> },
-    { id: 'attendance', label: 'Attendance Reports', icon: <CalendarDays className="w-3.5 h-3.5" /> },
+  // Phones show the short label so all three tabs fit without a hidden, sideways-scrolled third tab.
+  const tabs: { id: ReportTab; label: string; short: string; icon: React.ReactNode }[] = [
+    { id: 'students', label: 'Student Summaries', short: 'Students', icon: <Users className="w-3.5 h-3.5 max-[359px]:hidden" /> },
+    { id: 'retention', label: 'Retention Reports', short: 'Retention', icon: <ShieldAlert className="w-3.5 h-3.5 max-[359px]:hidden" /> },
+    { id: 'attendance', label: 'Attendance Reports', short: 'Attendance', icon: <CalendarDays className="w-3.5 h-3.5 max-[359px]:hidden" /> },
   ];
 
   return (
@@ -382,14 +383,15 @@ export const DeanReports: React.FC = () => {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 min-w-[125px] sm:min-w-[140px] py-2 px-2.5 sm:px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+            className={`flex-1 min-w-0 sm:min-w-[140px] py-2 px-1.5 sm:px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
               activeTab === tab.id
                 ? 'bg-accent-600 text-white shadow-md'
                 : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
           >
             {tab.icon}
-            {tab.label}
+            <span className="sm:hidden">{tab.short}</span>
+            <span className="hidden sm:inline">{tab.label}</span>
           </button>
         ))}
       </div>
@@ -446,7 +448,7 @@ export const DeanReports: React.FC = () => {
           <div className="space-y-4">
             {/* Class Section Filter Bar */}
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
-              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto sm:shrink-0">
+              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto sm:shrink-0">
                 <button
                   type="button"
                   onClick={() => setClassSectionTab('active')}
@@ -457,7 +459,7 @@ export const DeanReports: React.FC = () => {
                   }`}
                 >
                   <GraduationCap className="w-3.5 h-3.5" />
-                  <span>Active Classes</span>
+                  <span><span className="sm:hidden">Active</span><span className="hidden sm:inline">Active Classes</span></span>
                   <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-accent-100 dark:bg-accent-950/50 text-accent-700 dark:text-accent-300">
                     {activeClasses.length}
                   </span>
@@ -472,7 +474,7 @@ export const DeanReports: React.FC = () => {
                   }`}
                 >
                   <Archive className="w-3.5 h-3.5" />
-                  <span>Archived Classes</span>
+                  <span><span className="sm:hidden">Archived</span><span className="hidden sm:inline">Archived Classes</span></span>
                   <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                     {archivedClasses.length}
                   </span>
@@ -485,6 +487,7 @@ export const DeanReports: React.FC = () => {
                   <input
                     type="text"
                     placeholder="Search classes..."
+                    aria-label="Search classes"
                     value={classSearch}
                     onChange={e => setClassSearch(e.target.value)}
                     className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full sm:w-56"
@@ -602,7 +605,7 @@ export const DeanReports: React.FC = () => {
                         )}
                         {cls.noGradeCount > 0 && (
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                            {cls.noGradeCount} No Grade Yet
+                            {cls.noGradeCount} No grade yet
                           </span>
                         )}
                         {cls.remedialCount > 0 && (
@@ -671,6 +674,7 @@ export const DeanReports: React.FC = () => {
                   <input
                     type="text"
                     placeholder="Search student..."
+                    aria-label="Search students"
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full sm:w-44"
@@ -678,13 +682,14 @@ export const DeanReports: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
                   <select
+                    aria-label="Filter by status"
                     value={statusFilter}
                     onChange={e => setStatusFilter(e.target.value)}
                     className="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500"
                   >
                     <option value="all">All Statuses</option>
                     <option value="active">Good Standing</option>
-                    <option value="noGrade">No Grade Yet</option>
+                    <option value="noGrade">No grade yet</option>
                     <option value="remedial">Remedial</option>
                     <option value="cleared">Cleared</option>
                   </select>
@@ -795,7 +800,7 @@ export const DeanReports: React.FC = () => {
           <div className="space-y-4">
             {/* Class Section Filter Bar */}
             <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
-              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto sm:shrink-0">
+              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto sm:shrink-0">
                 <button
                   type="button"
                   onClick={() => setClassSectionTab('active')}
@@ -806,7 +811,7 @@ export const DeanReports: React.FC = () => {
                   }`}
                 >
                   <GraduationCap className="w-3.5 h-3.5" />
-                  <span>Active Classes</span>
+                  <span><span className="sm:hidden">Active</span><span className="hidden sm:inline">Active Classes</span></span>
                   <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-accent-100 dark:bg-accent-950/50 text-accent-700 dark:text-accent-300">
                     {activeClasses.length}
                   </span>
@@ -821,7 +826,7 @@ export const DeanReports: React.FC = () => {
                   }`}
                 >
                   <Archive className="w-3.5 h-3.5" />
-                  <span>Archived Classes</span>
+                  <span><span className="sm:hidden">Archived</span><span className="hidden sm:inline">Archived Classes</span></span>
                   <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                     {archivedClasses.length}
                   </span>
@@ -834,6 +839,7 @@ export const DeanReports: React.FC = () => {
                   <input
                     type="text"
                     placeholder="Search classes..."
+                    aria-label="Search classes"
                     value={classSearch}
                     onChange={e => setClassSearch(e.target.value)}
                     className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full sm:w-56"
@@ -938,7 +944,7 @@ export const DeanReports: React.FC = () => {
                         <div className="mt-4 flex flex-wrap gap-1.5 items-center">
                           {atRisk === 0 && cls.activeCount === 0 ? (
                             <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                              No Grades Yet
+                              No grade yet
                             </span>
                           ) : atRisk > 0 ? (
                             <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400">
@@ -1011,6 +1017,7 @@ export const DeanReports: React.FC = () => {
                   <input
                     type="text"
                     placeholder="Search student..."
+                    aria-label="Search students"
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full sm:w-44"
@@ -1018,13 +1025,14 @@ export const DeanReports: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
                   <select
+                    aria-label="Filter by status"
                     value={statusFilter}
                     onChange={e => setStatusFilter(e.target.value)}
                     className="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500"
                   >
                     <option value="all">All Statuses</option>
                     <option value="active">Good Standing</option>
-                    <option value="noGrade">No Grade Yet</option>
+                    <option value="noGrade">No grade yet</option>
                     <option value="remedial">Remedial</option>
                     <option value="cleared">Cleared</option>
                   </select>
@@ -1142,7 +1150,7 @@ export const DeanReports: React.FC = () => {
           <div className="space-y-4">
             {/* Class Section Filter Bar */}
             <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
-              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto sm:shrink-0">
+              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto sm:shrink-0">
                 <button
                   type="button"
                   onClick={() => setClassSectionTab('active')}
@@ -1153,7 +1161,7 @@ export const DeanReports: React.FC = () => {
                   }`}
                 >
                   <GraduationCap className="w-3.5 h-3.5" />
-                  <span>Active Classes</span>
+                  <span><span className="sm:hidden">Active</span><span className="hidden sm:inline">Active Classes</span></span>
                   <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-accent-100 dark:bg-accent-950/50 text-accent-700 dark:text-accent-300">
                     {activeClasses.length}
                   </span>
@@ -1168,7 +1176,7 @@ export const DeanReports: React.FC = () => {
                   }`}
                 >
                   <Archive className="w-3.5 h-3.5" />
-                  <span>Archived Classes</span>
+                  <span><span className="sm:hidden">Archived</span><span className="hidden sm:inline">Archived Classes</span></span>
                   <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                     {archivedClasses.length}
                   </span>
@@ -1181,6 +1189,7 @@ export const DeanReports: React.FC = () => {
                   <input
                     type="text"
                     placeholder="Search classes..."
+                    aria-label="Search classes"
                     value={classSearch}
                     onChange={e => setClassSearch(e.target.value)}
                     className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full sm:w-56"
@@ -1362,6 +1371,7 @@ export const DeanReports: React.FC = () => {
                   <input
                     type="text"
                     placeholder="Search logs..."
+                    aria-label="Search attendance logs"
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full sm:w-44"
@@ -1369,6 +1379,7 @@ export const DeanReports: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
                   <select
+                    aria-label="Filter by status"
                     value={statusFilter}
                     onChange={e => setStatusFilter(e.target.value)}
                     className="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500"

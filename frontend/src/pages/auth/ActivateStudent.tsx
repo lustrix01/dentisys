@@ -38,7 +38,7 @@ export function ActivateStudent() {
       return () => { active = false; };
     }
     if (!token) {
-      setError('This Student invitation link is missing its token.');
+      setError('This invitation link is incomplete. Open the full link from your email, or ask your Faculty to send a new one.');
       setLoading(false);
       return () => { active = false; };
     }

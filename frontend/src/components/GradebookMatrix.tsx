@@ -352,8 +352,9 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
 
   const th = 'px-2 py-2 text-center border border-slate-200 dark:border-slate-800';
   // Below xl the student columns stay pinned at the left edge; at xl and above these classes do nothing.
-  const pinId = `max-xl:w-[104px] max-xl:min-w-[104px] max-xl:max-w-[104px] ${pinBoth ? 'max-xl:sticky max-xl:left-0' : ''}`;
-  const pinName = `max-xl:w-[140px] max-xl:min-w-[140px] max-xl:max-w-[140px] max-xl:sticky ${pinBoth ? 'max-xl:left-[104px]' : 'max-xl:left-0'} max-xl:shadow-[1px_0_0_#cbd5e1] dark:max-xl:shadow-[1px_0_0_#334155]`;
+  // Phones (below sm) pin only a narrower, wrapping name column so more assessment columns fit.
+  const pinId = `max-xl:w-[104px] max-xl:min-w-[104px] max-xl:max-w-[104px] ${pinBoth ? 'sm:max-xl:sticky sm:max-xl:left-0' : ''}`;
+  const pinName = `max-xl:w-[140px] max-xl:min-w-[140px] max-xl:max-w-[140px] max-sm:w-[112px] max-sm:min-w-[112px] max-sm:max-w-[112px] max-sm:px-2 break-words max-xl:sticky ${pinBoth ? 'max-sm:left-0 sm:max-xl:left-[104px]' : 'max-xl:left-0'} max-xl:shadow-[1px_0_0_#cbd5e1] dark:max-xl:shadow-[1px_0_0_#334155]`;
   const pinHead = 'max-xl:z-20 max-xl:bg-slate-50 dark:max-xl:bg-slate-900';
   const pinBody = 'max-xl:z-[5] max-xl:bg-white dark:max-xl:bg-slate-900';
   const computedCell = 'px-2 py-2 text-center font-mono text-slate-600 dark:text-slate-300 bg-slate-50/70 dark:bg-slate-900/40';
@@ -374,6 +375,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
             <input
               type="text"
               placeholder="Search student or ID..."
+              aria-label="Search students by name or ID number"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-clinical-500/20 focus:border-clinical-500"
@@ -390,10 +392,10 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 xl:hidden">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pin:</span>
-            <div role="group" aria-label="Pin student columns" className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-700">
-              {([['Full Name', false], ['ID Number + Full Name', true]] as const).map(([label, both]) => (
+          <div className="flex items-center gap-1.5 max-sm:hidden xl:hidden">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Keep visible while scrolling:</span>
+            <div role="group" aria-label="Keep visible while scrolling" className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-700">
+              {([['Name', false], ['ID and name', true]] as const).map(([label, both]) => (
                 <button
                   key={label}
                   type="button"
@@ -511,7 +513,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
       {computeNotice && <p className="px-5 pt-1 text-[11px] text-slate-500">Calculated columns: {computeNotice}</p>}
       <p className="px-5 text-[10px] text-slate-500 dark:text-slate-400">Calculated columns use the server's grade computation of the saved scores; they update after “Save All Matrix Scores”.</p>
 
-      <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+      <div className="overflow-x-auto max-h-[600px] max-xl:max-h-[max(600px,calc(100dvh-6rem))] overflow-y-auto">
         <table className="min-w-full border-collapse text-xs">
           <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 text-[10px] font-bold uppercase tracking-wider text-slate-500">
             {/* ROW 1: Period Headers */}

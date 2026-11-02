@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
@@ -12,6 +12,8 @@ interface ModalProps {
   fullScreenOnMobile?: boolean;
 }
 
+const openModals: object[] = [];
+
 export const Modal: React.FC<ModalProps> = ({
   isOpen,
   onClose,
@@ -20,23 +22,30 @@ export const Modal: React.FC<ModalProps> = ({
   size = 'md',
   fullScreenOnMobile = false,
 }) => {
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
   useEffect(() => {
+    if (!isOpen) return undefined; // not open: no cleanup, so overflow is never wrongly cleared
+    // Stacked modals: only the topmost reacts to Escape, and the page stays locked until the last one closes.
+    const token = {};
+    openModals.push(token);
+    const opener = document.activeElement as HTMLElement | null;
+    document.body.style.overflow = 'hidden';
+    panelRef.current?.focus();
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && openModals[openModals.length - 1] === token) onCloseRef.current();
     };
-
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      window.addEventListener('keydown', handleEscape);
-      return () => {
-        document.body.style.overflow = '';
-        window.removeEventListener('keydown', handleEscape);
-      };
-    }
-
-    // Not open — do nothing, return no cleanup so overflow is never wrongly cleared
-    return undefined;
-  }, [isOpen, onClose]);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('keydown', handleEscape);
+      openModals.splice(openModals.indexOf(token), 1);
+      if (openModals.length === 0) document.body.style.overflow = '';
+      opener?.focus?.();
+    };
+  }, [isOpen]);
 
   // Early return is now handled above the JSX block
 
@@ -58,16 +67,23 @@ export const Modal: React.FC<ModalProps> = ({
       />
 
       {/* Modal Content */}
-      <div 
-        className={`relative w-full min-w-0 ${sizeClasses[size]} bg-white dark:bg-slate-900 shadow-2xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden transform transition-all duration-300 scale-100 flex flex-col ${fullScreenOnMobile ? 'h-full max-h-full rounded-none sm:h-auto sm:max-h-[90vh] sm:rounded-3xl' : 'max-h-[90vh] rounded-2xl sm:rounded-3xl'}`}
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className={`relative w-full outline-none min-w-0 ${sizeClasses[size]} bg-white dark:bg-slate-900 shadow-2xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden transform transition-all duration-300 scale-100 flex flex-col ${fullScreenOnMobile ? 'h-full max-h-full rounded-none sm:h-auto sm:max-h-[90dvh] sm:rounded-3xl' : 'max-h-[90dvh] rounded-2xl sm:rounded-3xl'}`}
       >
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900">
-          <h3 className="min-w-0 text-lg sm:text-xl font-semibold font-heading tracking-tight text-slate-800 dark:text-slate-100 break-words">
+          <h3 id={titleId} className="min-w-0 text-lg sm:text-xl font-semibold font-heading tracking-tight text-slate-800 dark:text-slate-100 break-words">
             {title}
           </h3>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close"
             className="shrink-0 min-h-11 min-w-11 flex items-center justify-center rounded-full text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />

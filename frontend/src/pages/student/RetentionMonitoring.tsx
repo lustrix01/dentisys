@@ -133,7 +133,7 @@ const attemptStatusLabel = (status: RemedialAttemptStatus | 'available' | 'not_s
 
 const GradePill: React.FC<{ grade: number | null; percentage?: number | null }> = ({ grade, percentage }) => {
   if (grade === null) {
-    return <span className="text-slate-500 dark:text-slate-400 italic text-xs">Pending</span>;
+    return <span className="whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">No grade yet</span>;
   }
   const isSafe = grade < 2.5;
   const isLimit = grade === 2.5;
@@ -358,7 +358,7 @@ export const RetentionMonitoring: React.FC = () => {
                 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60'
                 : standingPending ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
           }`}>
-            {isStandingAtRisk ? 'Retention Warning' : midtermAtRiskCount > 0 ? 'Midterm Advisory' : standingPending ? 'Standing Pending' : 'Active Standing · Cleared'}
+            {isStandingAtRisk ? 'Retention Warning' : midtermAtRiskCount > 0 ? 'Midterm Advisory' : standingPending ? 'No grade yet' : 'Active Standing · Cleared'}
           </span>
           <span className="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-xl font-bold text-slate-600 dark:text-slate-300">
             Limit: 2.50
@@ -559,7 +559,7 @@ export const RetentionMonitoring: React.FC = () => {
             {remedialReviewRecords.length > 0 && <h3 className="md:col-span-2 font-bold text-sm">Retention Review / Unassigned</h3>}
             {remedialReviewRecords.map(cls => <Card key={cls.enrollmentId} className="p-4 border border-slate-200 dark:border-slate-800 space-y-2">
               <h4 className="text-xs font-bold"><span className="font-mono text-blue-600 mr-2">{cls.courseCode}</span>{cls.courseName}</h4>
-              <p className="text-xs">Original Course Grade: {cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue>}</p>
+              <p className="text-xs">Original Course Grade: {cls.grade === null ? 'No grade yet' : <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue>}</p>
               <p className="text-xs">Retention: {cls.retentionState || 'State unavailable'}</p>
               <p className="text-[10px] text-slate-500">{semesterLabel(cls.semester)} · {cls.schoolYear}</p>
               <p className="text-xs font-semibold">{readRemedialProgression(cls).stage === 'none' ? 'No remedial attempt assigned.' : 'Remedial progression needs Faculty review.'}</p>

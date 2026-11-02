@@ -942,6 +942,24 @@ export const Reports: React.FC = () => {
     }
   }
 
+  // Shared by the phone blocks and the wider-screen table of the Grades & Assessments summary.
+  const renderCourseGrade = (evaluation: ReturnType<typeof courseEvaluation>) => (
+    evaluation.overallGwa !== null ? <GradeValue percentage={evaluation.overallPercentage} grade={evaluation.overallGwa} lecture={selectedGradingConfiguration?.componentMode === 'lecture' && selectedGradingConfiguration.termRatio && evaluation.midtermPercentage !== null && evaluation.finalPercentage !== null ? { midterm: evaluation.midtermPercentage, final: evaluation.finalPercentage, midtermShare: Number(selectedGradingConfiguration.termRatio.midterm), finalShare: Number(selectedGradingConfiguration.termRatio.final) } : null}>{formatCourseGrade(evaluation)}</GradeValue> : formatCourseGrade(evaluation)
+  );
+  const renderRemark = (remark: string) => (
+    <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+      remark === 'FAILED'
+        ? 'bg-rose-100 text-rose-700'
+        : remark === 'PENDING' || remark === 'RETENTION UNAVAILABLE'
+        ? 'bg-slate-100 text-slate-600'
+        : remark === 'REVIEW RETENTION'
+        ? 'bg-amber-100 text-amber-700'
+        : 'bg-emerald-100 text-emerald-700'
+    }`}>
+      {remark}
+    </span>
+  );
+
   return (
     <div className="space-y-6">
       
@@ -949,22 +967,23 @@ export const Reports: React.FC = () => {
       {/* Unified Course, Class, and School Year Selector Bar */}
       <Card className="p-4 flex flex-col xl:flex-row gap-4 xl:items-center no-print">
         {/* School Year Filter */}
-        <div className="w-full xl:w-56 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+        <label className="w-full xl:w-80 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
           <CalendarDays className="w-4 h-4 shrink-0 text-clinical-600 dark:text-clinical-400" aria-hidden="true" />
+          <span className="shrink-0 text-xs font-semibold text-slate-500 dark:text-slate-400">School year</span>
           <select
             value={selectedSchoolYear}
             onChange={(e) => setSelectedSchoolYear(e.target.value)}
             aria-label="School year"
             className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
           >
-            <option value="all">All School Years</option>
             {availableSchoolYears.map(sy => (
               <option key={sy} value={sy}>
-                S.Y. {sy}{sy === currentSchoolYear ? ' (Current)' : ''}
+                {sy === currentSchoolYear ? `Current (${sy})` : sy}
               </option>
             ))}
+            <option value="all">All school years</option>
           </select>
-        </div>
+        </label>
 
         {/* Active Class & Section (Unified Course and Section Filter) */}
         <div className="w-full xl:flex-1 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
@@ -1082,7 +1101,56 @@ export const Reports: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+          {/* Phones: one block per student (name first, then the grade fields) instead of a clipped table. */}
+          <ul className="md:hidden max-h-[480px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium">
+            {paginatedStudentsInSubject.length === 0 ? (
+              <li className="px-5 py-12 text-center text-slate-500 dark:text-slate-400 font-semibold">
+                No student records found for the selected course and class section.
+              </li>
+            ) : (
+              paginatedStudentsInSubject.map((student) => {
+                const subj = subjectForSelection(student);
+                const evaluation = courseEvaluation(subj);
+                const fields: [string, React.ReactNode][] = [
+                  ...(isLectureLaboratoryMode ? [
+                    ['Midterm Lecture', formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus)],
+                    ['Midterm Laboratory', formatComponentResult(evaluation.midtermComponents?.laboratory, evaluation.midtermStatus)],
+                  ] as [string, React.ReactNode][] : []),
+                  ['Midterm', formatPercent(evaluation.midtermPercentage)],
+                  ...(isLectureLaboratoryMode ? [
+                    ['Finals Lecture', formatComponentResult(evaluation.finalComponents?.lecture, evaluation.finalStatus)],
+                    ['Finals Laboratory', formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus)],
+                  ] as [string, React.ReactNode][] : []),
+                  [isLectureLaboratoryMode ? 'Finals' : 'Final', formatPercent(evaluation.finalPercentage)],
+                ];
+                return (
+                  <li key={student.id} className="px-5 py-3.5 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId}</span>
+                      </div>
+                      <span className="shrink-0 text-right">{renderRemark(courseRemark(student, subj))}</span>
+                    </div>
+                    <dl className="grid grid-cols-3 gap-2">
+                      {fields.map(([label, value]) => (
+                        <div key={label} className="min-w-0">
+                          <dt className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</dt>
+                          <dd className="font-mono text-slate-700 dark:text-slate-200">{value}</dd>
+                        </div>
+                      ))}
+                      <div className="min-w-0">
+                        <dt className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Grade</dt>
+                        <dd className="font-extrabold text-sm text-slate-800 dark:text-slate-100">{renderCourseGrade(evaluation)}</dd>
+                      </div>
+                    </dl>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+
+          <div className="hidden md:block overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="w-full text-left">
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
@@ -1123,20 +1191,10 @@ export const Reports: React.FC = () => {
                         {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus)}</td>}
                         <td className="px-5 py-3.5 text-center font-mono">{formatPercent(evaluation.finalPercentage)}</td>
                         <td className="px-5 py-3.5 text-center font-extrabold text-sm dark:text-slate-100">
-                          {evaluation.overallGwa !== null ? <GradeValue percentage={evaluation.overallPercentage} grade={evaluation.overallGwa} lecture={selectedGradingConfiguration?.componentMode === 'lecture' && selectedGradingConfiguration.termRatio && evaluation.midtermPercentage !== null && evaluation.finalPercentage !== null ? { midterm: evaluation.midtermPercentage, final: evaluation.finalPercentage, midtermShare: Number(selectedGradingConfiguration.termRatio.midterm), finalShare: Number(selectedGradingConfiguration.termRatio.final) } : null}>{formatCourseGrade(evaluation)}</GradeValue> : formatCourseGrade(evaluation)}
+                          {renderCourseGrade(evaluation)}
                         </td>
                         <td className="px-5 py-3.5">
-                          <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                            remark === 'FAILED'
-                              ? 'bg-rose-100 text-rose-700'
-                              : remark === 'PENDING' || remark === 'RETENTION UNAVAILABLE'
-                              ? 'bg-slate-100 text-slate-600'
-                              : remark === 'REVIEW RETENTION'
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-emerald-100 text-emerald-700'
-                          }`}>
-                            {remark}
-                          </span>
+                          {renderRemark(remark)}
                         </td>
                       </tr>
                     );
@@ -1148,11 +1206,11 @@ export const Reports: React.FC = () => {
 
           {/* Pagination controls */}
           {totalPagesInSubject > 1 && (
-            <div className="flex items-center justify-between p-4 border-t border-slate-100 dark:border-slate-800 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-t border-slate-100 dark:border-slate-800 text-xs">
               <span className="text-slate-500 dark:text-slate-400">
                 Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, studentsInSelectedSubject.length)} of {studentsInSelectedSubject.length} records
               </span>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2 max-sm:w-full max-sm:justify-between">
                 <button
                   onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
                   disabled={currentPage === 1}
@@ -1160,7 +1218,7 @@ export const Reports: React.FC = () => {
                 >
                   Previous
                 </button>
-                <span className="px-3 py-1.5 font-bold text-slate-700 dark:text-slate-200">
+                <span className="whitespace-nowrap px-3 py-1.5 font-bold text-slate-700 dark:text-slate-200">
                   Page {currentPage} of {totalPagesInSubject}
                 </span>
                 <button

@@ -646,7 +646,6 @@ export const AttendanceList: React.FC = () => {
   };
 
   // Attendance rate & straightforward counts (strictly adheres to backend contract tests)
-  const attended = filtered.filter((record) => record.status === 'present' || record.status === 'late' || record.status === 'excused').length;
   const present = filtered.filter((record) => record.status === 'present').length;
   const late = filtered.filter((record) => record.status === 'late').length;
   const absent = filtered.filter((record) => record.status === 'absent').length;
@@ -793,7 +792,7 @@ export const AttendanceList: React.FC = () => {
               {/* Term Selector */}
               {currentSchoolYear && (
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Term:</span>
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">School year</span>
                   <div className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 shadow-xs">
                     {currentSchoolYear} (Current)
                   </div>
@@ -894,7 +893,7 @@ export const AttendanceList: React.FC = () => {
                         </div>
 
                         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                          {/* View Session button */}
+                          {/* Sessions button */}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -905,7 +904,7 @@ export const AttendanceList: React.FC = () => {
                             className="inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 xl:max-[1439px]:px-2 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50 transition-all cursor-pointer whitespace-nowrap"
                           >
                             <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-300" />
-                            <span>View Session</span>
+                            <span>Sessions</span>
                           </button>
 
                           {/* View Attendance button */}
@@ -973,7 +972,7 @@ export const AttendanceList: React.FC = () => {
                   </button>
                 )}
 
-                {/* View / Manage Sessions button */}
+                {/* Sessions button */}
                 <button
                   type="button"
                   onClick={() => {
@@ -983,17 +982,17 @@ export const AttendanceList: React.FC = () => {
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200/70 dark:border-blue-800/50 text-xs font-bold transition-all cursor-pointer shadow-xs"
                 >
                   <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-300" />
-                  <span>View / Manage Sessions</span>
+                  <span>Sessions</span>
                 </button>
 
-                {/* Start Session CTA (hidden while a session is live) */}
+                {/* Start session CTA (hidden while a session is live) */}
                 {!liveCurrentSession && <button
                   type="button"
                   onClick={() => void openStartSession()}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
                 >
                   <Play className="w-3.5 h-3.5 fill-white" />
-                  <span>Start Session</span>
+                  <span>Start session</span>
                 </button>}
 
                 {/* Refresh button */}
@@ -1040,7 +1039,7 @@ export const AttendanceList: React.FC = () => {
               <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-slate-500 dark:text-slate-400">
                 <div className="flex items-center gap-1.5">
                   <Users className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                  <span className="font-bold text-slate-700 dark:text-slate-200">{filtered.length} Enrolled Students</span>
+                  <span className="font-bold text-slate-700 dark:text-slate-200">{activeCard?.enrolledCount ?? filtered.length} Enrolled Students</span>
                 </div>
 
                 {activeCard && activeCard.venue.length > 0 && (
@@ -1207,13 +1206,11 @@ export const AttendanceList: React.FC = () => {
             </div>
           )}
 
-          {/* 3. Summary Count Cards (Straightforward counts) */}
+          {/* 3. Summary Count Cards (Straightforward counts). They describe one session, so they wait for one. */}
+          {sessionId && !allSessionsHidden && (<>
           <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-3 shadow-xs">
             <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100 mr-2">
               Class Roll Call ({filtered.length} students)
-            </span>
-            <span className="rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-600 dark:text-slate-300">
-              All: {filtered.length}
             </span>
             <span className="rounded-lg bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
               Present: {present}
@@ -1228,43 +1225,34 @@ export const AttendanceList: React.FC = () => {
               Excused: {excused}
             </span>
             <span className="ml-auto text-[10px] font-bold text-slate-500 dark:text-slate-400">
-              {filtered.length ? Math.round((attended / filtered.length) * 100) : 0}% attended
+              {recorded} of {filtered.length} recorded
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-            <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Enrolled</span>
-              <span className="text-xl font-extrabold font-heading text-slate-800 dark:text-slate-100">{filtered.length}</span>
-            </div>
-            <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Recorded</span>
-              <span className="text-xl font-extrabold font-heading text-slate-700 dark:text-slate-300">{recorded}</span>
-            </div>
-            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shadow-xs">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block">Present</span>
-              <span className="text-xl font-extrabold font-heading text-emerald-600 dark:text-emerald-300">{present}</span>
-            </div>
-            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 shadow-xs">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-400 block">Late</span>
-              <span className="text-xl font-extrabold font-heading text-amber-600 dark:text-amber-300">{late}</span>
-            </div>
-            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 shadow-xs">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-rose-700 dark:text-rose-400 block">Absent</span>
-              <span className="text-xl font-extrabold font-heading text-rose-600 dark:text-rose-300">{absent}</span>
-            </div>
-            <div className="p-3.5 rounded-xl bg-sky-500/10 border border-sky-500/20 shadow-xs">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-sky-700 dark:text-sky-400 block">Excused</span>
-              <span className="text-xl font-extrabold font-heading text-sky-600 dark:text-sky-300">{excused}</span>
-            </div>
-          </div>
+          {/* One count line, as on the Faculty roll call: the six tiles repeated the same numbers. */}
+          </>)}
 
           {/* 4. Main Worksheet Register */}
           {allSessionsHidden || !sessionId ? (
-            <Card className="p-6 text-center">
+            <Card className="p-6 text-center space-y-3">
               <p role="status" className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                {allSessionsHidden ? revokedHiddenText(revokedSessionCount) : 'Choose a session to manage its attendance.'}
+                {allSessionsHidden
+                  ? revokedHiddenText(revokedSessionCount)
+                  : dateSessions.length === 0
+                    ? (date
+                      // Spelled out so it cannot be misread against the date box's own mm/dd format.
+                      ? `No attendance session on ${new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.${liveCurrentSession ? '' : ' Use Start session above to begin one.'}`
+                      : 'This class has no attendance sessions yet.')
+                    : 'Choose a session to manage its attendance.'}
               </p>
+              {!allSessionsHidden && dateSessions.length === 0 && date && sessions.some(s => inSection(scopedCard, s)) && (
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button type="button" onClick={() => { setDate(''); setSessionId(''); }}
+                    className="px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
+                    Show earlier sessions
+                  </button>
+                </div>
+              )}
             </Card>
           ) : (
           <Card className="p-0 overflow-hidden border border-slate-200/80 dark:border-slate-800 shadow-xs">
@@ -1544,7 +1532,7 @@ export const AttendanceList: React.FC = () => {
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white font-bold text-xs shadow-md shadow-blue-600/20 hover:bg-blue-700 cursor-pointer"
                       >
                         <Play className="w-3.5 h-3.5 fill-white" />
-                        <span>New Attendance Session</span>
+                        <span>Start session</span>
                       </button>
                     </div>
                   </div>
@@ -1562,7 +1550,7 @@ export const AttendanceList: React.FC = () => {
                       No upcoming sessions scheduled.
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      You can schedule future sessions in the Start Attendance Session screen.
+                      You can schedule future sessions with Start session.
                     </p>
                   </div>
                 ) : (

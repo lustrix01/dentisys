@@ -355,12 +355,12 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
   // The Start Session pop-up is shared with Faculty and lives in the Attendance Monitoring worksheet.
   const openStartPopup = async (page: Page) => {
     await page.goto('/secretary/attendance?view=worksheet');
-    await page.getByRole('button', { name: 'Start Session', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Start Attendance Session' })).toBeVisible();
+    await page.getByRole('button', { name: 'Start session', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Start session' })).toBeVisible();
   };
   const startForm = (page: Page) => page.locator('form').filter({ hasText: 'Selected class' });
   const openSessionsModal = async (page: Page) => {
-    await page.getByRole('button', { name: 'View / Manage Sessions' }).click();
+    await page.getByRole('button', { name: 'Sessions', exact: true }).click();
   };
   const sessionsReply = (sessions: unknown[]) => (route: Route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', records: [], sessions }) });
 
@@ -377,7 +377,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     const form = startForm(page);
     await expect(form.getByText('CLINIC-4B')).toBeVisible();
     await expect(form.getByPlaceholder('e.g. Dental Clinic Room 101')).toHaveValue('Dental Clinic Lab 2');
-    await expect(form.getByRole('button', { name: 'Start Session', exact: true })).toBeVisible();
+    await expect(form.getByRole('button', { name: 'Start session', exact: true })).toBeVisible();
     await expect(page.getByText('Live Session')).toHaveCount(0);
   });
 
@@ -402,7 +402,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await date.fill('2099-10-02');
     await expect(form.getByRole('checkbox', { name: /Geolocation|Geofence/ })).not.toBeChecked(); // ATT-002: off by default
     await form.getByRole('checkbox', { name: /Geolocation|Geofence/ }).uncheck();
-    await form.getByRole('button', { name: 'Schedule Session', exact: true }).click();
+    await form.getByRole('button', { name: 'Schedule session', exact: true }).click();
     await expect.poll(() => payload?.sessionDate).toBe('2099-10-02');
     await expect(page.getByText('Session scheduled for 2099-10-02 at 08:00 (Asia/Manila). Session code: CS8-20260921-ABC123').first()).toBeVisible();
     await openSessionsModal(page);
@@ -410,8 +410,8 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(page.getByText('(CS8-20260921-ABC123)')).toBeVisible();
     await expect(page.getByText('Live Session')).toHaveCount(0);
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Start Session', exact: true }).click();
-    await startForm(page).getByRole('button', { name: 'Schedule Session', exact: true }).click();
+    await page.getByRole('button', { name: 'Start session', exact: true }).click();
+    await startForm(page).getByRole('button', { name: 'Schedule session', exact: true }).click();
     await expect(startForm(page).getByRole('alert')).toContainText('created by Faculty Jane Doe');
   });
 
@@ -423,7 +423,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(page.getByText('CS8-20260921-ABC123').first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'End Session', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('button', { name: 'Start Session', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Start session', exact: true })).toHaveCount(0);
   });
 
   test('cancelling a queued revocation does not change the active-session revoke target', async ({ page }) => {
@@ -478,12 +478,12 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
 
     await openStartPopup(page);
     const form = startForm(page);
-    await expect(form.getByRole('button', { name: 'Start Session', exact: true })).toBeVisible();
+    await expect(form.getByRole('button', { name: 'Start session', exact: true })).toBeVisible();
 
-    await form.getByRole('button', { name: 'Start Session', exact: true }).click();
+    await form.getByRole('button', { name: 'Start session', exact: true }).click();
 
     await expect(page.getByText('Attendance session started. The class roll call is now live. Session code: CS8-20260921-XYZ999').first()).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Start Attendance Session' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Start session' })).toHaveCount(0);
     expect(startApiPayload).not.toBeNull();
     expect((startApiPayload as Record<string, unknown>)?.csId).toBe(8);
     expect((startApiPayload as Record<string, unknown>)?.room).toBe('Dental Clinic Lab 2');
@@ -525,7 +525,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect.poll(async () => (await map.boundingBox())!.y + 256 <= page.viewportSize()!.height).toBe(true);
     await map.click({ position: { x: 60, y: 60 } });
     await expect(page.getByText(/Location acquired: /)).toBeVisible();
-    await form.getByRole('button', { name: 'Start Session', exact: true }).click();
+    await form.getByRole('button', { name: 'Start session', exact: true }).click();
     await expect.poll(() => startApiPayload).not.toBeNull();
     const payload = startApiPayload as unknown as Record<string, number | boolean>;
     expect(payload.geofenceEnabled).toBe(true);
@@ -600,7 +600,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     // Page returns to inactive state
     await expect(page.getByText('Session CS8-20260921-ABC123 ended successfully.').first()).toBeVisible();
     await expect(page.getByText('Live Session')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Start Session', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Start session', exact: true })).toBeVisible();
   });
 
   const todayManila = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
@@ -690,7 +690,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     });
 
     await openStartPopup(page);
-    await startForm(page).getByRole('button', { name: 'Start Session', exact: true }).click();
+    await startForm(page).getByRole('button', { name: 'Start session', exact: true }).click();
 
     await expect(startForm(page).getByRole('alert')).toContainText('An active attendance session already exists for this class section.');
     await expect(page.getByText('Live Session')).toHaveCount(0);
@@ -710,7 +710,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
 
     await page.goto('/secretary/attendance');
     await expect(page.getByText('A server error occurred. Please try again later.')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Start Attendance Session' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Start session' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Retry/i })).toBeVisible();
   });
 
@@ -747,7 +747,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await picker.click();
     await form.getByRole('option', { name: 'CLINIC-4C' }).click();
     await expect(form.getByPlaceholder('e.g. Dental Clinic Room 101')).toHaveValue('Dental Clinic Lab 3');
-    await form.getByRole('button', { name: 'Start Session', exact: true }).click();
+    await form.getByRole('button', { name: 'Start session', exact: true }).click();
     await expect.poll(() => startApiPayload).not.toBeNull();
     expect((startApiPayload as Record<string, unknown>).csId).toBe(9);
     expect((startApiPayload as Record<string, unknown>).room).toBe('Dental Clinic Lab 3');
@@ -780,6 +780,6 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
   test('the old /secretary/start-session address opens the Start Session pop-up on Attendance Monitoring', async ({ page }) => {
     await page.goto('/secretary/start-session');
     await expect(page).toHaveURL(/\/secretary\/attendance$/);
-    await expect(page.getByRole('heading', { name: 'Start Attendance Session' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Start session' })).toBeVisible();
   });
 });

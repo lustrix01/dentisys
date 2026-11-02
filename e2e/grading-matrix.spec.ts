@@ -254,17 +254,18 @@ test('matrix keeps and saves a cell typed while another save is in flight', asyn
   expect(posts.flat().some(b => b.scores.some(e => e.studentId === '25' && e.score === 40))).toBe(true);
 });
 
-// The gate's Vite server runs without Tailwind, so this checks the Pin state and pinning classes;
+// The gate's Vite server runs without Tailwind, so this checks the keep-visible toggle state and pinning classes;
 // the pinned layout itself was verified on screenshots at 412/768 and desktop (1280+) stays unchanged.
-test('Pin switches which student columns are pinned below xl and is hidden on desktop', async ({ page }) => {
-  await page.setViewportSize({ width: 412, height: 915 });
+test('Keep-visible toggle switches which student columns are pinned from sm to below xl and is hidden on desktop', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
   await mockMatrixClass(page, {}, { wide: true });
   await page.getByRole('button', { name: 'Full Matrix View' }).click();
-  const pin = page.getByRole('group', { name: 'Pin student columns' });
+  const pin = page.getByRole('group', { name: 'Keep visible while scrolling' });
   await expect(pin).toBeVisible();
   await expect(pin.locator('..')).toHaveClass(/(^|\s)xl:hidden(\s|$)/);
-  const nameOnly = pin.getByRole('button', { name: 'Full Name', exact: true });
-  const both = pin.getByRole('button', { name: 'ID Number + Full Name' });
+  await expect(pin.locator('..')).toHaveClass(/(^|\s)max-sm:hidden(\s|$)/);
+  const nameOnly = pin.getByRole('button', { name: 'Name', exact: true });
+  const both = pin.getByRole('button', { name: 'ID and name' });
   await expect(nameOnly).toHaveAttribute('aria-pressed', 'true');
   await expect(both).toHaveAttribute('aria-pressed', 'false');
   const box = page.locator('div.overflow-x-auto.overflow-y-auto');
@@ -277,9 +278,9 @@ test('Pin switches which student columns are pinned below xl and is hidden on de
   await both.click();
   await expect(both).toHaveAttribute('aria-pressed', 'true');
   await expect(nameOnly).toHaveAttribute('aria-pressed', 'false');
-  await expect(idCell).toHaveClass(sticky);
-  await expect(idCell).toHaveClass(/max-xl:left-0/);
-  await expect(nameCell).toHaveClass(/max-xl:left-\[104px\]/);
+  await expect(idCell).toHaveClass(/(^|\s)sm:max-xl:sticky(\s|$)/);
+  await expect(idCell).toHaveClass(/sm:max-xl:left-0/);
+  await expect(nameCell).toHaveClass(/sm:max-xl:left-\[104px\]/);
   // Both columns keep their own cells: ID Number and Full Name are never merged.
   await expect(idCell).toHaveText('2023-5510');
   await expect(nameCell).toHaveText('Owhie Santillan Lumbang');

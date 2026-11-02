@@ -25,7 +25,7 @@ test('Student pending standing stays unresolved and past-only courses never beco
     currentSchoolYear: '2026-2027', records, atRiskCount: 0, midtermAtRiskCount: 0, hasPendingGrades: true,
   } } }));
   await page.goto('/student/retention');
-  await expect(page.getByText('Standing Pending', { exact: true })).toBeVisible();
+  await expect(page.getByText('No grade yet', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Active Standing · Cleared')).toHaveCount(0);
   await page.getByRole('button', { name: /Remedial Exams/ }).click();
   await expect(page.getByText('Remedial Requirements Pending', { exact: true })).toBeVisible();
@@ -114,7 +114,7 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 
     await openProfile();
     await expect(header.getByRole('link', { name: 'Switch to Student View', exact: true })).toHaveCount(0);
     await expect(header.getByRole('link', { name: 'Return to Secretary View', exact: true })).toHaveCount(0);
-    await expect(header.getByRole('link', { name: /My (Secretary )?Profile/, exact: true })).toBeVisible();
+    await expect(header.getByRole('link', { name: 'My Profile', exact: true })).toBeVisible();
     if (!phone) {
       await expect(header.getByTitle('Switch to Linked Student Self-Service')).toHaveCount(0);
       await expect(header.getByTitle('Return to Secretary Dashboard')).toHaveCount(0);

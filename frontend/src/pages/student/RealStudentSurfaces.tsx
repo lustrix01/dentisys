@@ -161,15 +161,18 @@ export const RealStudentDashboard: React.FC = () => {
   const { student, summary, classes } = data;
   const standingChip = (cls: (typeof classes)[number]) => {
     const retentionKey = cls.retentionState?.toLowerCase();
+    const noGradeYet = cls.grade === null && (!cls.retentionState || retentionKey === 'active');
     return (
       <span
-        className={`inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
-          retentionKey === 'remedial'
-            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60'
-            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
+        className={`inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold ${
+          noGradeYet
+            ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700'
+            : retentionKey === 'remedial'
+              ? 'capitalize bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60'
+              : 'capitalize bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
         }`}
       >
-        {cls.grade === null && (!cls.retentionState || retentionKey === 'active') ? 'No grade yet' : cls.retentionState || 'Good Standing'}
+        {noGradeYet ? 'No grade yet' : cls.retentionState || 'Good Standing'}
       </span>
     );
   };

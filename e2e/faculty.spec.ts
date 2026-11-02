@@ -890,10 +890,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.getByLabel('Attendance school year').selectOption('2024-2025');
     const oldCard = page.locator('div.group').filter({ hasText: 'OLD401' });
     await expect(oldCard).toHaveCount(1);
-    await expect(oldCard.getByRole('button', { name: 'View Session', exact: true })).toBeDisabled();
+    await expect(oldCard.getByRole('button', { name: 'Sessions', exact: true })).toBeDisabled();
     await oldCard.getByRole('button', { name: 'View Attendance', exact: true }).click();
     await expect(page.getByText('Past school-year attendance is view-only.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Start Session', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Start session', exact: true })).toBeDisabled();
     await expect(page.locator('tbody tr').filter({ hasText: 'Alice Green' }).getByRole('button', { name: 'Mark', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'Back to Assigned Classes' }).click();
     await page.getByLabel('Attendance school year').selectOption('current');
@@ -912,8 +912,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     const cards = page.locator('div.group');
     await expect(cards.last()).toContainText('FIN501');
     await expect(cards.last().getByText('Archived', { exact: true })).toBeVisible();
-    await expect(cards.last().getByRole('button', { name: 'View Session', exact: true })).toHaveCount(0);
-    await expect(cards.first().getByRole('button', { name: 'View Session', exact: true })).toBeVisible();
+    await expect(cards.last().getByRole('button', { name: 'Sessions', exact: true })).toHaveCount(0);
+    await expect(cards.first().getByRole('button', { name: 'Sessions', exact: true })).toBeVisible();
   });
 
   test('Faculty can choose a future session date and sees creator details for overlapping bookings', async ({ page }) => {
@@ -926,13 +926,13 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.goto('/attendance');
     await page.getByLabel('Assigned course').selectOption('101');
     await page.getByLabel('Class section').selectOption('1');
-    await page.getByRole('button', { name: 'Start Session', exact: true }).click();
+    await page.getByRole('button', { name: 'Start session', exact: true }).click();
     const date = page.getByLabel('Session date (Asia/Manila)');
     expect(await date.getAttribute('min')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await date.fill('2099-10-02');
     await expect(page.getByRole('checkbox', { name: /Geofence/ })).not.toBeChecked(); // ATT-002: off by default
     await page.getByRole('checkbox', { name: /Geofence/ }).uncheck();
-    await page.locator('form').getByRole('button', { name: 'Schedule Session', exact: true }).click();
+    await page.locator('form').getByRole('button', { name: 'Schedule session', exact: true }).click();
     await expect.poll(() => payload?.sessionDate).toBe('2099-10-02');
     await expect(page.getByText(/created by Secretary Bea Alonzo/)).toBeVisible();
   });
@@ -949,7 +949,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.goto('/attendance');
     await page.getByLabel('Assigned course').selectOption('101');
     await page.getByLabel('Class section').selectOption('1');
-    await page.getByRole('button', { name: 'Start Session', exact: true }).click();
+    await page.getByRole('button', { name: 'Start session', exact: true }).click();
     const expectTimes = async (times: string[], room: string) => {
       for (const [label, value] of [['Opening', times[0]], ['Present cutoff', times[1]], ['Late cutoff', times[2]], ['Class end time', times[3]]]) await expect(page.getByLabel(label, { exact: true })).toHaveValue(value);
       await expect(page.getByLabel('Room or session location')).toHaveValue(room);
@@ -1024,8 +1024,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.locator('tbody tr').filter({ hasText: 'Bob White' }).getByText('Present', { exact: true }).first()).toBeVisible();
 
     // Summary counts
-    await expect(page.locator('div').filter({ hasText: /^Enrolled/ }).getByText('2', { exact: true })).toBeVisible();
-    await expect(page.locator('div').filter({ hasText: /^Recorded/ }).getByText('1', { exact: true })).toBeVisible();
+    await expect(page.getByText('Class Roll Call (2 students)', { exact: true })).toBeVisible();
+    await expect(page.getByText('1 of 2 recorded', { exact: true })).toBeVisible();
   });
 
   test('worksheet: Faculty can end an active session after confirming', async ({ page }) => {
@@ -1054,7 +1054,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
     await page.goto('/attendance');
     await openWorksheet(page, 'CLIN401 - Section A');
-    await page.getByRole('button', { name: 'View / Manage Sessions' }).click();
+    await page.getByRole('button', { name: 'Sessions', exact: true }).click();
     await expect(page.getByText('End 12:00', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'End Session', exact: true }).click();
     await expect(page.getByText(/Students without an attendance record will be marked Absent/)).toBeVisible();
@@ -1215,7 +1215,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
     await expect.poll(() => requestedDates[requestedDates.length - 1]).toBe(futureDate);
     await expect(page.getByText('Scheduled session: attendance opens at its chosen date/time in Asia/Manila.', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'View / Manage Sessions' }).click();
+    await page.getByRole('button', { name: 'Sessions', exact: true }).click();
     await page.getByRole('button', { name: /Upcoming Sessions/ }).click();
     const upcoming = page.locator('div.fixed.inset-0').filter({ hasText: 'Scheduled & Upcoming Sessions' });
     await expect(upcoming).toContainText(futureDate);
@@ -1373,7 +1373,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(refresh).toBeDisabled();
       expect(reads).toBe(1);
       if (action === 'session revocation' && index === 1) {
-        await page.getByRole('button', { name: 'View / Manage Sessions' }).click();
+        await page.getByRole('button', { name: 'Sessions', exact: true }).click();
         await page.getByRole('button', { name: 'Revoke', exact: true }).click();
         await page.getByRole('button', { name: 'Confirm Revoke Session', exact: true }).click();
         await expect(page.getByRole('main').getByText(/Attendance session revoked\. Already-recorded/)).toBeVisible();
@@ -1701,7 +1701,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
     await page.goto('/attendance');
     await openWorksheet(page, 'CLIN401 - Section A');
-    await page.getByRole('button', { name: 'View / Manage Sessions' }).click();
+    await page.getByRole('button', { name: 'Sessions', exact: true }).click();
     await page.getByRole('button', { name: /Upcoming Sessions/ }).click();
     await expect(page.getByText('EDIT-700', { exact: true })).toBeVisible();
     await expect(page.getByText('08:00 – 11:30', { exact: true })).toBeVisible();
@@ -1733,7 +1733,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
       await page.goto('/attendance');
       await openWorksheet(page, 'CLIN401 - Section A');
-      await page.getByRole('button', { name: 'View / Manage Sessions' }).click();
+      await page.getByRole('button', { name: 'Sessions', exact: true }).click();
       await page.getByRole('button', { name: /Upcoming Sessions/ }).click();
       await page.getByRole('button', { name: 'Edit', exact: true }).click();
       return payloads;
@@ -1776,7 +1776,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
       await page.goto('/attendance');
       await openWorksheet(page, 'CLIN401 - Section A');
-      await page.getByRole('button', { name: 'View / Manage Sessions' }).click();
+      await page.getByRole('button', { name: 'Sessions', exact: true }).click();
       await page.getByRole('button', { name: /Upcoming Sessions/ }).click();
       await page.getByRole('button', { name: 'Edit', exact: true }).click();
       for (const label of ['Opening time', 'Present cutoff', 'Late cutoff']) await page.getByLabel(label, { exact: true }).fill('');
@@ -2550,7 +2550,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: /Convert to Period Grading/i }).click();
 
       // Conversion review modal should be visible
-      const modal = page.locator('div[role="dialog"]').or(page.locator('.fixed')).filter({ hasText: /Convert Course Offering to Period Grading/i });
+      const modal = page.getByRole('dialog').filter({ hasText: /Convert Course Offering to Period Grading/i });
       await expect(modal).toBeVisible();
 
       // Check that proposed period mapping displays preserved category IDs
@@ -2775,7 +2775,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: /Recompute Grades/i }).click();
 
       // Expect confirmation dialog
-      const confirmModal = page.locator('div[role="dialog"]').or(page.locator('.fixed')).filter({ hasText: /Confirm Grade Recomputation/i });
+      const confirmModal = page.getByRole('dialog').filter({ hasText: /Confirm Grade Recomputation/i });
       await expect(confirmModal).toBeVisible();
       expect(recomputeRequested).toBe(false);
 

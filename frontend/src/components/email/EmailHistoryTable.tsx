@@ -48,6 +48,7 @@ export const EmailHistoryTable: React.FC<EmailHistoryTableProps> = ({
             value={search}
             onChange={(e) => onSearch(e.target.value)}
             placeholder="Search recipient or email type..."
+            aria-label="Search email history"
             className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs outline-none focus:ring-2 focus:ring-clinical-500"
           />
         </label>
@@ -55,6 +56,7 @@ export const EmailHistoryTable: React.FC<EmailHistoryTableProps> = ({
           <select
             value={filter}
             onChange={(e) => onFilter(e.target.value)}
+            aria-label="Email category"
             className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs outline-none focus:ring-2 focus:ring-clinical-500 font-semibold"
           >
             <option value="all">All email categories</option>
@@ -133,7 +135,11 @@ export const EmailHistoryTable: React.FC<EmailHistoryTableProps> = ({
             })}
           </tbody>
         </table>
-        {visible.length === 0 && <p className="text-center py-8 text-slate-500 dark:text-slate-400">No email records match your filters.</p>}
+        {visible.length === 0 && (
+          <p className="text-center py-8 text-slate-500 dark:text-slate-400">
+            {search.trim() === '' && (filter ?? 'all') === 'all' ? 'No emails sent yet.' : 'No email records match your filters.'}
+          </p>
+        )}
       </div>
     </>
   );

@@ -10,8 +10,9 @@ import { ACCOUNTS, OUT, PARTS_DIR, wantedDevices, wantedRoles, type Role } from 
 // secretary/student nav lists). Detail pages that need an id are left out.
 const ROUTES: Record<Role, string[]> = {
   public: ['/landing', '/login'],
-  admin: ['/', '/admin/faculty-invite', '/admin/faculty-approval', '/admin/retention-criteria', '/admin/reports',
-    '/admin/audit-trail', '/admin/users', '/admin/audit', '/admin/profile', '/admin/settings', '/admin/rules'],
+  // Redirect aliases (/admin/faculty-approval, /retention-criteria, /users, /audit, /rules) are left out:
+  // they only land on pages already listed here.
+  admin: ['/', '/admin/terms', '/admin/faculty-invite', '/admin/reports', '/admin/audit-trail', '/admin/profile', '/admin/settings'],
   faculty: ['/', '/classes', '/students', '/grades', '/retention', '/attendance', '/reports', '/email-management',
     '/faculty/audit-trail', '/attendance?tab=activity','/faculty/profile', '/faculty/settings'],
   secretary: ['/', '/secretary/start-session', '/secretary/attendance', '/secretary/override', '/secretary/audit-trail',
@@ -191,12 +192,17 @@ function inPageCheck(): Finding[] {
     else if (Array.from(e.options).some(o => reach(o.text))) add('select-arrow-overlap-option', 'low', e, r);
   }
 
-  // 9. text leaves drawn on top of each other
+  // 9. text leaves drawn on top of each other. Text inside a fixed/sticky bar (app header, drawer) is
+  //    skipped: page text scrolling under the sticky header after the sweep scrolls is normal, not a bug.
+  const inBar = (e: Element) => {
+    for (let n: Element | null = e; n; n = n.parentElement) if (/fixed|sticky/.test(css(n).position)) return true;
+    return false;
+  };
   const texts = leaves.filter(e => !e.matches('img, svg, input, select, textarea') && css(e).opacity !== '0')
-    .map(e => ({ e, r: e.getBoundingClientRect() })).filter(t => t.r.bottom > 0 && t.r.top < H).slice(0, 700);
+    .map(e => ({ e, r: e.getBoundingClientRect(), bar: inBar(e) })).filter(t => t.r.bottom > 0 && t.r.top < H).slice(0, 700);
   for (let i = 0; i < texts.length; i++) for (let j = i + 1; j < texts.length; j++) {
     const a = texts[i], b = texts[j];
-    if (a.e.contains(b.e) || b.e.contains(a.e)) continue;
+    if (a.bar || b.bar || a.e.contains(b.e) || b.e.contains(a.e)) continue;
     const w = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);
     const h = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
     if (w > 6 && h > 6) { add('text-overlap', 'high', a.e, a.r); out[out.length - 1].text += ' x ' + ((b.e as HTMLElement).innerText || '').slice(0, 30); }
@@ -246,15 +252,22 @@ function inPageCheck(): Finding[] {
     if (parseFloat(s.opacity) < 1 || e.closest('[disabled], [aria-disabled=true]')) continue;
     const fg = rgba(s.color);
     if (fg.length > 3 && fg[3] < 0.5) continue;
+    // Collect translucent backgrounds on the way up, then composite them (nearest on top) over the
+    // first opaque one, so a dark-mode bg-slate-900/50 card is judged as the colour actually painted.
     let bg: number[] | null = null;
+    const layers: number[][] = [];
     for (let n: Element | null = e; n; n = n.parentElement) {
       const b = css(n);
       if (b.backgroundImage !== 'none') { bg = null; break; } // gradients/images: skip
       const c = rgba(b.backgroundColor);
-      if (c.length >= 3 && (c.length < 4 || c[3] > 0.9)) { bg = c; break; }
+      if (c.length < 3 || (c.length > 3 && c[3] === 0)) continue;
+      if (c.length < 4 || c[3] >= 1) { bg = c.slice(0, 3); break; }
+      layers.push(c);
     }
     if (!bg) continue;
-    const [a, b] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+    for (const l of layers.reverse()) bg = bg.map((v, i) => l[i] * l[3] + v * (1 - l[3]));
+    const ink = fg.length > 3 && fg[3] < 1 ? fg.slice(0, 3).map((v, i) => v * fg[3] + bg![i] * (1 - fg[3])) : fg;
+    const [a, b] = [lum(ink), lum(bg)].sort((x, y) => y - x);
     const ratio = (a + 0.05) / (b + 0.05);
     if (ratio < 3) { add('low-contrast', ratio < 2 ? 'high' : 'medium', e, e.getBoundingClientRect()); out[out.length - 1].text += ` (${ratio.toFixed(1)}:1)`; }
   }
@@ -267,7 +280,8 @@ function inPageCheck(): Finding[] {
   }
   for (const o of overlays) {
     if (!visible(o)) continue;
-    const panel = (o.matches('[role=dialog], [aria-modal=true]') ? o : o.firstElementChild) as HTMLElement;
+    // For a bare overlay the first child is usually the backdrop; the panel is the dialog or the last child.
+    const panel = (o.matches('[role=dialog], [aria-modal=true]') ? o : o.querySelector('[role=dialog]') ?? o.lastElementChild) as HTMLElement;
     if (!panel || panel.getBoundingClientRect().height < 1) continue;
     const tall = panel.getBoundingClientRect().height > H + 1 || panel.scrollHeight > panel.clientHeight + 1;
     let scrolls = false;
@@ -331,6 +345,10 @@ for (const device of wantedDevices()) for (const role of wantedRoles()) {
       const findings = [...extra];
       await page.evaluate(t => document.documentElement.classList.toggle('dark', t === 'dark'), theme);
       await page.waitForTimeout(150);
+      // Switching theme starts colour transitions (transition-colors, 200 ms); reading colours mid-fade gave
+      // false low-contrast ratios, so wait until no CSS transition is still running.
+      await page.waitForFunction(() => !document.getAnimations().some(a => a instanceof CSSTransition && a.playState === 'running'),
+        null, { timeout: 3_000 }).catch(() => {});
       findings.push(...await page.evaluate(inPageCheck));
       await scrollAll(page);
       findings.push(...await page.evaluate(inPageCheck));

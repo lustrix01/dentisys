@@ -2,7 +2,7 @@
 // Remedial and Cleared come from retention_state and keep precedence.
 export const STANDING_LABELS: Record<string, string> = {
   active: 'Good Standing',
-  noGrade: 'No Grade Yet',
+  noGrade: 'No grade yet',
   remedial: 'Remedial',
   cleared: 'Cleared',
 };

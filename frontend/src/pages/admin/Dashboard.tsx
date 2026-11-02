@@ -37,6 +37,7 @@ export const Dashboard: React.FC = () => {
   const totalFaculty = apiData?.kpis?.totalFaculty ?? 0;
   const goodStanding = apiData?.kpis?.goodStanding ?? 0;
   const atRisk = apiData?.kpis?.atRisk ?? 0;
+  const noGrade = Number(apiData?.statusCounts?.noGrade) || 0;
   const attendanceRate = apiData?.kpis?.attendanceRate;
   // Chart data comes from the server only (ACA-001); empty data shows an empty state.
   const gradeDistribution: Array<{ range: string; count: number }> = (apiData?.gwaBuckets ?? [])
@@ -144,6 +145,10 @@ export const Dashboard: React.FC = () => {
                 <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Good Standing</span>
                 <span className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 block mt-0.5 break-words xl:break-normal">
                   {goodStanding}
+                  {/* Without this, "0" reads as nobody in good standing when nobody has a grade yet. Same line, so card heights stay equal. */}
+                  {noGrade > 0 && (
+                    <span className="ml-1.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">· {noGrade} not graded yet</span>
+                  )}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
