@@ -22,6 +22,7 @@ Applied by the setup script: the Owner's [Ubuntu 26.04 hardening guide](https://
 - System updates, then one reboot if Ubuntu asks for it.
 - A sudo account (`devops` by default; never `root` or `ubuntu`).
 - SSH on **port 2202, keys only**; root and password logins off.
+- **Before the first setup run**, check the provider's own SSH files: `grep -ri passwordauthentication /etc/ssh/sshd_config.d/`. If any says `yes` (Vultr's `50-cloud-init.conf` does), change it to `no` and run `systemctl reload ssh`; otherwise the setup script stops (“An existing SSH setting overrides the guide”) without changing anything.
 - **UFW firewall**: only 2202 (rate-limited), 80 and 443 open.
 - **fail2ban** against repeated login attempts.
 - Production: no database tunnel; pgAdmin off by default and loopback-only when on. PostgreSQL, Mailpit and the face service stay inside Docker; Traefik is the only public entry point.
