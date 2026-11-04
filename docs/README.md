@@ -11,6 +11,7 @@ Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) 
 - [Release guide](release-guide.md): from an approved change to the demo and production servers, who does each step, and token renewals.
 - [VPS demonstration deployment](vps-deployment.md): the DEL-001 GHCR, HTTPS, update and backup runbook.
 - [Demo accounts](demo-accounts.md): development-only credentials.
+- [Benchmark](benchmark.md): the fixed, repeatable load and face-check benchmark for the demo server or a throwaway local stack, and how to compare runs.
 - [Manual demo readiness checklist](manual-demo-readiness.md)
 
 ## Current work

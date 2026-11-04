@@ -1,0 +1,32 @@
+{
+  "profile": "v1",
+  "seed": 20261104,
+  "userAgent": "DentiSys-Benchmark/v1",
+  "warmup": { "users": 5, "seconds": 30 },
+  "readUsers": [1, 5, 10, 25, 50],
+  "readSeconds": 60,
+  "signin": { "perSecond": 1, "seconds": 60 },
+  "face": {
+    "concurrency": [1, 2, 4],
+    "seconds": 60,
+    "guidanceCallsPerCheckin": 26,
+    "guidanceCallsNote": "Measured from one real attendance check-in in the demo access log (2026-11-04): 2 liveness challenge requests (PHP only), then 26 single-frame /v1/guidance calls about 0.6 s apart (paced by the phone), then one 9-frame /v1/verify. A face registration is 66 guidance calls then enrollment.",
+    "guidanceIntervalMs": 600,
+    "guidanceIntervalNote": "Each simulated student sends a call, waits for it, then sleeps the rest of the interval; a call slower than the interval is followed immediately by the next.",
+    "limitSeconds": 20,
+    "limitNote": "The PHP sidecar timeout per call (BIOMETRIC_SIDECAR_TIMEOUT_SECONDS); a verify call slower than this counts as over the limit."
+  },
+  "idleSeconds": 30,
+  "sampleSeconds": 5,
+  "maxErrorRate": 0.2,
+  "mix": [
+    { "name": "page /", "path": "/", "weight": 10 },
+    { "name": "api health", "path": "/api/health", "weight": 10 },
+    { "name": "student logs", "path": "/api/student/attendance/logs", "role": "STUDENT", "weight": 15 },
+    { "name": "student upcoming", "path": "/api/student/attendance/sessions/upcoming?range=week", "role": "STUDENT", "weight": 15 },
+    { "name": "student active", "path": "/api/student/attendance/sessions/active", "role": "STUDENT", "weight": 15 },
+    { "name": "faculty kpis", "path": "/api/faculty/dashboard/kpis", "role": "FACULTY", "weight": 15 },
+    { "name": "faculty students", "path": "/api/faculty/students", "role": "FACULTY", "weight": 10 },
+    { "name": "faculty retention", "path": "/api/faculty/retention", "role": "FACULTY", "weight": 10 }
+  ]
+}

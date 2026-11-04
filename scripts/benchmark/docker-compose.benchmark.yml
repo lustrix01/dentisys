@@ -1,0 +1,22 @@
+# Resource cap for the THROWAWAY local benchmark stack only (compose project "dentisys-bench").
+# Used by scripts/benchmark.ps1 after docker-compose.web.yml and docker-compose.database.yml; never by the development stack.
+# Same single core and 1 GB in total as the demo VPS: every container is pinned to CPU 0 (cpuset), so they share one core,
+# and the memory limits add up to 1024 MB, sized from the demo's measured use (the demo runs 3 web and 3 frontend replicas,
+# here one web container carries the same ~270 MB). Swap is allowed (memswap_limit = 2x), as on the VPS.
+services:
+  db:
+    cpuset: "0"
+    mem_limit: 170m
+    memswap_limit: 340m
+  web:
+    cpuset: "0"
+    mem_limit: 280m
+    memswap_limit: 560m
+  biometric:
+    cpuset: "0"
+    mem_limit: 500m
+    memswap_limit: 1000m
+  frontend:
+    cpuset: "0"
+    mem_limit: 74m
+    memswap_limit: 148m
