@@ -106,6 +106,10 @@ try {
     $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
     $tempConfig = Join-Path $tempBase ('dentisys-promote-' + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $tempConfig | Out-Null
+    # An empty config makes Docker fall back to the OS credential store (Windows Credential Manager), which is
+    # shared with the bot's demo login and outlives this folder. Any auths entry disables that fallback, so the
+    # token is written only to this folder's config.json and deleted with it.
+    [IO.File]::WriteAllText((Join-Path $tempConfig 'config.json'), '{"auths":{"dentisys-promote.invalid":{}}}', (New-Object Text.UTF8Encoding $false))
     $env:DOCKER_CONFIG = $tempConfig
     $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
     try {
