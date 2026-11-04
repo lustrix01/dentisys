@@ -71,6 +71,14 @@ try {
             @{ Path = $YuNetModelPath; Name = 'face_detection_yunet_2023mar.onnx'; HashKey = 'BIOMETRIC_YUNET_SHA256' },
             @{ Path = $SFaceModelPath; Name = 'face_recognition_sface_2021dec.onnx'; HashKey = 'BIOMETRIC_SFACE_SHA256' }
         )
+        # One SSH call for all three checksums: a hardened server's ufw `limit` drops the 6th new
+        # SSH connection within 30 s, and a rerun also probes, uploads, extracts and provisions.
+        # No double quotes in the remote command (Windows PowerShell 5.1 strips them); missing files are skipped.
+        $remoteHashes = @{}
+        $hashCommand = 'cd /opt/dentisys/assets 2>/dev/null && sha256sum ' + (($models | ForEach-Object { $_.Name }) -join ' ') + ' 2>/dev/null; true'
+        foreach ($line in @(Invoke-Native ssh ($sshArgs + @($Server, $hashCommand)))) {
+            if ("$line" -match '^([0-9a-f]{64})\s+\*?(\S+)$') { $remoteHashes[$Matches[2]] = $Matches[1] }
+        }
         foreach ($modelInfo in $models) {
             $model = (Resolve-Path -LiteralPath $modelInfo.Path).Path
             if (-not (Test-Path -LiteralPath $model -PathType Leaf)) { throw "Model path must be a file: $($modelInfo.Path)" }
@@ -78,9 +86,7 @@ try {
             Copy-Item -LiteralPath $model -Destination $stagedModel
             $modelHash = (Get-FileHash -LiteralPath $stagedModel -Algorithm SHA256).Hash.ToLowerInvariant()
             Write-Host "$($modelInfo.HashKey)=$modelHash"
-            $remotePath = "/opt/dentisys/assets/$($modelInfo.Name)"
-            $remoteHash = (Invoke-Native ssh ($sshArgs + @($Server, "if [ -f '$remotePath' ]; then sha256sum '$remotePath'; fi")) | Out-String).Trim()
-            if (($remoteHash -split '\s+')[0] -eq $modelHash) {
+            if ($remoteHashes[$modelInfo.Name] -eq $modelHash) {
                 Write-Host "$($modelInfo.Name) already matches; skipping upload."
             }
             else {

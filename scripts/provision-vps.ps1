@@ -457,7 +457,7 @@ try {
         if (-not $back) {
             throw "The server did not come back on SSH ${User}@${Ip}:$SshPort within 5 minutes after the reboot. Check the server in the provider console (EC2 status checks/system log, Vultr View Console), then rerun this command to verify."
         }
-        Write-Host 'SSH is back after the reboot. Waiting 30 s before reconnecting (ufw rate-limits new SSH connections).'
+        Write-Host 'SSH is back after the reboot. Waiting 30 s before reconnecting (ufw rate-limits new SSH connections; the upload and verify pass then use 4).'
         Start-Sleep -Seconds 30
         # /tmp is cleared at boot; upload the same bundle again for the verify-only pass.
         & (Join-Path $PSScriptRoot 'upload-vps.ps1') -Server "${User}@$Ip" -Port $SshPort -IdentityFile $identity -ModelPath $modelPath -YuNetModelPath $yunetModelPath -SFaceModelPath $sfaceModelPath -Provision
