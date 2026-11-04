@@ -1064,6 +1064,35 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByRole('button', { name: 'End Session' })).toHaveCount(0);
   });
 
+  test('worksheet: End Session works when the class has an active and a scheduled session on one date', async ({ page }) => {
+    let endPayload: Record<string, unknown> | null = null;
+    const base = {
+      classId: '1', sessionDate: '2026-10-26', room: null, presentCutoff: '12:30', lateCutoff: '13:00', classEndTime: '17:00',
+      timingConfigured: true, geofenceEnabled: false, biometricRequired: false, revokedAt: null, revocationReason: null,
+    };
+    const active = { ...base, sessionId: '900', sessionCode: 'CS1-ACTIVE', status: 'active', openingTime: '08:00' };
+    const scheduled = { ...base, sessionId: '901', sessionCode: 'CS1-LATER', status: 'scheduled', openingTime: '15:00', classEndTime: '18:00' };
+    // The backend leaves attendanceSession null when a class has 2+ sessions on the date.
+    await page.route('**/api/faculty/attendance?*csId=1*', route => route.fulfill({
+      json: { status: 'ok', worksheet: { ...mockWorksheetSectionA, date: '2026-10-26', attendanceSession: null, attendanceSessions: [active, scheduled] } },
+    }));
+    await page.route('**/api/faculty/attendance/session/end', async route => {
+      endPayload = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({ json: { status: 'ok', session: { ...active, status: 'ended' } } });
+    });
+    await page.clock.setFixedTime(new Date('2026-10-26T04:00:00Z')); // Monday 12:00 in Asia/Manila
+
+    await page.goto('/attendance');
+    await openWorksheet(page, 'CLIN401 - Section A');
+    await page.getByRole('button', { name: 'Sessions', exact: true }).click();
+    await page.getByRole('button', { name: 'End Session', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'End Attendance Session' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('CS1-ACTIVE');
+    await dialog.getByRole('button', { name: 'Confirm End Session' }).click();
+    await expect.poll(() => endPayload).toEqual({ sessionId: '900' });
+  });
+
   test('Excused requests (ATT-006): Faculty approve a pending Secretary request', async ({ page }) => {
     let decision: Record<string, unknown> | null = null;
     let decided = false;
