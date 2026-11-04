@@ -28,6 +28,7 @@ import {
   History,
   CheckCheck,
   Loader2,
+  DoorOpen,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
@@ -264,6 +265,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
         { name: 'Academic Terms', path: '/admin/terms', icon: CalendarDays, short: 'Terms' },
+        { name: 'Rooms', path: '/admin/rooms', icon: DoorOpen },
         { name: 'Faculty Invitations', path: '/admin/faculty-invite', icon: UserPlus, short: 'Invites' },
         { name: 'Reports & Analytics', path: '/admin/reports', icon: FileSpreadsheet, short: 'Reports' },
         { name: 'Audit Trail', path: '/admin/audit-trail', icon: ListChecks, short: 'Audit' },
@@ -515,6 +517,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'Settings', path: '/secretary/settings' });
     } else if (path === '/admin/terms') {
       crumbs.push({ name: 'Academic Terms', path: '/admin/terms' });
+    } else if (path === '/admin/rooms') {
+      crumbs.push({ name: 'Rooms', path: '/admin/rooms' });
     } else if (path === '/admin/faculty-invite') {
       crumbs.push({ name: 'Faculty Invitations', path: '/admin/faculty-invite' });
     } else if (path === '/admin/reports') {

@@ -2352,3 +2352,41 @@ export function deleteAcademicTermApi(id: number): Promise<{ status: string }> {
 export function copyAcademicTermsApi(): Promise<{ status: string; schoolYear: string; created: number }> {
   return request('POST', '/admin/academic-terms/copy', {});
 }
+
+// ROOM-001 Dean-managed rooms.
+export type RoomUsage = { classes: number; meetings: number; scheduledSessions: number; otherSessions: number };
+export type RoomRecord = {
+  roomId: number;
+  name: string;
+  group: string;
+  latitude: number | null;
+  longitude: number | null;
+  radiusMeters: number | null;
+  status: 'active' | 'retired';
+  retiredAt: string | null;
+  usage: RoomUsage;
+  deletable: boolean;
+};
+export type RoomInput = { name: string; group: string; latitude?: number | null; longitude?: number | null; radiusMeters?: number | null };
+export type RoomOption = Pick<RoomRecord, 'name' | 'group' | 'status' | 'latitude' | 'longitude' | 'radiusMeters'>;
+export function getAdminRoomsApi(): Promise<{ status: string; rooms: RoomRecord[]; groups: string[] }> {
+  return request('GET', '/admin/rooms');
+}
+export function createRoomApi(data: RoomInput): Promise<{ room: RoomRecord }> {
+  return request('POST', '/admin/rooms', data);
+}
+export function updateRoomApi(data: Partial<RoomInput> & { roomId: number; confirmRename?: boolean }): Promise<{ room: RoomRecord; renamed?: { classes: number; meetings: number; scheduledSessions: number } }> {
+  return request('POST', '/admin/rooms/update', data);
+}
+export function retireRoomApi(roomId: number): Promise<{ room: RoomRecord }> {
+  return request('POST', '/admin/rooms/retire', { roomId });
+}
+export function restoreRoomApi(roomId: number): Promise<{ room: RoomRecord }> {
+  return request('POST', '/admin/rooms/restore', { roomId });
+}
+export function deleteRoomApi(roomId: number): Promise<{ status: string }> {
+  return request('POST', '/admin/rooms/delete', { roomId });
+}
+export function getRoomsApi(): Promise<{ status: string; rooms: RoomOption[] }> {
+  return request('GET', '/rooms');
+}

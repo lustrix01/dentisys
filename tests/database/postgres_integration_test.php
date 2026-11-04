@@ -292,6 +292,7 @@ $expectedMigrations = [
     '051_lecture_only_grading.sql',
     '052_secretary_attendance_requests.sql',
     '053_field_normalization.sql',
+    '054_rooms.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -1725,6 +1726,7 @@ $facultyAccessToken = (string) ($facultyLoginBody['access_token'] ?? '');
 $seedFacultyAccessToken = $facultyAccessToken;
 
 require __DIR__ . '/academic_terms_integration.php';
+require __DIR__ . '/rooms_integration.php';
 require __DIR__ . '/schedule_session_integration.php';
 
 $facultyGeofenceClassStmt = $pdo->prepare(

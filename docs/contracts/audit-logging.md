@@ -151,6 +151,7 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | System settings changed | system_settings_updated | changed fields before → after | yes | KEEP |
 | Term added / changed / deleted | academic_term_created, academic_term_updated, academic_term_deleted | term before → after | yes | KEEP |
 | Terms copied to next year | academic_terms_copied | year, terms created | yes | KEEP |
+| Room added / changed / retired / restored / deleted | room_created, room_updated, room_retired, room_restored, room_deleted | room before → after (rename counts) | yes | KEEP |
 
 ### 5.4 Grading (actor: Faculty) — own view only
 

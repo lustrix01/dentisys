@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronDown, MapPin, Navigation, Play } from 'lucide-react';
 import { LocationPicker } from './LocationPicker';
 import { Modal } from './Modal';
-import { RoomSelector } from './RoomSelector';
+import { RoomSelector, RetiredRoomWarning, useRooms } from './RoomSelector';
 
 import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../utils/geofenceRadius';
 import type { ClassMeeting } from '../services/apiClient';
@@ -72,6 +72,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   initialRoom, initialLocation, note, meetings,
 }) => {
   const a = ACCENTS[accent];
+  const rooms = useRooms();
   const [sessionDate, setSessionDate] = useState(() => manilaToday());
   const [room, setRoom] = useState(initialRoom ?? '');
   const [openingTime, setOpeningTime] = useState('08:00');
@@ -243,7 +244,12 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
         </label>
         <div>
           <label htmlFor="start-session-room" className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Room or session location</label>
-          <RoomSelector id="start-session-room" value={room} onChange={setRoom} placeholder="Choose room" fieldClassName={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-800 outline-none ${a.focus} dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100`} />
+          <RoomSelector id="start-session-room" value={room} onChange={setRoom} onPickRoom={picked => {
+            // ATT-002: a picked room fills the location and radius; the Faculty still turns the geofence on.
+            if (picked.latitude != null && picked.longitude != null) setLocation({ latitude: picked.latitude, longitude: picked.longitude });
+            if (picked.radiusMeters != null) setGeofenceRadius(String(picked.radiusMeters));
+          }} placeholder="Choose room" fieldClassName={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-800 outline-none ${a.focus} dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100`} />
+          <div className="mt-2"><RetiredRoomWarning rooms={rooms} names={[room]} /></div>
         </div>
 
         {sortedMeetings.length > 0 && (

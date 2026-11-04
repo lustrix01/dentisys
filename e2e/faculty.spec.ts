@@ -1,4 +1,4 @@
-import { test, expect, openAccountMenu } from './fixtures';
+import { roomsJson, test, expect, openAccountMenu } from './fixtures';
 import type { Page } from '@playwright/test';
 import type { Download } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -301,6 +301,32 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.getByLabel('Lecture Units *')).toHaveCount(0);
     await expect(page.getByText('Lecture Schedule', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Laboratory Schedule', { exact: true })).toBeVisible();
+  });
+
+  test('A retired room warns on the class card and in the edit form, never blocks saving, and the dropdown hides retired rooms', async ({ page }) => {
+    const cls = { id: '91', csId: 91, csName: 'NEW601-A', courseId: 9, courseCode: 'NEW601', courseName: 'Advanced Clinic', units: 3, lectureUnits: 2, labUnits: 1, courseUnitsEditable: true, hasGrades: false, schoolYear: '2026-2027', isCurrentSchoolYear: true, isHistorical: false, semester: '1ST', yearLevel: 6, block: 'A', schedule: null, lecRoom: 'Lecture Hall A (Mon 08:00 AM - 09:00 AM)', labRoom: 'Simulation Lab (Wed 10:00 AM - 01:00 PM)', meetings: [{ component: 'Lecture', day: 'Mon', room: 'Lecture Hall A', startTime: '08:00', endTime: '09:00' }, { component: 'Laboratory', day: 'Wed', room: 'Simulation Lab', startTime: '10:00', endTime: '13:00' }], enrolledCount: 0, instructorName: 'Prof. Jane Doe', status: 'Active' };
+    const updates: Array<Record<string, unknown>> = [];
+    await page.route('**/api/rooms', route => route.fulfill({ json: { status: 'ok', rooms: roomsJson().rooms.map(r => r.name === 'Simulation Lab' ? { ...r, status: 'retired' } : r) } }));
+    await page.route('**/api/faculty/classes', route => route.fulfill({ json: { status: 'ok', currentSchoolYear: '2026-2027', classes: [cls] } }));
+    await page.route('**/api/faculty/classes/update', async route => {
+      updates.push(route.request().postDataJSON());
+      await route.fulfill({ json: { status: 'ok', message: 'Class section updated successfully.', csId: 91 } });
+    });
+    await page.route('**/api/faculty/courses', route => route.fulfill({ json: { status: 'ok', courses: [{ id: 9, courseCode: 'NEW601', name: 'Advanced Clinic', units: 3, lectureUnits: 2, labUnits: 1, yearLevel: 6, semester: '1ST', isClinical: false }] } }));
+    await page.route('**/api/faculty/students', route => route.fulfill({ json: [] }));
+
+    await page.click('a[href="/classes"]');
+    const warning = page.getByTestId('retired-room-warning');
+    await expect(warning).toHaveText('Room Simulation Lab was retired by the Dean. Pick a new room.');
+    await page.getByTitle('Edit Class Section Details').first().click();
+    const lab = page.getByLabel('Laboratory Room Venue');
+    await expect(lab.locator('option:checked')).toHaveText('Simulation Lab (retired)');
+    await expect(lab.locator('option', { hasText: 'Simulation Lab' })).toHaveCount(1);
+    await expect(page.getByTestId('retired-room-warning')).toHaveCount(2); // card behind the form + the form
+    await lab.selectOption('Dental Clinic Lab 1');
+    await expect(page.getByTestId('retired-room-warning')).toHaveCount(1); // only the card still warns
+    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await expect.poll(() => updates.length).toBe(1);
   });
 
   test('Edit Class offers the same lecture/lab component choices and sends changed units', async ({ page }) => {

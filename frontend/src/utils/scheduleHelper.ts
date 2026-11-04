@@ -12,37 +12,6 @@ export interface ClassSessionSlot {
   labData?: { room: string; days: string[]; startTime: string; endTime: string };
 }
 
-export const ROOM_CATEGORIES = [
-  {
-    category: 'Lecture Halls & Auditoriums',
-    rooms: ['Lecture Hall A', 'Lecture Hall B', 'Auditorium'],
-  },
-  {
-    category: 'Laboratories & Dental Clinics',
-    rooms: [
-      'Dental Clinic Lab 1',
-      'Dental Clinic Lab 2',
-      'Oral Anatomy Lab',
-      'Prosthodontics Lab',
-      'Periodontics Lab',
-      'Simulation Lab',
-    ],
-  },
-  {
-    category: 'Standard Classrooms',
-    rooms: [
-      'Room 101',
-      'Room 102',
-      'Room 201',
-      'Room 202',
-      'Room 301',
-      'Room 302',
-    ],
-  },
-];
-
-export const ROOM_OPTIONS = ROOM_CATEGORIES.flatMap(c => c.rooms);
-
 export const SCHEDULE_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export const SCHEDULE_PRESETS = [

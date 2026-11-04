@@ -1,5 +1,5 @@
 import type { Page, Route } from '@playwright/test';
-import { test, expect, openSecretaryWorksheet, openAccountMenu } from './fixtures';
+import { roomsJson, test, expect, openSecretaryWorksheet, openAccountMenu } from './fixtures';
 
 test.describe('Class Secretary Module E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
@@ -379,6 +379,33 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(form.getByLabel('Room or session location')).toHaveValue('Dental Clinic Lab 2');
     await expect(form.getByRole('button', { name: 'Start session', exact: true })).toBeVisible();
     await expect(page.getByText('Live Session')).toHaveCount(0);
+  });
+
+  test('Start Session pop-up: a retired room is kept as "(retired)" with a warning, and is not offered for other classes', async ({ page }) => {
+    await page.route('**/api/rooms', route => route.fulfill({ json: { status: 'ok', rooms: roomsJson().rooms.map(r => r.name === 'Dental Clinic Lab 2' ? { ...r, status: 'retired' } : r) } }));
+    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ json: { status: 'ok', activeSession: null } }));
+    await openStartPopup(page);
+    const form = startForm(page);
+    const room = form.getByLabel('Room or session location');
+    await expect(room).toHaveValue('Dental Clinic Lab 2');
+    await expect(room.locator('option:checked')).toHaveText('Dental Clinic Lab 2 (retired)');
+    await expect(room.locator('option', { hasText: 'Dental Clinic Lab 1' })).toHaveCount(1);
+    await expect(form.getByTestId('retired-room-warning')).toHaveText('Room Dental Clinic Lab 2 was retired by the Dean. Pick a new room.');
+    await room.selectOption('Room 101');
+    await expect(form.getByTestId('retired-room-warning')).toHaveCount(0);
+    await expect(room.locator('option', { hasText: '(retired)' })).toHaveCount(0);
+  });
+
+  test('Start Session pop-up: picking a room with a location fills location and radius; the geofence stays off', async ({ page }) => {
+    await page.route('**/api/rooms', route => route.fulfill({ json: { status: 'ok', rooms: roomsJson().rooms.map(r => r.name === 'Room 101' ? { ...r, latitude: 13.1436, longitude: 123.7438, radiusMeters: 150 } : r) } }));
+    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ json: { status: 'ok', activeSession: null } }));
+    await openStartPopup(page);
+    const form = startForm(page);
+    await form.getByLabel('Room or session location').selectOption('Room 101');
+    await expect(form.getByLabel('Geofence')).not.toBeChecked();
+    await form.getByLabel('Geofence').check();
+    await expect(form.getByLabel('Allowed radius (meters)')).toHaveValue('150');
+    await expect(form.getByText('Location acquired: 13.1436, 123.7438')).toBeVisible();
   });
 
   test('Secretary queues a future session and sees cross-role booking conflicts', async ({ page }) => {

@@ -22,7 +22,7 @@ import {
 import { Card } from '../../components/Card';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { LocationPicker } from '../../components/LocationPicker';
-import { RoomSelector } from '../../components/RoomSelector';
+import { RoomSelector, RetiredRoomWarning, useRooms } from '../../components/RoomSelector';
 import { FacultyExcusedRequestsPanel, PendingRequestsBadge, openSecretaryRequest } from '../../components/FacultyExcusedRequestsPanel';
 import { Modal } from '../../components/Modal';
 import { StartSessionModal, type StartSessionValues } from '../../components/StartSessionModal';
@@ -335,6 +335,7 @@ export const AttendanceMonitoring: React.FC = () => {
   // Edit Session Modal State
   const [isEditSessionOpen, setIsEditSessionOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<FacultyManagedAttendanceSession | null>(null);
+  const rooms = useRooms();
   const [editRoom, setEditRoom] = useState('');
   const [editOpeningTime, setEditOpeningTime] = useState('');
   const [editPresentCutoff, setEditPresentCutoff] = useState('');
@@ -2011,9 +2012,15 @@ export const AttendanceMonitoring: React.FC = () => {
                 id="edit-session-room"
                 value={editRoom}
                 onChange={setEditRoom}
+                onPickRoom={picked => {
+                  // ATT-002: a picked room fills the location and radius; the geofence switch is left as it is.
+                  if (picked.latitude != null && picked.longitude != null) setEditLocation({ latitude: picked.latitude, longitude: picked.longitude });
+                  if (picked.radiusMeters != null) setEditGeofenceRadius(String(picked.radiusMeters));
+                }}
                 placeholder="Choose room"
                 fieldClassName="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-800 outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
+              <div className="mt-2"><RetiredRoomWarning rooms={rooms} names={[editRoom]} /></div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

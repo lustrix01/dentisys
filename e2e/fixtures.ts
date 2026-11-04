@@ -24,7 +24,17 @@ const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   features: { browser_attendance_prototype: false, student_auth_enabled: false },
 };
 
+// ROOM-001: the 15 rooms every database starts with (migration 054), as GET /api/rooms returns them.
+const SEEDED_ROOMS: Array<[string, string]> = [
+  ...['Lecture Hall A', 'Lecture Hall B', 'Auditorium'].map(n => [n, 'Lecture Halls & Auditoriums'] as [string, string]),
+  ...['Dental Clinic Lab 1', 'Dental Clinic Lab 2', 'Oral Anatomy Lab', 'Prosthodontics Lab', 'Periodontics Lab', 'Simulation Lab'].map(n => [n, 'Laboratories & Dental Clinics'] as [string, string]),
+  ...['Room 101', 'Room 102', 'Room 201', 'Room 202', 'Room 301', 'Room 302'].map(n => [n, 'Standard Classrooms'] as [string, string]),
+];
+export const MOCK_ROOMS = SEEDED_ROOMS.map(([name, group]) => ({ name, group, status: 'active', latitude: null, longitude: null, radiusMeters: null }));
+export const roomsJson = (extra: Array<Record<string, unknown>> = []) => ({ status: 'ok', rooms: [...MOCK_ROOMS, ...extra] });
+
 const KNOWN_API_PATHS = new Set([
+  '/api/rooms',
   '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/google', '/api/auth/google/link', '/api/auth/google/link/profile', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/faculty/activate', '/api/auth/mfa/enroll/start',
   '/api/auth/mfa/enroll/confirm', '/api/auth/mfa/verify', '/api/auth/mfa/recover', '/api/auth/mfa/settings',
   '/api/auth/mfa/settings/recovery-codes', '/api/auth/mfa/settings/revoke', '/api/auth/me', '/api/auth/refresh', '/api/auth/theme',
@@ -50,6 +60,7 @@ const KNOWN_API_PATHS = new Set([
 ]);
 
 const GET_ONLY_API_PATHS = new Set([
+  '/api/rooms',
   '/api/health', '/api/runtime-config', '/api/auth/me', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/student/invitation', '/api/auth/mfa/settings', '/api/admin/faculty-invitations',
   '/api/admin/dashboard/kpis', '/api/admin/audit-logs', '/api/admin/reports/summary', '/api/secretary/invitation', '/api/secretary/invitations',
   '/api/secretary/dashboard/kpis', '/api/secretary/attendance', '/api/secretary/attendance/session/active', '/api/secretary/profile', '/api/secretary/settings',
@@ -86,6 +97,7 @@ function isKnownApiRequest(pathname: string, method: string): boolean {
 }
 
 function responseFor(pathname: string, method: string): unknown {
+  if (pathname === '/api/rooms') return roomsJson();
   if (pathname === '/api/runtime-config') return { status: 'ok', ...DEFAULT_RUNTIME_CONFIG };
   if (pathname === '/api/auth/refresh') return { access_token: 'mock-refresh-token', user: { user_id: 100 } };
   if (pathname === '/api/auth/me') return { id: 100, user_id: 100, login_email: 'mock@bicol-u.edu.ph', display_name: 'Mock User', role: 'faculty', session_uuid: 'server-fixture-session', authentication_source: 'password' };

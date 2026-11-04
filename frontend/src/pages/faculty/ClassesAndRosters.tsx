@@ -59,7 +59,6 @@ import {
 
 import {
   ClassSessionSlot,
-  ROOM_OPTIONS,
   SCHEDULE_DAYS,
   SCHEDULE_PRESETS,
   checkScheduleConflicts,
@@ -68,7 +67,7 @@ import {
   meetingDayKey,
 } from '../../utils/scheduleHelper';
 import { MeetingTimes, type DayTimes } from '../../components/MeetingTimes';
-import { RoomSelector } from '../../components/RoomSelector';
+import { RoomSelector, RetiredRoomWarning, useRooms } from '../../components/RoomSelector';
 import { RosterImportModal } from '../../components/RosterImportModal';
 import { recordAudit } from '../../services/auditService';
 import { createSecretaryInvitation, fetchSecretaryInvitations, type SecretaryInvitation } from '../../services/authService';
@@ -276,6 +275,7 @@ export const ClassesAndRosters: React.FC = () => {
   const [editBlock, setEditBlock] = useState('');
   const [editYearLevel, setEditYearLevel] = useState(4);
   const [editOriginalSchedule, setEditOriginalSchedule] = useState('');
+  const rooms = useRooms();
   const [editLecRoom, setEditLecRoom] = useState('');
   const [editLecDayTimes, setEditLecDayTimes] = useState<DayTimes>({});
   const [editLabDayTimes, setEditLabDayTimes] = useState<DayTimes>({});
@@ -1487,6 +1487,7 @@ const handleSendAllStudentInvites = async () => {
                           </div>
                         </div>
                       </div>
+                      {!historicalClass && <RetiredRoomWarning rooms={rooms} names={[cls.lecRoom, cls.labRoom].map(room => room?.replace(/\s+\([A-Z][a-z]{2}\b.*\)$/, '')).concat((cls.meetings ?? []).map(meeting => meeting.room))} />}
                       {archivedClass && (
                         <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                           {cls.archiveReason
@@ -3014,6 +3015,7 @@ const handleSendAllStudentInvites = async () => {
                 }}
                 placeholder="Choose Lecture Room"
               />
+              <RetiredRoomWarning rooms={rooms} names={[editLecRoom, ...Object.values(editLecDayTimes).map(t => t.room)]} />
 
               <div>
                 <span className="font-semibold text-slate-600 dark:text-slate-400 block mb-1 text-[11px]">
@@ -3098,6 +3100,7 @@ const handleSendAllStudentInvites = async () => {
                 }}
                 placeholder="Choose Laboratory Room (Optional)"
               />
+              <RetiredRoomWarning rooms={rooms} names={[editLabRoom, ...Object.values(editLabDayTimes).map(t => t.room)]} />
 
               <div>
                 <span className="font-semibold text-slate-600 dark:text-slate-400 block mb-1 text-[11px]">

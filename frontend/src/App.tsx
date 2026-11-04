@@ -21,6 +21,7 @@ import { DeanReports } from './pages/admin/SystemAudit';
 import { AuditTrail as DeanAuditTrail } from './pages/admin/AuditTrail';
 import { FacultyInvitation } from './pages/admin/FacultyInvitation';
 import { AcademicTerms } from './pages/admin/AcademicTerms';
+import { Rooms } from './pages/admin/Rooms';
 
 // Class Secretary Page Imports
 import { Dashboard as SecretaryDashboard } from './pages/secretary/Dashboard';
@@ -252,6 +253,7 @@ function App() {
 
                 <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
                   <Route path="/admin/terms" element={<AcademicTerms />} />
+                  <Route path="/admin/rooms" element={<Rooms />} />
                   <Route path="/admin/academic-terms" element={<Navigate to="/admin/terms" replace />} />
                   <Route path="/admin/faculty-invite" element={<FacultyInvitation />} />
                   <Route path="/admin/faculty-approval" element={<Navigate to="/admin/faculty-invite" replace />} />

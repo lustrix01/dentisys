@@ -16,6 +16,7 @@ require_once dirname(__DIR__) . '/controllers/PasswordChangeController.php';
 require_once dirname(__DIR__) . '/controllers/StudentAcademicController.php';
 require_once dirname(__DIR__) . '/controllers/NotificationController.php';
 require_once dirname(__DIR__) . '/controllers/AdminController.php';
+require_once dirname(__DIR__) . '/controllers/RoomController.php';
 require_once dirname(__DIR__) . '/controllers/FacultyController.php';
 
 return [
@@ -24,6 +25,13 @@ return [
     ['method' => 'POST', 'path' => '/api/admin/academic-terms/preview', 'handler' => 'handle_admin_academic_terms'],
     ['method' => 'POST', 'path' => '/api/admin/academic-terms/delete', 'handler' => 'handle_admin_academic_terms'],
     ['method' => 'POST', 'path' => '/api/admin/academic-terms/copy', 'handler' => 'handle_admin_academic_terms'],
+    ['method' => 'GET', 'path' => '/api/rooms', 'handler' => 'handle_rooms_list'],
+    ['method' => 'GET', 'path' => '/api/admin/rooms', 'handler' => 'handle_admin_rooms'],
+    ['method' => 'POST', 'path' => '/api/admin/rooms', 'handler' => 'handle_admin_rooms'],
+    ['method' => 'POST', 'path' => '/api/admin/rooms/update', 'handler' => 'handle_admin_rooms'],
+    ['method' => 'POST', 'path' => '/api/admin/rooms/retire', 'handler' => 'handle_admin_rooms'],
+    ['method' => 'POST', 'path' => '/api/admin/rooms/restore', 'handler' => 'handle_admin_rooms'],
+    ['method' => 'POST', 'path' => '/api/admin/rooms/delete', 'handler' => 'handle_admin_rooms'],
     [
         'method' => 'GET',
         'path' => '/api/health',

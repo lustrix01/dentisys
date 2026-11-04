@@ -94,6 +94,11 @@ function audit_catalogue(): array
         'academic_term_updated' => ['Term changed', $T, true, false],
         'academic_term_deleted' => ['Term deleted', $T, true, false],
         'academic_terms_copied' => ['Terms copied to next year', $T, true, false],
+        'room_created' => ['Room added', $T, true, false],
+        'room_updated' => ['Room changed', $T, true, false],
+        'room_retired' => ['Room retired', $T, true, false],
+        'room_restored' => ['Room restored', $T, true, false],
+        'room_deleted' => ['Room deleted', $T, true, false],
         // 5.4 Grading (own view only)
         'grading_config_update' => ['Grade weights changed', $G, false, false],
         'assessment_created' => ['Assessment added', $G, false, false],

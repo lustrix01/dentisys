@@ -439,4 +439,112 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(page.locator('table:not(.print-only table)').first()).toBeHidden();
     await expect(page.locator('h1', { hasText: 'System Audit Trail' })).toBeHidden();
   });
+
+  const usage0 = { classes: 0, meetings: 0, scheduledSessions: 0, otherSessions: 0 };
+  const mockRooms = async (page: Page) => {
+    const base = { latitude: null, longitude: null, radiusMeters: null, retiredAt: null };
+    let rooms: Array<Record<string, any>> = [
+      { ...base, roomId: 1, name: 'Room 302', group: 'Standard Classrooms', status: 'active', usage: { classes: 3, meetings: 4, scheduledSessions: 1, otherSessions: 2 }, deletable: false },
+      { ...base, roomId: 2, name: 'Room 405', group: 'Standard Classrooms', status: 'active', usage: usage0, deletable: true },
+      { ...base, roomId: 3, name: 'Old Lab', group: 'Laboratories', status: 'retired', usage: usage0, deletable: true },
+      { ...base, roomId: 4, name: 'Simulation Lab', group: 'Laboratories', status: 'retired', usage: { classes: 1, meetings: 1, scheduledSessions: 0, otherSessions: 0 }, deletable: false },
+    ];
+    const posted: Array<Record<string, any>> = [];
+    await page.route('**/api/admin/rooms**', async route => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      if (request.method() === 'GET') {
+        return route.fulfill({ json: { status: 'ok', rooms, groups: ['Standard Classrooms', 'Laboratories'] } });
+      }
+      const data = request.postDataJSON();
+      posted.push({ path: pathname.replace('/api/admin/rooms', '') || '/', ...data });
+      const room = rooms.find(r => r.roomId === data.roomId);
+      if (pathname.endsWith('/retire') && room) room.status = 'retired';
+      if (pathname.endsWith('/restore') && room) room.status = 'active';
+      if (pathname.endsWith('/delete')) rooms = rooms.filter(r => r.roomId !== data.roomId);
+      if (pathname.endsWith('/update') && room) {
+        if (data.name !== room.name && room.usage.classes > 0 && !data.confirmRename) {
+          return route.fulfill({ status: 409, json: { status: 'error', code: 'ROOM_RENAME_CONFIRM', message: 'Confirm the rename.', usage: room.usage } });
+        }
+        Object.assign(room, { name: data.name, group: data.group });
+        return route.fulfill({ json: { status: 'ok', room, renamed: { classes: room.usage.classes, meetings: room.usage.meetings, scheduledSessions: room.usage.scheduledSessions } } });
+      }
+      return route.fulfill({ json: { status: 'ok', room } });
+    });
+    return posted;
+  };
+
+  test('Rooms page: Retire and Delete ask first; Cancel sends nothing', async ({ page }) => {
+    const posted = await mockRooms(page);
+    await page.click('a[href="/admin/rooms"]');
+    const used = page.getByTestId('room-Room 302');
+    await expect(used).toContainText('Active');
+    await expect(used).toContainText('Used by 3 classes · 3 sessions');
+    // Delete is not offered for an active room.
+    await expect(used.getByRole('button', { name: 'Delete' })).toHaveCount(0);
+
+    await used.getByRole('button', { name: 'Retire' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Retire Room 302? Used by 3 classes and 1 scheduled session. They keep it and will show a warning. You can restore it later.');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    expect(posted).toHaveLength(0);
+
+    await used.getByRole('button', { name: 'Retire' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Retire room' }).click();
+    expect(posted).toEqual([{ path: '/retire', roomId: 1 }]);
+    await expect(page.getByRole('status').filter({ hasText: 'Room 302 retired.' })).toBeVisible();
+    await expect(used).toContainText('Retired');
+  });
+
+  test('Rooms page: Delete only for retired rooms, disabled when used, confirm then deletes; Restore is immediate', async ({ page }) => {
+    const posted = await mockRooms(page);
+    await page.goto('/admin/rooms');
+    const blocked = page.getByTestId('room-Simulation Lab');
+    await expect(blocked.getByRole('button', { name: 'Delete' })).toBeDisabled();
+    await expect(blocked).toContainText('Used by 1 class — it can only stay retired.');
+
+    const old = page.getByTestId('room-Old Lab');
+    await old.getByRole('button', { name: 'Delete' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Delete Old Lab for good? This cannot be undone.');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    expect(posted).toHaveLength(0);
+    await old.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete room' }).click();
+    expect(posted).toEqual([{ path: '/delete', roomId: 3 }]);
+    await expect(old).toHaveCount(0);
+
+    await blocked.getByRole('button', { name: 'Restore' }).click();
+    expect(posted[1]).toEqual({ path: '/restore', roomId: 4 });
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('status').filter({ hasText: 'Simulation Lab restored.' })).toBeVisible();
+    await expect(blocked).toContainText('Active');
+  });
+
+  test('Rooms page: renaming a used room asks first, then resends with confirmRename', async ({ page }) => {
+    const posted = await mockRooms(page);
+    await page.goto('/admin/rooms');
+    await page.getByTestId('room-Room 302').getByRole('button', { name: 'Edit' }).click();
+    await page.getByLabel('Room name').fill('Room 302A');
+    await page.getByRole('button', { name: 'Save room' }).click();
+    const confirm = page.getByRole('dialog').filter({ hasText: 'Rename Room 302 to Room 302A?' });
+    await expect(confirm).toContainText('This also updates 3 classes and 1 scheduled session.');
+    expect(posted).toHaveLength(1);
+    expect(posted[0].confirmRename).toBeUndefined();
+    await confirm.getByRole('button', { name: 'Rename room' }).click();
+    await expect(page.getByTestId('room-Room 302A')).toBeVisible();
+    expect(posted[1]).toMatchObject({ path: '/update', roomId: 1, name: 'Room 302A', confirmRename: true });
+  });
+
+  test('Rooms page: adds a room into a new group', async ({ page }) => {
+    const posted = await mockRooms(page);
+    await page.goto('/admin/rooms');
+    await page.getByRole('button', { name: 'Add room' }).click();
+    await page.getByLabel('Room name').fill('Skills Lab');
+    await page.getByLabel('Group').selectOption('New group…');
+    await page.getByLabel('New group name').fill('Skills');
+    await page.getByRole('button', { name: 'Save room' }).click();
+    await expect.poll(() => posted.length).toBe(1);
+    expect(posted[0]).toMatchObject({ path: '/', name: 'Skills Lab', group: 'Skills', latitude: null, longitude: null });
+  });
 });
