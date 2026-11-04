@@ -44,10 +44,12 @@ firewall, DNS) is always done by hand.
 ## 2. The server (manual)
 
 **Vultr:**
-1. *Deploy* → Cloud Compute, region **Singapore**, image **Ubuntu 26.04 LTS
-   x64**, a plan with **2 vCPU, 4 GB RAM** and at least **30 GB** disk, your
-   SSH key selected. No Firewall Group is needed (the script sets up UFW); if
-   you add one, allow `22` (first run only), `2202`, `80` and `443`.
+1. *Deploy* → Cloud Compute, **High Frequency AMD, 1 vCPU / 2 GB** (the
+   benchmarked size in [hosting-requirements.md](hosting-requirements.md)),
+   region **Singapore**, image **Ubuntu 26.04 LTS x64** (check it is not
+   26.10), only that server's SSH key selected. No Firewall Group is needed
+   (the script sets up UFW); if you add one, allow `22` (first run only),
+   `2202`, `80` and `443`.
 2. Wait for **Running** and note the IPv4. The server keeps it for its
    lifetime; use a Reserved IP only to rebuild a server on the same address.
 3. Check that *View Console* opens: it is the recovery route if SSH breaks.
@@ -56,10 +58,11 @@ firewall, DNS) is always done by hand.
 larger, **30 GB** gp3 disk), an **Elastic IP** associated with it, and a
 Security Group with `22` (first run only), `2202`, `80` and `443`.
 
-**Address:** without `-Domain` the site is `https://<ip-with-dashes>.sslip.io`
-(e.g. `3-1-177-69.sslip.io`); this is the current setup for both servers. For
-your own domain add an **A record** to the IP (with Cloudflare keep it
-DNS-only) and pass `-Domain` below.
+**Address:** point the server's record at its IP in Cloudflare (DNS-only):
+`@` for production (`bu-dentisys.com`), `demo` for the demo
+(`demo.bu-dentisys.com`), and pass `-Domain` below. Without `-Domain` the
+site falls back to `https://<ip-with-dashes>.sslip.io` (e.g.
+`3-1-177-69.sslip.io`), fine for a short-lived test server.
 
 ## 3. Run the command
 

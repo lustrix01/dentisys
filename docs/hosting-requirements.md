@@ -10,8 +10,8 @@ What the demo and production servers need, in one place. Approved by the Owner o
 | Provider | Any VPS provider; currently **Vultr**, one account, Singapore region. |
 | Operating system | **Ubuntu Server 26.04 LTS** only (the hardening script refuses others). |
 | CPU type | **x86-64 (amd64)**. Images are built for `linux/amd64`; ARM servers do not work. |
-| Size, each | **2 vCPU, 4 GB RAM, 30 GB disk or more** (2 GB RAM is the bare minimum; the face recognition service needs the headroom; 8 GB disks run out while pulling images). |
-| App copies | `WEB_REPLICAS` / `FRONTEND_REPLICAS` in the server's `.env` (default 3 each, for updates without downtime). The demo runs **1 and 1**: on 1 vCPU this removed the errors at 25 simultaneous users and cut face check-in delay (benchmark 2026-11-04). |
+| Size, each | **Vultr High Frequency AMD, 1 vCPU / 2 GB RAM** (about 1.6 GB usable), 30 GB disk or more; both servers since 2026-11-05. Benchmarked 2026-11-04 (`benchmarks/results/`): about 34 requests/s, no errors at 25 simultaneous users, and 4 face check-ins at once add under 2 s each. A plain 1 vCPU / 1 GB plan works for the demo but swaps heavily and is roughly 2.5× slower. Move to 2 vCPU if many people browse heavily at once. 8 GB disks run out while pulling images. |
+| App copies | `WEB_REPLICAS` / `FRONTEND_REPLICAS` in the server's `.env` (default 3 each, for updates without downtime). **Both servers run 1 and 1**: on 1 vCPU this removed the errors at 25 simultaneous users and cut face check-in delay (benchmark 2026-11-04); each update briefly interrupts the site. |
 | IP address | One fixed public IPv4. A Vultr server keeps its IP for its lifetime; a Reserved IP is needed only to rebuild a server on the same IP. On AWS use an Elastic IP. |
 | SSH keys | **A separate key per server, both made before the first server is created**: the demo key (no passphrase; Claude uses it for demo deploys and tests) and the production key (passphrase; Owner only). Never select the demo key for production, so a leaked demo key cannot open production and Claude has no way in. Owner decision 2026-11-05. |
 | First login | The server's own SSH key, selected when the server is created. Vultr logs in as `root` (setup option `-InitialUser root`); AWS logs in as `ubuntu` (the default). |
@@ -45,8 +45,9 @@ Pinned in the repository; change them there, not on the server.
 
 ## Addresses and HTTPS
 
-- **Now:** both servers use their automatic `<ip-with-dashes>.sslip.io` address (the setup script's default without `-Domain`). [sslip.io](https://sslip.io) is a free public service, so it works for any server with a public IPv4, but the site is unreachable by that name if the service is down, and some school or office networks block it. Open the production address once from the college Wi-Fi before testers rely on it.
-- **Later (needed for production):** a real domain. Buy it, add an **A record** for the production server's IP (with Cloudflare keep it *DNS-only*), rerun the setup with `-Domain <name>`, and add `https://<name>` to the Google Sign-In client's authorized JavaScript origins. A hostname change needs no spec amendment.
+- **Domain:** `bu-dentisys.com`, registered at Namecheap with its DNS on Cloudflare (nameservers changed; the registration itself can move to Cloudflare later). **Production:** `https://bu-dentisys.com` (A record `@`). **Demo:** `https://demo.bu-dentisys.com` (A record `demo`). Keep both records **DNS-only** (grey cloud) so Let's Encrypt can issue certificates; update the record when a server's IP changes.
+- Both addresses are in the Google Sign-In client's authorized JavaScript origins. A new server or hostname: point the record at it, run the setup with `-Domain <name>`, and add the origin. A hostname change needs no spec amendment.
+- Without `-Domain`, the setup falls back to the free `<ip-with-dashes>.sslip.io` address (useful for a quick test server; some networks block it).
 - **Port 80 must stay open** so Let's Encrypt can issue and renew certificates; HTTP redirects to HTTPS.
 
 ## Accounts and services
@@ -71,5 +72,4 @@ Pinned in the repository; change them there, not on the server.
 
 - Both servers are on one provider account and one payment method: a billing or account problem takes both down together.
 - There is no off-server backup, so test data can be lost.
-- `sslip.io` addresses depend on a free outside service until production has its own domain.
 - Temporary exception (Owner, 2026-11-05): the first production server was created with the demo key. Until it is replaced with a production key, one leaked key opens both servers, and Claude must still never connect to production.

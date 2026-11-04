@@ -94,13 +94,13 @@ The log is on the VPS, so retrieve it before terminating a failed instance.
 
 ## Host, DNS and firewall
 
-Start with an **x86-64 Ubuntu 26.04 LTS VPS, 2 vCPU**, **2 GB RAM minimum / 4 GB
-recommended**, and **at least 30 GB disk** for images, PostgreSQL and 14 database
-dumps. AWS's default 8 GB disk runs out while pulling the biometric image.
-With real biometrics enabled, **4 GB RAM is recommended** (for example AWS
-EC2 [t3.medium](https://aws.amazon.com/ec2/instance-types/t3/), 2 vCPU / 4 GB).
-Measure memory, disk and biometric latency during team testing. AWS Lightsail/EC2,
-Vultr and DigitalOcean are possible providers; select an equivalent Ubuntu VPS.
+Use an **x86-64 Ubuntu 26.04 LTS VPS** of the size in
+[hosting-requirements.md](hosting-requirements.md) (currently Vultr High Frequency
+AMD, 1 vCPU / 2 GB, chosen from the 2026-11-04 benchmarks; re-measure with
+`scripts/benchmark.ps1` before changing it), with **at least 30 GB disk** for images,
+PostgreSQL and 14 database dumps. AWS's default 8 GB disk runs out while pulling the
+biometric image. AWS Lightsail/EC2, Vultr and DigitalOcean are possible providers;
+select an equivalent Ubuntu VPS.
 The publishing script builds `linux/amd64`; do not select an ARM instance.
 
 Buy your domain and point an A record for `APP_DOMAIN` at the VPS public IPv4.

@@ -4,7 +4,7 @@
 #   ./scripts/demo-test.ps1 e2e/live/<file>.ts    (a specific live spec)
 # -Prod is for the Owner only (Claude has no production access): it checks the production site directly, with no tunnel.
 #   ./scripts/demo-test.ps1 -Prod
-#   ~/.dentisys/prod-test.env: PROD_BASE_URL (e.g. https://1-2-3-4.sslip.io) and PROD_(ADMIN|FACULTY|SECRETARY|STUDENT)_(EMAIL|PASSWORD)
+#   ~/.dentisys/prod-test.env: PROD_BASE_URL (e.g. https://bu-dentisys.com) and PROD_(ADMIN|FACULTY|SECRETARY|STUDENT)_(EMAIL|PASSWORD)
 #   ~/.dentisys/prod.env (same file promote-prod.ps1 uses): PROD_SSH_HOST, PROD_SSH_PORT (2202), PROD_SSH_USER (devops), PROD_SSH_KEY
 #   for the audit-chain check; skipped with a note when prod.env is missing.
 [CmdletBinding()]
