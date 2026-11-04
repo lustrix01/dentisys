@@ -5,9 +5,7 @@ import {
   Copy,
   Plus,
   Trash2,
-  Clock,
-  BookOpen,
-  Calendar,
+  ChevronRight,
   AlertCircle,
 } from 'lucide-react';
 import { Modal } from '../../components/Modal';
@@ -26,6 +24,7 @@ const termInputClass =
   'mt-1.5 min-w-0 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3.5 py-2.5 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent-500/20 focus:border-accent-500 transition-all';
 const termButtonClass =
   'rounded-xl px-4 py-2 text-xs font-bold bg-accent-600 hover:bg-accent-700 text-white shadow-xs hover:shadow-md transition-all disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed';
+const SEMESTER_ORDER = ['1ST', '2ND', 'Summer'] as const;
 const outlineButtonClass =
   'rounded-xl border border-slate-200 dark:border-slate-700 px-3.5 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed';
 const cancelButtonClass =
@@ -87,6 +86,7 @@ export const AcademicTermsSettings: React.FC = () => {
     setError('');
     setFields({});
     setConfirmation(null);
+    if (term) setExpanded((open) => ({ ...open, [term.schoolYear]: true })); // stay open after saving
     const defaults = newTermDefaults(
       currentYear,
       terms.filter((t) => t.id !== null && t.schoolYear === currentYear).map((t) => t.semester),
@@ -132,8 +132,12 @@ export const AcademicTermsSettings: React.FC = () => {
     }
   };
 
-  const years = [...new Set(terms.map((term) => term.schoolYear))];
-  const latestYear = terms.find((term) => term.id !== null)?.schoolYear;
+  const definedTerms = terms.filter((term) => term.id !== null);
+  const years = [...new Set(terms.map((term) => term.schoolYear))].sort().reverse();
+  const latestYear = definedTerms.map((term) => term.schoolYear).sort().pop();
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // A school year earlier than the current one starts collapsed.
+  const yearPast = (year: string) => !!currentYear && year < currentYear;
 
   const formatDates = (startDate: string | null, endDate: string | null) => {
     if (!startDate || !endDate) return 'Dates not set';
@@ -145,7 +149,7 @@ export const AcademicTermsSettings: React.FC = () => {
     return start + (startYear === endYear ? '' : ', ' + startYear) + ' – ' + end;
   };
 
-  const termStatus = (term: AcademicTerm) => {
+  const termStatus = (term: Pick<AcademicTerm, 'startDate' | 'endDate'>) => {
     if (!term.startDate || !term.endDate)
       return {
         label: 'Not set',
@@ -176,7 +180,7 @@ export const AcademicTermsSettings: React.FC = () => {
     if (!today || !t.startDate || !t.endDate) return false;
     return today >= t.startDate && today <= t.endDate;
   });
-  const totalClassesCount = terms.reduce((acc, t) => acc + (t.classCount || 0), 0);
+  const totalClassesCount = definedTerms.reduce((acc, t) => acc + (t.classCount || 0), 0);
 
   return (
     <section id="academic-terms" className="scroll-mt-6 space-y-6">
@@ -217,59 +221,19 @@ export const AcademicTermsSettings: React.FC = () => {
               }}
             >
               <Copy className="w-4 h-4" />
-              Copy to next school year
+              Add next school year
             </button>
           </div>
         </div>
       </div>
 
-      {/* 2. Key Metrics Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-xs hover:shadow-sm transition-all flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Current School Year</span>
-            <span className="text-lg font-black text-slate-800 dark:text-slate-100 mt-0.5 block">
-              {currentYear || 'Not configured'}
-            </span>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              {currentTermObj ? `${semesterLabel(currentTermObj.semester)} Active` : 'No active semester today'}
-            </p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-accent-50 dark:bg-accent-950/40 text-accent-600 dark:text-accent-400 flex items-center justify-center shrink-0">
-            <Calendar className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-xs hover:shadow-sm transition-all flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">School Years Defined</span>
-            <span className="text-lg font-black text-slate-800 dark:text-slate-100 mt-0.5 block">
-              {years.length} {years.length === 1 ? 'Year' : 'Years'}
-            </span>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              {terms.length} total semester periods
-            </p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-accent-50 dark:bg-accent-950/40 text-accent-600 dark:text-accent-400 flex items-center justify-center shrink-0">
-            <Clock className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-xs hover:shadow-sm transition-all flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Class Sections</span>
-            <span className="text-lg font-black text-slate-800 dark:text-slate-100 mt-0.5 block">
-              {totalClassesCount} {totalClassesCount === 1 ? 'Class' : 'Classes'}
-            </span>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              Linked across all terms
-            </p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-accent-50 dark:bg-accent-950/40 text-accent-600 dark:text-accent-400 flex items-center justify-center shrink-0">
-            <BookOpen className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
+      {/* 2. One-line summary */}
+      <p className="px-1.5 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
+        <span>Current school year <b className="text-slate-800 dark:text-slate-100">{currentYear || 'Not configured'}</b></span>
+        <span>{currentTermObj ? `${semesterLabel(currentTermObj.semester)} active` : 'No active semester today'}</span>
+        <span><b className="text-slate-800 dark:text-slate-100">{years.length}</b> {years.length === 1 ? 'school year' : 'school years'} · {definedTerms.length} {definedTerms.length === 1 ? 'term' : 'terms'}</span>
+        <span><b className="text-slate-800 dark:text-slate-100">{totalClassesCount}</b> {totalClassesCount === 1 ? 'class' : 'classes'} linked</span>
+      </p>
 
       {/* Notifications & Status Alerts */}
       {error && !draft && (
@@ -285,7 +249,7 @@ export const AcademicTermsSettings: React.FC = () => {
         </div>
       )}
 
-      {/* 3. Academic Year Cards Grid */}
+      {/* 3. One card per school year */}
       {loading ? (
         <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800">
           Loading academic terms…
@@ -295,124 +259,120 @@ export const AcademicTermsSettings: React.FC = () => {
           No academic terms defined. Add the terms for {currentYear}.
         </div>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-4">
           {years.map((year) => {
-            const yearTerms = terms.filter((term) => term.schoolYear === year);
             const isCurrentYear = year === currentYear;
+            const yearSet = definedTerms.filter((term) => term.schoolYear === year);
+            const past = yearPast(year);
+            const isOpen = expanded[year] ?? !past;
 
             return (
               <div
                 key={year}
-                className={`min-w-0 rounded-3xl border ${
+                className={`min-w-0 overflow-hidden rounded-3xl border ${
                   isCurrentYear
                     ? 'border-accent-300/80 dark:border-accent-800/80 bg-accent-50/15 dark:bg-accent-950/10 shadow-sm'
                     : 'border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs'
-                } p-5 sm:p-6 space-y-4 hover:border-accent-400/80 transition-all`}
+                }`}
               >
-                {/* Year Card Header */}
-                <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-accent-50 dark:bg-accent-950/40 text-accent-600 dark:text-accent-400 flex items-center justify-center shrink-0">
-                      <Calendar className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
-                        {year}
-                      </h3>
-                      <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
-                        {yearTerms.length} {yearTerms.length === 1 ? 'Term' : 'Terms'} configured
-                      </span>
-                    </div>
-                  </div>
-
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  data-testid={`year-${year}`}
+                  className="flex w-full items-center gap-3 px-4 py-3.5 sm:px-5 text-left cursor-pointer"
+                  onClick={() => setExpanded({ ...expanded, [year]: !isOpen })}
+                >
+                  <ChevronRight className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block text-base font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">{year}</span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400">
+                      {yearSet.length === 0 && past
+                        ? 'No dates set'
+                        : `${yearSet.length} ${yearSet.length === 1 ? 'term' : 'terms'}${past ? ' · ended' : ' set'}`}
+                    </span>
+                  </span>
                   {isCurrentYear && (
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-accent-50 text-accent-700 dark:bg-accent-950/60 dark:text-accent-300 border border-accent-200/60 inline-flex items-center gap-1.5 shadow-sm">
-                      <span className="w-1.5 h-1.5 rounded-full bg-accent-600 animate-pulse" />
+                    <span className="ml-auto whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-extrabold bg-white text-accent-700 dark:bg-slate-900 dark:text-accent-300 border border-accent-200/60 dark:border-accent-900/60">
                       Current S.Y.
                     </span>
                   )}
-                </div>
+                </button>
 
-                {/* Semesters List (Tiles) */}
-                <div className="space-y-3">
-                  {yearTerms.map((term) => {
-                    const status = termStatus(term);
-                    return (
-                      <div
-                        key={term.semester}
-                        data-testid={`${year}-${term.semester}`}
-                        className="rounded-2xl border border-slate-200/70 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/40 p-4 space-y-3 hover:border-slate-300 dark:hover:border-slate-700 transition-all shadow-sm"
-                      >
-                        {/* Semester Title & Status */}
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                            {semesterLabel(term.semester)}
+                {isOpen && (
+                  <div className="border-t border-slate-100 dark:border-slate-800 px-4 sm:px-5 py-1.5">
+                    {SEMESTER_ORDER.map((semester) => {
+                      const term = yearSet.find((t) => t.semester === semester);
+                      const slot = !term;
+                      const placeholder = terms.find((t) => t.schoolYear === year && t.semester === semester);
+                      const status = termStatus(term ?? { startDate: null, endDate: null });
+                      const classCount = (term ?? placeholder)?.classCount ?? 0;
+                      return (
+                        <div
+                          key={semester}
+                          data-testid={`${year}-${semester}`}
+                          className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[9rem_minmax(0,1fr)_7rem_6rem_9rem] items-center gap-x-3 gap-y-1 py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-b-0"
+                        >
+                          <span className={`text-sm font-bold ${slot ? 'text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100'}`}>
+                            {semesterLabel(semester)}
                           </span>
-                          {status && (
-                            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold tracking-wide inline-flex items-center gap-1.5 ${status.className}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${status.dotClass}`} />
-                              {status.label}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Metadata Rows: Dates & Class Counts */}
-                        <div className="space-y-1.5 text-xs">
-                          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
-                            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span>{formatDates(term.startDate, term.endDate)}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                            <BookOpen className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span>
-                              {term.classCount} {term.classCount === 1 ? 'class' : 'classes'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Actions Row */}
-                        <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-slate-200/60 dark:border-slate-800/60">
-                          <button
-                            type="button"
-                            className={
-                              term.id === null
-                                ? 'px-3.5 py-1.5 rounded-xl text-xs font-bold bg-accent-600 hover:bg-accent-700 text-white shadow-xs hover:shadow-sm transition-all cursor-pointer'
-                                : 'px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition-all cursor-pointer'
-                            }
-                            disabled={busy}
-                            onClick={() => open(term)}
-                          >
-                            {term.id === null ? 'Set dates' : 'Edit dates'}
-                          </button>
-                          {term.id !== null && (
+                          <span className={`col-span-2 sm:col-span-1 row-start-2 sm:row-start-auto text-xs ${slot ? 'italic text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200'}`}>
+                            {formatDates(term?.startDate ?? null, term?.endDate ?? null)}
+                          </span>
+                          <span className="row-start-1 sm:row-start-auto col-start-2 sm:col-start-auto justify-self-end sm:justify-self-start">
+                            {status && (
+                              <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold tracking-wide inline-flex items-center gap-1.5 ${status.className}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${status.dotClass}`} />
+                                {status.label}
+                              </span>
+                            )}
+                          </span>
+                          <span className="row-start-3 sm:row-start-auto col-start-1 sm:col-start-auto text-xs text-slate-500 dark:text-slate-400">
+                            {classCount} {classCount === 1 ? 'class' : 'classes'}
+                          </span>
+                          <span className="row-start-3 sm:row-start-auto col-start-2 sm:col-start-auto flex items-center justify-end gap-1.5">
                             <button
                               type="button"
-                              aria-label="Delete"
-                              className="flex h-8 w-8 items-center justify-center rounded-xl text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                              disabled={busy || term.classCount > 0}
-                              title={
-                                term.classCount > 0
-                                  ? 'A term used by a class cannot be deleted.'
-                                  : 'Delete unused term'
+                              className={
+                                slot
+                                  ? 'px-3.5 py-1.5 rounded-xl text-xs font-bold bg-accent-600 hover:bg-accent-700 text-white shadow-xs transition-all cursor-pointer disabled:opacity-40'
+                                  : outlineButtonClass
                               }
-                              onClick={() => {
-                                setError('');
-                                setDeleteTerm(term);
-                              }}
+                              disabled={busy}
+                              onClick={() => open(term ?? { id: null, schoolYear: year, semester, startDate: null, endDate: null, classCount: 0 })}
                             >
-                              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                              {slot ? 'Add dates' : 'Edit'}
                             </button>
-                          )}
+                            {term && (
+                              <button
+                                type="button"
+                                aria-label="Delete"
+                                className="flex h-8 w-8 items-center justify-center rounded-xl text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                                disabled={busy || term.classCount > 0}
+                                title={
+                                  term.classCount > 0
+                                    ? 'A term used by a class cannot be deleted.'
+                                    : 'Delete unused term'
+                                }
+                                onClick={() => {
+                                  setError('');
+                                  setDeleteTerm(term);
+                                }}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                              </button>
+                            )}
+                          </span>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       )}
+
 
       {/* Set / Edit Academic Term Modal */}
       <Modal

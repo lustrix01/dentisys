@@ -122,7 +122,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(row).toContainText('Dates not set');
     await expect(row).toContainText('Not set');
     await expect(row).toContainText('3 classes');
-    await row.getByRole('button', { name: 'Set dates' }).click();
+    await row.getByRole('button', { name: 'Add dates' }).click();
     let dialog = page.getByRole('dialog');
     await dialog.getByLabel('Start date').fill('2026-08-01');
     await dialog.getByLabel('End date').fill('2026-07-01');
@@ -134,7 +134,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(row).toContainText('Aug 1 – Dec 31, 2026');
     await expect(row).toContainText('Current');
     await expect(row.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
-    await row.getByRole('button', { name: 'Edit dates' }).click();
+    await row.getByRole('button', { name: 'Edit', exact: true }).click();
     dialog = page.getByRole('dialog');
     await expect(dialog.getByLabel('School year')).toHaveAttribute('readonly', '');
     await expect(dialog.getByLabel('Semester')).toBeDisabled();
@@ -144,7 +144,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(row).toContainText('Oct 10, 2026');
     expect(saves).toBe(2);
     expect(posted.some(data => data.confirmedExpiringEnrollments !== undefined)).toBe(false);
-    await row.getByRole('button', { name: 'Edit dates' }).click();
+    await row.getByRole('button', { name: 'Edit', exact: true }).click();
     dialog = page.getByRole('dialog');
     await dialog.getByLabel('End date').fill('2026-10-09');
     await dialog.getByRole('button', { name: 'Save term' }).click();
@@ -153,7 +153,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await dialog.getByRole('button', { name: 'Confirm and save' }).click();
     await expect(row).toContainText('Oct 9, 2026');
     expect(posted.some(data => data.confirmedExpiringEnrollments === 3)).toBe(true);
-    await section.getByRole('button', { name: 'Copy to next school year' }).click();
+    await section.getByRole('button', { name: 'Add next school year' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Copy terms', exact: true }).click();
     await expect(section).toContainText('Review and adjust their dates.');
     const copied = section.getByTestId('2027-2028-1ST');
@@ -161,6 +161,38 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await copied.getByRole('button', { name: 'Delete', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete term', exact: true }).click();
     await expect(copied).toHaveCount(0);
+  });
+
+  test('Academic terms: ended year is collapsed, empty semester offers Add dates, term used by a class cannot be deleted', async ({ page }) => {
+    const terms = [
+      { id: null as number | null, schoolYear: '2024-2025', semester: '1ST', startDate: null as string | null, endDate: null as string | null, classCount: 1 },
+      { id: 1, schoolYear: '2025-2026', semester: '1ST', startDate: '2025-08-01', endDate: '2025-12-15', classCount: 0 },
+      { id: 2, schoolYear: '2025-2026', semester: '2ND', startDate: '2026-01-05', endDate: '2026-05-15', classCount: 0 },
+      { id: 3, schoolYear: '2026-2027', semester: '1ST', startDate: '2026-08-01', endDate: '2026-12-31', classCount: 2 },
+      { id: 4, schoolYear: '2026-2027', semester: '2ND', startDate: '2027-01-05', endDate: '2027-05-15', classCount: 0 },
+    ];
+    await page.route('**/api/admin/academic-terms**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', today: '2026-10-10', terms }) }));
+    await page.click('a[href="/admin/terms"]');
+    const section = page.locator('#academic-terms');
+    const pastYear = section.getByTestId('year-2025-2026');
+    await expect(section.getByTestId('year-2024-2025')).toContainText('No dates set');
+    await expect(section.getByTestId('year-2024-2025')).toHaveAttribute('aria-expanded', 'false');
+    await expect(pastYear).toContainText('2 terms · ended');
+    await expect(pastYear).toHaveAttribute('aria-expanded', 'false');
+    await expect(section.getByTestId('2025-2026-1ST')).toHaveCount(0);
+    await pastYear.click();
+    await expect(section.getByTestId('2025-2026-1ST')).toContainText('Ended');
+    await expect(section.getByTestId('2025-2026-Summer')).toContainText('Dates not set');
+
+    const used = section.getByTestId('2026-2027-1ST');
+    await expect(used.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+    await expect(used.getByRole('button', { name: 'Delete', exact: true })).toHaveAttribute('title', 'A term used by a class cannot be deleted.');
+    await expect(section.getByTestId('2026-2027-2ND').getByRole('button', { name: 'Delete', exact: true })).toBeEnabled();
+
+    await section.getByTestId('2026-2027-Summer').getByRole('button', { name: 'Add dates' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByLabel('School year')).toHaveValue('2026-2027');
+    await expect(dialog.getByLabel('Semester')).toHaveValue('Summer');
   });
 
   test('Academic-term dashboard reminder links to the Academic Terms page', async ({ page }) => {

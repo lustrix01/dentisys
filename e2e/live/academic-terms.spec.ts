@@ -18,7 +18,7 @@ test('Dean term dates persist and Faculty selects only current-year Dean terms',
   await expect(row).toContainText('Aug 1 – Dec 31, 2097');
   await page.reload();
   await expect(row).toContainText('Aug 1 – Dec 31, 2097');
-  await row.getByRole('button', { name: 'Edit dates' }).click();
+  await row.getByRole('button', { name: 'Edit', exact: true }).click();
   dialog = page.getByRole('dialog');
   await dialog.getByLabel('End date').fill('2098-01-31');
   await dialog.getByRole('button', { name: 'Save term', exact: true }).click();
