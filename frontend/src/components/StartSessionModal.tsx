@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronDown, MapPin, Navigation, Play } from 'lucide-react';
 import { LocationPicker } from './LocationPicker';
 import { Modal } from './Modal';
+import { RoomSelector } from './RoomSelector';
 
 import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../utils/geofenceRadius';
 import type { ClassMeeting } from '../services/apiClient';
@@ -240,10 +241,10 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
         <label className="block font-bold text-slate-700 dark:text-slate-300">Session date (Asia/Manila)
           <input type="date" required min={manilaToday()} value={sessionDate} onChange={event => setSessionDate(event.target.value)} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900" />
         </label>
-        <label className="block">
-          <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Room or session location</span>
-          <input value={room} onChange={(event) => setRoom(event.target.value)} placeholder="e.g. Dental Clinic Room 101" className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-800 outline-none ${a.focus} dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100`} />
-        </label>
+        <div>
+          <label htmlFor="start-session-room" className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Room or session location</label>
+          <RoomSelector id="start-session-room" value={room} onChange={setRoom} placeholder="Choose room" fieldClassName={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-800 outline-none ${a.focus} dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100`} />
+        </div>
 
         {sortedMeetings.length > 0 && (
           <div>

@@ -8,6 +8,7 @@ interface RoomSelectorProps {
   preferredType?: 'Lecture' | 'Laboratory';
   placeholder?: string;
   id?: string;
+  fieldClassName?: string;
 }
 
 export const RoomSelector: React.FC<RoomSelectorProps> = ({
@@ -16,6 +17,7 @@ export const RoomSelector: React.FC<RoomSelectorProps> = ({
   onChange,
   placeholder = 'Select Room Venue',
   id,
+  fieldClassName,
 }) => {
   const isKnownRoom = ROOM_OPTIONS.includes(value);
   const [isCustom, setIsCustom] = useState(!isKnownRoom && value.trim() !== '');
@@ -52,7 +54,7 @@ export const RoomSelector: React.FC<RoomSelectorProps> = ({
         id={id}
         value={isCustom ? 'CUSTOM' : (isKnownRoom ? value : (value ? 'CUSTOM' : ''))}
         onChange={handleSelectChange}
-        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium text-xs cursor-pointer focus:ring-2 focus:ring-accent-500 focus:outline-none"
+        className={fieldClassName ?? "w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium text-xs cursor-pointer focus:ring-2 focus:ring-accent-500 focus:outline-none"}
       >
         <option value="" disabled>-- {placeholder} --</option>
         {ROOM_CATEGORIES.map(cat => (
@@ -71,7 +73,8 @@ export const RoomSelector: React.FC<RoomSelectorProps> = ({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Type custom room name (e.g. Room 405)"
-          className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs focus:ring-2 focus:ring-accent-500 focus:outline-none animate-fade-in"
+          aria-label="Custom room name"
+          className={fieldClassName ?? "w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs focus:ring-2 focus:ring-accent-500 focus:outline-none animate-fade-in"}
         />
       )}
     </div>

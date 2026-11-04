@@ -952,7 +952,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.getByRole('button', { name: 'Start session', exact: true }).click();
     const expectTimes = async (times: string[], room: string) => {
       for (const [label, value] of [['Opening', times[0]], ['Present cutoff', times[1]], ['Late cutoff', times[2]], ['Class end time', times[3]]]) await expect(page.getByLabel(label, { exact: true })).toHaveValue(value);
-      await expect(page.getByLabel('Room or session location')).toHaveValue(room);
+      await expect(page.getByLabel('Custom room name')).toHaveValue(room);
     };
     const chips = page.getByRole('button', { name: /^(Mon|Thu) · / });
     await expect(chips).toHaveText(['Mon · Lecture · 09:00–11:00 · CDM 1', 'Mon · Laboratory · 13:00–16:00 · CDM 2', 'Thu · Laboratory · 12:00–17:00 · CDM 2']);
@@ -961,13 +961,36 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expectTimes(['08:45', '09:15', '09:30', '11:00'], 'CDM 1');
     await expect(page.getByText('On: students check in with their face. Off: you mark attendance in the roll call.')).toBeVisible();
     await page.getByLabel('Present cutoff', { exact: true }).fill('10:00');
-    await page.getByLabel('Room or session location').fill('Hand room');
+    await page.getByLabel('Custom room name').fill('Hand room');
     await chips.nth(2).click();
     await expect(chips.nth(2)).toHaveAttribute('aria-pressed', 'true');
     await expect(chips.nth(0)).toHaveAttribute('aria-pressed', 'false');
     await expectTimes(['11:45', '12:15', '12:30', '17:00'], 'CDM 2');
     await expect(page.getByLabel('Session date (Asia/Manila)')).toHaveValue('2026-10-26');
   });
+
+  for (const [title, pickRoom, expected] of [
+    ['picking a listed room from the dropdown', async (page: import('@playwright/test').Page) => { await page.getByLabel('Room or session location').selectOption('Dental Clinic Lab 1'); }, 'Dental Clinic Lab 1'],
+    ['choosing Custom and typing a room', async (page: import('@playwright/test').Page) => { await page.getByLabel('Room or session location').selectOption({ label: 'Other / Custom Room...' }); await page.getByLabel('Custom room name').fill('Room 405'); }, 'Room 405'],
+  ] as const) {
+    test(`Start Session sends the room when ${title}`, async ({ page }) => {
+      let payload: Record<string, unknown> | null = null;
+      await page.route('**/api/faculty/attendance?*', route => route.fulfill({ json: { status: 'ok', worksheet: mockWorksheetSectionA } }));
+      await page.route('**/api/faculty/attendance/session', async route => {
+        payload = route.request().postDataJSON();
+        await route.fulfill({ status: 409, json: { status: 'error', message: 'A schedule already exists on 2099-10-02 from 08:00 to 13:00 (Asia/Manila), created by Secretary Bea Alonzo.' } });
+      });
+      await page.goto('/attendance');
+      await page.getByLabel('Assigned course').selectOption('101');
+      await page.getByLabel('Class section').selectOption('1');
+      await page.getByRole('button', { name: 'Start session', exact: true }).click();
+      await page.getByLabel('Session date (Asia/Manila)').fill('2099-10-02');
+      await pickRoom(page);
+      await page.getByRole('checkbox', { name: /Geofence/ }).uncheck();
+      await page.locator('form').getByRole('button', { name: 'Schedule session', exact: true }).click();
+      await expect.poll(() => payload?.room).toBe(expected);
+    });
+  }
 
   test('hierarchy: courses derive from classes, section list filters by course, course change clears section', async ({ page }) => {
     await page.goto('/attendance');
@@ -1740,7 +1763,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByLabel('Allowed radius (meters)')).toHaveValue('250');
     await expect(page.getByRole('checkbox', { name: /Face biometric/ })).not.toBeChecked();
     await expect(page.getByText('Location set: 13.15, 123.75')).toBeVisible();
-    await page.getByLabel('Room or session location').fill('Changed room');
+    await page.getByLabel('Custom room name').fill('Changed room');
     await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('created by Faculty Jane Doe');
     expect(payloads).toEqual([{ sessionId: '700', room: 'Changed room' }]);
@@ -1748,7 +1771,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
     expect(payloads[1]).toEqual(payloads[0]);
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
-    await expect(page.getByLabel('Room or session location')).toHaveValue('Changed room');
+    await expect(page.getByLabel('Custom room name')).toHaveValue('Changed room');
   });
 
   test.describe('Faculty edit form sends only what changed', () => {
@@ -1771,7 +1794,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     test('opens with the exact saved values when geofence is off', async ({ page }) => {
       await openEdit(page, baseSession);
       await expect(page.getByText('Date: 2099-10-03 (Asia/Manila)', { exact: true })).toBeVisible();
-      await expect(page.getByLabel('Room or session location')).toHaveValue('Lab 5');
+      await expect(page.getByLabel('Custom room name')).toHaveValue('Lab 5');
       await expect(page.getByLabel('Opening time', { exact: true })).toHaveValue('07:45');
       await expect(page.getByLabel('Present cutoff', { exact: true })).toHaveValue('08:20');
       await expect(page.getByLabel('Late cutoff', { exact: true })).toHaveValue('09:40');
@@ -1788,9 +1811,19 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByText('Location set: 13.15, 123.75')).toBeVisible();
     });
 
+    test('a saved non-listed room opens as Custom and changing only the time does not send the room', async ({ page }) => {
+      const payloads = await openEdit(page, baseSession);
+      await expect(page.getByLabel('Room or session location')).toHaveValue('CUSTOM');
+      await expect(page.getByLabel('Custom room name')).toHaveValue('Lab 5');
+      await page.getByLabel('Class end time', { exact: true }).fill('10:30');
+      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
+      expect(payloads).toEqual([{ sessionId: '710', classEndTime: '10:30' }]);
+    });
+
     test('changing only the room sends the session id and room', async ({ page }) => {
       const payloads = await openEdit(page, baseSession);
-      await page.getByLabel('Room or session location').fill('Lab 6');
+      await page.getByLabel('Custom room name').fill('Lab 6');
       await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
       await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', room: 'Lab 6' }]);

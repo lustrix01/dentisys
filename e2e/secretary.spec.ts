@@ -376,7 +376,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await openStartPopup(page);
     const form = startForm(page);
     await expect(form.getByText('CLINIC-4B')).toBeVisible();
-    await expect(form.getByPlaceholder('e.g. Dental Clinic Room 101')).toHaveValue('Dental Clinic Lab 2');
+    await expect(form.getByLabel('Room or session location')).toHaveValue('Dental Clinic Lab 2');
     await expect(form.getByRole('button', { name: 'Start session', exact: true })).toBeVisible();
     await expect(page.getByText('Live Session')).toHaveCount(0);
   });
@@ -746,7 +746,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(form.getByText('CLINIC-4B').first()).toBeVisible();
     await picker.click();
     await form.getByRole('option', { name: 'CLINIC-4C' }).click();
-    await expect(form.getByPlaceholder('e.g. Dental Clinic Room 101')).toHaveValue('Dental Clinic Lab 3');
+    await expect(form.getByLabel('Custom room name')).toHaveValue('Dental Clinic Lab 3');
     await form.getByRole('button', { name: 'Start session', exact: true }).click();
     await expect.poll(() => startApiPayload).not.toBeNull();
     expect((startApiPayload as Record<string, unknown>).csId).toBe(9);
@@ -774,7 +774,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(chip).toHaveAttribute('aria-pressed', 'true');
     await expect(form.getByLabel('Opening', { exact: true })).toHaveValue('08:45');
     await expect(form.getByLabel('Class end time', { exact: true })).toHaveValue('11:00');
-    await expect(form.getByPlaceholder('e.g. Dental Clinic Room 101')).toHaveValue('CDM 1');
+    await expect(form.getByLabel('Custom room name')).toHaveValue('CDM 1');
   });
 
   test('the old /secretary/start-session address opens the Start Session pop-up on Attendance Monitoring', async ({ page }) => {

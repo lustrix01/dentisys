@@ -22,6 +22,7 @@ import {
 import { Card } from '../../components/Card';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { LocationPicker } from '../../components/LocationPicker';
+import { RoomSelector } from '../../components/RoomSelector';
 import { FacultyExcusedRequestsPanel, PendingRequestsBadge, openSecretaryRequest } from '../../components/FacultyExcusedRequestsPanel';
 import { Modal } from '../../components/Modal';
 import { StartSessionModal, type StartSessionValues } from '../../components/StartSessionModal';
@@ -2004,15 +2005,16 @@ export const AttendanceMonitoring: React.FC = () => {
               </p>
             </div>
 
-            <label className="block">
-              <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Room or session location</span>
-              <input
+            <div>
+              <label htmlFor="edit-session-room" className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Room or session location</label>
+              <RoomSelector
+                id="edit-session-room"
                 value={editRoom}
-                onChange={(event) => setEditRoom(event.target.value)}
-                placeholder="e.g. Dental Clinic Room 101"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-800 outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                onChange={setEditRoom}
+                placeholder="Choose room"
+                fieldClassName="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-800 outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
-            </label>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label className="block">
