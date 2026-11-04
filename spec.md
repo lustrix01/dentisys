@@ -901,6 +901,8 @@ Owner decision (2026-10-12): The edit form opens showing the session's saved val
 
 Owner decision (2026-10-12): Every attendance session, created or edited, must have an opening time, Present cutoff and Late cutoff. A session without them is rejected.
 
+Owner-approved amendment (2026-11-05): A session may end after midnight. Times later than the Opening time are on the session day; earlier times are on the next day ('next day'). The whole session must last under 24 hours.
+
 ## ATT-002 — Geofencing and location privacy
 
 **Status: APPROVED**
@@ -1208,6 +1210,11 @@ Normalize affected persistent data to 3NF: atomic attributes, declared candidate
 Use additive ordered migrations and explicit backfill/compatibility handling. Never guess an ambiguous legacy name split: preserve the original for reconciliation. Preserve identifiers, enrollment, raw scores, grades, attendance, audit history, and persisted volumes. No database reset or destructive cleanup is approved.
 
 **Self-service name changes.** Each role (Dean, Faculty, Secretary, Student) changes only its own five-part name, from its own profile, through a dedicated Change Name action; the rest of the profile is read-only. When authenticator-app MFA is enabled, a current authenticator code is required before the change is saved; recovery codes are not accepted for this confirmation, and failed attempts are rate limited. Self-service requests that include institutional email, account ID, role, Student number, institutional identifiers, class or Faculty assignments, or other relationship-critical keys are rejected rather than ignored; those remain changeable only through the authorized role's own management tools. After a Student account is activated, Faculty can no longer change that Student's name; before activation, Faculty may still correct it.
+
+## ROOM-001 - Dean-managed rooms
+**Status: APPROVED**
+
+Owner decision (2026-11-05): The Dean manages the list of rooms: name (unique, ignoring case and extra spaces), group, and an optional location and radius. Faculty and Secretaries pick rooms from this list or type a custom room; classes and sessions keep the room name they saved. Renaming a room also renames it in classes, class meetings and scheduled sessions; sessions that already opened or ended keep the old name. The Dean may retire a room, which removes it from room lists. Classes and sessions already using it keep it, labelled "(retired)", with a warning where a room can be picked; saving is never blocked. A retired room can be restored. Only a retired room that no class, class meeting or session has ever used can be deleted. Retiring, deleting and renaming a room in use always ask for confirmation first. Picking a room with a saved location fills the session location and radius; geofence stays off until turned on (ATT-002). Every room change is audited.
 
 ---
 
