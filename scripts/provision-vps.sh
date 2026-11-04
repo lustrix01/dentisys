@@ -248,6 +248,9 @@ failed=0
 result() { if [[ "$1" == true ]]; then echo "PASS: $2"; else echo "FAIL: $2"; failed=$((failed + 1)); fi; }
 # After a reboot the containers restart on their own; give them time to become healthy.
 container_deadline="$SECONDS"
+# Expected copies follow WEB_REPLICAS / FRONTEND_REPLICAS in .env (docker-compose.vps.yml default 3).
+want_web="$(env_value WEB_REPLICAS)"; [[ "$want_web" =~ ^[1-9][0-9]*$ ]] || want_web=3
+want_frontend="$(env_value FRONTEND_REPLICAS)"; [[ "$want_frontend" =~ ^[1-9][0-9]*$ ]] || want_frontend=3
 if [[ "$mode" == verify ]]; then
   container_deadline=$((SECONDS + 300))
   echo 'Waiting up to 5 minutes for containers to become healthy after the reboot...'
@@ -266,11 +269,11 @@ while true; do
       biometric) biometric=$((biometric + 1)); [[ "$health" == healthy ]] || healthy=false ;;
     esac
   done
-  [[ "$web" -eq 3 && "$frontend" -eq 3 && "$biometric" -eq 1 ]] || healthy=false
+  [[ "$web" -eq "$want_web" && "$frontend" -eq "$want_frontend" && "$biometric" -eq 1 ]] || healthy=false
   [[ "$healthy" != true && "$SECONDS" -lt "$container_deadline" ]] || break
   sleep 10
 done
-result "$healthy" 'containers running; 3 healthy web, 3 healthy frontend, 1 healthy biometric'
+result "$healthy" "containers running; $web of $want_web healthy web, $frontend of $want_frontend healthy frontend, 1 healthy biometric"
 headers="$(curl -sS --connect-timeout 5 --max-time 10 -I "http://$domain" 2>/dev/null || true)"
 redirect=false
 location="$(awk 'tolower($1) == "location:" { sub(/\r$/, "", $2); print $2; exit }' <<< "$headers")"
