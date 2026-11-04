@@ -117,6 +117,7 @@ export function compareRuns(a, b) {
   const warnings = [];
   if (a.rttMs && b.rttMs && Math.abs(((b.rttMs - a.rttMs) / a.rttMs) * 100) > RTT_WARN) warnings.push(`Round-trip changed ${a.rttMs} -> ${b.rttMs} ms (network differs; latency is not comparable).`);
   for (const [t, n] of Object.entries(b.fingerprint?.rowCounts ?? {})) {
+    if (t === 'audit_events') continue;   // each run's own sign-in phase adds ~60 rows; still recorded, not a drift signal
     const o = a.fingerprint?.rowCounts?.[t];
     if (o && Math.abs(((n - o) / o) * 100) > ROWS_WARN) warnings.push(`Table ${t} rows ${o} -> ${n} (data changed by more than ${ROWS_WARN}%).`);
   }
