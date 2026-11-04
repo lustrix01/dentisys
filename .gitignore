@@ -55,3 +55,4 @@ frontend/certs/
 
 # Dev-only device audit output and saved sign-ins
 /audit-output/
+__pycache__/
