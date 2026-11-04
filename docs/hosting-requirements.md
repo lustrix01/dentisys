@@ -11,6 +11,7 @@ What the demo and production servers need, in one place. Approved by the Owner o
 | Operating system | **Ubuntu Server 26.04 LTS** only (the hardening script refuses others). |
 | CPU type | **x86-64 (amd64)**. Images are built for `linux/amd64`; ARM servers do not work. |
 | Size, each | **2 vCPU, 4 GB RAM, 30 GB disk or more** (2 GB RAM is the bare minimum; the face recognition service needs the headroom; 8 GB disks run out while pulling images). |
+| App copies | `WEB_REPLICAS` / `FRONTEND_REPLICAS` in the server's `.env` (default 3 each, for updates without downtime). The demo runs **1 and 1**: on 1 vCPU this removed the errors at 25 simultaneous users and cut face check-in delay (benchmark 2026-11-04). |
 | IP address | One fixed public IPv4. A Vultr server keeps its IP for its lifetime; a Reserved IP is needed only to rebuild a server on the same IP. On AWS use an Elastic IP. |
 | First login | The SSH key added when the server is created. Vultr logs in as `root` (setup option `-InitialUser root`); AWS logs in as `ubuntu` (the default). |
 | Recovery | The provider's web console (Vultr *View Console*; AWS Session Manager or EC2 Instance Connect). Keep it available before hardening. |

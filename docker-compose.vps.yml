@@ -28,7 +28,7 @@ services:
     build: !reset null
     image: ${WEB_IMAGE:?Set WEB_IMAGE to the published GHCR web image.}
     deploy:
-      replicas: 3
+      replicas: ${WEB_REPLICAS:-3}
     environment:
       APP_IS_HTTPS: "true"
       APP_BASE_URL: https://${APP_DOMAIN:?Set APP_DOMAIN to the VPS hostname.}
@@ -70,7 +70,7 @@ services:
     build: !reset null
     image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE to the published GHCR frontend image.}
     deploy:
-      replicas: 3
+      replicas: ${FRONTEND_REPLICAS:-3}
     ports: !reset []
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]

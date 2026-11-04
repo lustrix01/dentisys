@@ -143,7 +143,7 @@ Site: https://<ip-with-dashes>.sslip.io
 | Manual attendance | Secretary/Faculty marks a Student | Record and audit entry |
 | Email | Invitations, remedial notices | Arrive in the inbox |
 | Reports and audit | Dean → Reports, Audit Trail | Data loads; CSV/PDF export |
-| Rolling update | See the [release guide](release-guide.md) | Watchtower updates one copy at a time, no downtime |
+| Rolling update | See the [release guide](release-guide.md) | Watchtower updates one copy at a time, no downtime (with the default 3 copies; the demo runs 1, so an update there briefly interrupts the site) |
 
 ## 6. Releasing changes later
 
