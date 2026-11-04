@@ -76,3 +76,9 @@ test('the revoked switch copies the Pin switch design', () => {
   assert.ok(source.includes('`Show (${revokedCount})`'));
   assert.ok(source.includes('aria-pressed'));
 });
+
+test('faculty End Session dialog opens for the live session when a date has several sessions', () => {
+  const source = src('../pages/faculty/AttendanceMonitoring.tsx');
+  assert.ok(source.includes('isEndModalOpen && (liveCurrentSession || worksheet?.attendanceSession)'));
+  assert.ok(!source.includes('isEndModalOpen && worksheet?.attendanceSession &&'));
+});

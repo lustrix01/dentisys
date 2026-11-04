@@ -1846,7 +1846,8 @@ export const AttendanceMonitoring: React.FC = () => {
       )}
 
       {/* Session End Confirmation */}
-      {isEndModalOpen && worksheet?.attendanceSession && (
+      {/* The End button belongs to liveCurrentSession; the worksheet has no selected session when a date has several. */}
+      {isEndModalOpen && (liveCurrentSession || worksheet?.attendanceSession) && (
         <Modal
           isOpen={isEndModalOpen}
           onClose={() => {
@@ -1862,7 +1863,7 @@ export const AttendanceMonitoring: React.FC = () => {
               </div>
             )}
             <p className="text-slate-700 dark:text-slate-300">
-              End session <span className="font-mono font-bold">{worksheet.attendanceSession.sessionCode}</span> now? Students without an attendance record will be marked Absent. Corrections remain possible afterwards.
+              End session <span className="font-mono font-bold">{(liveCurrentSession ?? worksheet?.attendanceSession)?.sessionCode}</span> now? Students without an attendance record will be marked Absent. Corrections remain possible afterwards.
             </p>
             <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
               <button
