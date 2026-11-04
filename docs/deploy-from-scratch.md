@@ -39,7 +39,7 @@ firewall, DNS) is always done by hand.
 | Gmail account with **2-Step Verification** and an **App Password** | Google account | Sends invitations and notices (~500 emails/day limit). |
 | GitHub account and the published images `ghcr.io/<owner>/dentisys-{web,frontend,biometric}:demo` | GitHub | To use your own namespace: `docker login ghcr.io`, then `.\scripts\publish-images.ps1 -Namespace <your-github-user>`. Then create a **classic token with `read:packages`** for the server. |
 | Google OAuth client ID (optional, for Google Sign-In) | Google Cloud Console | Add the site URL to *Authorized JavaScript origins* after step 2. |
-| VPS provider account and an **SSH key pair** | Vultr (or AWS) | Vultr: create a key with `ssh-keygen -t ed25519 -f $HOME\.ssh\dentisys-demo` and add the `.pub` under *Account → SSH Keys*. AWS: an EC2 key pair (`.pem`). Keep the private key in `%USERPROFILE%\.ssh\` (see troubleshooting for permissions). |
+| VPS provider account and **two SSH key pairs, made before creating any server** | Vultr (or AWS) | One key per server, never shared: a demo key (`ssh-keygen -t ed25519 -f $HOME\.ssh\dentisys-demo`, no passphrase, so Claude can run demo deploys and tests) and a production key with a passphrase (`ssh-keygen -t ed25519 -f $HOME\.ssh\dentisys-prod`; only the Owner uses it). Add both `.pub` files under *Account → SSH Keys* and select only the matching one when creating each server. AWS: one EC2 key pair (`.pem`) per server. Keep private keys in `%USERPROFILE%\.ssh\` (see troubleshooting for permissions). |
 
 ## 2. The server (manual)
 
@@ -160,7 +160,7 @@ Production is a second server with its own images (`dentisys-*-prod`, tag `:prod
 
 First setup, in this order:
 1. Check out the approved commit and run `.\scripts\promote-prod.ps1 -Sha <approved> -DryRun`, then without `-DryRun`. Without `~\.dentisys\prod.env` it promotes the images only.
-2. Server steps as in section 2, with a NEW key pair that has a passphrase.
+2. Server steps as in section 2, with the production key (passphrase; never the demo key) selected when creating the server.
 3. `.\scripts\provision-vps.ps1 -Ip <ip> -KeyFile <key> -InitialUser root -Production`. It writes the `-prod:prod` images, turns real biometrics on by default (production is a public test site, spec 2026-11-02), disables pgAdmin and skips the database tunnel. The GHCR token it asks for is your own classic token with `read:packages` (the bot cannot read `-prod` packages).
 4. Create `$HOME\.dentisys\prod.env` with `PROD_SSH_HOST`, `PROD_SSH_PORT` (default 2202), `PROD_SSH_USER` (default devops) and `PROD_SSH_KEY`.
 

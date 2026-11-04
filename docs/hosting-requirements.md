@@ -13,7 +13,8 @@ What the demo and production servers need, in one place. Approved by the Owner o
 | Size, each | **2 vCPU, 4 GB RAM, 30 GB disk or more** (2 GB RAM is the bare minimum; the face recognition service needs the headroom; 8 GB disks run out while pulling images). |
 | App copies | `WEB_REPLICAS` / `FRONTEND_REPLICAS` in the server's `.env` (default 3 each, for updates without downtime). The demo runs **1 and 1**: on 1 vCPU this removed the errors at 25 simultaneous users and cut face check-in delay (benchmark 2026-11-04). |
 | IP address | One fixed public IPv4. A Vultr server keeps its IP for its lifetime; a Reserved IP is needed only to rebuild a server on the same IP. On AWS use an Elastic IP. |
-| First login | The SSH key added when the server is created. Vultr logs in as `root` (setup option `-InitialUser root`); AWS logs in as `ubuntu` (the default). |
+| SSH keys | **A separate key per server, both made before the first server is created**: the demo key (no passphrase; Claude uses it for demo deploys and tests) and the production key (passphrase; Owner only). Never select the demo key for production, so a leaked demo key cannot open production and Claude has no way in. Owner decision 2026-11-05. |
+| First login | The server's own SSH key, selected when the server is created. Vultr logs in as `root` (setup option `-InitialUser root`); AWS logs in as `ubuntu` (the default). |
 | Recovery | The provider's web console (Vultr *View Console*; AWS Session Manager or EC2 Instance Connect). Keep it available before hardening. |
 
 ## Hardening
@@ -71,3 +72,4 @@ Pinned in the repository; change them there, not on the server.
 - Both servers are on one provider account and one payment method: a billing or account problem takes both down together.
 - There is no off-server backup, so test data can be lost.
 - `sslip.io` addresses depend on a free outside service until production has its own domain.
+- Temporary exception (Owner, 2026-11-05): the first production server was created with the demo key. Until it is replaced with a production key, one leaked key opens both servers, and Claude must still never connect to production.
