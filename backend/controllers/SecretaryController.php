@@ -1361,6 +1361,7 @@ function handle_secretary_attendance_session_start(): void
         if (array_key_exists('room', $data) && $data['room'] !== null && $data['room'] !== '') {
             $room = validate_required_string($data, 'room', 1, 255);
         }
+        attendance_session_require_room($pdo, $room);
         [$openingTime, $presentCutoff, $lateCutoff] = attendance_session_timing_from_request($data);
         $classEndTime = attendance_session_class_end_time_from_request($data, $openingTime, $lateCutoff, $sessionDate, $config);
 
@@ -1434,6 +1435,7 @@ function handle_secretary_attendance_session_start(): void
                 safe_error_response($conflict, 409);
                 return;
             }
+            $overlaps = attendance_session_overlap_gate($pdo, $data, $csId, $sessionDate, $openingTime, $classEndTime, $room);
             $creationStatus = attendance_session_creation_status($sessionDate, $openingTime, $config);
 
             $insert = $pdo->prepare(
@@ -1498,6 +1500,7 @@ function handle_secretary_attendance_session_start(): void
                 'status' => $creationStatus,
                 'started_at' => $nowSql,
             ]);
+            attendance_session_overlap_confirmed($pdo, $config, $authCtx, $context, $sessionId, $csId, $sessionDate, $openingTime, $classEndTime, $room, $overlaps);
 
             $pdo->commit();
         } catch (\PDOException $e) {
@@ -1528,6 +1531,8 @@ function handle_secretary_attendance_session_start(): void
         ], 201);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
+    } catch (AttendanceSessionException $e) {
+        attendance_session_exception_response($e);
     } catch (\Throwable $e) {
         error_log('Secretary attendance session start error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
@@ -1730,7 +1735,7 @@ function handle_secretary_attendance_session_update(): void
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
     } catch (AttendanceSessionException $e) {
-        emit_response(build_error_response($e->getMessage(), $e->statusCode, $e->errorCode));
+        attendance_session_exception_response($e);
     } catch (Throwable $e) {
         error_log('Secretary attendance session update error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);

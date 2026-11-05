@@ -7,7 +7,7 @@ declare(strict_types=1);
 $nightDay = static fn(int $days): string => (new DateTimeImmutable('now', $sessionLocalTimezone))->modify('+' . $days . ' days')->format('Y-m-d');
 $nightDate = $nightDay(1);
 $nightNext = $nightDay(2);
-$nightPayload = ['csId' => $meetingClassId, 'sessionDate' => $nightDate, 'openingTime' => '23:00', 'presentCutoff' => '00:15', 'lateCutoff' => '01:00', 'classEndTime' => '02:00', 'biometricRequired' => false, 'geofenceEnabled' => false];
+$nightPayload = ['csId' => $meetingClassId, 'sessionDate' => $nightDate, 'openingTime' => '23:00', 'presentCutoff' => '00:15', 'lateCutoff' => '01:00', 'classEndTime' => '02:00', 'room' => 'Night Room ' . $scheduleSuffix, 'biometricRequired' => false, 'geofenceEnabled' => false];
 
 // Create: accepted and labelled next day.
 [$nightStatus, $nightBody] = integration_http_json('/api/faculty/attendance/session', $seedFacultyAccessToken, $nightPayload);
@@ -28,8 +28,11 @@ foreach ([
     expect_same(422, $badStatus, 'Overnight rule rejects ' . $label);
 }
 [$longStatus, $longBody] = integration_http_json('/api/faculty/attendance/session', $seedFacultyAccessToken, array_merge($nightPayload, ['sessionDate' => $nightDay(10), 'classEndTime' => '22:30', 'lateCutoff' => '22:00', 'presentCutoff' => '23:30']));
-expect_same(201, $longStatus, 'A session just under 24 hours is accepted');
-$pdo->prepare("UPDATE attendance_sessions SET status = 'revoked', revoked_at = CURRENT_TIMESTAMP WHERE session_id = ?")->execute([(int) ($longBody['session']['sessionId'] ?? 0)]);
+expect_same(422, $longStatus, 'A session just under 24 hours is now refused by the 12 hour limit');
+expect_same('A session can last at most 12 hours.', $longBody['errors'][0]['message'] ?? null, 'The 12 hour refusal names the limit');
+[$twelveStatus, $twelveBody] = integration_http_json('/api/faculty/attendance/session', $seedFacultyAccessToken, array_merge($nightPayload, ['sessionDate' => $nightDay(10), 'classEndTime' => '11:00']));
+expect_same(201, $twelveStatus, 'A session of exactly 12 hours is accepted');
+$pdo->prepare("UPDATE attendance_sessions SET status = 'revoked', revoked_at = CURRENT_TIMESTAMP WHERE session_id = ?")->execute([(int) ($twelveBody['session']['sessionId'] ?? 0)]);
 
 // The database CHECK allows the wrap and still rejects a bad order.
 try {
@@ -40,7 +43,7 @@ try {
 }
 
 // Overlap across midnight, both roles; back-to-back is allowed.
-$nightOverlap = ['csId' => $meetingClassId, 'sessionDate' => $nightNext, 'openingTime' => '01:00', 'presentCutoff' => '01:30', 'lateCutoff' => '02:30', 'classEndTime' => '03:00', 'biometricRequired' => false, 'geofenceEnabled' => false];
+$nightOverlap = ['csId' => $meetingClassId, 'sessionDate' => $nightNext, 'openingTime' => '01:00', 'presentCutoff' => '01:30', 'lateCutoff' => '02:30', 'classEndTime' => '03:00', 'room' => 'Night Room ' . $scheduleSuffix, 'biometricRequired' => false, 'geofenceEnabled' => false];
 [$overlapFacultyStatus] = integration_http_json('/api/faculty/attendance/session', $seedFacultyAccessToken, $nightOverlap);
 expect_same(409, $overlapFacultyStatus, 'Faculty booking at 01:00 the next day overlaps the overnight session');
 [$overlapSecretaryStatus, $overlapSecretaryBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, $nightOverlap);

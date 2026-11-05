@@ -1,25 +1,33 @@
 import React, { useEffect, useState } from 'react';
+import { Filter as FilterIcon, Search } from 'lucide-react';
 import { Card } from './Card';
 import { Modal } from './Modal';
 import { formatManilaWhen } from '../services/auditService';
-import { AttendanceExcusedRequest, decideFacultyExcusedRequestApi, getFacultyExcusedRequestsApi } from '../services/apiClient';
+import { AttendanceExcusedRequest, FacultyClassItem, decideFacultyExcusedRequestApi, getFacultyExcusedRequestsApi } from '../services/apiClient';
 
 type Filter = 'pending' | 'approved' | 'rejected';
 const word = (status?: string | null) => status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Not recorded';
 const count = (n: number) => `${n} request${n === 1 ? '' : 's'}`;
 
 const OPEN_EVENT = 'open-secretary-request';
-/** Roll call chip target: the panel opens first, then scrolls to the request row and focuses it. */
+/** Roll call chip target: the requests tab opens filtered to the request's class, then scrolls to the row and focuses it. */
 export const openSecretaryRequest = (id: string) => {
-  window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: id }));
+  window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: { id } }));
+};
+/** Class page chip target: the requests tab opens filtered to that class. */
+export const openRequestsForClass = (classId: string) => {
+  window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: { classId } }));
 };
 
 /** Count of requests waiting for this Faculty member (Faculty Dashboard / page headers). */
-export const PendingRequestsBadge: React.FC<{ count: number; className?: string }> = ({ count, className = '' }) => count > 0 ? (
-  <span data-testid="pending-requests-badge" className={`inline-flex items-center rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-bold text-sky-800 dark:bg-sky-950/60 dark:text-sky-200 ${className}`}>
-    {count} pending Secretary request{count === 1 ? '' : 's'}
-  </span>
-) : null;
+export const PendingRequestsBadge: React.FC<{ count: number; className?: string; onClick?: () => void }> = ({ count, className = '', onClick }) => {
+  if (count <= 0) return null;
+  const classes = `inline-flex items-center rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-bold text-sky-800 dark:bg-sky-950/60 dark:text-sky-200 ${className}`;
+  const text = `${count} pending Secretary request${count === 1 ? '' : 's'}`;
+  return onClick
+    ? <button type="button" data-testid="pending-requests-badge" onClick={onClick} className={`${classes} cursor-pointer`}>{text}</button>
+    : <span data-testid="pending-requests-badge" className={classes}>{text}</span>;
+};
 
 /**
  * ATT-006: attendance change requests from class Secretaries. Approving applies the
@@ -28,7 +36,15 @@ export const PendingRequestsBadge: React.FC<{ count: number; className?: string 
 export const FacultyExcusedRequestsPanel: React.FC<{
   onDecided?: () => void;
   onLoaded?: (requests: AttendanceExcusedRequest[]) => void;
-}> = ({ onDecided, onLoaded }) => {
+  /** The Faculty's current school-year classes, for the Class filter. */
+  classes?: FacultyClassItem[];
+  /** True while the Secretary requests tab is showing (the panel stays mounted so roll-call chips keep their data). */
+  active?: boolean;
+  /** Asks the page to switch to the requests tab. */
+  onOpenTab?: () => void;
+  /** From the URL: ?class=<classId>&request=<requestId>. */
+  initial?: { classId?: string; requestId?: string };
+}> = ({ onDecided, onLoaded, classes = [], active = true, onOpenTab, initial }) => {
   const [requests, setRequests] = useState<AttendanceExcusedRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -37,26 +53,35 @@ export const FacultyExcusedRequestsPanel: React.FC<{
   const [selected, setSelected] = useState<string[]>([]);
   const [filter, setFilter] = useState<Filter>('pending');
   const [reloadKey, setReloadKey] = useState(0);
-  const [open, setOpen] = useState(false); // collapsed on every visit, not remembered
   const [noteOpen, setNoteOpen] = useState<Record<string, boolean>>({});
   const [confirm, setConfirm] = useState<{ ids: string[]; decision: 'approve' | 'reject'; label: string } | null>(null);
-  const [target, setTarget] = useState<string | null>(null);
+  const [target, setTarget] = useState<string | null>(initial?.requestId ?? null);
+  // Filters are not remembered between visits.
+  const [query, setQuery] = useState('');
+  const [classId, setClassId] = useState(initial?.classId ?? '');
+  const [change, setChange] = useState('');
 
   useEffect(() => {
-    const onOpen = (event: Event) => { setFilter('pending'); setOpen(true); setTarget((event as CustomEvent<string>).detail); };
+    const onOpen = (event: Event) => {
+      const { id, classId: forClass } = (event as CustomEvent<{ id?: string; classId?: string }>).detail;
+      setFilter('pending'); setQuery(''); setChange('');
+      setClassId(forClass ?? requests.find(request => request.id === id)?.classId ?? '');
+      setTarget(id ?? null);
+      onOpenTab?.();
+    };
     window.addEventListener(OPEN_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_EVENT, onOpen);
-  }, []);
+  }, [requests, onOpenTab]);
 
-  // Runs after the panel has rendered open, so the row exists.
+  // Runs after the tab has rendered, so the row exists.
   useEffect(() => {
-    if (!target || !open) return;
+    if (!target || !active) return;
     const row = document.getElementById(`secretary-request-${target}`);
     if (!row) return;
     row.scrollIntoView({ behavior: 'smooth', block: 'center' });
     row.focus();
     setTarget(null);
-  }, [target, open, requests, filter]);
+  }, [target, active, requests, filter, classId]);
 
   useEffect(() => {
     let active = true;
@@ -73,7 +98,14 @@ export const FacultyExcusedRequestsPanel: React.FC<{
 
   const pending = requests.filter(request => request.status === 'pending');
   const hasHistory = requests.some(request => request.status !== 'pending');
-  const shown = requests.filter(request => request.status === filter);
+  const needle = query.trim().toLowerCase();
+  const matching = requests.filter(request =>
+    (!classId || request.classId === classId)
+    && (!change || (request.requestedStatus ?? 'excused') === change)
+    && (!needle || request.studentName.toLowerCase().includes(needle) || (request.studentNumber ?? '').toLowerCase().includes(needle)));
+  const countOf = (status: Filter) => matching.filter(request => request.status === status).length;
+  const shown = matching.filter(request => request.status === filter);
+  const pendingShown = filter === 'pending' ? shown : [];
 
   // withNote: only a single-row Reject sends its optional note; bulk calls never do.
   const decide = async (ids: string[], decision: 'approve' | 'reject', withNote = false) => {
@@ -108,9 +140,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
     }
   };
 
-  if (requests.length === 0 && !error && !message) return null;
-
-  const chosen = selected.filter(id => pending.some(request => request.id === id));
+  const chosen = selected.filter(id => pendingShown.some(request => request.id === id));
   const groups: { key: string; rows: AttendanceExcusedRequest[] }[] = [];
   for (const request of shown) {
     const key = request.sessionId ?? `${request.classId}:${request.sessionDate}`;
@@ -123,35 +153,84 @@ export const FacultyExcusedRequestsPanel: React.FC<{
   const plainBtn = `${btn} border border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-200`;
 
   return (
-    <section aria-label="Secretary requests">
+    <section aria-label="Secretary requests" className={active ? '' : 'hidden'}>
     <Card className="p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Secretary requests · {pending.length} waiting</h2>
-        <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} className={plainBtn}>{open ? 'Hide' : 'Show'}</button>
       </div>
       {error && <p role="alert" className="text-xs text-rose-600">{error}</p>}
       {message && <p role="status" className="text-xs text-emerald-700 dark:text-emerald-400">{message}</p>}
-      {open && (
-        <>
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-            <p className="text-[11px] text-slate-500">Sent by class Secretaries. Approving applies the requested status; rejecting leaves the record unchanged.</p>
-            <div className="flex items-center gap-2">
-              <select
-                aria-label="Show requests"
-                value={filter}
-                onChange={event => setFilter(event.target.value as Filter)}
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
-              >
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-              </select>
-              {filter === 'pending' && pending.length > 0 && (
-                <button type="button" disabled={busy || chosen.length === 0} onClick={() => void decide(chosen, 'approve')} className={approveBtn}>Approve selected</button>
-              )}
+      <>
+          <p className="text-[11px] text-slate-500">Sent by class Secretaries. Approving applies the requested status; rejecting leaves the record unchanged.</p>
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5">
+            <div className="relative flex-1 sm:min-w-48">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                aria-label="Search students"
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder="Search student name or ID..."
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
+              />
             </div>
+            <div className="sm:flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+              <FilterIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
+              <select
+                value={classId}
+                onChange={event => setClassId(event.target.value)}
+                aria-label="Class"
+                className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
+              >
+                <option value="">All Classes</option>
+                {classes.map(item => <option key={item.csId} value={String(item.csId)}>{item.courseCode} {item.csName}</option>)}
+              </select>
+            </div>
+            <select
+              aria-label="Show requests"
+              value={filter}
+              onChange={event => setFilter(event.target.value as Filter)}
+              className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
+            >
+              <option value="pending">Pending ({countOf('pending')})</option>
+              <option value="approved">Approved ({countOf('approved')})</option>
+              <option value="rejected">Rejected ({countOf('rejected')})</option>
+            </select>
+            <select
+              aria-label="Requested change"
+              value={change}
+              onChange={event => setChange(event.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
+            >
+              <option value="">All requested changes</option>
+              <option value="present">Present</option>
+              <option value="late">Late</option>
+              <option value="absent">Absent</option>
+              <option value="excused">Excused</option>
+            </select>
+            {(query || classId || change) && (
+              <button type="button" onClick={() => { setQuery(''); setClassId(''); setChange(''); }} className={plainBtn}>Clear filters</button>
+            )}
           </div>
-          {filter === 'pending' && pending.length === 0 && <p className="text-xs text-slate-500">Nothing waiting for you.</p>}
+          {pendingShown.length > 0 && (
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={pendingShown.every(request => selected.includes(request.id))}
+                  onChange={event => setSelected(event.target.checked ? [...new Set([...selected, ...pendingShown.map(request => request.id)])] : selected.filter(id => !pendingShown.some(request => request.id === id)))}
+                />
+                Select all shown ({pendingShown.length})
+              </label>
+              <button
+                type="button"
+                disabled={busy || chosen.length === 0}
+                onClick={() => chosen.length > 1 ? setConfirm({ ids: chosen, decision: 'approve', label: 'Selected requests' }) : void decide(chosen, 'approve')}
+                className={approveBtn}
+              >Approve selected</button>
+            </div>
+          )}
+          {filter === 'pending' && shown.length === 0 && <p className="text-xs text-slate-500">{pending.length === 0 ? 'Nothing waiting for you.' : 'No pending requests match the filters.'}</p>}
           {filter !== 'pending' && !hasHistory && <p className="text-xs text-slate-500">History not available.</p>}
           {filter !== 'pending' && hasHistory && shown.length === 0 && <p className="text-xs text-slate-500">No {filter} requests.</p>}
           <div className="space-y-3">
@@ -231,8 +310,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
               );
             })}
           </div>
-        </>
-      )}
+      </>
     </Card>
     <Modal isOpen={!!confirm} onClose={() => setConfirm(null)} title={confirm ? `${confirm.decision === 'approve' ? 'Approve' : 'Reject'} all ${count(confirm.ids.length)}?` : ''} size="sm">
       {confirm && (

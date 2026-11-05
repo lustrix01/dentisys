@@ -2,7 +2,7 @@
 export interface TimeSet { openingTime: string; presentCutoff: string; lateCutoff: string; classEndTime: string }
 export type TimeField = keyof TimeSet;
 
-export const LONG_SESSION_MINUTES = 12 * 60;
+export const MAX_SESSION_MINUTES = 12 * 60;
 
 const DAY = 1440;
 const mod = (n: number) => ((n % DAY) + DAY) % DAY;
@@ -39,12 +39,13 @@ export const applyTimeChange = (times: TimeSet, field: TimeField, value: string)
   return next;
 };
 
-/** Error text for the first problem, or null. Measured from Opening, so the session is always under 24 h. */
+/** Error text for the first problem, or null. Measured from Opening, a session may last at most 12 h. */
 export const checkTimes = (times: TimeSet): string | null => {
   if (!complete(times)) return 'Fill in all four times.';
   if (rel(times, 'presentCutoff') <= 0) return 'Present cutoff must be after the Opening time.';
   if (rel(times, 'lateCutoff') <= rel(times, 'presentCutoff')) return 'Late cutoff must be after the Present cutoff.';
   if (rel(times, 'classEndTime') < rel(times, 'lateCutoff')) return 'Class end time must be at or after the Late cutoff.';
+  if (rel(times, 'classEndTime') > MAX_SESSION_MINUTES) return 'A session can last at most 12 hours.';
   return null;
 };
 

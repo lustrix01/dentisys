@@ -86,6 +86,7 @@ function audit_catalogue(): array
         'secretary_appointment_ended' => ['Secretary appointment ended', $P, true, false],
         'class_create' => ['Class created', $P, true, false],
         'class_update' => ['Class changed', $P, true, false],
+        'class_schedule_overlap_confirmed' => ['Class schedule booked over an overlap', $P, true, false],
         'class_archive' => ['Class archived', $P, true, false],
         'class_restore' => ['Class restored', $P, true, false],
         // 5.3 Settings and terms
@@ -99,6 +100,11 @@ function audit_catalogue(): array
         'room_retired' => ['Room retired', $T, true, false],
         'room_restored' => ['Room restored', $T, true, false],
         'room_deleted' => ['Room deleted', $T, true, false],
+        'room_category_created' => ['Room category added', $T, true, false],
+        'room_category_updated' => ['Room category changed', $T, true, false],
+        'room_category_retired' => ['Room category retired', $T, true, false],
+        'room_category_restored' => ['Room category restored', $T, true, false],
+        'room_category_deleted' => ['Room category deleted', $T, true, false],
         // 5.4 Grading (own view only)
         'grading_config_update' => ['Grade weights changed', $G, false, false],
         'assessment_created' => ['Assessment added', $G, false, false],
@@ -112,6 +118,7 @@ function audit_catalogue(): array
         'attendance_session_ended' => ['Attendance session ended', $A, false, false],
         'attendance_session_revoked' => ['Attendance session revoked', $A, false, false],
         'attendance_session_auto_opened' => ['Session opened automatically', $A, false, false],
+        'attendance_session_overlap_confirmed' => ['Session booked over an overlap', $A, false, false],
         'attendance_session_auto_ended' => ['Session ended automatically', $A, false, false],
         'biometric_attendance_recorded' => ['Attendance recorded by face check', $A, false, false],
         'secretary_attendance_override' => ['Attendance set by Secretary', $A, false, false],

@@ -289,7 +289,7 @@ export const AttendanceList: React.FC = () => {
     setOtherLiveName(await readOtherLive(classId, startSections).catch(() => null));
   };
 
-  const handleStartSession = async (values: StartSessionValues) => {
+  const handleStartSession = async (values: StartSessionValues, confirmOverlap?: boolean) => {
     const csId = parseInt(startCsId, 10);
     const { location } = values;
     const res = await startSecretaryAttendanceSessionApi({
@@ -306,6 +306,7 @@ export const AttendanceList: React.FC = () => {
       ...(values.geofenceEnabled && location
         ? { geofenceLatitude: location.latitude, geofenceLongitude: location.longitude, latitude: location.latitude, longitude: location.longitude }
         : {}),
+      confirmOverlap: confirmOverlap || undefined,
     });
     setIsStartOpen(false);
     setSessionId(''); // reopen on the new live session once the list reloads

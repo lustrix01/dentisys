@@ -5542,6 +5542,7 @@ function handle_faculty_attendance_session_create(): void
         $room = array_key_exists('room', $data) && trim((string) $data['room']) !== ''
             ? validate_required_string($data, 'room', 1, 255)
             : null;
+        attendance_session_require_room($pdo, $room);
         $biometricRequired = attendance_session_request_bool($data, 'biometricRequired', false);
         attendance_session_require_timing_for_biometric(
             $biometricRequired,
@@ -5588,6 +5589,7 @@ function handle_faculty_attendance_session_create(): void
                 safe_error_response($conflict, 409);
                 return;
             }
+            $overlaps = attendance_session_overlap_gate($pdo, $data, $csId, $sessionDate, $openingTime, $classEndTime, $room);
             $creationStatus = attendance_session_creation_status($sessionDate, $openingTime, $config);
             $secretaryUserId = $lockedClass['secretary_user_id'] !== null
                 ? (int) $lockedClass['secretary_user_id']
@@ -5612,6 +5614,7 @@ function handle_faculty_attendance_session_create(): void
                 'Created attendance session for ' . audit_class_label($pdo, $csId) . " on {$sessionDate}.", null, null,
                 ['session_id' => $sessionId, 'cs_id' => $csId, 'session_date' => $sessionDate, 'status' => $creationStatus, 'opening_time' => $openingTime, 'present_cutoff_time' => $presentCutoff, 'late_cutoff_time' => $lateCutoff, 'class_end_time' => $classEndTime]
             );
+            attendance_session_overlap_confirmed($pdo, $config, $authCtx, $context, $sessionId, $csId, $sessionDate, $openingTime, $classEndTime, $room, $overlaps);
             $pdo->commit();
         } catch (PDOException $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
@@ -5629,6 +5632,8 @@ function handle_faculty_attendance_session_create(): void
         json_response(['status' => 'ok', 'session' => attendance_session_map($session ?? [], true)], 201);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
+    } catch (AttendanceSessionException $e) {
+        attendance_session_exception_response($e);
     } catch (\Throwable $e) {
         error_log('Faculty attendance session create error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
@@ -5653,7 +5658,7 @@ function handle_faculty_attendance_session_update(): void
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
     } catch (AttendanceSessionException $e) {
-        emit_response(build_error_response($e->getMessage(), $e->statusCode, $e->errorCode));
+        attendance_session_exception_response($e);
     } catch (Throwable $e) {
         error_log('Faculty attendance session update error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
@@ -7844,7 +7849,7 @@ function handle_faculty_classes_get(): void
             'status' => 'ok',
             'currentSchoolYear' => $currentSchoolYear,
             'classes' => $mapped,
-            'academicTerms' => array_values(array_filter(academic_terms_list($pdo), static fn(array $term): bool => $term['id'] !== null && $term['schoolYear'] === $currentSchoolYear)),
+            'academicTerms' => array_values(array_filter(academic_terms_list($pdo), static fn(array $term): bool => $term['id'] !== null && $term['schoolYear'] === $currentSchoolYear && $term['endDate'] >= (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d'))),
         ], 200);
     } catch (\Throwable $e) {
         error_log('Faculty classes get error: ' . sanitize_for_log($e));
@@ -7886,10 +7891,10 @@ function handle_faculty_courses_get(): void
     }
 }
 
-function faculty_check_schedule_conflict(PDO $pdo, string $schoolYear, int $instructorId, ?string $lecRoom, ?string $labRoom, int $excludeCsId = 0, ?array $meetings = null): ?string
+function faculty_check_schedule_conflict(PDO $pdo, string $schoolYear, string $semester, int $instructorId, ?string $lecRoom, ?string $labRoom, int $excludeCsId = 0, ?array $meetings = null): ?string
 {
     $proposed = $meetings ?? array_merge(class_meetings_legacy($lecRoom, 'Lecture'), class_meetings_legacy($labRoom, 'Laboratory'));
-    return class_meetings_conflict($pdo, $schoolYear, $instructorId, $proposed, $excludeCsId);
+    return class_meetings_conflict($pdo, $schoolYear, $semester, $instructorId, $proposed, $excludeCsId);
 }
 
 function faculty_parse_component_units(array $data): array
@@ -8037,6 +8042,9 @@ function handle_faculty_class_create(): void
         $pdo->beginTransaction();
         academic_terms_lock($pdo);
         $term = academic_term_for_class_create($pdo, $data);
+        if ($term['end_date'] < (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d')) {
+            throw new ValidationException(['academicTermId' => 'This term has ended. Pick a current or upcoming term.']);
+        }
         $schoolYear = $term['school_year'];
         $semester = faculty_class_semester_label($term['semester']);
         $rawYearLevel = $data['yearLevel'] ?? 1;
@@ -8077,12 +8085,15 @@ function handle_faculty_class_create(): void
             return;
         }
 
-        $conflictErr = faculty_check_schedule_conflict($pdo, $schoolYear, (int) $authCtx['user_id'], $lecRoom, $labRoom, 0, $meetings);
+        class_rooms_require_active($pdo, $lecRoom, $labRoom, $meetings ?? []);
+        $conflictErr = faculty_check_schedule_conflict($pdo, $schoolYear, $semester, (int) $authCtx['user_id'], $lecRoom, $labRoom, 0, $meetings);
         if ($conflictErr !== null) {
             $pdo->rollBack();
             safe_error_response($conflictErr, 422);
             return;
         }
+        $overlaps = class_meetings_overlap_gate($pdo, $data, $term['start_date'], $term['end_date'], (int) $authCtx['user_id'],
+            $meetings ?? array_merge(class_meetings_legacy($lecRoom, 'Lecture'), class_meetings_legacy($labRoom, 'Laboratory')), 0);
 
         $termCode = "{$schoolYear}-{$semester}";
 
@@ -8120,6 +8131,7 @@ function handle_faculty_class_create(): void
                 'ip_address' => $context['ip_address'],
                 'user_agent' => $context['user_agent'],
             ], $macKey, null, ['csId' => $newCsId, 'meetings' => $meetings ?? array_merge(class_meetings_legacy($lecRoom, 'Lecture'), class_meetings_legacy($labRoom, 'Laboratory'))]);
+            class_meetings_overlap_confirmed($pdo, $config, $authCtx, $context, $newCsId, $csName, $overlaps);
 
             $pdo->commit();
         } catch (\Throwable $e) {
@@ -8135,6 +8147,9 @@ function handle_faculty_class_create(): void
     } catch (ValidationException $e) {
         if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
         validation_error_response($e->getErrors());
+    } catch (AttendanceSessionException $e) {
+        if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        attendance_session_exception_response($e);
     } catch (\Throwable $e) {
         if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
         error_log('Faculty class create error: ' . sanitize_for_log($e));
@@ -8196,7 +8211,7 @@ function handle_faculty_class_update(): void
             }
         }
 
-        $allowedFields = ['csId', 'csName', 'block', 'yearLevel', 'lecRoom', 'labRoom', 'courseCode', 'courseName', 'semester', 'schoolYear', 'lectureUnits', 'labUnits', 'meetings'];
+        $allowedFields = ['csId', 'csName', 'block', 'yearLevel', 'lecRoom', 'labRoom', 'courseCode', 'courseName', 'semester', 'schoolYear', 'lectureUnits', 'labUnits', 'meetings', 'confirmOverlap'];
         foreach (array_keys($data) as $field) {
             if (!in_array($field, $allowedFields, true) && !array_key_exists($field, $protectedFields)) {
                 $errors[$field] = 'This field is not editable through the class-section contract.';
@@ -8409,11 +8424,17 @@ function handle_faculty_class_update(): void
                     $meetings = array_merge(class_meetings_legacy($checkLec, 'Lecture'), class_meetings_legacy($checkLab, 'Laboratory'));
                 }
             }
-            $conflictErr = faculty_check_schedule_conflict($pdo, (string) $before['school_year'], (int) $authCtx['user_id'], $checkLec, $checkLab, $csId, $meetings ?? $before['meetings']);
+            class_rooms_require_active($pdo, $checkLec, $checkLab, $meetings ?? $before['meetings']);
+            $conflictErr = faculty_check_schedule_conflict($pdo, (string) $before['school_year'], (string) $before['semester'], (int) $authCtx['user_id'], $checkLec, $checkLab, $csId, $meetings ?? $before['meetings']);
             if ($conflictErr !== null) {
                 $pdo->rollBack();
                 safe_error_response($conflictErr, 422);
                 return;
+            }
+            $overlaps = [];
+            if ($meetings !== null) { // only a schedule save asks; a rename or unit edit does not
+                $termDates = academic_resolve_class_term_dates($before, academic_terms_read($pdo));
+                $overlaps = class_meetings_overlap_gate($pdo, $data, $termDates['startDate'], $termDates['endDate'], (int) $authCtx['user_id'], $meetings, $csId);
             }
 
             if ($updates !== []) {
@@ -8461,6 +8482,7 @@ function handle_faculty_class_update(): void
                     'user_agent' => $context['user_agent'],
                 ], $macKey, $changed[0], $changed[1]);
             }
+            class_meetings_overlap_confirmed($pdo, $config, $authCtx, $context, $csId, (string) $after['cs_name'], $overlaps);
 
             $pdo->commit();
         } catch (Throwable $e) {
@@ -8477,6 +8499,8 @@ function handle_faculty_class_update(): void
         ], 200);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
+    } catch (AttendanceSessionException $e) {
+        attendance_session_exception_response($e);
     } catch (Throwable $e) {
         if ($pdo instanceof PDO && $pdo->inTransaction()) {
             $pdo->rollBack();

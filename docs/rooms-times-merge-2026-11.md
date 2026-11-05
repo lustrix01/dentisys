@@ -38,3 +38,18 @@ Branch `lighthal9-rooms-and-times`, audited against `lighthal9-responsive` (99c7
 
 - [Rooms & Times Merge Comparison](https://claude.ai/artifact/DpezoFnRBF3oa9YGMu2ZQ3): today | branch | merged with fixes.
 - [Review Hub](https://claude.ai/artifact/CXKXPAz5hiYra8z56BbWWb): the Before/After demos the Owner approved for each feature.
+
+## Follow-up: room categories, overlaps and requests tab (2026-11-06)
+
+Owner review of this branch led to new decisions, grilled with `/grill-me` and recorded in `spec.md` (commits 76092ce, a7fc2b1, c4817fc; ROOM-001, CLS-001, CLS-002, ATT-001, ATT-006).
+
+- Rooms: categories are their own Dean list; starting rooms are CDM-1..3 in Lecture/Laboratory (migration 057); "Rooms | Retired" tabs like Classes; messages use the shared pop-up.
+- Rename reaches current and future school years only and notifies each affected Faculty. Retire notifies them; a retired room cannot be picked or typed, and edit forms that still hold it cannot be saved. A retired room can be deleted once no class whose term has not ended, and no session not yet opened, uses it.
+- Sessions: at most 12 hours, a room is required, and overlaps with another class's session (same room or same Faculty) or regular schedule show one "Book anyway" pop-up, with a bell notice to the other Faculty and an audit entry. F5 fixed: a scheduled session does not open while the same class still has one running.
+- Class schedules clash only within the same semester; a booked session in the new slot shows the pop-up. Faculty cannot create a class in an ended term.
+- Secretary requests: own tab in Attendance Monitoring with filters, Select all shown, and a confirm for approving several.
+
+Checked: `scripts/check.ps1` (280 mocked UI tests) and `scripts/check-postgres.ps1` (database suite incl. new overlap, rooms and 12-hour tests; 15 live E2E) passed.
+
+- [Rooms & Sessions Demo](https://claude.ai/artifact/4ANX88m56ebsHVNPvRPtPa): the approved clickable proposal (Today | Earlier proposal | Proposal now).
+- [Rooms & Sessions Review](https://claude.ai/artifact/EaoxbUwB4Sj1XSZPegZCD1): real-app screenshots, light and dark, desktop and phone.

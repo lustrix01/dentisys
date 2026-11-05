@@ -1190,6 +1190,7 @@ export function createFacultyAttendanceSessionApi(data: {
   geofenceRadiusMeters?: number;
   geofenceLatitude?: number;
   geofenceLongitude?: number;
+  confirmOverlap?: boolean;
 }): Promise<{ status: string; message?: string; sessionCode?: string; createdCount?: number; session: NonNullable<FacultyAttendanceWorksheet['attendanceSession']> }> {
   return request('POST', '/faculty/attendance/session', data);
 }
@@ -1522,6 +1523,7 @@ export interface StartSecretaryAttendanceSessionPayload {
   classEndNextDay?: boolean;
   presentCutoffNextDay?: boolean;
   lateCutoffNextDay?: boolean;
+  confirmOverlap?: boolean;
 }
 
 export function startSecretaryAttendanceSessionApi(
@@ -1716,6 +1718,7 @@ export function createFacultyClassApi(data: {
   labRoom?: string;
   lectureUnits?: number | null;
   labUnits?: number | null;
+  confirmOverlap?: boolean;
 }): Promise<{ status: string; message: string; csId: number }> {
   return request('POST', '/faculty/classes', data);
 }
@@ -1734,6 +1737,7 @@ export function updateFacultyClassApi(data: {
   labRoom?: string;
   lectureUnits?: number | null;
   labUnits?: number | null;
+  confirmOverlap?: boolean;
 }): Promise<{ status: string; message: string }> {
   return request('POST', '/faculty/classes/update', data);
 }
@@ -2378,29 +2382,30 @@ export function copyAcademicTermsApi(): Promise<{ status: string; schoolYear: st
 }
 
 // ROOM-001 Dean-managed rooms.
-export type RoomUsage = { classes: number; meetings: number; scheduledSessions: number; otherSessions: number };
+export type RoomUsage = { classes: number; meetings: number; scheduledSessions: number };
 export type RoomRecord = {
   roomId: number;
   name: string;
-  group: string;
+  categoryId: number;
+  group: string; // category name
   latitude: number | null;
   longitude: number | null;
   radiusMeters: number | null;
   status: 'active' | 'retired';
-  retiredAt: string | null;
   usage: RoomUsage;
-  usedBeforeRename: boolean;
+  inUse: boolean;
   deletable: boolean;
 };
-export type RoomInput = { name: string; group: string; latitude?: number | null; longitude?: number | null; radiusMeters?: number | null };
+export type RoomCategory = { categoryId: number; name: string; status: 'active' | 'retired'; roomCount: number; activeRoomCount: number };
+export type RoomInput = { name: string; categoryId: number; latitude?: number | null; longitude?: number | null; radiusMeters?: number | null };
 export type RoomOption = Pick<RoomRecord, 'name' | 'group' | 'status' | 'latitude' | 'longitude' | 'radiusMeters'>;
-export function getAdminRoomsApi(): Promise<{ status: string; rooms: RoomRecord[]; groups: string[] }> {
+export function getAdminRoomsApi(): Promise<{ status: string; rooms: RoomRecord[]; categories: RoomCategory[] }> {
   return request('GET', '/admin/rooms');
 }
 export function createRoomApi(data: RoomInput): Promise<{ room: RoomRecord }> {
   return request('POST', '/admin/rooms', data);
 }
-export function updateRoomApi(data: Partial<RoomInput> & { roomId: number; confirmRename?: boolean }): Promise<{ room: RoomRecord; renamed?: { classes: number; meetings: number; scheduledSessions: number } }> {
+export function updateRoomApi(data: Partial<RoomInput> & { roomId: number; confirmRename?: boolean }): Promise<{ room: RoomRecord; renamed?: RoomUsage }> {
   return request('POST', '/admin/rooms/update', data);
 }
 export function retireRoomApi(roomId: number): Promise<{ room: RoomRecord }> {
@@ -2411,6 +2416,21 @@ export function restoreRoomApi(roomId: number): Promise<{ room: RoomRecord }> {
 }
 export function deleteRoomApi(roomId: number): Promise<{ status: string }> {
   return request('POST', '/admin/rooms/delete', { roomId });
+}
+export function createRoomCategoryApi(name: string): Promise<{ category: RoomCategory }> {
+  return request('POST', '/admin/room-categories', { name });
+}
+export function renameRoomCategoryApi(categoryId: number, name: string): Promise<{ category: RoomCategory }> {
+  return request('POST', '/admin/room-categories/update', { categoryId, name });
+}
+export function retireRoomCategoryApi(categoryId: number): Promise<{ category: RoomCategory }> {
+  return request('POST', '/admin/room-categories/retire', { categoryId });
+}
+export function restoreRoomCategoryApi(categoryId: number): Promise<{ category: RoomCategory }> {
+  return request('POST', '/admin/room-categories/restore', { categoryId });
+}
+export function deleteRoomCategoryApi(categoryId: number): Promise<{ status: string }> {
+  return request('POST', '/admin/room-categories/delete', { categoryId });
 }
 export function getRoomsApi(): Promise<{ status: string; rooms: RoomOption[] }> {
   return request('GET', '/rooms');

@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronDown, MapPin, Navigation, Play } from 'lucide-react';
 import { LocationPicker } from './LocationPicker';
 import { Modal } from './Modal';
-import { RoomSelector, RetiredRoomWarning, useRooms } from './RoomSelector';
+import { RoomSelector, RetiredRoomWarning, retiredRoomError, useRooms } from './RoomSelector';
+import { OverlapConfirmModal, overlapsFrom, type BookingOverlap } from './OverlapConfirmModal';
 
 import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../utils/geofenceRadius';
 import type { ClassMeeting } from '../services/apiClient';
@@ -55,7 +56,7 @@ interface StartSessionModalProps {
   /** Runs before the form checks; return a message to stop the submit. */
   precheck?: () => string | null;
   /** Does the API call; throw an Error to show its message in the pop-up. */
-  onSubmit: (values: StartSessionValues) => Promise<void>;
+  onSubmit: (values: StartSessionValues, confirmOverlap?: boolean) => Promise<void>;
   /** 2+ sections turn the "Selected class" box into a picker. */
   sections?: Array<{ id: string; name: string }>;
   selectedSectionId?: string;
@@ -87,6 +88,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [overlaps, setOverlaps] = useState<BookingOverlap[] | null>(null);
 
   const fixtureLat = initialLocation?.latitude;
   const fixtureLng = initialLocation?.longitude;
@@ -146,9 +148,16 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    await submit(false);
+  };
+
+  const submit = async (confirmOverlap: boolean) => {
     const blocked = precheck?.();
     if (blocked) { setError(blocked); return; }
     if (!sessionDate || sessionDate < manilaToday()) { setError('Choose today or a future date (Asia/Manila).'); return; }
+    if (!room.trim()) { setError('Choose a room or type the place where the session happens.'); return; }
+    const retired = retiredRoomError(rooms, room);
+    if (retired) { setError(retired); return; }
     const timeProblem = checkTimes(times);
     if (timeProblem) { setError(timeProblem); return; }
     if (geofenceEnabled && !location) {
@@ -165,8 +174,12 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
       await onSubmit({
         sessionDate, room: room.trim(), ...times,
         biometricRequired, geofenceEnabled, geofenceRadiusMeters: parseRadius(geofenceRadius) ?? 100, location,
-      });
+      }, confirmOverlap);
+      setOverlaps(null);
     } catch (err) {
+      const found = overlapsFrom(err, 'SESSION_OVERLAP');
+      if (found) { setOverlaps(found); return; }
+      setOverlaps(null);
       setError(err instanceof Error ? err.message : 'Unable to start the attendance session.');
     } finally {
       setSubmitting(false);
@@ -186,6 +199,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   );
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
       onClose={() => { if (!submitting) { onClose(); setError(null); } }}
@@ -305,5 +319,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
         </div>
       </form>
     </Modal>
+    <OverlapConfirmModal overlaps={overlaps} busy={submitting} onCancel={() => setOverlaps(null)} onConfirm={() => void submit(true)} />
+    </>
   );
 };

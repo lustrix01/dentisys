@@ -441,24 +441,45 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(page.locator('h1', { hasText: 'System Audit Trail' })).toBeHidden();
   });
 
-  const usage0 = { classes: 0, meetings: 0, scheduledSessions: 0, otherSessions: 0 };
+  const usage0 = { classes: 0, meetings: 0, scheduledSessions: 0 };
   const mockRooms = async (page: Page) => {
-    const base = { latitude: null, longitude: null, radiusMeters: null, retiredAt: null, usedBeforeRename: false };
+    const base = { latitude: null, longitude: null, radiusMeters: null };
     let rooms: Array<Record<string, any>> = [
-      { ...base, roomId: 1, name: 'Room 302', group: 'Standard Classrooms', status: 'active', usage: { classes: 3, meetings: 4, scheduledSessions: 1, otherSessions: 2 }, deletable: false },
-      { ...base, roomId: 2, name: 'Room 405', group: 'Standard Classrooms', status: 'active', usage: usage0, deletable: true },
-      { ...base, roomId: 3, name: 'Old Lab', group: 'Laboratories', status: 'retired', usage: usage0, deletable: true },
-      { ...base, roomId: 4, name: 'Simulation Lab', group: 'Laboratories', status: 'retired', usage: { classes: 1, meetings: 1, scheduledSessions: 0, otherSessions: 0 }, deletable: false },
-      { ...base, roomId: 5, name: 'Aged Lab', group: 'Laboratories', status: 'retired', usage: usage0, usedBeforeRename: true, deletable: false },
-      { ...base, roomId: 6, name: 'Annex', group: 'Standard Classrooms', status: 'active', usage: { classes: 0, meetings: 2, scheduledSessions: 0, otherSessions: 0 }, deletable: false },
-      { ...base, roomId: 7, name: 'Ran Hall', group: 'Standard Classrooms', status: 'active', usage: { classes: 0, meetings: 0, scheduledSessions: 0, otherSessions: 3 }, deletable: false },
+      { ...base, roomId: 1, name: 'Room 302', categoryId: 1, group: 'Standard Classrooms', status: 'active', usage: { classes: 3, meetings: 4, scheduledSessions: 1 }, inUse: true, deletable: false },
+      { ...base, roomId: 2, name: 'Room 405', categoryId: 1, group: 'Standard Classrooms', status: 'active', usage: usage0, inUse: false, deletable: false },
+      { ...base, roomId: 3, name: 'Old Lab', categoryId: 2, group: 'Laboratories', status: 'retired', usage: usage0, inUse: false, deletable: true },
+      { ...base, roomId: 4, name: 'Simulation Lab', categoryId: 2, group: 'Laboratories', status: 'retired', usage: { classes: 1, meetings: 1, scheduledSessions: 0 }, inUse: true, deletable: false },
+      { ...base, roomId: 6, name: 'Annex', categoryId: 1, group: 'Standard Classrooms', status: 'active', usage: { classes: 0, meetings: 2, scheduledSessions: 0 }, inUse: true, deletable: false },
+      { ...base, roomId: 7, name: 'Ran Hall', categoryId: 1, group: 'Standard Classrooms', status: 'active', usage: usage0, inUse: false, deletable: false },
+    ];
+    let categories: Array<Record<string, any>> = [
+      { categoryId: 1, name: 'Standard Classrooms', status: 'active' },
+      { categoryId: 2, name: 'Laboratories', status: 'active' },
+      { categoryId: 3, name: 'Empty Wing', status: 'active' },
+      { categoryId: 4, name: 'Old Wing', status: 'retired' },
     ];
     const posted: Array<Record<string, any>> = [];
+    await page.route('**/api/admin/room-categories**', async route => {
+      const data = route.request().postDataJSON();
+      const path = new URL(route.request().url()).pathname.replace('/api/admin/room-categories', '') || '/';
+      posted.push({ path: `cat${path}`, ...data });
+      const cat = categories.find(c => c.categoryId === data.categoryId);
+      if (path === '/') categories.push({ categoryId: 9, name: data.name, status: 'active' });
+      if (path === '/update' && cat) cat.name = data.name;
+      if (path === '/retire' && cat) cat.status = 'retired';
+      if (path === '/restore' && cat) cat.status = 'active';
+      if (path === '/delete') categories = categories.filter(c => c.categoryId !== data.categoryId);
+      return route.fulfill({ json: { status: 'ok', category: cat ?? categories[categories.length - 1] } });
+    });
     await page.route('**/api/admin/rooms**', async route => {
       const request = route.request();
       const pathname = new URL(request.url()).pathname;
       if (request.method() === 'GET') {
-        return route.fulfill({ json: { status: 'ok', rooms, groups: ['Standard Classrooms', 'Laboratories'] } });
+        const counted = categories.map(c => {
+          const own = rooms.filter(r => r.categoryId === c.categoryId);
+          return { ...c, roomCount: own.length, activeRoomCount: own.filter(r => r.status === 'active').length };
+        });
+        return route.fulfill({ json: { status: 'ok', rooms, categories: counted } });
       }
       const data = request.postDataJSON();
       posted.push({ path: pathname.replace('/api/admin/rooms', '') || '/', ...data });
@@ -467,11 +488,11 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
       if (pathname.endsWith('/restore') && room) room.status = 'active';
       if (pathname.endsWith('/delete')) rooms = rooms.filter(r => r.roomId !== data.roomId);
       if (pathname.endsWith('/update') && room) {
-        if (data.name !== room.name && Object.values<number>(room.usage).some(n => n > 0) && !data.confirmRename) {
+        if (data.name !== room.name && (room.inUse || room.name === 'Ran Hall') && !data.confirmRename) {
           return route.fulfill({ status: 409, json: { status: 'error', code: 'ROOM_RENAME_CONFIRM', message: 'Confirm the rename.', usage: room.usage } });
         }
-        Object.assign(room, { name: data.name, group: data.group });
-        return route.fulfill({ json: { status: 'ok', room, renamed: { classes: room.usage.classes, meetings: room.usage.meetings, scheduledSessions: room.usage.scheduledSessions } } });
+        Object.assign(room, { name: data.name });
+        return route.fulfill({ json: { status: 'ok', room, renamed: room.usage } });
       }
       return route.fulfill({ json: { status: 'ok', room } });
     });
@@ -483,13 +504,13 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.click('a[href="/admin/rooms"]');
     const used = page.getByTestId('room-Room 302');
     await expect(used).toContainText('Active');
-    await expect(used).toContainText('Used by 3 classes · 3 sessions');
+    await expect(used).toContainText('Used by 3 classes · 1 session');
     // Delete is not offered for an active room.
     await expect(used.getByRole('button', { name: 'Delete' })).toHaveCount(0);
 
     await used.getByRole('button', { name: 'Retire' }).click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toContainText('Retire Room 302? Used by 3 classes and 1 scheduled session. They keep it and will show a warning. You can restore it later.');
+    await expect(dialog).toContainText('Retire Room 302? Used by 3 classes and 1 scheduled session. They keep it and will show a warning. Each Faculty using it is notified to change the room. You can restore it later.');
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     expect(posted).toHaveLength(0);
 
@@ -497,22 +518,31 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Retire room' }).click();
     expect(posted).toEqual([{ path: '/retire', roomId: 1 }]);
     await expect(page.getByRole('status').filter({ hasText: 'Room 302 retired.' })).toBeVisible();
-    await expect(used).toContainText('Retired');
+    await expect(used).toHaveCount(0); // moved to the Retired tab
   });
 
-  test('Rooms page: Delete only for retired rooms, disabled when used, confirm then deletes; Restore is immediate', async ({ page }) => {
+  test('Rooms page: categories, Retired tab, Delete only for retired unused rooms, Restore returns to Rooms', async ({ page }) => {
     const posted = await mockRooms(page);
     await page.goto('/admin/rooms');
+    // Rooms tab: active categories only; a category with only retired rooms says so.
+    await expect(page.getByTestId('group-Standard Classrooms')).toContainText('4 rooms');
+    await expect(page.getByTestId('group-Laboratories')).toContainText('2 in Retired');
+    await expect(page.getByTestId('group-Laboratories')).toContainText('All rooms here are retired. They are in the Retired tab.');
+    await expect(page.getByTestId('group-Laboratories').getByRole('button', { name: 'Delete' })).toHaveCount(0);
+    await expect(page.getByTestId('group-Empty Wing').getByRole('button', { name: 'Delete' })).toBeVisible();
+    await expect(page.getByTestId('group-Old Wing')).toHaveCount(0);
+
+    await page.getByRole('button', { name: /^Retired/ }).click();
+    await expect(page.getByTestId('group-Laboratories')).toContainText('Category is active');
+    await expect(page.getByTestId('group-Old Wing')).toContainText('Retired category');
     const blocked = page.getByTestId('room-Simulation Lab');
     await expect(blocked.getByRole('button', { name: 'Delete' })).toBeDisabled();
-    await expect(blocked).toContainText('Used by 1 class — it can only stay retired.');
-    await expect(page.getByTestId('room-Aged Lab').getByRole('button', { name: 'Delete' })).toBeDisabled();
-    await expect(page.getByTestId('room-Aged Lab')).toContainText('Used under an older name — it can only stay retired.');
+    await expect(blocked).toContainText('Used by 1 class');
 
     const old = page.getByTestId('room-Old Lab');
     await old.getByRole('button', { name: 'Delete' }).click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toContainText('Delete Old Lab for good? This cannot be undone.');
+    await expect(dialog).toContainText('Delete Old Lab for good? Past classes and sessions keep the name. This cannot be undone.');
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     expect(posted).toHaveLength(0);
     await old.getByRole('button', { name: 'Delete' }).click();
@@ -522,9 +552,24 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
 
     await blocked.getByRole('button', { name: 'Restore' }).click();
     expect(posted[1]).toEqual({ path: '/restore', roomId: 4 });
-    await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByRole('status').filter({ hasText: 'Simulation Lab restored.' })).toBeVisible();
-    await expect(blocked).toContainText('Active');
+    await expect(page.getByTestId('room-Simulation Lab')).toContainText('Active'); // back on the Rooms tab
+  });
+
+  test('Rooms page: add, rename and retire a category', async ({ page }) => {
+    const posted = await mockRooms(page);
+    await page.goto('/admin/rooms');
+    await page.getByRole('button', { name: 'Add category' }).click();
+    await page.getByLabel('Category name').fill('Clinics');
+    await page.getByRole('button', { name: 'Save category' }).click();
+    await expect.poll(() => posted.length).toBe(1);
+    expect(posted[0]).toEqual({ path: 'cat/', name: 'Clinics' });
+
+    await page.getByTestId('group-Empty Wing').getByRole('button', { name: 'Retire' }).click();
+    await expect(page.getByRole('dialog')).toContainText('Retire Empty Wing? You can restore it later.');
+    await page.getByRole('dialog').getByRole('button', { name: 'Retire category' }).click();
+    expect(posted[1]).toEqual({ path: 'cat/retire', categoryId: 3 });
+    await expect(page.getByTestId('group-Empty Wing')).toHaveCount(0);
   });
 
   test('Rooms page: renaming a used room asks first, then resends with confirmRename', async ({ page }) => {
@@ -533,23 +578,23 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.getByTestId('room-Room 302').getByRole('button', { name: 'Edit' }).click();
     await page.getByLabel('Room name').fill('Room 302A');
     await page.getByRole('button', { name: 'Save room' }).click();
-    const confirm = page.getByRole('dialog').filter({ hasText: 'Rename Room 302 to Room 302A?' });
-    await expect(confirm).toContainText('This also updates 3 classes, 4 class meetings and 1 scheduled session. Sessions that already ran keep the old name.');
+    const confirm = page.getByRole('dialog').filter({ hasText: 'Renaming Room 302 changes' });
+    await expect(confirm).toContainText('Renaming Room 302 changes 3 classes, 4 class meetings and 1 scheduled session this school year. Past school years and sessions that already ran keep the old name. Each affected Faculty is notified.');
     expect(posted).toHaveLength(1);
     expect(posted[0].confirmRename).toBeUndefined();
     await confirm.getByRole('button', { name: 'Rename room' }).click();
     await expect(page.getByTestId('room-Room 302A')).toBeVisible();
-    expect(posted[1]).toMatchObject({ path: '/update', roomId: 1, name: 'Room 302A', confirmRename: true });
+    expect(posted[1]).toMatchObject({ path: '/update', roomId: 1, name: 'Room 302A', categoryId: 1, confirmRename: true });
   });
 
-  test('Rooms page: a meetings-only room names its class meetings; a room with only past sessions renames without asking', async ({ page }) => {
+  test('Rooms page: a meetings-only room names its class meetings; a rename that changes nothing goes through without asking', async ({ page }) => {
     const posted = await mockRooms(page);
     await page.goto('/admin/rooms');
     await page.getByTestId('room-Annex').getByRole('button', { name: 'Edit' }).click();
     await page.getByLabel('Room name').fill('Annex B');
     await page.getByRole('button', { name: 'Save room' }).click();
-    const confirm = page.getByRole('dialog').filter({ hasText: 'Rename Annex to Annex B?' });
-    await expect(confirm).toContainText('This also updates 2 class meetings. Sessions that already ran keep the old name.');
+    const confirm = page.getByRole('dialog').filter({ hasText: 'Renaming Annex changes' });
+    await expect(confirm).toContainText('changes 2 class meetings this school year.');
     await expect(confirm).not.toContainText('0 ');
     await confirm.getByRole('button', { name: 'Cancel' }).click();
     expect(posted).toHaveLength(1);
@@ -563,15 +608,16 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     expect(posted[posted.length - 1]).toMatchObject({ path: '/update', roomId: 7, name: 'Ran Hall B', confirmRename: true });
   });
 
-  test('Rooms page: adds a room into a new group', async ({ page }) => {
+  test('Rooms page: adds a room into a new category', async ({ page }) => {
     const posted = await mockRooms(page);
     await page.goto('/admin/rooms');
     await page.getByRole('button', { name: 'Add room' }).click();
     await page.getByLabel('Room name').fill('Skills Lab');
-    await page.getByLabel('Group').selectOption('New group…');
-    await page.getByLabel('New group name').fill('Skills');
+    await page.getByRole('dialog').locator('select').selectOption('New category…');
+    await page.getByLabel('New category name').fill('Skills');
     await page.getByRole('button', { name: 'Save room' }).click();
-    await expect.poll(() => posted.length).toBe(1);
-    expect(posted[0]).toMatchObject({ path: '/', name: 'Skills Lab', group: 'Skills', latitude: null, longitude: null });
+    await expect.poll(() => posted.length).toBe(2);
+    expect(posted[0]).toEqual({ path: 'cat/', name: 'Skills' });
+    expect(posted[1]).toMatchObject({ path: '/', name: 'Skills Lab', categoryId: 9, latitude: null, longitude: null });
   });
 });

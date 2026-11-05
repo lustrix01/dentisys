@@ -84,15 +84,14 @@ function manilaSessionWindow() {
   const formatTime = (totalMinutes: number) =>
     `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
 
+  // ATT-001: a session lasts at most 12 hours, so it opens a minute ago and ends 11 h 59 min later.
+  const openMinute = Math.min(Math.max(currentMinute - 1, 0), 23 * 60 + 50);
+  const classEndTime = formatTime((openMinute + 719) % 1440);
   if (currentMinute <= 21 * 60) {
-    return {
-      openingTime: '00:00',
-      presentCutoff: formatTime(currentMinute + 60),
-      lateCutoff: formatTime(currentMinute + 120),
-    };
+    return { openingTime: formatTime(openMinute), presentCutoff: formatTime(currentMinute + 60), lateCutoff: formatTime(currentMinute + 120), classEndTime };
   }
 
-  return { openingTime: '00:00', presentCutoff: '23:56', lateCutoff: '23:58' };
+  return { openingTime: formatTime(openMinute), presentCutoff: '23:56', lateCutoff: '23:58', classEndTime };
 }
 
 test.beforeEach(async ({ page }) => {
@@ -402,7 +401,9 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   await form.getByLabel('Present cutoff').fill(sessionWindow.presentCutoff);
   await form.getByLabel('Late cutoff').fill(sessionWindow.lateCutoff);
   // Open the session in the past while keeping its same-day end time ahead.
-  await form.getByLabel('Class End Time').fill('23:59');
+  await form.getByLabel('Class End Time').fill(sessionWindow.classEndTime);
+  await form.getByLabel('Room or session location').selectOption('CUSTOM');
+  await form.getByLabel('Custom room name').fill('Live Test Room');
   await form.getByRole('button', { name: 'Start session', exact: true }).click();
 
   const startResponse = await startPromise;
@@ -584,7 +585,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
 
   // Modal appears
   await expect(page.getByRole('heading', { name: 'Manual Attendance Override' })).toBeVisible();
-  await expect(page.getByText(/PRESENT → LATE/i)).toBeVisible();
+  await expect(page.getByText('PRESENT → LATE', { exact: true })).toBeVisible();
 
   // Submitting without reason triggers in-app validation error
   await page.getByRole('button', { name: 'Save Override' }).click();

@@ -32,6 +32,11 @@ return [
     ['method' => 'POST', 'path' => '/api/admin/rooms/retire', 'handler' => 'handle_admin_rooms'],
     ['method' => 'POST', 'path' => '/api/admin/rooms/restore', 'handler' => 'handle_admin_rooms'],
     ['method' => 'POST', 'path' => '/api/admin/rooms/delete', 'handler' => 'handle_admin_rooms'],
+    ['method' => 'POST', 'path' => '/api/admin/room-categories', 'handler' => 'handle_admin_rooms'],
+    ['method' => 'POST', 'path' => '/api/admin/room-categories/update', 'handler' => 'handle_admin_rooms'],
+    ['method' => 'POST', 'path' => '/api/admin/room-categories/retire', 'handler' => 'handle_admin_rooms'],
+    ['method' => 'POST', 'path' => '/api/admin/room-categories/restore', 'handler' => 'handle_admin_rooms'],
+    ['method' => 'POST', 'path' => '/api/admin/room-categories/delete', 'handler' => 'handle_admin_rooms'],
     [
         'method' => 'GET',
         'path' => '/api/health',

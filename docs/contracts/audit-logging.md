@@ -143,6 +143,7 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | Secretary invited / invitation revoked | secretary_invited, secretary_invitation_revoked | Faculty | student, class | yes | yes | KEEP |
 | Secretary appointed / appointment ended | secretary_appointed, secretary_appointment_ended | Faculty | student, class, role before → after | yes | yes | KEEP |
 | Class created / changed | class_create, class_update | Faculty | changed fields before → after | yes | yes | KEEP |
+| Class schedule saved over an overlap | class_schedule_overlap_confirmed | Faculty | who confirmed, other classes | yes | yes | KEEP |
 
 ### 5.3 Settings and terms (actor: Dean)
 
@@ -152,6 +153,7 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | Term added / changed / deleted | academic_term_created, academic_term_updated, academic_term_deleted | term before → after | yes | KEEP |
 | Terms copied to next year | academic_terms_copied | year, terms created | yes | KEEP |
 | Room added / changed / retired / restored / deleted | room_created, room_updated, room_retired, room_restored, room_deleted | room before → after (rename counts) | yes | KEEP |
+| Room category added / changed / retired / restored / deleted | room_category_created, room_category_updated, room_category_retired, room_category_restored, room_category_deleted | category before/after | yes | KEEP |
 
 ### 5.4 Grading (actor: Faculty) — own view only
 
@@ -173,6 +175,7 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | What | Code | Actor | Stores | Dean | Own | Change |
 |---|---|---|---|---|---|---|
 | Attendance session created / changed / ended / revoked | attendance_session_started, _updated, _ended, _revoked | Faculty, Secretary | edits before → after; revoke reason | no | yes | KEEP |
+| Session booked over an overlap | attendance_session_overlap_confirmed | Faculty, Secretary | who confirmed, other classes | no | yes | KEEP |
 | Session opened / ended automatically | attendance_session_auto_opened, attendance_session_auto_ended | system | students resolved Absent (count) | no | — | KEEP |
 | Attendance recorded by face check | biometric_attendance_recorded | Student | session, method, device/IP (the only evidence of who checked a student in); about 14,000 rows per term, shown on no screen | no | — | KEEP |
 | Attendance set by Secretary | secretary_attendance_override | Secretary | status before → after, reason | no | yes | KEEP |

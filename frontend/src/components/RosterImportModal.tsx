@@ -18,6 +18,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { Modal } from './Modal';
+import { OverlapConfirmModal, overlapsFrom, type BookingOverlap } from './OverlapConfirmModal';
 import { showFeedback } from './FeedbackCenter';
 import {
   ParsedRosterStudent,
@@ -262,7 +263,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
     }));
   };
 
-  const handleExecuteImport = async () => {
+  const [importOverlaps, setImportOverlaps] = useState<BookingOverlap[] | null>(null);
+  const handleExecuteImport = async (confirmOverlap = false) => {
     if (isImporting || runtime.loading) return;
     if (!targetReviewed) {
       showFeedback(studentsOnly ? 'Please review the student rows before importing.' : 'Please select and review a target class section before importing.', 'error');
@@ -303,11 +305,14 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
           lectureUnits: includesLecture ? units(lectureUnits) : null,
           labUnits: includesLab ? units(labUnits) : null,
           meetings,
+          ...(confirmOverlap ? { confirmOverlap: true } : {}),
         });
         csId = res.csId;
         createdLabel = csName;
       } catch (error: any) {
         setIsImporting(false);
+        const overlaps = overlapsFrom(error, 'CLASS_SESSION_OVERLAP');
+        if (overlaps) { setImportOverlaps(overlaps); return; }
         showFeedback(error.message || 'Failed to create class section.', 'error');
         return;
       }
@@ -821,7 +826,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
 
           <button
             type="button"
-            onClick={handleExecuteImport}
+            onClick={() => void handleExecuteImport()}
             disabled={isImporting || isParsing || runtime.loading || !readyStudents.length || !targetReviewed || Boolean(matchPrompt) || (isNewClass ? newClassProblems.length > 0 : !availableClasses.some(cls => cls.csId === selectedClassId))}
             className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
           >
@@ -835,6 +840,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
         </div>
         </fieldset>
       </div>
+      <OverlapConfirmModal overlaps={importOverlaps} forClass onCancel={() => setImportOverlaps(null)} onConfirm={() => { setImportOverlaps(null); void handleExecuteImport(true); }} />
     </Modal>
   );
 };

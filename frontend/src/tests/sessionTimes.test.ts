@@ -53,7 +53,7 @@ test('duration, formats and the long-session figure', () => {
   assert.equal(formatTime12('13:00'), '1:00 PM');
 });
 
-test('checkTimes accepts overnight and rejects out-of-order or 24 h sessions', () => {
+test('checkTimes accepts overnight and rejects out-of-order or over-12 h sessions', () => {
   assert.equal(checkTimes(base), null);
   assert.equal(checkTimes({ openingTime: '23:00', presentCutoff: '23:30', lateCutoff: '01:00', classEndTime: '02:00' }), null);
   assert.equal(checkTimes({ ...base, presentCutoff: '08:00' }), 'Present cutoff must be after the Opening time.');
@@ -62,4 +62,8 @@ test('checkTimes accepts overnight and rejects out-of-order or 24 h sessions', (
   assert.equal(checkTimes({ ...base, classEndTime: '08:00' }), 'Class end time must be at or after the Late cutoff.');
   assert.equal(checkTimes({ ...base, classEndTime: '' }), 'Fill in all four times.');
   assert.equal(sessionMinutes({ ...base, classEndTime: '07:59' }), 23 * 60 + 59);
+  assert.equal(checkTimes({ ...base, classEndTime: '21:00' }), 'A session can last at most 12 hours.');
+  assert.equal(checkTimes({ ...base, classEndTime: '20:00' }), null);
+  assert.equal(checkTimes({ ...base, classEndTime: '07:59' }), 'A session can last at most 12 hours.');
+  assert.equal(checkTimes({ openingTime: '23:00', presentCutoff: '23:30', lateCutoff: '00:30', classEndTime: '01:00' }), null);
 });

@@ -303,7 +303,7 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.getByText('Laboratory Schedule', { exact: true })).toBeVisible();
   });
 
-  test('A retired room warns on the class card and in the edit form, never blocks saving, and the dropdown hides retired rooms', async ({ page }) => {
+  test('A retired room warns on the class card and in the edit form, and the dropdown hides retired rooms', async ({ page }) => {
     const cls = { id: '91', csId: 91, csName: 'NEW601-A', courseId: 9, courseCode: 'NEW601', courseName: 'Advanced Clinic', units: 3, lectureUnits: 2, labUnits: 1, courseUnitsEditable: true, hasGrades: false, schoolYear: '2026-2027', isCurrentSchoolYear: true, isHistorical: false, semester: '1ST', yearLevel: 6, block: 'A', schedule: null, lecRoom: 'Lecture Hall A (Mon 08:00 AM - 09:00 AM)', labRoom: 'Simulation Lab (Wed 10:00 AM - 01:00 PM)', meetings: [{ component: 'Lecture', day: 'Mon', room: 'Lecture Hall A', startTime: '08:00', endTime: '09:00' }, { component: 'Laboratory', day: 'Wed', room: 'Simulation Lab', startTime: '10:00', endTime: '13:00' }], enrolledCount: 0, instructorName: 'Prof. Jane Doe', status: 'Active' };
     const updates: Array<Record<string, unknown>> = [];
     await page.route('**/api/rooms', route => route.fulfill({ json: { status: 'ok', rooms: roomsJson().rooms.map(r => r.name === 'Simulation Lab' ? { ...r, status: 'retired' } : r) } }));
@@ -317,7 +317,7 @@ test.describe('Faculty Module E2E Tests', () => {
 
     await page.click('a[href="/classes"]');
     const warning = page.getByTestId('retired-room-warning');
-    await expect(warning).toHaveText('Room Simulation Lab was retired by the Dean. Pick a new room.');
+    await expect(warning).toHaveText('Simulation Lab was retired by the Dean. Pick another room.');
     await page.getByTitle('Edit Class Section Details').first().click();
     const lab = page.getByLabel('Laboratory Room Venue');
     await expect(lab.locator('option:checked')).toHaveText('Simulation Lab (retired)');
@@ -956,6 +956,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     const date = page.getByLabel('Session date (Asia/Manila)');
     expect(await date.getAttribute('min')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await date.fill('2099-10-02');
+    await page.getByLabel('Room or session location').selectOption('Dental Clinic Lab 1');
     await expect(page.getByRole('checkbox', { name: /Geofence/ })).not.toBeChecked(); // ATT-002: off by default
     await page.getByRole('checkbox', { name: /Geofence/ }).uncheck();
     await page.locator('form').getByRole('button', { name: 'Schedule session', exact: true }).click();
@@ -963,7 +964,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByText(/created by Secretary Bea Alonzo/)).toBeVisible();
   });
 
-  test('Start Session auto-shifts the times, accepts an overnight session and warns about a long one without blocking', async ({ page }) => {
+  test('Start Session auto-shifts the times, accepts an overnight session and refuses one over 12 hours', async ({ page }) => {
     const payloads: Record<string, unknown>[] = [];
     await page.route('**/api/faculty/attendance?*', route => route.fulfill({ json: { status: 'ok', worksheet: mockWorksheetSectionA } }));
     await page.route('**/api/faculty/attendance/session', route => {
@@ -987,6 +988,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await time('Opening').fill('07:00');
     await expectTimes(['07:00', '20:00', '20:01', '20:01']);
 
+    await page.getByLabel('Room or session location').selectOption('Dental Clinic Lab 1');
     await time('Opening').fill('23:00');
     await time('Present cutoff').fill('23:30');
     await time('Late cutoff').fill('01:00');
@@ -995,16 +997,46 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByTestId('caption-lateCutoff')).toContainText('1:00 AM (next day)');
     await expect(page.getByTestId('caption-classEndTime')).toContainText('2:00 AM (next day)');
     await expect(page.getByTestId('time-summary')).toContainText('Session lasts 3 h');
-    await expect(page.getByTestId('long-session-note')).toHaveCount(0);
     await page.locator('form').getByRole('button', { name: /^(Start|Schedule) session$/ }).click();
     await expect.poll(() => payloads.length).toBe(1);
     expect(payloads[0]).toMatchObject({ openingTime: '23:00', presentCutoff: '23:30', lateCutoff: '01:00', classEndTime: '02:00' });
 
     await time('Class end time').fill('13:00');
-    await expect(page.getByTestId('long-session-note')).toHaveText('Check AM / PM — this session lasts 14 h.');
+    await expect(page.getByTestId('time-summary')).toHaveText('A session can last at most 12 hours.');
     await page.locator('form').getByRole('button', { name: /^(Start|Schedule) session$/ }).click();
+    await expect(page.getByRole('alert')).toContainText('A session can last at most 12 hours.');
+    expect(payloads).toHaveLength(1); // refused in the browser, nothing sent
+  });
+
+  test('Start Session asks before booking over another booking, and Book anyway resends with confirmOverlap', async ({ page }) => {
+    const payloads: Record<string, unknown>[] = [];
+    await page.route('**/api/faculty/attendance?*', route => route.fulfill({ json: { status: 'ok', worksheet: mockWorksheetSectionA } }));
+    await page.route('**/api/faculty/attendance/session', route => {
+      payloads.push(route.request().postDataJSON());
+      if (payloads.length === 1) {
+        return route.fulfill({ status: 409, json: { status: 'error', code: 'SESSION_OVERLAP', message: 'This booking overlaps with other bookings.', overlaps: [
+          { kind: 'session', reason: 'room', classId: 7, classCode: 'ORTHO 201', classTitle: 'Orthodontics', facultyName: 'Dr. Reyes', isOwn: false, room: 'Dental Clinic Lab 1', date: '2099-10-02', start: '09:00', end: '11:00' },
+          { kind: 'schedule', reason: 'room_faculty', classId: 8, classCode: 'PERIO 101', classTitle: 'Periodontics', facultyName: 'Me', isOwn: true, room: 'Dental Clinic Lab 1', weekday: 'Fri', start: '09:00', end: '11:00' },
+        ] } });
+      }
+      return route.fulfill({ status: 409, json: { status: 'error', message: 'Stubbed server refusal.' } });
+    });
+    await page.goto('/attendance');
+    await page.getByLabel('Assigned course').selectOption('101');
+    await page.getByLabel('Class section').selectOption('1');
+    await page.getByRole('button', { name: 'Start session', exact: true }).click();
+    await page.getByLabel('Session date (Asia/Manila)').fill('2099-10-02');
+    await page.getByLabel('Room or session location').selectOption('Dental Clinic Lab 1');
+    await page.locator('form').getByRole('button', { name: 'Schedule session', exact: true }).click();
+    const popup = page.getByTestId('overlap-confirm');
+    await expect(popup).toContainText('Booked session');
+    await expect(popup).toContainText('Regular schedule');
+    await expect(popup).toContainText('Fridays');
+    await expect(popup).toContainText('Dr. Reyes will be notified.');
+    expect(payloads[0].confirmOverlap).toBeUndefined();
+    await popup.getByRole('button', { name: 'Book anyway' }).click();
     await expect.poll(() => payloads.length).toBe(2);
-    expect(payloads[1]).toMatchObject({ openingTime: '23:00', classEndTime: '13:00' });
+    expect(payloads[1].confirmOverlap).toBe(true);
   });
 
   test('Start Session prefills from the class schedule and a meeting chip replaces hand-edited times', async ({ page }) => {
@@ -1041,7 +1073,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
   for (const [title, pickRoom, expected] of [
     ['picking a listed room from the dropdown', async (page: import('@playwright/test').Page) => { await page.getByLabel('Room or session location').selectOption('Dental Clinic Lab 1'); }, 'Dental Clinic Lab 1'],
-    ['choosing Custom and typing a room', async (page: import('@playwright/test').Page) => { await page.getByLabel('Room or session location').selectOption({ label: 'Other / Custom Room...' }); await page.getByLabel('Custom room name').fill('Room 405'); }, 'Room 405'],
+    ['choosing Custom and typing a room', async (page: import('@playwright/test').Page) => { await page.getByLabel('Room or session location').selectOption({ label: 'Other place (custom)…' }); await page.getByLabel('Custom room name').fill('Room 405'); }, 'Room 405'],
   ] as const) {
     test(`Start Session sends the room when ${title}`, async ({ page }) => {
       let payload: Record<string, unknown> | null = null;
@@ -1203,9 +1235,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       decided = true;
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Excused request approved; attendance set to Excused.', request: { ...pending, status: 'approved' } }) });
     });
-    await page.goto('/attendance');
+    await page.goto('/attendance?tab=requests');
     const panel = page.getByRole('region', { name: 'Secretary requests' });
-    await panel.getByRole('button', { name: 'Show', exact: true }).click();
     await expect(panel).toContainText('Alice Green');
     await expect(panel).toContainText('Medical certificate given to the Secretary');
     await panel.getByRole('button', { name: 'Approve', exact: true }).click();
@@ -1231,10 +1262,9 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       decisions.push(route.request().postDataJSON() as Record<string, unknown>);
       return route.fulfill({ json: { status: 'ok', message: 'Decision saved.', request: null } });
     });
-    await page.goto('/attendance');
+    await page.goto('/attendance?tab=requests');
     const panel = page.getByRole('region', { name: 'Secretary requests' });
     await expect(panel).toContainText('Secretary requests · 3 waiting');
-    await panel.getByRole('button', { name: 'Show', exact: true }).click();
     await expect(panel).toContainText('Sent by class Secretaries. Approving applies the requested status; rejecting leaves the record unchanged.');
     const alice = panel.getByRole('listitem').filter({ hasText: 'Alice Green' });
     await expect(alice).toContainText('Present → Present');
@@ -1253,13 +1283,14 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await panel.getByLabel('Select Alice Green').check();
     await panel.getByLabel('Select Bob White').check();
     await panel.getByRole('button', { name: 'Approve selected' }).click();
+    await page.getByRole('dialog', { name: 'Approve all 2 requests?' }).getByRole('button', { name: 'Approve 2' }).click();
     await expect.poll(() => decisions[1]).toEqual({ requestIds: ['31', '32'], decision: 'approve' });
     // History filter shows decided rows the GET returns.
     await panel.getByLabel('Show requests').selectOption('approved');
     await expect(panel).toContainText('Old Decided');
   });
 
-  test('Secretary requests: collapsed by default with the count; group Approve all asks first and sends the group ids', async ({ page }) => {
+  test('Secretary requests: group Approve all asks first and sends the group ids', async ({ page }) => {
     const decisions: Record<string, unknown>[] = [];
     const base = {
       status: 'pending', studentNumber: '2024-0001', classId: '1', className: 'Section A', courseCode: 'CLIN401',
@@ -1276,11 +1307,9 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       decisions.push(route.request().postDataJSON() as Record<string, unknown>);
       return route.fulfill({ json: { status: 'ok', message: 'Decision saved.', request: null } });
     });
-    await page.goto('/attendance');
+    await page.goto('/attendance?tab=requests');
     const panel = page.getByRole('region', { name: 'Secretary requests' });
     await expect(panel).toContainText('Secretary requests · 3 waiting');
-    await expect(panel).not.toContainText('Alice Green');
-    await panel.getByRole('button', { name: 'Show', exact: true }).click();
     await expect(panel).toContainText('2 requests');
     // Cancel changes nothing.
     await panel.getByRole('button', { name: 'Approve all' }).first().click();
@@ -1311,23 +1340,23 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       decisions.push(route.request().postDataJSON() as Record<string, unknown>);
       return route.fulfill({ json: { status: 'ok', message: 'Decision saved.', request: null } });
     });
-    await page.goto('/attendance');
+    await page.goto('/attendance?tab=requests');
     const panel = page.getByRole('region', { name: 'Secretary requests' });
-    await panel.getByRole('button', { name: 'Show', exact: true }).click();
     await panel.getByRole('button', { name: 'Reject all' }).click();
     await page.getByRole('dialog', { name: 'Reject all 2 requests?' }).getByRole('button', { name: 'Reject 2' }).click();
     await expect(panel.getByRole('status')).toHaveText('Rejected 2 requests.');
     expect(decisions).toEqual([{ requestId: '41', decision: 'reject' }, { requestId: '42', decision: 'reject' }]);
   });
 
-  test('Secretary requests: opening a request from the roll call chip opens the collapsed panel', async ({ page }) => {
+  test('Secretary requests: opening a request from the roll call chip opens the requests tab filtered to its class', async ({ page }) => {
     const pending = { id: '31', status: 'pending', studentId: '1001', studentNumber: '2024-0001', studentName: 'Alice Green', classId: '1', className: 'Section A', courseCode: 'CLIN401', sessionId: '900', sessionDate: '2026-09-20', requestedStatus: 'late', currentStatus: 'absent', reason: 'Late bus', requestedBy: 'Bea Alonzo', requestedAt: null, decidedBy: null, decidedAt: null, decisionNote: null };
     await page.route('**/api/faculty/excused-requests', route => route.fulfill({ json: { status: 'ok', requests: [pending] } }));
     await page.goto('/attendance');
     const panel = page.getByRole('region', { name: 'Secretary requests' });
-    await expect(panel.getByRole('button', { name: 'Show', exact: true })).toBeVisible();
-    await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-secretary-request', { detail: '31' })));
-    await expect(panel.getByRole('button', { name: 'Hide', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Secretary requests/ })).toContainText('1'); // page and requests loaded
+    await expect(panel).toBeHidden();
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-secretary-request', { detail: { id: '31' } })));
+    await expect(panel).toBeVisible();
     await expect(panel.locator('#secretary-request-31')).toBeFocused();
   });
 
@@ -1620,9 +1649,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
     await page.getByRole('button', { name: 'Save Override', exact: true }).click();
     await expect.poll(() => writing).toBe(true);
-    await page.getByRole('region', { name: 'Secretary requests' }).getByRole('button', { name: 'Show', exact: true }).dispatchEvent('click');
+    await page.getByRole('button', { name: /^Secretary requests/ }).dispatchEvent('click');
     await page.getByRole('region', { name: 'Secretary requests' }).getByRole('button', { name: 'Approve', exact: true }).dispatchEvent('click'); // the Save Override modal overlay now really covers the page (styles on)
     await expect(page.getByText('Bob approval saved.', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /^Classes/ }).dispatchEvent('click'); // back to the roll call
     expect(reads).toBe(1);
     releaseWrite();
     await expect(alice.getByTestId('attendance-status')).toHaveText(/Present$/);

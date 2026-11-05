@@ -1,5 +1,5 @@
 import React from 'react';
-import { applyTimeChange, checkTimes, formatDayLabel, formatDuration, formatTime12, isNextDay, LONG_SESSION_MINUTES, sessionMinutes, type TimeField, type TimeSet } from '../utils/sessionTimes';
+import { applyTimeChange, checkTimes, formatDayLabel, formatDuration, formatTime12, isNextDay, sessionMinutes, type TimeField, type TimeSet } from '../utils/sessionTimes';
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100';
 const labelClass = 'mb-1 block font-bold text-slate-700 dark:text-slate-300';
@@ -51,16 +51,13 @@ export const SessionTimeFields: React.FC<SessionTimeFieldsProps> = ({ times, onC
         <small className="block text-slate-500 dark:text-slate-400">{endHint}</small>
       </div>
       {problem && times.openingTime && times.presentCutoff && times.lateCutoff && times.classEndTime && (
-        <div data-testid="time-summary" className="rounded-xl bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">Times are not in order yet. <span className="font-medium">{problem}</span></div>
+        <div data-testid="time-summary" className="rounded-xl bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{problem.includes('12 hours') ? problem : <>Times are not in order yet. <span className="font-medium">{problem}</span></>}</div>
       )}
       {!problem && minutes !== null && (
         <div data-testid="time-summary" className="rounded-xl bg-emerald-50 px-3 py-2 text-[12px] font-semibold text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
           Session lasts {formatDuration(minutes)}
           <span className="block font-medium">Auto-ends {formatDayLabel(sessionDate, endNext ? 1 : 0)} at {formatTime12(times.classEndTime)}{endNext ? ' (next day)' : ''}.</span>
         </div>
-      )}
-      {!problem && minutes !== null && minutes > LONG_SESSION_MINUTES && (
-        <div role="status" data-testid="long-session-note" className="rounded-xl bg-amber-50 px-3 py-2 text-[12px] font-semibold text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">Check AM / PM — this session lasts {formatDuration(minutes)}.</div>
       )}
     </div>
   );

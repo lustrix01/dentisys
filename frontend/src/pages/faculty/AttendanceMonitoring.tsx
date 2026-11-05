@@ -22,8 +22,10 @@ import {
 import { Card } from '../../components/Card';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { LocationPicker } from '../../components/LocationPicker';
-import { RoomSelector, RetiredRoomWarning, useRooms } from '../../components/RoomSelector';
-import { FacultyExcusedRequestsPanel, PendingRequestsBadge, openSecretaryRequest } from '../../components/FacultyExcusedRequestsPanel';
+import { RoomSelector, RetiredRoomWarning, retiredRoomError, useRooms } from '../../components/RoomSelector';
+import { OverlapConfirmModal, overlapsFrom, type BookingOverlap } from '../../components/OverlapConfirmModal';
+import { useSearchParams } from 'react-router-dom';
+import { FacultyExcusedRequestsPanel, PendingRequestsBadge, openSecretaryRequest, openRequestsForClass } from '../../components/FacultyExcusedRequestsPanel';
 import { Modal } from '../../components/Modal';
 import { StartSessionModal, type StartSessionValues } from '../../components/StartSessionModal';
 import { RevokedSessionsSwitch } from '../../components/RevokedSessionsSwitch';
@@ -205,6 +207,12 @@ export const AttendanceMonitoring: React.FC = () => {
   const [notification, setNotificationState] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   // Pending Secretary requests, by "studentId:sessionId" (chip in the roll call; the panel owns Approve/Reject).
   const [pendingByRow, setPendingByRow] = useState<Record<string, string>>({});
+  const [pendingRows, setPendingRows] = useState<{ id: string; classId: string }[]>([]);
+  // Page-level tab, opened by ?tab=requests[&class=<classId>&request=<requestId>]; not remembered.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<'classes' | 'requests'>(searchParams.get('tab') === 'requests' ? 'requests' : 'classes');
+  const [urlRequest] = useState({ classId: searchParams.get('class') ?? undefined, requestId: searchParams.get('request') ?? undefined });
+  const openRequestsTab = useCallback(() => setTab('requests'), []);
   // Also raise the corner notice: the banner is off-screen when the page is scrolled.
   const setNotification = (n: { type: 'success' | 'error'; message: string } | null) => {
     setNotificationState(n);
@@ -367,6 +375,7 @@ export const AttendanceMonitoring: React.FC = () => {
   const [locatingEdit, setLocatingEdit] = useState(false);
   const [submittingEdit, setSubmittingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [editOverlaps, setEditOverlaps] = useState<BookingOverlap[] | null>(null);
 
   const attendanceWritePending = savingStudentId !== null || bulkMarking || submittingCorrection
     || submittingSession || submittingEnd || submittingRevocation || submittingEdit || worksheetMutationCount > 0;
@@ -686,7 +695,14 @@ export const AttendanceMonitoring: React.FC = () => {
   // Submit Session Updates
   const handleUpdateSession = async (e: React.FormEvent) => {
     e.preventDefault();
+    await saveSessionEdit(false);
+  };
+
+  const saveSessionEdit = async (confirmOverlap: boolean) => {
     if (!editingSession || !editOriginal) return;
+    if (!editRoom.trim()) { setEditError('Choose a room or type the place where the session happens.'); return; }
+    const retired = retiredRoomError(rooms, editRoom);
+    if (retired) { setEditError(retired); return; }
 
     const editRadius = parseRadius(editGeofenceRadius);
     if (editGeofenceEnabled && editRadius === null) {
@@ -731,7 +747,9 @@ export const AttendanceMonitoring: React.FC = () => {
       await updateFacultyAttendanceSessionApi({
         sessionId: editingSession.sessionId,
         ...changes,
+        confirmOverlap: confirmOverlap || undefined,
       });
+      setEditOverlaps(null);
 
       setIsEditSessionOpen(false);
       setNotification({ type: 'success', message: 'Attendance session updated successfully.' });
@@ -741,6 +759,9 @@ export const AttendanceMonitoring: React.FC = () => {
         await loadWorksheet(csIdNum, selectedDate);
       }
     } catch (err) {
+      const found = overlapsFrom(err, 'SESSION_OVERLAP');
+      if (found) { setEditOverlaps(found); return; }
+      setEditOverlaps(null);
       setEditError(err instanceof Error ? err.message : 'Unable to update attendance session.');
     } finally {
       setSubmittingEdit(false);
@@ -833,7 +854,7 @@ export const AttendanceMonitoring: React.FC = () => {
     return null;
   };
 
-  const handleStartSession = async (values: StartSessionValues) => {
+  const handleStartSession = async (values: StartSessionValues, confirmOverlap?: boolean) => {
     const csId = Number.parseInt(selectedCsId, 10);
     const { sessionDate, openingTime, location } = values;
     setSubmittingSession(true);
@@ -852,6 +873,7 @@ export const AttendanceMonitoring: React.FC = () => {
         geofenceRadiusMeters: values.geofenceEnabled ? values.geofenceRadiusMeters : undefined,
         geofenceLatitude: values.geofenceEnabled ? location?.latitude : undefined,
         geofenceLongitude: values.geofenceEnabled ? location?.longitude : undefined,
+        confirmOverlap: confirmOverlap || undefined,
       });
       setIsStartSessionOpen(false);
       setNotification({ type: 'success', message: response.session.status === 'scheduled' ? `Attendance session scheduled for ${sessionDate} at ${openingTime} (Asia/Manila).` : 'Attendance session started. The class roll call is now live.' });
@@ -985,7 +1007,46 @@ export const AttendanceMonitoring: React.FC = () => {
   return (
     <div className="space-y-6">
 
-      <FacultyExcusedRequestsPanel onLoaded={rows => setPendingByRow(Object.fromEntries(rows.filter(r => r.status === 'pending').map(r => [`${r.studentId}:${r.sessionId ?? ''}`, r.id])))} onDecided={() => {
+      <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-fit">
+        <button
+          type="button"
+          onClick={() => setTab('classes')}
+          className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            tab === 'classes'
+              ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+          }`}
+        >
+          <BookOpen className="w-4 h-4 text-emerald-600" />
+          Classes
+          <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold">
+            {scopedClasses.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('requests')}
+          className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            tab === 'requests'
+              ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+          }`}
+        >
+          <UserCheck className="w-4 h-4 text-emerald-600" />
+          Secretary requests
+          <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
+            {pendingRows.length}
+          </span>
+        </button>
+      </div>
+
+      <FacultyExcusedRequestsPanel
+        active={tab === 'requests'}
+        classes={classes.filter(item => item.schoolYear === currentSchoolYear)}
+        onOpenTab={openRequestsTab}
+        initial={urlRequest}
+        onLoaded={rows => { const waiting = rows.filter(r => r.status === 'pending'); setPendingRows(waiting.map(r => ({ id: r.id, classId: r.classId }))); setPendingByRow(Object.fromEntries(waiting.map(r => [`${r.studentId}:${r.sessionId ?? ''}`, r.id]))); }}
+        onDecided={() => {
         const csIdNum = parseInt(selectedCsId, 10);
         if (csIdNum > 0) void loadWorksheet(csIdNum, selectedDate);
       }} />
@@ -1019,7 +1080,7 @@ export const AttendanceMonitoring: React.FC = () => {
       {/* ========================================================================= */}
       {/* VIEW 1: ASSIGNED CLASSES GRID                                             */}
       {/* ========================================================================= */}
-      {viewMode === 'classes' && (
+      {tab === 'classes' && viewMode === 'classes' && (
         <div className="space-y-6 animate-fade-in">
           {/* 2. Assigned Classes Cards Grid */}
           <div className="space-y-3">
@@ -1194,7 +1255,7 @@ export const AttendanceMonitoring: React.FC = () => {
       {/* ========================================================================= */}
       {/* VIEW 2: DEDICATED ATTENDANCE WORKSHEET VIEW                                */}
       {/* ========================================================================= */}
-      {viewMode === 'worksheet' && (
+      {tab === 'classes' && viewMode === 'worksheet' && (
         <div className="space-y-6 animate-fade-in">
           {/* Top Class Header */}
           <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
@@ -1291,7 +1352,7 @@ export const AttendanceMonitoring: React.FC = () => {
               <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-900 dark:text-slate-50 tracking-tight">
                 {selectedClass?.courseName || 'Class Attendance Worksheet'}
               </h1>
-              <PendingRequestsBadge count={Object.keys(pendingByRow).length} className="mt-2" />
+              <PendingRequestsBadge count={pendingRows.filter(r => r.classId === selectedCsId).length} className="mt-2" onClick={() => openRequestsForClass(selectedCsId)} />
 
               <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-slate-500 dark:text-slate-400">
                 <div className="flex items-center gap-1.5">
@@ -1713,6 +1774,8 @@ export const AttendanceMonitoring: React.FC = () => {
         onSubmit={handleStartSession}
         meetings={availableSections.find(section => String(section.csId) === selectedCsId)?.meetings}
       />
+
+      <OverlapConfirmModal overlaps={editOverlaps} busy={submittingEdit} onCancel={() => setEditOverlaps(null)} onConfirm={() => void saveSessionEdit(true)} />
 
       {/* Bulk mark confirmation */}
       {isBulkConfirmOpen && worksheet && (

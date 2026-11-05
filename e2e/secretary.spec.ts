@@ -390,7 +390,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(room).toHaveValue('Dental Clinic Lab 2');
     await expect(room.locator('option:checked')).toHaveText('Dental Clinic Lab 2 (retired)');
     await expect(room.locator('option', { hasText: 'Dental Clinic Lab 1' })).toHaveCount(1);
-    await expect(form.getByTestId('retired-room-warning')).toHaveText('Room Dental Clinic Lab 2 was retired by the Dean. Pick a new room.');
+    await expect(form.getByTestId('retired-room-warning')).toHaveText('Dental Clinic Lab 2 was retired by the Dean. Pick another room.');
     await room.selectOption('Room 101');
     await expect(form.getByTestId('retired-room-warning')).toHaveCount(0);
     await expect(room.locator('option', { hasText: '(retired)' })).toHaveCount(0);
@@ -433,7 +433,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect.poll(() => payloads.length).toBe(1);
     expect(payloads[0]).toMatchObject({ openingTime: '23:00', presentCutoff: '23:30', lateCutoff: '01:00', classEndTime: '02:00' });
     await time('Class end time').fill('13:00');
-    await expect(form.getByTestId('long-session-note')).toContainText('Check AM / PM — this session lasts 14 h.');
+    await expect(form.getByTestId('time-summary')).toHaveText('A session can last at most 12 hours.');
     await form.getByRole('button', { name: 'Cancel', exact: true }).click();
     await openSessionsModal(page);
     await page.getByRole('button', { name: 'Upcoming Sessions' }).click();

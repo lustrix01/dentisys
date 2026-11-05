@@ -295,6 +295,7 @@ $expectedMigrations = [
     '054_rooms.sql',
     '055_overnight_sessions.sql',
     '056_room_history.sql',
+    '057_room_categories.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -507,8 +508,11 @@ $sessionNowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
 $sessionLocalTimezone = new DateTimeZone($sessionConfig['app']['operational_timezone']);
 $sessionNowLocal = $sessionNowUtc->setTimezone($sessionLocalTimezone);
 $sessionDate = app_local_date($sessionConfig, $sessionNowUtc);
-$sessionOpeningTime = '00:00';
 $sessionMinuteOfDay = (int) $sessionNowLocal->format('H') * 60 + (int) $sessionNowLocal->format('i');
+// ATT-001: a session lasts at most 12 hours, so it opens a minute ago and ends 11 h 59 min after that.
+$sessionOpenMinute = min(max($sessionMinuteOfDay - 1, 0), 23 * 60 + 50);
+$sessionOpeningTime = sprintf('%02d:%02d', intdiv($sessionOpenMinute, 60), $sessionOpenMinute % 60);
+$sessionClassEnd = sprintf('%02d:%02d', intdiv(($sessionOpenMinute + 719) % 1440, 60), ($sessionOpenMinute + 719) % 60);
 if ($sessionMinuteOfDay <= 21 * 60) {
     $sessionPresentCutoff = $sessionNowLocal->modify('+1 hour')->format('H:i');
     $sessionLateCutoff = $sessionNowLocal->modify('+2 hours')->format('H:i');
@@ -526,7 +530,7 @@ expect_same(null, $activeBeforeBody['activeSession'] ?? null, 'Secretary active-
 
 $sessionCode = 'INTEGRATION-SESSION-' . strtoupper(bin2hex(random_bytes(4)));
 [$startSessionStatus, $startSessionBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
-    'classEndTime' => '23:59',
+    'classEndTime' => $sessionClassEnd,
     'csId' => $secretarySessionClassId,
     'sessionDate' => $sessionDate,
     'sessionCode' => $sessionCode,
@@ -572,8 +576,9 @@ expect_same((string) $attendanceSessionId, (string) ($activeSessionBody['activeS
 expect_same($sessionCode, $activeSessionBody['activeSession']['sessionCode'] ?? null, 'Active-session lookup returns the persisted session code');
 
 [$duplicateSessionStatus, $duplicateSessionBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
-    'classEndTime' => '23:59',
+    'classEndTime' => $sessionClassEnd,
     'csId' => $secretarySessionClassId,
+    'room' => 'Integration Room',
     'sessionDate' => $sessionDate,
     'sessionCode' => $sessionCode . '-DUPLICATE',
     'openingTime' => $sessionOpeningTime,
@@ -585,8 +590,9 @@ expect_same('error', $duplicateSessionBody['status'] ?? null, 'Duplicate active 
 
 $futureDate = $sessionNowUtc->setTimezone($sessionLocalTimezone)->modify('+1 day')->format('Y-m-d');
 [$futureSessionStatus, $futureSessionBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
-    'classEndTime' => '23:59',
+    'classEndTime' => $sessionClassEnd,
     'csId' => $secretarySessionClassId,
+    'room' => 'Integration Room',
     'sessionDate' => $futureDate,
 ]);
 expect_same(422, $futureSessionStatus, 'A future session without opening times is rejected server-side');
@@ -603,8 +609,9 @@ $unassignedClassStmt->execute([$secretarySessionClassId]);
 $unassignedClassId = (int) $unassignedClassStmt->fetchColumn();
 expect_true($unassignedClassId > 0, 'Integration fixture exposes an unassigned class for authorization testing');
 [$unassignedSessionStatus] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
-    'classEndTime' => '23:59',
+    'classEndTime' => $sessionClassEnd,
     'csId' => $unassignedClassId,
+    'room' => 'Integration Room',
     'sessionDate' => $sessionDate,
     'openingTime' => $sessionOpeningTime,
     'presentCutoff' => $sessionPresentCutoff,
@@ -613,8 +620,9 @@ expect_true($unassignedClassId > 0, 'Integration fixture exposes an unassigned c
 expect_same(403, $unassignedSessionStatus, 'Secretary cannot start a session for an unassigned class');
 
 [$invalidSectionStatus] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
-    'classEndTime' => '23:59',
+    'classEndTime' => $sessionClassEnd,
     'csId' => 999999,
+    'room' => 'Integration Room',
     'sessionDate' => $sessionDate,
     'openingTime' => $sessionOpeningTime,
     'presentCutoff' => $sessionPresentCutoff,
@@ -708,8 +716,9 @@ expect_same(null, $activeAfterEndBody['activeSession'] ?? null, 'Ended session n
 expect_same(409, $repeatEndStatus, 'Ending an already-ended session returns a conflict');
 
 [$geofenceNoLocationStatus, $geofenceNoLocationBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
-    'classEndTime' => '23:59',
+    'classEndTime' => $sessionClassEnd,
     'csId' => $secretarySessionClassId,
+    'room' => 'Integration Room',
     'sessionDate' => $sessionDate,
     'geofenceEnabled' => true,
     'openingTime' => $sessionOpeningTime,
@@ -818,7 +827,7 @@ foreach ($secretaryFilteredRecords as $secretaryFilteredRecord) {
 }
 $secondSessionCode = 'INTEGRATION-SESSION-OLDER-' . strtoupper(bin2hex(random_bytes(4)));
 [$secondSessionStartStatus, $secondSessionStartBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
-    'classEndTime' => '23:59',
+    'classEndTime' => $sessionClassEnd,
     'csId' => $secretarySessionClassId,
     'sessionDate' => $sessionDate,
     'sessionCode' => $secondSessionCode,
@@ -1729,6 +1738,7 @@ $seedFacultyAccessToken = $facultyAccessToken;
 
 require __DIR__ . '/academic_terms_integration.php';
 require __DIR__ . '/rooms_integration.php';
+require __DIR__ . '/session_overlap_integration.php';
 require __DIR__ . '/schedule_session_integration.php';
 
 $facultyGeofenceClassStmt = $pdo->prepare(
@@ -1740,12 +1750,13 @@ $facultyGeofenceClassStmt->execute([academic_current_school_year($pdo)]);
 $facultyGeofenceClassId = (int) $facultyGeofenceClassStmt->fetchColumn();
 expect_true($facultyGeofenceClassId > 0, 'Seed Faculty owns an active class for geofence validation');
 [$facultyGeofenceStatus, $facultyGeofenceBody] = integration_http_json('/api/faculty/attendance/session', $facultyAccessToken, [
-    'classEndTime' => '23:59',
+    'classEndTime' => $sessionClassEnd,
     'csId' => $facultyGeofenceClassId,
+    'room' => 'Integration Room',
     'geofenceEnabled' => true,
-    'openingTime' => '08:00',
-    'presentCutoff' => '09:00',
-    'lateCutoff' => '10:00',
+    'openingTime' => $sessionOpeningTime,
+    'presentCutoff' => $sessionPresentCutoff,
+    'lateCutoff' => $sessionLateCutoff,
     'geofenceRadiusMeters' => 100,
     'latitude' => 13.1436,
     'longitude' => 123.7438,
@@ -2206,6 +2217,7 @@ expect_same(400, $revokeFacultyAcceptStatus, 'Revoked Faculty invitation token c
 // ATT-001: every new session needs a class end time at or after the Late cutoff.
 [$noEndTimeStatus, $noEndTimeBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
     'csId' => $secretarySessionClassId,
+    'room' => 'Integration Room',
     'openingTime' => '08:00',
     'presentCutoff' => '09:00',
     'lateCutoff' => '10:00',
@@ -2214,6 +2226,7 @@ expect_same(422, $noEndTimeStatus, 'A session without a class end time is reject
 expect_same('classEndTime', $noEndTimeBody['errors'][0]['field'] ?? null, 'The missing class end time is reported on its field');
 [$earlyEndStatus] = integration_http_json('/api/faculty/attendance/session', $facultyAccessToken, [
     'csId' => $facultyGeofenceClassId,
+    'room' => 'Integration Room',
     'openingTime' => '08:00',
     'presentCutoff' => '09:00',
     'lateCutoff' => '10:00',
@@ -3551,6 +3564,7 @@ expect_same(0, (int) $historicalAttendanceCountStmt->fetchColumn(), 'Rejected pa
 [$historicalSessionStatus] = integration_http_json('/api/faculty/attendance/session', $seedFacultyAccessToken, [
     'classEndTime' => '23:59',
     'csId' => $historicalRemedialClassId,
+    'room' => 'Integration Room',
 ]);
 expect_same(409, $historicalSessionStatus, 'Attendance sessions cannot be started for a past school-year class');
 

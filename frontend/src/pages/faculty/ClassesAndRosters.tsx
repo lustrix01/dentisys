@@ -67,7 +67,8 @@ import {
   meetingDayKey,
 } from '../../utils/scheduleHelper';
 import { MeetingTimes, type DayTimes } from '../../components/MeetingTimes';
-import { RoomSelector, RetiredRoomWarning, useRooms } from '../../components/RoomSelector';
+import { RoomSelector, RetiredRoomWarning, retiredRoomError, useRooms } from '../../components/RoomSelector';
+import { OverlapConfirmModal, overlapsFrom, type BookingOverlap } from '../../components/OverlapConfirmModal';
 import { RosterImportModal } from '../../components/RosterImportModal';
 import { recordAudit } from '../../services/auditService';
 import { createSecretaryInvitation, fetchSecretaryInvitations, type SecretaryInvitation } from '../../services/authService';
@@ -292,6 +293,7 @@ export const ClassesAndRosters: React.FC = () => {
   const [editLabUnits, setEditLabUnits] = useState('1');
   const [editSchoolYear, setEditSchoolYear] = useState('2025-2026');
   const [editError, setEditError] = useState<string | null>(null);
+  const [classOverlap, setClassOverlap] = useState<{ overlaps: BookingOverlap[]; mode: 'create' | 'edit' } | null>(null);
   const [serverClash, setServerClash] = useState<string | null>(null);
   const [isUpdatingClass, setIsUpdatingClass] = useState(false);
 
@@ -806,9 +808,18 @@ export const ClassesAndRosters: React.FC = () => {
   // The schedules shown follow the selected components.
   const editVisibleComponents: CourseComponents = editComponents;
 
+  // A retired room (slot room or any chosen day's own room) blocks saving; only picked components are given in.
+  const firstRetiredSlotRoom = (slots: ClassSessionSlot[]): string | null => {
+    for (const slot of slots) {
+      const names = [slot.room, ...slot.days.map(day => slot.dayTimes?.[day]?.room)];
+      for (const name of names) { const msg = retiredRoomError(rooms, name); if (msg) return msg; }
+    }
+    return null;
+  };
+
   // Handler: Update Class Section
-  const handleUpdateClass = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleUpdateClass = async (e: React.FormEvent | null, confirmOverlap = false) => {
+    e?.preventDefault();
     if (!editingClass) return;
     setEditError(null);
 
@@ -847,6 +858,8 @@ export const ClassesAndRosters: React.FC = () => {
       ...(includesLecture ? [{ id: 'edit-lecture', type: 'Lecture' as const, room: editLecRoom, days: editLecDays, startTime: editLecStartTime, endTime: editLecEndTime, dayTimes: editLecDayTimes }] : []),
       ...(includesLab ? [{ id: 'edit-lab', type: 'Laboratory' as const, room: editLabRoom, days: editLabDays, startTime: editLabStartTime, endTime: editLabEndTime, dayTimes: editLabDayTimes }] : []),
     ];
+    const retired = firstRetiredSlotRoom(editSlots);
+    if (retired) { setEditError(retired); return; }
     const scheduleChanged = JSON.stringify({ components: editComponents, lecRoom: editLecRoom, lecDays: editLecDays, lecTimes: editLecDayTimes, labRoom: editLabRoom, labDays: editLabDays, labTimes: editLabDayTimes }) !== editOriginalSchedule;
     const scheduledSlots = editSlots.filter(slot => slot.days.length > 0);
     const conflict = scheduleChanged && scheduledSlots.length ? checkScheduleConflicts(scheduledSlots, classes, newSchoolYear, parsedCsId) : null;
@@ -874,7 +887,9 @@ export const ClassesAndRosters: React.FC = () => {
           meetings: formatted.meetings,
         } : {}),
         ...(newCatalogCode || unitsChanged ? { lectureUnits, labUnits } : {}),
+        confirmOverlap: confirmOverlap || undefined,
       });
+      setClassOverlap(null);
 
       if (res && (res.status === 'ok' || res.status === 'success')) {
         showFeedback(`Class ${editCourseCode} (${editBlock.trim()}) updated successfully!`, 'success');
@@ -884,6 +899,9 @@ export const ClassesAndRosters: React.FC = () => {
         setEditError(res?.message || 'Failed to update class section.');
       }
     } catch (err: any) {
+      const found = overlapsFrom(err, 'CLASS_SESSION_OVERLAP');
+      if (found) { setClassOverlap({ overlaps: found, mode: 'edit' }); return; }
+      setClassOverlap(null);
       setEditError(err?.message || 'Failed to save class section updates to backend.');
     } finally {
       setIsUpdatingClass(false);
@@ -1003,10 +1021,11 @@ export const ClassesAndRosters: React.FC = () => {
     sessionSlots.forEach(slot => {
       const kind = slot.type.toLowerCase();
       if (!slot.room.trim()) add(`room-${slot.id}`, `${slot.type} room`, `Choose a ${kind} room.`);
+      else { const retired = firstRetiredSlotRoom([slot]); if (retired) add(`room-${slot.id}`, `${slot.type} room`, retired); }
       if (slot.days.length === 0) add(`days-${slot.id}`, `${slot.type} days`, `Pick at least one ${kind} day.`);
     });
     return out;
-  }, [newCourseCode, newCourseName, newComponents, newLectureUnits, newLabUnits, newBlock, newTermId, academicTerms, sessionSlots]);
+  }, [newCourseCode, newCourseName, newComponents, newLectureUnits, newLabUnits, newBlock, newTermId, academicTerms, sessionSlots, rooms]);
   const shownProblems = createAttempted ? createClassProblems : [];
   const problemMsg = (key: string) => shownProblems.find(p => p.key === key)?.message;
   const invalidCls = 'border-rose-300 dark:border-rose-700 bg-rose-50/60 dark:bg-rose-950/30';
@@ -1023,8 +1042,8 @@ export const ClassesAndRosters: React.FC = () => {
   };
 
   // Handler: Create Class via authoritative API with strict conflict prevention
-  const handleCreateClass = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateClass = async (e: React.FormEvent | null, confirmOverlap = false) => {
+    e?.preventDefault();
     if (createClassProblems.length > 0) {
       setCreateAttempted(true);
       focusCreateField(createClassProblems[0].key);
@@ -1070,7 +1089,9 @@ export const ClassesAndRosters: React.FC = () => {
         lectureUnits,
         labUnits,
         meetings,
+        confirmOverlap: confirmOverlap || undefined,
       });
+      setClassOverlap(null);
 
       showFeedback(res.message || `Class section ${csName} created successfully for current S.Y. ${newSchoolYear}!`, 'success');
       setIsCreateClassOpen(false);
@@ -1081,6 +1102,9 @@ export const ClassesAndRosters: React.FC = () => {
       }
       await fetchData();
     } catch (err: any) {
+      const found = overlapsFrom(err, 'CLASS_SESSION_OVERLAP');
+      if (found) { setClassOverlap({ overlaps: found, mode: 'create' }); return; }
+      setClassOverlap(null);
       if (/conflict/i.test(err.message || '')) setServerClash(err.message);
       showFeedback(err.message || 'Failed to create class section.', 'error');
     } finally {
@@ -3187,6 +3211,14 @@ const handleSendAllStudentInvites = async () => {
           </form>
         </Modal>
       )}
+
+      <OverlapConfirmModal
+        forClass
+        overlaps={classOverlap?.overlaps ?? null}
+        busy={isSubmittingClass || isUpdatingClass}
+        onCancel={() => setClassOverlap(null)}
+        onConfirm={() => void (classOverlap?.mode === 'edit' ? handleUpdateClass(null, true) : handleCreateClass(null, true))}
+      />
 
       {/* Modal: Import a class and its roster from a file */}
       {isClassRosterImportOpen && (

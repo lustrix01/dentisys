@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/notifications.php';
+require_once __DIR__ . '/room_rules.php';
+require_once __DIR__ . '/class_meetings.php';
 
 const ATTENDANCE_GEOFENCE_RADIUS_MIN_METERS = 50;
 const ATTENDANCE_GEOFENCE_RADIUS_MAX_METERS = 2000;
@@ -118,6 +120,140 @@ function attendance_session_booking_conflict(PDO $pdo, int $csId, string $date, 
     return "A schedule already exists on {$existing['session_date']} from {$from} to {$to} (Asia/Manila), created by {$role}" . ($name !== '' ? " {$name}" : '') . '.';
 }
 
+/** ATT-001 (2026-11-06): a session needs a room that the Dean has not retired. */
+function attendance_session_require_room(PDO $pdo, ?string $room): void
+{
+    if ($room === null || trim($room) === '') {
+        throw new ValidationException(['room' => 'Choose a room or type the place where the session happens.']);
+    }
+    $retired = room_retired_by_name($pdo, $room);
+    if ($retired !== null) throw new ValidationException(['room' => "{$retired} was retired by the Dean. Pick another room."]);
+}
+
+/** 409 that asks the user to confirm a booking overlap; $errorCode is SESSION_OVERLAP or CLASS_SESSION_OVERLAP. */
+class BookingOverlapException extends AttendanceSessionException
+{
+    public function __construct(public readonly array $overlaps, string $errorCode = 'SESSION_OVERLAP')
+    {
+        parent::__construct('This booking overlaps with other bookings.', 409, $errorCode);
+    }
+}
+
+function attendance_session_exception_response(AttendanceSessionException $e): void
+{
+    if (!($e instanceof BookingOverlapException)) {
+        emit_response(build_error_response($e->getMessage(), $e->statusCode, $e->errorCode));
+        return;
+    }
+    emit_response(build_json_response(['status' => 'error', 'code' => $e->errorCode, 'message' => $e->getMessage(),
+        'overlaps' => $e->overlaps, 'requestId' => function_exists('request_id') ? request_id() : null], 409));
+}
+
+/** One overlap entry for another class's row ($r needs cs_id, cs_name, course_code, title, instructor_user_id, faculty_name). */
+function booking_overlap_entry(array $r, string $kind, string $reason, int $ownInstructorId, string $room, string $start, string $end, ?string $date, ?string $weekday): array
+{
+    return ['kind' => $kind, 'reason' => $reason, 'classId' => (int) $r['cs_id'], 'classCode' => (string) $r['course_code'],
+        'classTitle' => (string) $r['title'], 'className' => (string) $r['cs_name'], 'facultyName' => (string) $r['faculty_name'],
+        'isOwn' => (int) $r['instructor_user_id'] === $ownInstructorId, 'room' => $room, 'date' => $date, 'weekday' => $weekday,
+        'start' => substr($start, 0, 5), 'end' => substr($end, 0, 5)];
+}
+
+const BOOKING_OVERLAP_CLASS_COLUMNS = "cs.cs_id, cs.cs_name, cs.instructor_user_id, c.course_code, COALESCE(cs.course_title, c.name) AS title, u.display_name AS faculty_name";
+const BOOKING_OVERLAP_CLASS_JOINS = "JOIN courses c ON c.course_id = cs.course_id LEFT JOIN user_accounts u ON u.user_id = cs.instructor_user_id";
+
+/**
+ * ATT-001 overlap check (never blocks by itself): a session of another class in the same room or with the
+ * same Faculty, or another class's weekly meeting in the same room within its term. Touching times do not overlap.
+ */
+function attendance_session_overlaps(PDO $pdo, int $csId, string $date, ?string $opening, string $end, ?string $room): array
+{
+    $opening ??= '00:00:00';
+    $tz = new DateTimeZone('UTC'); // wall-clock arithmetic only
+    $newStart = new DateTimeImmutable($date . ' ' . $opening, $tz);
+    $newEnd = attendance_session_clock_moment($date, $end, $opening, $tz);
+    $own = $pdo->prepare('SELECT instructor_user_id FROM class_sections WHERE cs_id = ?');
+    $own->execute([$csId]);
+    $ownInstructor = (int) $own->fetchColumn();
+    $roomKey = room_match_key((string) $room);
+    $sessionRoomKey = "lower(regexp_replace(COALESCE(s.room, ''), '[\\s.\\-]+', '', 'g'))";
+    $stmt = $pdo->prepare('SELECT ' . BOOKING_OVERLAP_CLASS_COLUMNS . ", s.session_date, s.opening_time, s.class_end_time, s.room,
+            ({$sessionRoomKey} = ? AND ? <> '') AS same_room, (cs.instructor_user_id = ?) AS same_faculty
+        FROM attendance_sessions s JOIN class_sections cs ON cs.cs_id = s.cs_id " . BOOKING_OVERLAP_CLASS_JOINS . '
+        WHERE s.cs_id <> ? AND s.status IN (\'active\', \'scheduled\') AND s.session_date BETWEEN CAST(? AS date) - 1 AND CAST(? AS date) + 1
+          AND (s.session_date + COALESCE(s.opening_time, TIME \'00:00\')) < CAST(? AS timestamp)
+          AND CAST(? AS timestamp) < COALESCE(' . attendance_session_end_sql('s') . ', s.session_date + TIME \'23:59:59\')
+          AND (' . $sessionRoomKey . " = ? AND ? <> '' OR cs.instructor_user_id = ?)
+        ORDER BY s.session_date, s.opening_time, s.session_id");
+    $stmt->execute([$roomKey, $roomKey, $ownInstructor, $csId, $date, $date, $newEnd->format('Y-m-d H:i:s'), $newStart->format('Y-m-d H:i:s'), $roomKey, $roomKey, $ownInstructor]);
+    $overlaps = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $sameRoom = attendance_session_bool($r['same_room']);
+        $sameFaculty = attendance_session_bool($r['same_faculty']);
+        $overlaps[] = booking_overlap_entry($r, 'session', $sameRoom && $sameFaculty ? 'room_faculty' : ($sameRoom ? 'room' : 'faculty'), $ownInstructor,
+            (string) $r['room'], $r['opening_time'] ?? '00:00', $r['class_end_time'] ?? '23:59', $r['session_date'], null);
+    }
+    if ($roomKey === '') return $overlaps;
+    // Weekly meetings of other active classes whose term contains the session date.
+    $terms = academic_terms_read($pdo);
+    $classes = $pdo->prepare('SELECT ' . BOOKING_OVERLAP_CLASS_COLUMNS . ", cs.semester, cs.school_year, cs.term_start_date, cs.term_end_date, cs.lec_room, cs.lab_room, cs.meetings_recorded
+        FROM class_sections cs " . BOOKING_OVERLAP_CLASS_JOINS . " WHERE cs.status = 'Active' AND cs.archived_at IS NULL AND cs.cs_id <> ?");
+    $classes->execute([$csId]);
+    foreach ($classes->fetchAll(PDO::FETCH_ASSOC) as $class) {
+        $term = academic_resolve_class_term_dates($class, $terms);
+        if ($term['startDate'] === null || $term['endDate'] === null || $date < $term['startDate'] || $date > $term['endDate']) continue;
+        foreach (class_meetings_read($pdo, $class) as $m) {
+            if (room_match_key($m['room']) !== $roomKey) continue;
+            foreach ([-1, 0, 1] as $shift) {
+                $day = (new DateTimeImmutable($date, $tz))->modify("{$shift} day");
+                if ($day->format('D') !== $m['day']) continue;
+                $from = new DateTimeImmutable($day->format('Y-m-d') . ' ' . $m['startTime'], $tz);
+                $to = new DateTimeImmutable($day->format('Y-m-d') . ' ' . $m['endTime'], $tz);
+                if ($from < $newEnd && $newStart < $to) {
+                    $overlaps[] = booking_overlap_entry($class, 'schedule', 'room', $ownInstructor, $m['room'], $m['startTime'], $m['endTime'], null, $m['day']);
+                    break 2;
+                }
+            }
+        }
+    }
+    return $overlaps;
+}
+
+/** Throws the SESSION_OVERLAP 409 unless the request confirmed it; returns the overlaps to record after saving. */
+function attendance_session_overlap_gate(PDO $pdo, array $data, int $csId, string $date, ?string $opening, string $end, ?string $room): array
+{
+    $overlaps = attendance_session_overlaps($pdo, $csId, $date, $opening, $end, $room);
+    if ($overlaps !== [] && ($data['confirmOverlap'] ?? null) !== true) throw new BookingOverlapException($overlaps);
+    return $overlaps;
+}
+
+/** Bell notice to the other Faculty of each overlapped class; every call notifies again. $body(entry) returns the text. */
+function booking_overlap_notify(PDO $pdo, array $overlaps, callable $body, string $entityType, int $entityId): void
+{
+    $recipient = $pdo->prepare('SELECT instructor_user_id FROM class_sections WHERE cs_id = ?');
+    foreach ($overlaps as $o) {
+        if ($o['isOwn']) continue;
+        $recipient->execute([$o['classId']]);
+        $userId = (int) $recipient->fetchColumn();
+        if ($userId <= 0) continue;
+        notification_create_idempotent($pdo, $userId, 'room_overlap', 'Booking overlap', $body($o),
+            $entityType, (string) $entityId, 'room_overlap:' . bin2hex(random_bytes(8)));
+    }
+}
+
+/** After saving a confirmed overlap: notify the other Faculty and audit who confirmed. Runs inside the save transaction. */
+function attendance_session_overlap_confirmed(PDO $pdo, array $config, array $authCtx, array $context, int $sessionId, int $csId, string $date, string $opening, string $end, ?string $room, array $overlaps): void
+{
+    if ($overlaps === []) return;
+    $clock = static fn(string $t): string => (new DateTimeImmutable($t))->format('g:i A');
+    $thisClass = audit_class_label($pdo, $csId);
+    $when = (new DateTimeImmutable($date))->format('D, M j') . ', ' . $clock($opening) . '–' . $clock($end);
+    $who = trim((string) ($authCtx['display_name'] ?? '')) ?: 'A user';
+    booking_overlap_notify($pdo, $overlaps, static fn(array $o): string => "{$who} booked {$room} on {$when} for {$thisClass}. This overlaps your {$o['className']} "
+        . ($o['kind'] === 'schedule' ? 'regular schedule' : 'session') . '.', 'attendance_session', $sessionId);
+    attendance_session_record_audit($pdo, $config, $authCtx, $context, 'attendance_session_overlap_confirmed', $sessionId, $csId,
+        "Booked {$thisClass} on {$date} over " . count($overlaps) . ' overlapping booking(s).', null, null, ['overlaps' => $overlaps]);
+}
+
 function attendance_session_bool(mixed $value): bool
 {
     return in_array($value, [true, 't', 'true', '1', 1], true);
@@ -204,6 +340,9 @@ function attendance_session_class_end_time_from_request(
     }
     if ($classEnd === $opening) {
         throw new ValidationException([['field' => 'classEndTime', 'message' => 'The session must last under 24 hours.']]);
+    }
+    if (attendance_session_offset($classEnd, $opening) > 12 * 3600) {
+        throw new ValidationException([['field' => 'classEndTime', 'message' => 'A session can last at most 12 hours.']]);
     }
     if (attendance_session_offset($classEnd, $opening) < attendance_session_offset($lateCutoff, $opening)) {
         throw new ValidationException([['field' => 'classEndTime', 'message' => 'Class end time must be at or after the Late cutoff.']]);
@@ -449,10 +588,12 @@ function attendance_session_update(PDO $pdo, array $config, array $authCtx, arra
             throw new AttendanceSessionException(academic_view_only_message($pdo, $csId), 409, 'CONFLICT');
         }
         $values = attendance_session_update_values(attendance_session_merge_stored_request($data, $session, $role), $config, $role);
+        attendance_session_require_room($pdo, $values['room']);
         $conflict = attendance_session_booking_conflict($pdo, $csId, $values['session_date'], $values['opening_time'], $values['class_end_time'], $sessionId);
         if ($conflict !== null) {
             throw new AttendanceSessionException($conflict, 409, 'CONFLICT');
         }
+        $overlaps = attendance_session_overlap_gate($pdo, $data, $csId, $values['session_date'], $values['opening_time'], $values['class_end_time'], $values['room']);
         $values['status'] = attendance_session_creation_status($values['session_date'], $values['opening_time'], $config);
         $nowSql = attendance_session_now_utc()->format('Y-m-d H:i:s.u');
         $update = $pdo->prepare(
@@ -483,6 +624,7 @@ function attendance_session_update(PDO $pdo, array $config, array $authCtx, arra
                 'Updated attendance session for ' . audit_class_label($pdo, $csId) . " on {$updatedSession['session_date']}.", null, $changed[0], $changed[1]
             );
         }
+        attendance_session_overlap_confirmed($pdo, $config, $authCtx, $context, $sessionId, $csId, $values['session_date'], $values['opening_time'], $values['class_end_time'], $values['room'], $overlaps);
         $pdo->commit();
         return $updatedSession;
     } catch (PDOException $e) {
@@ -754,7 +896,7 @@ function attendance_sessions_open_due(PDO $pdo, array $config, array $context, D
             $openedAt = (new DateTimeImmutable($candidate['session_date'] . ' ' . $candidate['opening_time'], $nowLocal->getTimezone()))->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
             // An overdue predecessor may be skipped while biometric verification
             // holds its lock. Leave the next booking queued until it can end.
-            $active = $pdo->prepare("SELECT 1 FROM attendance_sessions WHERE cs_id = ? AND session_date = ? AND status = 'active'");
+            $active = $pdo->prepare("SELECT 1 FROM attendance_sessions WHERE cs_id = ? AND status = 'active' AND (session_date = ? OR class_end_time IS NOT NULL)"); // any date while it still runs (overnight); old rows without an end time only block their own date
             $active->execute([$candidate['cs_id'], $candidate['session_date']]);
             if ($active->fetchColumn() !== false) {
                 $pdo->commit();

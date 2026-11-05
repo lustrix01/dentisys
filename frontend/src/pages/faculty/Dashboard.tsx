@@ -327,7 +327,7 @@ export const Dashboard: React.FC = () => {
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
             Access your assigned dental courses, grade computations, student attendance records, and retention evaluations in one place.
           </p>
-          <PendingRequestsBadge count={pendingRequests} className="mt-2" />
+          <PendingRequestsBadge count={pendingRequests} className="mt-2" onClick={() => navigate('/attendance?tab=requests')} />
         </div>
         <SchoolYearFilter
           value={schoolYear}

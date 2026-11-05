@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/room_rules.php';
+require_once __DIR__ . '/attendance_sessions.php';
+
 function class_meetings_validate(mixed $value): array
 {
     if (!is_array($value) || !array_is_list($value) || count($value) > 28) {
@@ -93,18 +96,20 @@ function class_meetings_display(array $meetings, string $component, string $lega
     return $legacyMeetings === [] ? $legacy : implode('; ', array_unique(array_column($legacyMeetings, 'room')));
 }
 
-function class_meetings_conflict(PDO $pdo, string $schoolYear, int $instructorId, array $proposed, int $excludeCsId): ?string
+/** CLS-001 (2026-11-06): the hard conflict covers one school year and semester; Summer is its own semester. */
+function class_meetings_conflict(PDO $pdo, string $schoolYear, string $semester, int $instructorId, array $proposed, int $excludeCsId): ?string
 {
     if ($proposed === []) return null;
     // Serialize schedule writes for the year, including other Faculty using the same room.
     $pdo->prepare('SELECT pg_advisory_xact_lock(hashtext(?))')->execute(['class-meetings:' . $schoolYear]);
-    $stmt = $pdo->prepare("SELECT cs_id, cs_name, instructor_user_id, lec_room, lab_room, meetings_recorded FROM class_sections WHERE school_year = ? AND status = 'Active' AND archived_at IS NULL AND cs_id <> ?"); // archived classes no longer meet (CLS-003)
+    $stmt = $pdo->prepare("SELECT cs_id, cs_name, instructor_user_id, semester, lec_room, lab_room, meetings_recorded FROM class_sections WHERE school_year = ? AND status = 'Active' AND archived_at IS NULL AND cs_id <> ?"); // archived classes no longer meet (CLS-003)
     $stmt->execute([$schoolYear, $excludeCsId]);
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $class) {
+        if (academic_term_semester($class['semester']) !== academic_term_semester($semester)) continue;
         foreach (class_meetings_read($pdo, $class) as $existing) {
             foreach ($proposed as $meeting) {
                 if ($meeting['day'] !== $existing['day'] || $meeting['startTime'] >= $existing['endTime'] || $existing['startTime'] >= $meeting['endTime']) continue;
-                if ((int) $class['instructor_user_id'] === $instructorId || strcasecmp($meeting['room'], $existing['room']) === 0) {
+                if ((int) $class['instructor_user_id'] === $instructorId || room_match_key($meeting['room']) === room_match_key($existing['room'])) {
                     $clock = static fn (string $time): string => DateTimeImmutable::createFromFormat('!H:i', $time)->format('g:i A');
                     return "Schedule conflict: {$class['cs_name']} already uses {$existing['room']} on {$existing['day']}, {$clock($existing['startTime'])} – {$clock($existing['endTime'])}.";
                 }
@@ -112,4 +117,90 @@ function class_meetings_conflict(PDO $pdo, string $schoolYear, int $instructorId
         }
     }
     return null;
+}
+
+/** CLS-001: a room retired by the Dean cannot be saved on a class (lecture room, lab room or any meeting room). */
+function class_rooms_require_active(PDO $pdo, ?string $lecRoom, ?string $labRoom, array $meetings): void
+{
+    $candidates = [['lecRoom', $lecRoom], ['labRoom', $labRoom]];
+    foreach ($meetings as $meeting) $candidates[] = ['meetings', $meeting['room']];
+    foreach ($candidates as [$field, $room]) {
+        $retired = room_retired_by_name($pdo, $room);
+        if ($retired !== null) throw new ValidationException([$field => "{$retired} was retired by the Dean. Pick another room."]);
+    }
+}
+
+/**
+ * CLS-001: sessions (active or scheduled, from today on, inside the term) of another class that overlap the proposed
+ * weekly meetings in the same room or with the same Faculty. Never blocks by itself; see BookingOverlapException.
+ */
+function class_meetings_session_overlaps(PDO $pdo, ?string $termStart, ?string $termEnd, int $instructorId, array $proposed, int $excludeCsId): array
+{
+    if ($proposed === []) return [];
+    $tz = new DateTimeZone('UTC'); // wall-clock arithmetic only
+    $from = max((new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d'), $termStart ?? '0000-00-00');
+    $to = $termEnd ?? (new DateTimeImmutable($from))->modify('+1 year')->format('Y-m-d');
+    $stmt = $pdo->prepare('SELECT ' . BOOKING_OVERLAP_CLASS_COLUMNS . ', s.session_date, s.opening_time, s.class_end_time, s.room
+        FROM attendance_sessions s JOIN class_sections cs ON cs.cs_id = s.cs_id ' . BOOKING_OVERLAP_CLASS_JOINS . "
+        WHERE cs.cs_id <> ? AND s.status IN ('active', 'scheduled') AND s.session_date BETWEEN CAST(? AS date) AND CAST(? AS date)
+        ORDER BY s.session_date, s.opening_time, s.session_id");
+    $stmt->execute([$excludeCsId, $from, $to]);
+    $overlaps = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $opening = $r['opening_time'] ?? '00:00:00';
+        $start = new DateTimeImmutable($r['session_date'] . ' ' . $opening, $tz);
+        $end = $r['class_end_time'] !== null ? attendance_session_clock_moment($r['session_date'], $r['class_end_time'], $opening, $tz)
+            : new DateTimeImmutable($r['session_date'] . ' 23:59:59', $tz);
+        $sameFaculty = (int) $r['instructor_user_id'] === $instructorId;
+        foreach ($proposed as $meeting) {
+            $sameRoom = room_match_key((string) $r['room']) !== '' && room_match_key((string) $r['room']) === room_match_key($meeting['room']);
+            if (!$sameRoom && !$sameFaculty) continue;
+            foreach ([-1, 0, 1] as $shift) {
+                $day = (new DateTimeImmutable($r['session_date'], $tz))->modify("{$shift} day");
+                if ($day->format('D') !== $meeting['day']) continue;
+                if (new DateTimeImmutable($day->format('Y-m-d') . ' ' . $meeting['startTime'], $tz) < $end
+                    && $start < new DateTimeImmutable($day->format('Y-m-d') . ' ' . $meeting['endTime'], $tz)) {
+                    $entry = booking_overlap_entry($r, 'session', $sameRoom && $sameFaculty ? 'room_faculty' : ($sameRoom ? 'room' : 'faculty'),
+                        $instructorId, (string) $r['room'], $opening, $r['class_end_time'] ?? '23:59', $r['session_date'], null);
+                    $entry['meeting'] = $meeting;
+                    $overlaps[] = $entry;
+                    break 2;
+                }
+            }
+        }
+    }
+    return $overlaps;
+}
+
+/** Throws CLASS_SESSION_OVERLAP unless the request confirmed it; returns the overlaps to record after saving. */
+function class_meetings_overlap_gate(PDO $pdo, array $data, ?string $termStart, ?string $termEnd, int $instructorId, array $proposed, int $excludeCsId): array
+{
+    $overlaps = class_meetings_session_overlaps($pdo, $termStart, $termEnd, $instructorId, $proposed, $excludeCsId);
+    if ($overlaps !== [] && ($data['confirmOverlap'] ?? null) !== true) throw new BookingOverlapException($overlaps, 'CLASS_SESSION_OVERLAP');
+    return $overlaps;
+}
+
+/** After saving a confirmed class schedule overlap: notify the other Faculty and audit who confirmed. Runs in the save transaction. */
+function class_meetings_overlap_confirmed(PDO $pdo, array $config, array $authCtx, array $context, int $csId, string $csName, array $overlaps): void
+{
+    if ($overlaps === []) return;
+    $clock = static fn(string $t): string => DateTimeImmutable::createFromFormat('!H:i', substr($t, 0, 5))->format('g:i A');
+    $days = ['Mon' => 'Mondays', 'Tue' => 'Tuesdays', 'Wed' => 'Wednesdays', 'Thu' => 'Thursdays', 'Fri' => 'Fridays', 'Sat' => 'Saturdays', 'Sun' => 'Sundays'];
+    $who = trim((string) ($authCtx['display_name'] ?? '')) ?: 'A user';
+    booking_overlap_notify($pdo, $overlaps, static function (array $o) use ($who, $csName, $clock, $days): string {
+        $m = $o['meeting'];
+        return "{$who} saved a class schedule for {$csName} in {$m['room']}, {$days[$m['day']]} {$clock($m['startTime'])}–{$clock($m['endTime'])}. "
+            . "This overlaps your {$o['className']} session on " . (new DateTimeImmutable($o['date']))->format('D, M j') . '.';
+    }, 'class_section', $csId);
+    $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+    $auditCtx = audit_begin_operation($pdo);
+    audit_finish_operation($pdo, $auditCtx, [
+        'module_code' => 'class_management', 'action_code' => 'class_schedule_overlap_confirmed', 'event_status' => 'Success',
+        'actor_user_id' => $authCtx['user_id'], 'actor_username' => $authCtx['login_email'], 'actor_role' => $authCtx['role'],
+        'actor_display_name' => $authCtx['display_name'], 'session_id' => $authCtx['session_id'], 'scope_cs_id' => $csId,
+        'target_type' => 'class_section', 'target_id' => (string) $csId,
+        'description' => "Saved the schedule of class section '{$csName}' over " . count($overlaps) . ' overlapping session(s).', 'reason' => null,
+        'http_method' => $context['http_method'], 'endpoint' => $context['endpoint'], 'request_id' => $context['request_id'],
+        'ip_address' => $context['ip_address'], 'user_agent' => $context['user_agent'],
+    ], $macKey, null, ['overlaps' => $overlaps]);
 }
