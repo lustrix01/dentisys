@@ -39,6 +39,13 @@ const usedBy = (u: RoomUsage) => {
   return parts.length ? `Used by ${parts.join(' · ')}` : 'Never used';
 };
 
+// What a rename changes; zero parts are left out.
+const renameChanges = (u: { classes: number; meetings: number; scheduledSessions: number }) => [
+  u.classes > 0 ? plural(u.classes, 'class', 'classes') : '',
+  u.meetings > 0 ? plural(u.meetings, 'class meeting') : '',
+  u.scheduledSessions > 0 ? plural(u.scheduledSessions, 'scheduled session') : '',
+].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1');
+
 type Draft = {
   roomId?: number;
   name: string;
@@ -156,7 +163,7 @@ export const Rooms: React.FC = () => {
         const result = await updateRoomApi({ roomId: draft.roomId, ...body, ...(confirmRename ? { confirmRename: true } : {}) });
         setMessage(
           result.renamed && result.renamed.classes + result.renamed.meetings + result.renamed.scheduledSessions > 0
-            ? `${name} saved. Updated ${plural(result.renamed.classes, 'class', 'classes')} and ${plural(result.renamed.scheduledSessions, 'scheduled session')}.`
+            ? `${name} saved. Updated ${renameChanges(result.renamed)}.`
             : `${name} saved.`,
         );
       }
@@ -165,7 +172,10 @@ export const Rooms: React.FC = () => {
       await load();
     } catch (err) {
       if (err instanceof ApiError && err.status === 409 && err.code === 'ROOM_RENAME_CONFIRM' && draft.original) {
-        setConfirm({ kind: 'rename', room: draft.original, to: name, usage: err.details?.usage as RoomUsage });
+        const usage = err.details?.usage as RoomUsage;
+        // Only ask when something changes; sessions that already ran keep the old name.
+        if (!usage || usage.classes + usage.meetings + usage.scheduledSessions === 0) return await saveDraft(true);
+        setConfirm({ kind: 'rename', room: draft.original, to: name, usage });
       } else {
         setConfirm(null);
         setError(err instanceof Error ? err.message : 'Unable to save the room.');
@@ -294,7 +304,7 @@ export const Rooms: React.FC = () => {
                       </span>
                       {retired && !room.deletable && (
                         <span className="col-span-2 lg:col-span-5 text-right text-[11px] text-slate-500 dark:text-slate-400">
-                          {usedBy(room.usage)} — it can only stay retired.
+                          {isUsed(room.usage) ? usedBy(room.usage) : 'Used under an older name'} — it can only stay retired.
                         </span>
                       )}
                     </div>
@@ -384,7 +394,7 @@ export const Rooms: React.FC = () => {
                   : `Retire ${confirm.room.name}? It will disappear from room lists. You can restore it later.`
               )}
               {confirm.kind === 'delete' && `Delete ${confirm.room.name} for good? This cannot be undone.`}
-              {confirm.kind === 'rename' && `Rename ${confirm.room.name} to ${confirm.to}? This also updates ${plural(confirm.usage?.classes ?? 0, 'class', 'classes')} and ${plural(confirm.usage?.scheduledSessions ?? 0, 'scheduled session')}.`}
+              {confirm.kind === 'rename' && `Rename ${confirm.room.name} to ${confirm.to}? This also updates ${renameChanges(confirm.usage)}. Sessions that already ran keep the old name.`}
             </p>
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button type="button" disabled={busy} className={cancelButtonClass} onClick={() => setConfirm(null)}>Cancel</button>

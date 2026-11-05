@@ -154,6 +154,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(row).toContainText('Oct 9, 2026');
     expect(posted.some(data => data.confirmedExpiringEnrollments === 3)).toBe(true);
     await section.getByRole('button', { name: 'Add next school year' }).click();
+    await expect(page.getByRole('dialog', { name: 'Add next school year' })).toBeVisible();
     await page.getByRole('dialog').getByRole('button', { name: 'Copy terms', exact: true }).click();
     await expect(section).toContainText('Review and adjust their dates.');
     const copied = section.getByTestId('2027-2028-1ST');
@@ -442,12 +443,15 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
 
   const usage0 = { classes: 0, meetings: 0, scheduledSessions: 0, otherSessions: 0 };
   const mockRooms = async (page: Page) => {
-    const base = { latitude: null, longitude: null, radiusMeters: null, retiredAt: null };
+    const base = { latitude: null, longitude: null, radiusMeters: null, retiredAt: null, usedBeforeRename: false };
     let rooms: Array<Record<string, any>> = [
       { ...base, roomId: 1, name: 'Room 302', group: 'Standard Classrooms', status: 'active', usage: { classes: 3, meetings: 4, scheduledSessions: 1, otherSessions: 2 }, deletable: false },
       { ...base, roomId: 2, name: 'Room 405', group: 'Standard Classrooms', status: 'active', usage: usage0, deletable: true },
       { ...base, roomId: 3, name: 'Old Lab', group: 'Laboratories', status: 'retired', usage: usage0, deletable: true },
       { ...base, roomId: 4, name: 'Simulation Lab', group: 'Laboratories', status: 'retired', usage: { classes: 1, meetings: 1, scheduledSessions: 0, otherSessions: 0 }, deletable: false },
+      { ...base, roomId: 5, name: 'Aged Lab', group: 'Laboratories', status: 'retired', usage: usage0, usedBeforeRename: true, deletable: false },
+      { ...base, roomId: 6, name: 'Annex', group: 'Standard Classrooms', status: 'active', usage: { classes: 0, meetings: 2, scheduledSessions: 0, otherSessions: 0 }, deletable: false },
+      { ...base, roomId: 7, name: 'Ran Hall', group: 'Standard Classrooms', status: 'active', usage: { classes: 0, meetings: 0, scheduledSessions: 0, otherSessions: 3 }, deletable: false },
     ];
     const posted: Array<Record<string, any>> = [];
     await page.route('**/api/admin/rooms**', async route => {
@@ -463,7 +467,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
       if (pathname.endsWith('/restore') && room) room.status = 'active';
       if (pathname.endsWith('/delete')) rooms = rooms.filter(r => r.roomId !== data.roomId);
       if (pathname.endsWith('/update') && room) {
-        if (data.name !== room.name && room.usage.classes > 0 && !data.confirmRename) {
+        if (data.name !== room.name && Object.values<number>(room.usage).some(n => n > 0) && !data.confirmRename) {
           return route.fulfill({ status: 409, json: { status: 'error', code: 'ROOM_RENAME_CONFIRM', message: 'Confirm the rename.', usage: room.usage } });
         }
         Object.assign(room, { name: data.name, group: data.group });
@@ -502,6 +506,8 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     const blocked = page.getByTestId('room-Simulation Lab');
     await expect(blocked.getByRole('button', { name: 'Delete' })).toBeDisabled();
     await expect(blocked).toContainText('Used by 1 class — it can only stay retired.');
+    await expect(page.getByTestId('room-Aged Lab').getByRole('button', { name: 'Delete' })).toBeDisabled();
+    await expect(page.getByTestId('room-Aged Lab')).toContainText('Used under an older name — it can only stay retired.');
 
     const old = page.getByTestId('room-Old Lab');
     await old.getByRole('button', { name: 'Delete' }).click();
@@ -528,12 +534,33 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.getByLabel('Room name').fill('Room 302A');
     await page.getByRole('button', { name: 'Save room' }).click();
     const confirm = page.getByRole('dialog').filter({ hasText: 'Rename Room 302 to Room 302A?' });
-    await expect(confirm).toContainText('This also updates 3 classes and 1 scheduled session.');
+    await expect(confirm).toContainText('This also updates 3 classes, 4 class meetings and 1 scheduled session. Sessions that already ran keep the old name.');
     expect(posted).toHaveLength(1);
     expect(posted[0].confirmRename).toBeUndefined();
     await confirm.getByRole('button', { name: 'Rename room' }).click();
     await expect(page.getByTestId('room-Room 302A')).toBeVisible();
     expect(posted[1]).toMatchObject({ path: '/update', roomId: 1, name: 'Room 302A', confirmRename: true });
+  });
+
+  test('Rooms page: a meetings-only room names its class meetings; a room with only past sessions renames without asking', async ({ page }) => {
+    const posted = await mockRooms(page);
+    await page.goto('/admin/rooms');
+    await page.getByTestId('room-Annex').getByRole('button', { name: 'Edit' }).click();
+    await page.getByLabel('Room name').fill('Annex B');
+    await page.getByRole('button', { name: 'Save room' }).click();
+    const confirm = page.getByRole('dialog').filter({ hasText: 'Rename Annex to Annex B?' });
+    await expect(confirm).toContainText('This also updates 2 class meetings. Sessions that already ran keep the old name.');
+    await expect(confirm).not.toContainText('0 ');
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+    expect(posted).toHaveLength(1);
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click(); // the edit form
+
+    await page.getByTestId('room-Ran Hall').getByRole('button', { name: 'Edit' }).click();
+    await page.getByLabel('Room name').fill('Ran Hall B');
+    await page.getByRole('button', { name: 'Save room' }).click();
+    await expect(page.getByTestId('room-Ran Hall B')).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(posted[posted.length - 1]).toMatchObject({ path: '/update', roomId: 7, name: 'Ran Hall B', confirmRename: true });
   });
 
   test('Rooms page: adds a room into a new group', async ({ page }) => {

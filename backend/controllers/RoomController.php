@@ -52,10 +52,11 @@ function room_json(array $row, ?array $usage = null): array
         'longitude' => $row['longitude'] !== null ? (float) $row['longitude'] : null,
         'radiusMeters' => $row['radius_meters'] !== null ? (float) $row['radius_meters'] : null,
         'status' => $row['status'], 'retiredAt' => $row['retired_at'],
+        'usedBeforeRename' => filter_var($row['used_before_rename'], FILTER_VALIDATE_BOOLEAN),
     ];
     if ($usage !== null) {
         $json['usage'] = $usage;
-        $json['deletable'] = $row['status'] === 'retired' && array_sum($usage) === 0;
+        $json['deletable'] = $row['status'] === 'retired' && array_sum($usage) === 0 && !$json['usedBeforeRename'];
     }
     return $json;
 }
@@ -165,8 +166,8 @@ function room_update(PDO $pdo, array $config, array $actor, array $data): array
     $counts = ['classes' => 0, 'meetings' => 0, 'scheduledSessions' => 0];
     try {
         $stmt = $pdo->prepare('UPDATE rooms SET name = :name, group_name = :group_name, latitude = :latitude, longitude = :longitude,
-            radius_meters = :radius_meters, updated_at = CURRENT_TIMESTAMP(6) WHERE room_id = :id RETURNING *');
-        $stmt->execute($v + ['id' => $before['room_id']]);
+            radius_meters = :radius_meters, used_before_rename = used_before_rename OR :used, updated_at = CURRENT_TIMESTAMP(6) WHERE room_id = :id RETURNING *');
+        $stmt->execute($v + ['id' => $before['room_id'], 'used' => $renamed && array_sum($usage) > 0 ? 'true' : 'false']);
     } catch (PDOException $e) { room_write_name_taken($e); }
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($renamed) {
@@ -211,7 +212,7 @@ function room_delete(PDO $pdo, array $config, array $actor, int $id): array
 {
     $row = room_fetch($pdo, $id, true);
     if ($row['status'] !== 'retired') throw new RoomConflict('ROOM_NOT_RETIRED', 'Retire the room first.');
-    if (array_sum(room_usage($pdo, $row['name_key'])) > 0) {
+    if ($row['used_before_rename'] || array_sum(room_usage($pdo, $row['name_key'])) > 0) {
         throw new RoomConflict('ROOM_IN_USE', 'This room is used by classes or sessions, so it can only stay retired.');
     }
     $pdo->prepare('DELETE FROM rooms WHERE room_id = ?')->execute([$id]);

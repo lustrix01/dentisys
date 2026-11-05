@@ -2389,6 +2389,7 @@ export type RoomRecord = {
   status: 'active' | 'retired';
   retiredAt: string | null;
   usage: RoomUsage;
+  usedBeforeRename: boolean;
   deletable: boolean;
 };
 export type RoomInput = { name: string; group: string; latitude?: number | null; longitude?: number | null; radiusMeters?: number | null };

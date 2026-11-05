@@ -369,7 +369,8 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(main.getByRole('button', { name: 'Show next 7 days' })).toBeVisible();
   });
 
-  test('an open overnight session stays listed after midnight and marks next-day times', async ({ page }) => {
+  for (const closed of [false, true]) {
+  test(`an overnight session stays listed after midnight and marks next-day times${closed ? ' after capture closed (past Late cutoff)' : ''}`, async ({ page }) => {
     const student = {
       user_id: 29, login_email: 'night.student@bicol-u.edu.ph', display_name: 'Night Student', role: 'student',
       session_uuid: 'night-student-session', authentication_source: 'password',
@@ -378,7 +379,7 @@ test.describe('P03 Student identity and authentication', () => {
     const night = {
       id: 911, sessionId: '911', courseCode: 'NIGHT101', courseName: 'NIGHT101 Course', sessionDate: '2026-10-13',
       openingTime: '23:00', presentCutoff: '23:30', lateCutoff: '01:00', classEndTime: '02:00',
-      status: 'active', captureOpen: true, captureStatus: 'late', alreadyRecordedStatus: null,
+      status: 'active', captureOpen: !closed, captureStatus: closed ? 'closed' : 'late', alreadyRecordedStatus: null,
     };
     await page.route('**/api/runtime-config', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
       ...ENABLED_RUNTIME_CONFIG, providers: { ...ENABLED_RUNTIME_CONFIG.providers, biometrics: { active: 'sidecar' } },
@@ -389,7 +390,7 @@ test.describe('P03 Student identity and authentication', () => {
       status: 'ok', consentGranted: true, enrollmentStatus: 'active', enrolledAt: '2026-09-27T08:00:00+08:00',
       expiresAt: '2026-12-20', usableSampleCount: 28, requiredUsableSamples: 20, manualFallbackAvailable: true,
     }) }));
-    await page.route('**/api/student/attendance/sessions/active', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sessions: [night] }) }));
+    await page.route('**/api/student/attendance/sessions/active', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sessions: closed ? [] : [night] }) }));
     // 00:30 on 14 Oct in Asia/Manila; no next-day flags, so the end-before-opening rule applies.
     await page.route('**/api/student/attendance/sessions/upcoming**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
       status: 'ok', range: 'week', timezone: 'Asia/Manila', serverNow: '2026-10-13T16:30:00Z', sessions: [night],
@@ -398,8 +399,9 @@ test.describe('P03 Student identity and authentication', () => {
     const main = page.getByRole('main');
     await expect(main.getByText('NIGHT101').first()).toBeVisible();
     await expect(main.getByText('23:00–02:00 (next day)')).toBeVisible();
-    await expect(main.getByText('Open · Late until 01:00 (next day)')).toBeVisible();
+    if (!closed) await expect(main.getByText('Open · Late until 01:00 (next day)')).toBeVisible();
   });
+  }
 
   test('Take attendance starts check-in and scrolls to the liveness stage', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 700 });

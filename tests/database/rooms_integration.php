@@ -102,6 +102,20 @@ expect_same(200, $roomDelStatus, 'An unused retired room is deleted');
 expect_same(0, (int) $pdo->query("SELECT COUNT(*) FROM rooms WHERE room_id = {$roomTmpId}")->fetchColumn(), 'Deleted room is gone');
 expect_true((int) $pdo->query("SELECT COUNT(*) FROM audit_events WHERE action_code IN ('room_created','room_updated','room_retired','room_restored','room_deleted')")->fetchColumn() >= 6, 'Room changes are audited');
 
+// A room that only ever had an ended session: rename drops its usage to 0, but it can still never be deleted.
+[, $roomHist] = $roomPost('', ['name' => 'Zz History', 'group' => 'Test Group']);
+$roomHistId = (int) $roomHist['room']['roomId'];
+$pdo->prepare("INSERT INTO attendance_sessions(cs_id, secretary_user_id, owner_user_id, session_date, session_code, status, room, ended_at)
+    VALUES (?, ?, ?, DATE '2099-01-03', 'ROOM-END', 'ended', 'Zz History', '2099-01-03 10:00:00')")->execute([$roomClassId, $roomFacultyId, $roomFacultyId]);
+[$roomHistRenameStatus, $roomHistRename] = $roomPost('/update', ['roomId' => $roomHistId, 'name' => 'Zz History New', 'confirmRename' => true]);
+expect_same(200, $roomHistRenameStatus, 'Rename of a room with only an ended session succeeds');
+expect_same(true, $roomHistRename['room']['usedBeforeRename'], 'Rename of a used room remembers it was used');
+expect_same(false, $roomHistRename['room']['deletable'], 'A renamed used room is not deletable');
+$roomPost('/retire', ['roomId' => $roomHistId]);
+[$roomHistDelStatus, $roomHistDel] = $roomPost('/delete', ['roomId' => $roomHistId]);
+expect_same(409, $roomHistDelStatus, 'A retired room used before a rename cannot be deleted');
+expect_same('ROOM_IN_USE', $roomHistDel['code'] ?? '', 'Used-before-rename delete is refused as in use');
+
 // Remove the fixtures so later suites see the original data.
 $pdo->prepare('DELETE FROM attendance_sessions WHERE cs_id = ?')->execute([$roomClassId]);
 $pdo->prepare('DELETE FROM class_meetings WHERE cs_id = ?')->execute([$roomClassId]);

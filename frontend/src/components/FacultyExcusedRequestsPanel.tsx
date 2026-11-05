@@ -81,10 +81,23 @@ export const FacultyExcusedRequestsPanel: React.FC<{
     setError(null);
     try {
       const note = decision === 'reject' && withNote ? notes[ids[0]]?.trim() || undefined : undefined;
-      const response = await decideFacultyExcusedRequestApi(ids.length === 1
-        ? { requestId: ids[0], decision, note }
-        : { requestIds: ids, decision });
-      setMessage(response.message);
+      if (decision === 'reject' && ids.length > 1) {
+        // The server refuses a bulk reject, so send one request at a time.
+        try {
+          for (const id of ids) await decideFacultyExcusedRequestApi({ requestId: id, decision });
+        } catch (err) {
+          setSelected([]);
+          setReloadKey(key => key + 1); // already-rejected ones disappear
+          onDecided?.();
+          throw err;
+        }
+        setMessage(`Rejected ${ids.length} requests.`);
+      } else {
+        const response = await decideFacultyExcusedRequestApi(ids.length === 1
+          ? { requestId: ids[0], decision, note }
+          : { requestIds: ids, decision });
+        setMessage(response.message);
+      }
       setSelected([]);
       setReloadKey(key => key + 1);
       onDecided?.();

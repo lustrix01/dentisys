@@ -445,8 +445,8 @@ export const Attendance: React.FC = () => {
   }, [isAuthoritative, loadAuthoritativeData]);
 
   const serverNowParts = manilaNow(clockLocalNow + clockOffsetMs);
-  // An open overnight session stays listed after midnight under Today (ATT-007).
-  const upcomingToday = upcomingSessions.filter(s => s.sessionDate === serverNowParts.date || (s.sessionDate < serverNowParts.date && s.isOpen));
+  // An overnight session still running after midnight stays listed under Today (ATT-007), even after the Late cutoff.
+  const upcomingToday = upcomingSessions.filter(s => s.sessionDate === serverNowParts.date || (s.sessionDate < serverNowParts.date && (s.isOpen || s.status === 'active')));
   const upcomingLater = upcomingSessions.filter(s => s.sessionDate > serverNowParts.date);
 
   // Selected Authoritative Session Object

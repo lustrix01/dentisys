@@ -1295,6 +1295,31 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect.poll(() => decisions).toEqual([{ requestIds: ['41', '42'], decision: 'approve' }]);
   });
 
+  test('Secretary requests: group Reject all sends one single-request reject per id and shows one message', async ({ page }) => {
+    const decisions: Record<string, unknown>[] = [];
+    const base = {
+      status: 'pending', studentNumber: '2024-0001', classId: '1', className: 'Section A', courseCode: 'CLIN401',
+      reason: '', requestedBy: 'Bea Alonzo', requestedAt: '2026-09-20T03:00:00Z', decidedBy: null, decidedAt: null, decisionNote: null,
+      requestedStatus: 'late', currentStatus: 'absent', sessionId: '900', sessionDate: '2026-09-20',
+    };
+    const rows = [
+      { ...base, id: '41', studentId: '1001', studentName: 'Alice Green' },
+      { ...base, id: '42', studentId: '1002', studentName: 'Bob White' },
+    ];
+    await page.route('**/api/faculty/excused-requests', route => route.fulfill({ json: { status: 'ok', requests: rows } }));
+    await page.route('**/api/faculty/excused-requests/decide', route => {
+      decisions.push(route.request().postDataJSON() as Record<string, unknown>);
+      return route.fulfill({ json: { status: 'ok', message: 'Decision saved.', request: null } });
+    });
+    await page.goto('/attendance');
+    const panel = page.getByRole('region', { name: 'Secretary requests' });
+    await panel.getByRole('button', { name: 'Show', exact: true }).click();
+    await panel.getByRole('button', { name: 'Reject all' }).click();
+    await page.getByRole('dialog', { name: 'Reject all 2 requests?' }).getByRole('button', { name: 'Reject 2' }).click();
+    await expect(panel.getByRole('status')).toHaveText('Rejected 2 requests.');
+    expect(decisions).toEqual([{ requestId: '41', decision: 'reject' }, { requestId: '42', decision: 'reject' }]);
+  });
+
   test('Secretary requests: opening a request from the roll call chip opens the collapsed panel', async ({ page }) => {
     const pending = { id: '31', status: 'pending', studentId: '1001', studentNumber: '2024-0001', studentName: 'Alice Green', classId: '1', className: 'Section A', courseCode: 'CLIN401', sessionId: '900', sessionDate: '2026-09-20', requestedStatus: 'late', currentStatus: 'absent', reason: 'Late bus', requestedBy: 'Bea Alonzo', requestedAt: null, decidedBy: null, decidedAt: null, decisionNote: null };
     await page.route('**/api/faculty/excused-requests', route => route.fulfill({ json: { status: 'ok', requests: [pending] } }));
@@ -1793,6 +1818,41 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     expect(payloads).toEqual([{ csId: 1, enrollmentId: 10, sessionDate: '2026-09-20', sessionId: 42,
       status: 'late', reason: 'Verified arrival for the afternoon session' }]);
     await expect(row.getByTestId('attendance-status')).toHaveText(/Late$/);
+  });
+
+  test('after midnight the worksheet and a manual mark use the date of the still-running overnight session, unless another date is picked', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-14T16:30:00Z')); // 00:30 on 15 Oct in Asia/Manila
+    const night = { sessionId: '77', sessionDate: '2026-10-14', sessionCode: 'NIGHT-77', status: 'active', openingTime: '23:00', presentCutoff: '23:30', lateCutoff: '01:00', classEndTime: '02:00', room: 'Room 101' };
+    const dates: string[] = [];
+    const payloads: unknown[] = [];
+    await page.route('**/api/faculty/attendance?*csId=1*', route => {
+      const date = new URL(route.request().url()).searchParams.get('date') || '';
+      dates.push(date);
+      const live = date === night.sessionDate;
+      return route.fulfill({ json: { status: 'ok', worksheet: {
+        ...mockWorksheetSectionA, date, managedSessions: [night], pendingSessions: [night],
+        attendanceSession: live ? night : null, attendanceSessions: live ? [night] : [],
+        roster: mockWorksheetSectionA.roster.map(r => ({ ...r, id: null, status: null, date, attendanceSessionId: live ? '77' : null })),
+      } } });
+    });
+    await page.route('**/api/faculty/attendance/override', route => {
+      payloads.push(route.request().postDataJSON());
+      return route.fulfill({ json: { status: 'ok', operation: 'created', recordId: '999' } });
+    });
+    await page.goto('/attendance');
+    await openWorksheet(page, 'CLIN401 - Section A');
+    await expect(page.locator('input[type="date"]')).toHaveValue('2026-10-14');
+    expect(dates).toContain('2026-10-15'); // first load is today, then the page moves to the session's day
+    const row = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
+    await row.getByRole('button', { name: 'Mark', exact: true }).click();
+    await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
+    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+    await expect(page.getByRole('main').getByText('Attendance updated for Alice Green (present).', { exact: true })).toBeVisible();
+    expect(payloads).toEqual([expect.objectContaining({ csId: 1, enrollmentId: 10, sessionDate: '2026-10-14', status: 'present' })]);
+    // An explicit date is respected.
+    await page.locator('input[type="date"]').fill('2026-10-15');
+    await expect(page.locator('input[type="date"]')).toHaveValue('2026-10-15');
+    await expect.poll(() => dates[dates.length - 1]).toBe('2026-10-15');
   });
 
   test('no-op: selecting the same status that is already persisted does not call API', async ({ page }) => {

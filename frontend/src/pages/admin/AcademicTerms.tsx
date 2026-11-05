@@ -529,7 +529,7 @@ export const AcademicTermsSettings: React.FC = () => {
         onClose={() => {
           if (!busy) setCopying(false);
         }}
-        title="Copy to next school year"
+        title="Add next school year"
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">

@@ -161,6 +161,7 @@ export const AttendanceMonitoring: React.FC = () => {
   });
   // Attendance dates are Asia/Manila calendar days, as on the server.
   const [selectedDate, setSelectedDate] = useState<string>(() => manilaDateToday());
+  const dateChosen = useRef(false); // true once the Faculty picks a date; stops the overnight-session default
 
   // Worksheet State
   const worksheetRequest = useRef(0);
@@ -335,6 +336,18 @@ export const AttendanceMonitoring: React.FC = () => {
     return { liveCurrentSession: current, upcomingSessions: upcoming };
   }, [allClassSessions, currentTimeMs]);
 
+  // An overnight session still running after midnight belongs to its own (yesterday's) date, so the
+  // worksheet and manual marks default to that date until the Faculty picks another date.
+  useEffect(() => {
+    if (dateChosen.current || !liveCurrentSession || liveCurrentSession.status !== 'active') return;
+    if (String(worksheet?.classSection?.id) !== selectedCsId) return;
+    const yesterday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(currentTimeMs - 86400000));
+    if (liveCurrentSession.sessionDate === yesterday && selectedDate !== yesterday) {
+      setSelectedDate(yesterday);
+      setSelectedSessionId('');
+    }
+  }, [liveCurrentSession, worksheet, selectedCsId, selectedDate, currentTimeMs]);
+
   // Edit Session Modal State
   const [isEditSessionOpen, setIsEditSessionOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<FacultyManagedAttendanceSession | null>(null);
@@ -447,6 +460,7 @@ export const AttendanceMonitoring: React.FC = () => {
     setSelectedCourseId(classItem.courseId);
     setSelectedCsId(String(classItem.csId));
     setSelectedSessionId('');
+    if (!dateChosen.current) setSelectedDate(manilaDateToday()); // drop another class's overnight date
     try {
       localStorage.setItem('faculty_attendance_selected_cs_id', String(classItem.csId));
     } catch {}
@@ -1357,7 +1371,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   type="date"
                   value={selectedDate}
                   disabled={attendanceWritePending}
-                  onChange={(e) => { setWorksheet(null); setSelectedDate(e.target.value); setSelectedSessionId(''); }}
+                  onChange={(e) => { dateChosen.current = true; setWorksheet(null); setSelectedDate(e.target.value); setSelectedSessionId(''); }}
                   className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
                 />
               </div>
@@ -1365,7 +1379,7 @@ export const AttendanceMonitoring: React.FC = () => {
               {selectedDate !== manilaDateToday() && (
                 <button
                   type="button"
-                  onClick={() => { setWorksheet(null); setSelectedDate(manilaDateToday()); setSelectedSessionId(''); }}
+                  onClick={() => { dateChosen.current = true; setWorksheet(null); setSelectedDate(manilaDateToday()); setSelectedSessionId(''); }}
                   className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
                 >
                   Jump to Today
