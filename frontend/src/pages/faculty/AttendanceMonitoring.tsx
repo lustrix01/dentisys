@@ -48,6 +48,8 @@ import {
 
 import { isViewOnlyClass, isArchivedCurrentYear, orderCurrentYearClasses } from '../../utils/classArchiving';
 import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../../utils/geofenceRadius';
+import { SessionTimeFields } from '../../components/SessionTimeFields';
+import { checkTimes, isNextDay, sessionEndOffsetMs, type TimeSet } from '../../utils/sessionTimes';
 const RADIUS_HINT = 'Indoors, use 150 m or more; phone GPS is often off by 50–100 m inside buildings.';
 
 type SupportedStatus = 'present' | 'absent' | 'late' | 'excused';
@@ -306,7 +308,8 @@ export const AttendanceMonitoring: React.FC = () => {
       }
 
       const startMs = parseSessionTimeMs(session.sessionDate, session.openingTime);
-      const endMs = parseSessionTimeMs(session.sessionDate, session.classEndTime || '23:59');
+      const endBase = parseSessionTimeMs(session.sessionDate, session.classEndTime || '23:59');
+      const endMs = endBase === null ? null : endBase + sessionEndOffsetMs(session.openingTime, session.classEndTime, session.classEndNextDay);
 
       // A session is CURRENT if:
       // 1. It is explicitly active
@@ -337,10 +340,7 @@ export const AttendanceMonitoring: React.FC = () => {
   const [editingSession, setEditingSession] = useState<FacultyManagedAttendanceSession | null>(null);
   const rooms = useRooms();
   const [editRoom, setEditRoom] = useState('');
-  const [editOpeningTime, setEditOpeningTime] = useState('');
-  const [editPresentCutoff, setEditPresentCutoff] = useState('');
-  const [editLateCutoff, setEditLateCutoff] = useState('');
-  const [editClassEndTime, setEditClassEndTime] = useState('');
+  const [editTimes, setEditTimes] = useState<TimeSet>({ openingTime: '', presentCutoff: '', lateCutoff: '', classEndTime: '' });
   const [editBiometricRequired, setEditBiometricRequired] = useState(false);
   const [editGeofenceEnabled, setEditGeofenceEnabled] = useState(false);
   // The saved values the form opened with; an edit sends only what differs from these.
@@ -659,10 +659,7 @@ export const AttendanceMonitoring: React.FC = () => {
     };
     setEditOriginal(original);
     setEditRoom(original.room);
-    setEditOpeningTime(original.openingTime);
-    setEditPresentCutoff(original.presentCutoff);
-    setEditLateCutoff(original.lateCutoff);
-    setEditClassEndTime(original.classEndTime);
+    setEditTimes({ openingTime: original.openingTime, presentCutoff: original.presentCutoff, lateCutoff: original.lateCutoff, classEndTime: original.classEndTime });
     setEditBiometricRequired(original.biometricRequired);
     setEditGeofenceEnabled(original.geofenceEnabled);
     setEditGeofenceRadius(String(original.radius));
@@ -682,12 +679,15 @@ export const AttendanceMonitoring: React.FC = () => {
       setEditError(RADIUS_RANGE_ERROR);
       return;
     }
+    // Cleared times go to the server, which answers with its own message.
+    const timeProblem = Object.values(editTimes).every(Boolean) ? checkTimes(editTimes) : null;
+    if (timeProblem) { setEditError(timeProblem); return; }
     const changes: Omit<Parameters<typeof updateFacultyAttendanceSessionApi>[0], 'sessionId'> = {};
     if (editRoom.trim() !== editOriginal.room.trim()) changes.room = editRoom.trim();
-    if (editOpeningTime !== editOriginal.openingTime) changes.openingTime = editOpeningTime;
-    if (editPresentCutoff !== editOriginal.presentCutoff) changes.presentCutoff = editPresentCutoff;
-    if (editLateCutoff !== editOriginal.lateCutoff) changes.lateCutoff = editLateCutoff;
-    if (editClassEndTime !== editOriginal.classEndTime) changes.classEndTime = editClassEndTime;
+    if (editTimes.openingTime !== editOriginal.openingTime) changes.openingTime = editTimes.openingTime;
+    if (editTimes.presentCutoff !== editOriginal.presentCutoff) changes.presentCutoff = editTimes.presentCutoff;
+    if (editTimes.lateCutoff !== editOriginal.lateCutoff) changes.lateCutoff = editTimes.lateCutoff;
+    if (editTimes.classEndTime !== editOriginal.classEndTime) changes.classEndTime = editTimes.classEndTime;
     if (editBiometricRequired !== editOriginal.biometricRequired) changes.biometricRequired = editBiometricRequired;
     if (editGeofenceEnabled !== editOriginal.geofenceEnabled) {
       changes.geofenceEnabled = editGeofenceEnabled;
@@ -2023,48 +2023,7 @@ export const AttendanceMonitoring: React.FC = () => {
               <div className="mt-2"><RetiredRoomWarning rooms={rooms} names={[editRoom]} /></div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <label className="block">
-                <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Opening time</span>
-                <input
-                  type="time"
-                  value={editOpeningTime}
-                  onChange={(event) => setEditOpeningTime(event.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Present cutoff</span>
-                <input
-                  type="time"
-                  value={editPresentCutoff}
-                  onChange={(event) => setEditPresentCutoff(event.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Late cutoff</span>
-                <input
-                  type="time"
-                  value={editLateCutoff}
-                  onChange={(event) => setEditLateCutoff(event.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-              </label>
-            </div>
-
-            <label className="block">
-              <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Class end time</span>
-              <input
-                type="time"
-                required
-                aria-label="Class end time"
-                value={editClassEndTime}
-                onChange={(event) => setEditClassEndTime(event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-              <small className="mt-1 block text-slate-500 dark:text-slate-400">The session ends automatically at this time; unrecorded students are marked Absent.</small>
-            </label>
+            <SessionTimeFields times={editTimes} onChange={setEditTimes} sessionDate={editingSession?.sessionDate ?? ''} openingLabel="Opening time" endHint="The session ends automatically at this time; unrecorded students are marked Absent." />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
@@ -2268,7 +2227,7 @@ export const AttendanceMonitoring: React.FC = () => {
                           {liveCurrentSession.classEndTime && (
                             <>
                               <span>→</span>
-                              <span className="font-bold text-slate-700 dark:text-slate-200">End {liveCurrentSession.classEndTime}</span>
+                              <span className="font-bold text-slate-700 dark:text-slate-200">End {liveCurrentSession.classEndTime}{(liveCurrentSession.classEndNextDay ?? isNextDay(liveCurrentSession.openingTime ?? '', liveCurrentSession.classEndTime)) ? ' (next day)' : ''}</span>
                             </>
                           )}
                         </div>
@@ -2382,7 +2341,7 @@ export const AttendanceMonitoring: React.FC = () => {
                             </div>
                             <div className="flex items-center gap-2 text-xs text-slate-500">
                               <Clock className="w-3.5 h-3.5 text-slate-400" />
-                              <span>{session.openingTime ?? '08:00'} – {session.classEndTime ?? '13:00'}</span>
+                              <span>{session.openingTime ?? '08:00'} – {session.classEndTime ?? '13:00'}{(session.classEndNextDay ?? isNextDay(session.openingTime ?? '', session.classEndTime)) ? ' (next day)' : ''}</span>
                               {session.room && (
                                 <>
                                   <span>&bull;</span>

@@ -53,6 +53,7 @@ import {
 } from '../../utils/guidedCapture';
 import { GuidedCaptureStatus } from '../../components/GuidedCaptureStatus';
 import { playGuidanceSuccessTone, primeGuidanceAudio } from '../../utils/guidanceAudio';
+import { isNextDay } from '../../utils/sessionTimes';
 
 // Mock Geofence center for simulation only
 const BU_DENTAL_CLINIC_COORDS = {
@@ -134,11 +135,19 @@ function formatUpcomingDate(isoDate: string): string {
   return `${weekday}, ${months[month - 1]} ${day}`;
 }
 
+/** A time earlier than the Opening time is on the next day (ATT-001); the server flag wins when present. */
+function withNextDay(session: StudentUpcomingSession, field: 'classEnd' | 'presentCutoff' | 'lateCutoff'): string {
+  const time = field === 'classEnd' ? session.classEndTime : session[field];
+  if (!time) return '--:--';
+  const flag = session[`${field}NextDay` as 'classEndNextDay'];
+  return (flag ?? isNextDay(session.openingTime ?? '', time)) ? `${time} (next day)` : time;
+}
+
 function upcomingPill(session: StudentUpcomingSession, nowMinutes: number): { label: string; tone: 'open' | 'late' | 'soon' | 'done' | 'idle' } {
   if (session.alreadyRecordedStatus) return { label: `Recorded: ${session.alreadyRecordedStatus}`, tone: 'done' };
   if (session.isOpen) {
-    if (session.captureStatus === 'late') return { label: `Open · Late until ${session.lateCutoff ?? '--:--'}`, tone: 'late' };
-    return { label: `Open · Present until ${session.presentCutoff ?? '--:--'}`, tone: 'open' };
+    if (session.captureStatus === 'late') return { label: `Open · Late until ${withNextDay(session, 'lateCutoff')}`, tone: 'late' };
+    return { label: `Open · Present until ${withNextDay(session, 'presentCutoff')}`, tone: 'open' };
   }
   const opening = timeToMinutes(session.openingTime);
   if (opening !== null && opening > nowMinutes) {
@@ -436,7 +445,8 @@ export const Attendance: React.FC = () => {
   }, [isAuthoritative, loadAuthoritativeData]);
 
   const serverNowParts = manilaNow(clockLocalNow + clockOffsetMs);
-  const upcomingToday = upcomingSessions.filter(s => s.sessionDate === serverNowParts.date);
+  // An open overnight session stays listed after midnight under Today (ATT-007).
+  const upcomingToday = upcomingSessions.filter(s => s.sessionDate === serverNowParts.date || (s.sessionDate < serverNowParts.date && s.isOpen));
   const upcomingLater = upcomingSessions.filter(s => s.sessionDate > serverNowParts.date);
 
   // Selected Authoritative Session Object
@@ -1216,7 +1226,7 @@ export const Attendance: React.FC = () => {
                               {sess.courseName}
                             </p>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {sess.openingTime ?? '--:--'}–{sess.classEndTime ?? '--:--'}
+                              {sess.openingTime ?? '--:--'}–{withNextDay(sess, 'classEnd')}
                             </p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
@@ -1273,7 +1283,7 @@ export const Attendance: React.FC = () => {
                           {sess.courseName}
                         </p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {formatUpcomingDate(sess.sessionDate)} · {sess.openingTime ?? '--:--'}–{sess.classEndTime ?? '--:--'}
+                          {formatUpcomingDate(sess.sessionDate)} · {sess.openingTime ?? '--:--'}–{withNextDay(sess, 'classEnd')}
                         </p>
                       </div>
                     ))}

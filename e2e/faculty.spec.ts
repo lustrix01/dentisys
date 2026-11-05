@@ -963,6 +963,50 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByText(/created by Secretary Bea Alonzo/)).toBeVisible();
   });
 
+  test('Start Session auto-shifts the times, accepts an overnight session and warns about a long one without blocking', async ({ page }) => {
+    const payloads: Record<string, unknown>[] = [];
+    await page.route('**/api/faculty/attendance?*', route => route.fulfill({ json: { status: 'ok', worksheet: mockWorksheetSectionA } }));
+    await page.route('**/api/faculty/attendance/session', route => {
+      payloads.push(route.request().postDataJSON());
+      return route.fulfill({ status: 409, json: { status: 'error', message: 'Stubbed server refusal.' } });
+    });
+    await page.goto('/attendance');
+    await page.getByLabel('Assigned course').selectOption('101');
+    await page.getByLabel('Class section').selectOption('1');
+    await page.getByRole('button', { name: 'Start session', exact: true }).click();
+    const time = (label: string) => page.getByLabel(label, { exact: true });
+    const expectTimes = async (v: string[]) => {
+      for (const [i, label] of ['Opening', 'Present cutoff', 'Late cutoff', 'Class end time'].entries()) await expect(time(label)).toHaveValue(v[i]);
+    };
+    await time('Opening').fill('02:00');
+    await expectTimes(['02:00', '03:00', '06:00', '07:00']);
+    await time('Late cutoff').fill('14:00');
+    await expect(time('Class end time')).toHaveValue('14:00');
+    await time('Present cutoff').fill('15:00');
+    await expectTimes(['02:00', '15:00', '15:01', '15:01']);
+    await time('Opening').fill('07:00');
+    await expectTimes(['07:00', '20:00', '20:01', '20:01']);
+
+    await time('Opening').fill('23:00');
+    await time('Present cutoff').fill('23:30');
+    await time('Late cutoff').fill('01:00');
+    await time('Class end time').fill('02:00');
+    await expect(page.getByTestId('caption-presentCutoff')).toHaveText('11:30 PM · same day');
+    await expect(page.getByTestId('caption-lateCutoff')).toContainText('1:00 AM (next day)');
+    await expect(page.getByTestId('caption-classEndTime')).toContainText('2:00 AM (next day)');
+    await expect(page.getByTestId('time-summary')).toContainText('Session lasts 3 h');
+    await expect(page.getByTestId('long-session-note')).toHaveCount(0);
+    await page.locator('form').getByRole('button', { name: /^(Start|Schedule) session$/ }).click();
+    await expect.poll(() => payloads.length).toBe(1);
+    expect(payloads[0]).toMatchObject({ openingTime: '23:00', presentCutoff: '23:30', lateCutoff: '01:00', classEndTime: '02:00' });
+
+    await time('Class end time').fill('13:00');
+    await expect(page.getByTestId('long-session-note')).toHaveText('Check AM / PM — this session lasts 14 h.');
+    await page.locator('form').getByRole('button', { name: /^(Start|Schedule) session$/ }).click();
+    await expect.poll(() => payloads.length).toBe(2);
+    expect(payloads[1]).toMatchObject({ openingTime: '23:00', classEndTime: '13:00' });
+  });
+
   test('Start Session prefills from the class schedule and a meeting chip replaces hand-edited times', async ({ page }) => {
     const meetings = [
       { component: 'Laboratory', day: 'Thu', startTime: '12:00', endTime: '17:00', room: 'CDM 2' },
@@ -1896,6 +1940,27 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
       await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', classEndTime: '10:30' }]);
+    });
+
+    test('changing Opening shifts the other times and sends only the four changed time fields', async ({ page }) => {
+      const payloads = await openEdit(page, baseSession);
+      await page.getByLabel('Opening time', { exact: true }).fill('22:00');
+      await expect(page.getByLabel('Present cutoff', { exact: true })).toHaveValue('22:35');
+      await expect(page.getByLabel('Late cutoff', { exact: true })).toHaveValue('23:55');
+      await expect(page.getByLabel('Class end time', { exact: true })).toHaveValue('00:30');
+      await expect(page.getByTestId('caption-classEndTime')).toContainText('12:30 AM (next day)');
+      await expect(page.getByTestId('time-summary')).toContainText('Session lasts 2 h 30 min');
+      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
+      expect(payloads).toEqual([{ sessionId: '710', openingTime: '22:00', presentCutoff: '22:35', lateCutoff: '23:55', classEndTime: '00:30' }]);
+    });
+
+    test('moving a cutoff earlier than the later fields sends only that field', async ({ page }) => {
+      const payloads = await openEdit(page, baseSession);
+      await page.getByLabel('Present cutoff', { exact: true }).fill('08:00');
+      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
+      expect(payloads).toEqual([{ sessionId: '710', presentCutoff: '08:00' }]);
     });
 
     test('changing only the room sends the session id and room', async ({ page }) => {

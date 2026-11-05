@@ -5262,6 +5262,7 @@ function faculty_attendance_session_payload(?array $session): ?array
         'lateCutoff' => $session['late_cutoff_time'] !== null ? substr((string) $session['late_cutoff_time'], 0, 5) : null,
         'classEndTime' => isset($session['class_end_time']) ? substr((string) $session['class_end_time'], 0, 5) : null,
         'timingConfigured' => $session['opening_time'] !== null && $session['present_cutoff_time'] !== null && $session['late_cutoff_time'] !== null,
+        ...attendance_session_next_day_flags($session),
         'revokedAt' => attendance_session_timestamp($session['revoked_at'] ?? null),
         'revocationReason' => $session['revocation_reason'] ?? null,
     ];
@@ -5537,7 +5538,7 @@ function handle_faculty_attendance_session_create(): void
             return;
         }
         [$openingTime, $presentCutoff, $lateCutoff] = attendance_session_timing_from_request($data);
-        $classEndTime = attendance_session_class_end_time_from_request($data, $lateCutoff, $sessionDate, $config);
+        $classEndTime = attendance_session_class_end_time_from_request($data, $openingTime, $lateCutoff, $sessionDate, $config);
         $room = array_key_exists('room', $data) && trim((string) $data['room']) !== ''
             ? validate_required_string($data, 'room', 1, 255)
             : null;
@@ -7781,9 +7782,9 @@ function handle_faculty_classes_get(): void
                            AND lv.status NOT IN ('revoked', 'ended')
                            AND lv.revoked_at IS NULL
                            AND (lv.status = 'active'
-                                OR (lv.session_date = (NOW() AT TIME ZONE 'Asia/Manila')::date
-                                    AND (NOW() AT TIME ZONE 'Asia/Manila')::time
-                                        BETWEEN COALESCE(lv.opening_time, TIME '00:00') AND COALESCE(lv.class_end_time, TIME '23:59')))) AS live_session,
+                                OR ((NOW() AT TIME ZONE 'Asia/Manila') BETWEEN (lv.session_date + COALESCE(lv.opening_time, TIME '00:00'))
+                                        AND (lv.session_date + COALESCE(lv.class_end_time, TIME '23:59')
+                                             + CASE WHEN lv.class_end_time < lv.opening_time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END)))) AS live_session,
                 (EXISTS (SELECT 1 FROM assessment_scores sc JOIN assessments a ON a.assessment_id = sc.assessment_id WHERE a.cs_id = cs.cs_id)
                  OR EXISTS (SELECT 1 FROM enrollments eg WHERE eg.cs_id = cs.cs_id AND (eg.final_gwa IS NOT NULL OR eg.final_percentage IS NOT NULL))) AS has_grades
             FROM class_sections cs

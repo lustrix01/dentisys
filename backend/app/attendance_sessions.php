@@ -47,18 +47,64 @@ function attendance_session_creation_status(string $date, ?string $opening, arra
     return $date . ' ' . ($opening ?? '00:00:00') > $now->format('Y-m-d H:i:s') ? 'scheduled' : 'active';
 }
 
-/** Called while holding the class-section row lock when creating or editing. */
+/** ATT-001 (2026-11-05): seconds since midnight of an HH:MM[:SS] clock time. */
+function attendance_session_seconds(string $time): int
+{
+    $p = explode(':', $time);
+    return ((int) $p[0]) * 3600 + ((int) ($p[1] ?? 0)) * 60 + (int) ($p[2] ?? 0);
+}
+
+/** Seconds after the opening time; a time earlier than opening is on the next day. */
+function attendance_session_offset(string $time, string $opening): int
+{
+    return (attendance_session_seconds($time) - attendance_session_seconds($opening) + 86400) % 86400;
+}
+
+/** The real moment of a session clock time: the session date, or the next day when earlier than opening. */
+function attendance_session_clock_moment(string $date, string $time, ?string $opening, DateTimeZone $timezone): DateTimeImmutable
+{
+    $moment = new DateTimeImmutable($date . ' ' . $time, $timezone);
+    return $opening !== null && attendance_session_seconds($time) < attendance_session_seconds($opening)
+        ? $moment->modify('+1 day') : $moment;
+}
+
+/** Payload flags so the UI can show "(next day)". */
+function attendance_session_next_day_flags(array $row): array
+{
+    $opening = $row['opening_time'] ?? null;
+    $flag = static fn(string $key): bool => $opening !== null && ($row[$key] ?? null) !== null
+        && attendance_session_seconds((string) $row[$key]) < attendance_session_seconds((string) $opening);
+    return [
+        'presentCutoffNextDay' => $flag('present_cutoff_time'),
+        'lateCutoffNextDay' => $flag('late_cutoff_time'),
+        'classEndNextDay' => $flag('class_end_time'),
+    ];
+}
+
+/** SQL timestamp (Asia/Manila wall clock) of the real class end of the sessions table alias $a. */
+function attendance_session_end_sql(string $a): string
+{
+    return "({$a}.session_date + {$a}.class_end_time + CASE WHEN {$a}.class_end_time < {$a}.opening_time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END)";
+}
+
+/** Called while holding the class-section row lock when creating or editing. Compares real time ranges across midnight. */
 function attendance_session_booking_conflict(PDO $pdo, int $csId, string $date, ?string $opening, string $end, ?int $excludeSessionId = null): ?string
 {
     $exclude = $excludeSessionId !== null ? ' AND s.session_id <> ?' : '';
+    $tz = new DateTimeZone('UTC'); // wall-clock arithmetic only
+    $opening ??= '00:00:00';
+    $newStart = new DateTimeImmutable($date . ' ' . $opening, $tz);
+    $newEnd = attendance_session_clock_moment($date, $end, $opening, $tz);
+    $endSql = attendance_session_end_sql('s');
     $stmt = $pdo->prepare("SELECT s.session_date, s.opening_time, s.class_end_time, s.created_by_role,
         u.display_name AS creator_name FROM attendance_sessions s
         LEFT JOIN user_accounts u ON u.user_id = s.owner_user_id
-        WHERE s.cs_id = ? AND s.session_date = ? AND s.status IN ('active', 'scheduled')
-          AND COALESCE(s.opening_time, TIME '00:00') < CAST(? AS time)
-          AND CAST(? AS time) < COALESCE(s.class_end_time, TIME '23:59:59')
-        {$exclude} ORDER BY s.opening_time, s.session_id LIMIT 1");
-    $params = [$csId, $date, $end, $opening ?? '00:00:00'];
+        WHERE s.cs_id = ? AND s.session_date BETWEEN CAST(? AS date) - 1 AND CAST(? AS date) + 1
+          AND s.status IN ('active', 'scheduled')
+          AND (s.session_date + COALESCE(s.opening_time, TIME '00:00')) < CAST(? AS timestamp)
+          AND CAST(? AS timestamp) < COALESCE({$endSql}, s.session_date + TIME '23:59:59')
+        {$exclude} ORDER BY s.session_date, s.opening_time, s.session_id LIMIT 1");
+    $params = [$csId, $date, $date, $newEnd->format('Y-m-d H:i:s'), $newStart->format('Y-m-d H:i:s')];
     if ($excludeSessionId !== null) {
         $params[] = $excludeSessionId;
     }
@@ -69,7 +115,7 @@ function attendance_session_booking_conflict(PDO $pdo, int $csId, string $date, 
     $name = trim((string) ($existing['creator_name'] ?? ''));
     $from = isset($existing['opening_time']) ? substr($existing['opening_time'], 0, 5) : '00:00';
     $to = isset($existing['class_end_time']) ? substr($existing['class_end_time'], 0, 5) : '23:59';
-    return "A schedule already exists on {$date} from {$from} to {$to} (Asia/Manila), created by {$role}" . ($name !== '' ? " {$name}" : '') . '.';
+    return "A schedule already exists on {$existing['session_date']} from {$from} to {$to} (Asia/Manila), created by {$role}" . ($name !== '' ? " {$name}" : '') . '.';
 }
 
 function attendance_session_bool(mixed $value): bool
@@ -129,7 +175,8 @@ function attendance_session_timing_from_request(array $data): array
         ]]);
     }
 
-    if (!($opening < $present && $present < $late)) {
+    $presentOffset = attendance_session_offset($present, $opening);
+    if (!(0 < $presentOffset && $presentOffset < attendance_session_offset($late, $opening))) {
         throw new ValidationException([[
             'field' => 'openingTime',
             'message' => 'Opening time must be before Present cutoff, which must be before Late cutoff.',
@@ -140,12 +187,14 @@ function attendance_session_timing_from_request(array $data): array
 }
 
 /**
- * ATT-001: required class end time (HH:MM, Asia/Manila) on the session day, at
- * or after the Late cutoff. A session for today cannot end in the past.
+ * ATT-001: required class end time (HH:MM, Asia/Manila), at or after the Late cutoff. Times
+ * earlier than the opening time are on the next day; the session must last under 24 hours.
+ * A session for today cannot end in the past.
  */
 function attendance_session_class_end_time_from_request(
     array $data,
-    ?string $lateCutoff,
+    string $opening,
+    string $lateCutoff,
     string $sessionDate,
     array $config
 ): string {
@@ -153,12 +202,14 @@ function attendance_session_class_end_time_from_request(
     if ($classEnd === null) {
         throw new ValidationException([['field' => 'classEndTime', 'message' => 'Class end time is required.']]);
     }
-    if ($lateCutoff !== null && $classEnd < $lateCutoff) {
+    if ($classEnd === $opening) {
+        throw new ValidationException([['field' => 'classEndTime', 'message' => 'The session must last under 24 hours.']]);
+    }
+    if (attendance_session_offset($classEnd, $opening) < attendance_session_offset($lateCutoff, $opening)) {
         throw new ValidationException([['field' => 'classEndTime', 'message' => 'Class end time must be at or after the Late cutoff.']]);
     }
     $timezone = new DateTimeZone((string) $config['app']['operational_timezone']);
-    $end = new DateTimeImmutable($sessionDate . ' ' . $classEnd, $timezone);
-    if ($end <= attendance_session_now_utc()) {
+    if (attendance_session_clock_moment($sessionDate, $classEnd, $opening, $timezone) <= attendance_session_now_utc()) {
         throw new ValidationException([['field' => 'classEndTime', 'message' => 'Class end time has already passed.']]);
     }
     return $classEnd;
@@ -302,7 +353,7 @@ function attendance_session_update_values(array $data, array $config, string $ro
         ? attendance_session_creation_date(trim((string) ($data['sessionDate'] ?? ($data['date'] ?? $today))), $config)
         : secretary_attendance_session_date($data, attendance_session_now_utc(), $config);
     [$openingTime, $presentCutoff, $lateCutoff] = attendance_session_timing_from_request($data);
-    $classEndTime = attendance_session_class_end_time_from_request($data, $lateCutoff, $sessionDate, $config);
+    $classEndTime = attendance_session_class_end_time_from_request($data, $openingTime, $lateCutoff, $sessionDate, $config);
 
     $room = null;
     if ($role === 'faculty') {
@@ -515,6 +566,7 @@ function attendance_session_map(array $row, bool $includeLocation = false): arra
         'lateCutoff' => $row['late_cutoff_time'] !== null ? substr((string) $row['late_cutoff_time'], 0, 5) : null,
         'classEndTime' => isset($row['class_end_time']) ? substr((string) $row['class_end_time'], 0, 5) : null,
         'timingConfigured' => $row['opening_time'] !== null && $row['present_cutoff_time'] !== null && $row['late_cutoff_time'] !== null,
+        ...attendance_session_next_day_flags($row),
         'geofenceEnabled' => attendance_session_bool($row['geofence_enabled']),
         'geofenceRadiusMeters' => $row['geofence_radius_meters'] !== null ? (float) $row['geofence_radius_meters'] : null,
         'biometricRequired' => attendance_session_bool($row['biometric_required']),
@@ -551,9 +603,10 @@ function attendance_session_timing_decision(array $session, DateTimeImmutable $n
     $timezone = new DateTimeZone((string) $config['app']['operational_timezone']);
     $nowLocal = $nowUtc->setTimezone($timezone);
     $date = (string) $session['session_date'];
-    $opening = new DateTimeImmutable($date . ' ' . $session['opening_time'], $timezone);
-    $presentCutoff = new DateTimeImmutable($date . ' ' . $session['present_cutoff_time'], $timezone);
-    $lateCutoff = new DateTimeImmutable($date . ' ' . $session['late_cutoff_time'], $timezone);
+    $openingTime = (string) $session['opening_time'];
+    $opening = new DateTimeImmutable($date . ' ' . $openingTime, $timezone);
+    $presentCutoff = attendance_session_clock_moment($date, (string) $session['present_cutoff_time'], $openingTime, $timezone);
+    $lateCutoff = attendance_session_clock_moment($date, (string) $session['late_cutoff_time'], $openingTime, $timezone);
 
     if ($nowLocal < $opening) {
         return ['allowed' => false, 'code' => 'attendance_not_open', 'status' => null];
@@ -625,21 +678,20 @@ function attendance_session_request_context(): array
  * by the time anyone looks at it. Each session ends in its own transaction
  * and is audited as a system action. Returns the number of sessions ended.
  */
-function attendance_sessions_end_overdue(PDO $pdo, array $config, array $context): int
+function attendance_sessions_end_overdue(PDO $pdo, array $config, array $context, ?DateTimeImmutable $nowLocal = null): int
 {
     if ($pdo->inTransaction()) {
         throw new AttendanceSessionException('Automatic session end must run outside a transaction.', 500, 'attendance_resolution_failed');
     }
     $timezone = new DateTimeZone((string) $config['app']['operational_timezone']);
-    $nowLocal = attendance_session_now_utc()->setTimezone($timezone);
+    $nowLocal ??= attendance_session_now_utc()->setTimezone($timezone);
     $candidates = $pdo->prepare(
         "SELECT session_id, cs_id FROM attendance_sessions
           WHERE status IN ('active', 'scheduled') AND class_end_time IS NOT NULL
-            AND (session_date < ? OR (session_date = ? AND class_end_time <= ?))
+            AND " . attendance_session_end_sql('attendance_sessions') . " <= CAST(? AS timestamp)
           ORDER BY session_id"
     );
-    $today = $nowLocal->format('Y-m-d');
-    $candidates->execute([$today, $today, $nowLocal->format('H:i:s')]);
+    $candidates->execute([$nowLocal->format('Y-m-d H:i:s')]);
     $system = ['user_id' => null, 'login_email' => null, 'role' => 'system', 'display_name' => 'Automatic session end', 'session_id' => null];
     $ended = 0;
     foreach ($candidates->fetchAll(PDO::FETCH_ASSOC) as $candidate) {
@@ -648,7 +700,7 @@ function attendance_sessions_end_overdue(PDO $pdo, array $config, array $context
         try {
             $pdo->prepare('SELECT cs_id FROM class_sections WHERE cs_id = ? FOR UPDATE')->execute([$candidate['cs_id']]);
             $lock = $pdo->prepare(
-                "SELECT session_id, cs_id, session_code, session_date, class_end_time, status
+                "SELECT session_id, cs_id, session_code, session_date, opening_time, class_end_time, status
                    FROM attendance_sessions
                   WHERE session_id = ? AND status IN ('active', 'scheduled')
                   FOR UPDATE SKIP LOCKED"
@@ -659,7 +711,7 @@ function attendance_sessions_end_overdue(PDO $pdo, array $config, array $context
                 $pdo->commit();
                 continue;
             }
-            $endUtc = (new DateTimeImmutable($session['session_date'] . ' ' . $session['class_end_time'], $timezone))
+            $endUtc = attendance_session_clock_moment($session['session_date'], $session['class_end_time'], $session['opening_time'], $timezone)
                 ->setTimezone(new DateTimeZone('UTC'));
             $endSql = $endUtc->format('Y-m-d H:i:s.u');
             $update = $pdo->prepare(
@@ -691,8 +743,10 @@ function attendance_sessions_end_overdue(PDO $pdo, array $config, array $context
 function attendance_sessions_open_due(PDO $pdo, array $config, array $context, DateTimeImmutable $nowLocal): void
 {
     $due = $pdo->prepare("SELECT session_id, cs_id, session_date, opening_time FROM attendance_sessions WHERE status = 'scheduled'
-        AND session_date = ? AND opening_time <= ? AND class_end_time > ? ORDER BY session_id");
-    $due->execute([$nowLocal->format('Y-m-d'), $nowLocal->format('H:i:s'), $nowLocal->format('H:i:s')]);
+        AND (session_date + opening_time) <= CAST(? AS timestamp)
+        AND " . attendance_session_end_sql('attendance_sessions') . " > CAST(? AS timestamp) ORDER BY session_id");
+    $nowSql = $nowLocal->format('Y-m-d H:i:s');
+    $due->execute([$nowSql, $nowSql]);
     foreach ($due->fetchAll(PDO::FETCH_ASSOC) as $candidate) {
         $pdo->beginTransaction();
         try {

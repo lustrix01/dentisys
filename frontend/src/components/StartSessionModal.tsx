@@ -6,6 +6,8 @@ import { RoomSelector, RetiredRoomWarning, useRooms } from './RoomSelector';
 
 import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../utils/geofenceRadius';
 import type { ClassMeeting } from '../services/apiClient';
+import { SessionTimeFields } from './SessionTimeFields';
+import { checkTimes, type TimeSet } from '../utils/sessionTimes';
 import { FIXED_TIMES, manilaNow, meetingTimes, pickMeeting, sortMeetings } from '../utils/sessionDefaults';
 const RADIUS_HINT = 'Indoors, use 150 m or more; phone GPS is often off by 50–100 m inside buildings.';
 
@@ -75,10 +77,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   const rooms = useRooms();
   const [sessionDate, setSessionDate] = useState(() => manilaToday());
   const [room, setRoom] = useState(initialRoom ?? '');
-  const [openingTime, setOpeningTime] = useState('08:00');
-  const [presentCutoff, setPresentCutoff] = useState('09:00');
-  const [lateCutoff, setLateCutoff] = useState('12:00');
-  const [classEndTime, setClassEndTime] = useState('13:00');
+  const [times, setTimes] = useState<TimeSet>({ ...FIXED_TIMES });
   const [biometricRequired, setBiometricRequired] = useState(true);
   const [geofenceEnabled, setGeofenceEnabled] = useState(false);
   const [geofenceRadius, setGeofenceRadius] = useState('100');
@@ -103,9 +102,9 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   const [chosen, setChosen] = useState<number | null>(null);
   const applyMeeting = (index: number | null) => {
     setChosen(index);
-    const times = index === null ? { ...FIXED_TIMES, room: null } : meetingTimes(sortedMeetings[index]);
-    setOpeningTime(times.openingTime); setPresentCutoff(times.presentCutoff); setLateCutoff(times.lateCutoff); setClassEndTime(times.classEndTime);
-    if (times.room !== null) setRoom(times.room);
+    const picked = index === null ? { ...FIXED_TIMES, room: null } : meetingTimes(sortedMeetings[index]);
+    setTimes({ openingTime: picked.openingTime, presentCutoff: picked.presentCutoff, lateCutoff: picked.lateCutoff, classEndTime: picked.classEndTime });
+    if (picked.room !== null) setRoom(picked.room);
   };
   // Prefill when the pop-up opens or the class changes, never while typing (S1, S2, S4).
   useEffect(() => {
@@ -150,14 +149,8 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
     const blocked = precheck?.();
     if (blocked) { setError(blocked); return; }
     if (!sessionDate || sessionDate < manilaToday()) { setError('Choose today or a future date (Asia/Manila).'); return; }
-    if (openingTime >= presentCutoff || presentCutoff >= lateCutoff) {
-      setError('Set the times in order: opening, Present cutoff, then Late cutoff.');
-      return;
-    }
-    if (!classEndTime || classEndTime < lateCutoff) {
-      setError('Set a class end time at or after the Late cutoff.');
-      return;
-    }
+    const timeProblem = checkTimes(times);
+    if (timeProblem) { setError(timeProblem); return; }
     if (geofenceEnabled && !location) {
       setError('Acquire the session location before starting a geofenced session.');
       return;
@@ -170,7 +163,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
     setError(null);
     try {
       await onSubmit({
-        sessionDate, room: room.trim(), openingTime, presentCutoff, lateCutoff, classEndTime,
+        sessionDate, room: room.trim(), ...times,
         biometricRequired, geofenceEnabled, geofenceRadiusMeters: parseRadius(geofenceRadius) ?? 100, location,
       });
     } catch (err) {
@@ -276,16 +269,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <label className="block"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Opening</span><input type="time" value={openingTime} onChange={(event) => setOpeningTime(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
-          <label className="block"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Present cutoff</span><input type="time" value={presentCutoff} onChange={(event) => setPresentCutoff(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
-          <label className="block"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Late cutoff</span><input type="time" value={lateCutoff} onChange={(event) => setLateCutoff(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
-        </div>
-        <label className="block">
-          <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Class end time</span>
-          <input type="time" required aria-label="Class end time" value={classEndTime} onChange={(event) => setClassEndTime(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
-          <small className="mt-1 block text-slate-500 dark:text-slate-400">The session ends automatically at this time; students without a record are marked Absent.</small>
-        </label>
+        <SessionTimeFields times={times} onChange={setTimes} sessionDate={sessionDate} endHint="The session ends automatically at this time; students without a record are marked Absent." />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">

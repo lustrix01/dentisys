@@ -30,6 +30,7 @@ import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { DEVELOPMENT_LOCATION_FIXTURES } from '../../services/developmentProviders';
 import { RevokedSessionsSwitch } from '../../components/RevokedSessionsSwitch';
 import { meetingVenueLines } from '../../utils/scheduleHelper';
+import { isNextDay, sessionEndOffsetMs } from '../../utils/sessionTimes';
 import {
   REVOKED_SESSION_VIEW_ONLY_NOTE, countRevokedSessions, matchesRollCallFilters, revokedHiddenText, visibleSessions,
   type OverriddenFilter, type RecordedByFilter,
@@ -77,6 +78,9 @@ const sessionStatusClass: Record<string, string> = {
   ended: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
   revoked: 'bg-rose-500/10 text-rose-700 dark:text-rose-400',
 };
+
+const nextDayTag = (s: { openingTime?: string | null; classEndTime?: string | null; classEndNextDay?: boolean }) =>
+  (s.classEndNextDay ?? isNextDay(s.openingTime ?? '', s.classEndTime)) ? ' (next day)' : '';
 
 const formatSessionTime = (value?: string | null) => {
   if (!value) return '—';
@@ -550,7 +554,8 @@ export const AttendanceList: React.FC = () => {
 
       const sDate = session.sessionDate || session.date;
       const startMs = parseSessionTimeMs(sDate, session.openingTime);
-      const endMs = parseSessionTimeMs(sDate, session.classEndTime || '23:59');
+      const endBase = parseSessionTimeMs(sDate, session.classEndTime || '23:59');
+      const endMs = endBase === null ? null : endBase + sessionEndOffsetMs(session.openingTime, session.classEndTime, session.classEndNextDay);
 
       // A session is CURRENT if:
       // 1. It is explicitly active
@@ -1453,7 +1458,7 @@ export const AttendanceList: React.FC = () => {
                         <div>
                           <span className="font-semibold text-slate-500 dark:text-slate-400">Time window: </span>
                           <span>
-                            {liveCurrentSession.openingTime ? formatSessionTime(liveCurrentSession.openingTime) : '—'} – {liveCurrentSession.classEndTime ? formatSessionTime(liveCurrentSession.classEndTime) : '—'}
+                            {liveCurrentSession.openingTime ? formatSessionTime(liveCurrentSession.openingTime) : '—'} – {liveCurrentSession.classEndTime ? formatSessionTime(liveCurrentSession.classEndTime) + nextDayTag(liveCurrentSession) : '—'}
                           </span>
                         </div>
                         {liveCurrentSession.presentCutoff && (
@@ -1575,7 +1580,7 @@ export const AttendanceList: React.FC = () => {
                           </div>
                           <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
                             <span>Date: {sDate}</span>
-                            <span>Time: {formatSessionTime(s.openingTime)} – {formatSessionTime(s.classEndTime)}</span>
+                            <span>Time: {formatSessionTime(s.openingTime)} – {formatSessionTime(s.classEndTime)}{nextDayTag(s)}</span>
                             {s.room && <span>Room: {s.room}</span>}
                           </div>
                         </div>

@@ -1045,6 +1045,9 @@ export interface FacultyManagedAttendanceSession extends Record<string, unknown>
   presentCutoff?: string | null;
   lateCutoff?: string | null;
   classEndTime?: string | null;
+  classEndNextDay?: boolean;
+  presentCutoffNextDay?: boolean;
+  lateCutoffNextDay?: boolean;
   biometricRequired?: boolean;
   geofenceEnabled?: boolean;
   geofenceLatitude?: number | null;
@@ -1091,6 +1094,9 @@ export interface FacultyAttendanceWorksheet {
     presentCutoff?: string | null;
     lateCutoff?: string | null;
     classEndTime?: string | null;
+    classEndNextDay?: boolean;
+    presentCutoffNextDay?: boolean;
+    lateCutoffNextDay?: boolean;
     timingConfigured?: boolean;
     revokedAt?: string | null;
     revocationReason?: string | null;
@@ -1176,6 +1182,9 @@ export function createFacultyAttendanceSessionApi(data: {
   presentCutoff?: string;
   lateCutoff?: string;
   classEndTime: string;
+  classEndNextDay?: boolean;
+  presentCutoffNextDay?: boolean;
+  lateCutoffNextDay?: boolean;
   biometricRequired?: boolean;
   geofenceEnabled?: boolean;
   geofenceRadiusMeters?: number;
@@ -1365,6 +1374,9 @@ export function getSecretaryAttendanceApi(params?: {
     createdByCurrentSecretary?: boolean | null;
     openingTime?: string | null;
     classEndTime?: string | null;
+    classEndNextDay?: boolean;
+    presentCutoffNextDay?: boolean;
+    lateCutoffNextDay?: boolean;
     startedAt?: string;
     endedAt?: string;
     revokedAt?: string | null;
@@ -1476,6 +1488,9 @@ export interface SecretaryAttendanceSession {
   presentCutoff?: string | null;
   lateCutoff?: string | null;
   classEndTime?: string | null;
+  classEndNextDay?: boolean;
+  presentCutoffNextDay?: boolean;
+  lateCutoffNextDay?: boolean;
   timingConfigured?: boolean;
   geofenceEnabled: boolean;
   geofenceLatitude?: number | null;
@@ -1504,6 +1519,9 @@ export interface StartSecretaryAttendanceSessionPayload {
   presentCutoff?: string;
   lateCutoff?: string;
   classEndTime: string;
+  classEndNextDay?: boolean;
+  presentCutoffNextDay?: boolean;
+  lateCutoffNextDay?: boolean;
 }
 
 export function startSecretaryAttendanceSessionApi(
@@ -2179,6 +2197,9 @@ export interface StudentUpcomingSession extends StudentActiveSession {
   sessionDate: string;
   classEndTime: string | null;
   captureStatus: string | null;
+  classEndNextDay?: boolean;
+  presentCutoffNextDay?: boolean;
+  lateCutoffNextDay?: boolean;
 }
 
 export interface StudentUpcomingSessionsResponse {
@@ -2202,6 +2223,9 @@ export async function getStudentUpcomingAttendanceSessions(
         sessionDate: typeof row.sessionDate === 'string' ? row.sessionDate : '',
         classEndTime: typeof row.classEndTime === 'string' ? row.classEndTime : null,
         captureStatus: typeof row.captureStatus === 'string' ? row.captureStatus : null,
+        classEndNextDay: typeof row.classEndNextDay === 'boolean' ? row.classEndNextDay : undefined,
+        presentCutoffNextDay: typeof row.presentCutoffNextDay === 'boolean' ? row.presentCutoffNextDay : undefined,
+        lateCutoffNextDay: typeof row.lateCutoffNextDay === 'boolean' ? row.lateCutoffNextDay : undefined,
       };
     }),
     serverNow: typeof obj.serverNow === 'string' ? obj.serverNow : new Date().toISOString(),

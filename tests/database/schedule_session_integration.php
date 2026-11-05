@@ -449,4 +449,6 @@ expect_same(422, $upcomingBadStatus, 'Invalid upcoming range is rejected');
 expect_same($upcomingBefore, (int) $pdo->query('SELECT COUNT(*) FROM attendance_records')->fetchColumn(), 'Listing upcoming sessions writes no attendance');
 $pdo->prepare("UPDATE attendance_sessions SET status = 'revoked', revoked_at = CURRENT_TIMESTAMP WHERE session_id IN (?, ?, ?, ?)")->execute([$upcomingScheduledToday, $upcomingNear, $upcomingFar, $upcomingForeign]);
 
+require __DIR__ . '/overnight_sessions_integration.php';
+
 $pdo->prepare("UPDATE class_sections SET status = 'Archived' WHERE cs_id = ?")->execute([$meetingClassId]);

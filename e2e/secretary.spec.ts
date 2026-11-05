@@ -408,6 +408,38 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(form.getByText('Location acquired: 13.1436, 123.7438')).toBeVisible();
   });
 
+  test('Secretary schedules an overnight session: auto-shift, next-day labels and the times sent unchanged', async ({ page }) => {
+    const payloads: Record<string, unknown>[] = [];
+    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', activeSession: null }) }));
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, route => sessionsReply([{ ...mockActiveSession, sessionId: '102', sessionDate: '2099-10-02', status: 'scheduled', openingTime: '23:00', presentCutoff: '23:30', lateCutoff: '01:00', classEndTime: '02:00' }])(route));
+    await page.route('**/api/secretary/attendance/session', route => {
+      payloads.push(route.request().postDataJSON());
+      return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ status: 'error', message: 'Stubbed server refusal.' }) });
+    });
+    await openStartPopup(page);
+    const form = startForm(page);
+    const time = (label: string) => form.getByLabel(label, { exact: true });
+    await time('Opening').fill('02:00');
+    await expect(time('Present cutoff')).toHaveValue('03:00');
+    await expect(time('Late cutoff')).toHaveValue('06:00');
+    await expect(time('Class end time')).toHaveValue('07:00');
+    await time('Opening').fill('23:00');
+    await time('Present cutoff').fill('23:30');
+    await time('Late cutoff').fill('01:00');
+    await time('Class end time').fill('02:00');
+    await expect(form.getByTestId('caption-classEndTime')).toContainText('2:00 AM (next day)');
+    await expect(form.getByTestId('time-summary')).toContainText('Session lasts 3 h');
+    await form.getByRole('button', { name: /^(Start|Schedule) session$/ }).click();
+    await expect.poll(() => payloads.length).toBe(1);
+    expect(payloads[0]).toMatchObject({ openingTime: '23:00', presentCutoff: '23:30', lateCutoff: '01:00', classEndTime: '02:00' });
+    await time('Class end time').fill('13:00');
+    await expect(form.getByTestId('long-session-note')).toContainText('Check AM / PM — this session lasts 14 h.');
+    await form.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await openSessionsModal(page);
+    await page.getByRole('button', { name: 'Upcoming Sessions' }).click();
+    await expect(page.getByText(/Time: .*02:00 AM \(next day\)/)).toBeVisible();
+  });
+
   test('Secretary queues a future session and sees cross-role booking conflicts', async ({ page }) => {
     let payload: Record<string, unknown> | null = null;
     let queued = false;

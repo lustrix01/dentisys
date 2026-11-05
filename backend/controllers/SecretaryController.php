@@ -1320,6 +1320,7 @@ function secretary_attendance_session_map(array $row, ?int $currentSecretaryId =
         'lateCutoff' => $row['late_cutoff_time'] !== null ? substr((string) $row['late_cutoff_time'], 0, 5) : null,
         'classEndTime' => isset($row['class_end_time']) ? substr((string) $row['class_end_time'], 0, 5) : null,
         'timingConfigured' => $row['opening_time'] !== null && $row['present_cutoff_time'] !== null && $row['late_cutoff_time'] !== null,
+        ...attendance_session_next_day_flags($row),
         'revokedAt' => secretary_attendance_session_timestamp($row['revoked_at'] !== null ? (string) $row['revoked_at'] : null),
         'revocationReason' => $row['revocation_reason'] ?? null,
         'createdAt' => secretary_attendance_session_timestamp((string) $row['created_at']),
@@ -1361,7 +1362,7 @@ function handle_secretary_attendance_session_start(): void
             $room = validate_required_string($data, 'room', 1, 255);
         }
         [$openingTime, $presentCutoff, $lateCutoff] = attendance_session_timing_from_request($data);
-        $classEndTime = attendance_session_class_end_time_from_request($data, $lateCutoff, $sessionDate, $config);
+        $classEndTime = attendance_session_class_end_time_from_request($data, $openingTime, $lateCutoff, $sessionDate, $config);
 
         $biometricRequired = secretary_attendance_session_bool(
             $data,
@@ -1903,6 +1904,7 @@ function handle_secretary_attendance_get(): void
             'status' => $row['status'],
             'openingTime' => isset($row['opening_time']) ? substr($row['opening_time'], 0, 5) : null,
             'classEndTime' => isset($row['class_end_time']) ? substr($row['class_end_time'], 0, 5) : null,
+            ...attendance_session_next_day_flags($row),
             'startedAt' => attendance_session_timestamp($row['started_at']),
             'endedAt' => attendance_session_timestamp($row['ended_at']),
             'revokedAt' => attendance_session_timestamp($row['revoked_at']),

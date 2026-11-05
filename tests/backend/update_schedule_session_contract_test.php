@@ -51,10 +51,10 @@ class EditSchedulePdo extends PDO
 $pdo = new EditSchedulePdo();
 edit_schedule_assert(attendance_session_booking_conflict($pdo, 3, '2026-10-12', '08:00:00', '11:00:00', 17) === null, 'Editing has no conflict when the query finds no other booking');
 edit_schedule_assert(str_contains($pdo->sql, 's.session_id <> ?'), 'Edit conflict SQL excludes the edited session');
-edit_schedule_assert($pdo->statement->params === [3, '2026-10-12', '11:00:00', '08:00:00', 17], 'Edit conflict parameters keep the excluded ID separate from the time bounds');
+edit_schedule_assert($pdo->statement->params === [3, '2026-10-12', '2026-10-12', '2026-10-12 11:00:00', '2026-10-12 08:00:00', 17], 'Edit conflict parameters keep the excluded ID separate from the time bounds');
 attendance_session_booking_conflict($pdo, 3, '2026-10-12', null, '11:00:00');
-edit_schedule_assert(!str_contains($pdo->sql, 's.session_id <>') && $pdo->statement->params === [3, '2026-10-12', '11:00:00', '00:00:00'], 'Creation retains its original conflict query and parameters');
-$pdo->statement->result = ['created_by_role' => 'secretary', 'creator_name' => 'Fixture Secretary', 'opening_time' => '08:00:00', 'class_end_time' => '11:00:00'];
+edit_schedule_assert(!str_contains($pdo->sql, 's.session_id <>') && $pdo->statement->params === [3, '2026-10-12', '2026-10-12', '2026-10-12 11:00:00', '2026-10-12 00:00:00'], 'Creation retains its original conflict query and parameters');
+$pdo->statement->result = ['session_date' => '2026-10-12', 'created_by_role' => 'secretary', 'creator_name' => 'Fixture Secretary', 'opening_time' => '08:00:00', 'class_end_time' => '11:00:00'];
 edit_schedule_assert(attendance_session_booking_conflict($pdo, 3, '2026-10-12', '08:00:00', '11:00:00', 17) === 'A schedule already exists on 2026-10-12 from 08:00 to 11:00 (Asia/Manila), created by Secretary Fixture Secretary.', 'Edit preserves the exact booking-conflict message');
 
 $routes = require dirname(__DIR__, 2) . '/backend/routes/api.php';

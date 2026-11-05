@@ -553,7 +553,7 @@ function handle_student_attendance_active_sessions(): void
                     s.session_date, s.session_code, s.room, s.started_at, s.ended_at,
                     s.status, s.geofence_enabled, s.geofence_latitude, s.geofence_longitude,
                     s.geofence_radius_meters, s.biometric_required, s.opening_time,
-                    s.present_cutoff_time, s.late_cutoff_time, s.revoked_at,
+                    s.present_cutoff_time, s.late_cutoff_time, s.class_end_time, s.revoked_at,
                     s.revoked_by_user_id, s.revocation_reason, s.created_at, s.updated_at,
                     cs.cs_name, cs.block, c.course_id, c.course_code, c.name AS course_name,
                     u.display_name AS instructor_name, r.record_id, r.status AS record_status
@@ -601,7 +601,8 @@ function handle_student_attendance_upcoming_sessions(): void
         attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
         $now = attendance_session_now_utc();
         $today = app_local_date($config, $now);
-        $params = [$identity['student_id'], $today];
+        // A session that began yesterday stays listed past midnight until its real end.
+        $params = [$identity['student_id'], (new DateTimeImmutable($today))->modify('-1 day')->format('Y-m-d')];
         $rangeSql = '';
         if ($range === 'week') {
             $rangeSql = ' AND s.session_date <= ?';
@@ -629,6 +630,7 @@ function handle_student_attendance_upcoming_sessions(): void
         $stmt->execute($params);
         $sessions = [];
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            if ($row['session_date'] < $today && $row['class_end_time'] === null) { continue; }
             $decision = attendance_session_timing_decision($row, $now, $config);
             $payload = attendance_session_map($row, false);
             $payload['captureOpen'] = $decision['allowed'];
