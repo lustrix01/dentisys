@@ -887,7 +887,7 @@ An authorized Faculty or Secretary may revoke an attendance session that they ar
 
 When a session is created, eligible Students have an attendance state that remains unresolved until attendance is recorded or the attendance-resolution lifecycle resolves it; this requirement does not select a database representation.
 
-Every session has a required class end time. It must be on the session day and at or after the Late cutoff.
+Every session has a required class end time at or after the Late cutoff; it may fall on the next day (2026-11-05 amendment).
 
 A revoked session is treated as if it never happened. Its attendance records do not count toward attendance rates, attendance categories, transmutation, or reports. No student is resolved to Absent for it. The records and the revocation stay in history and audit.
 
@@ -902,6 +902,10 @@ Owner decision (2026-10-12): The edit form opens showing the session's saved val
 Owner decision (2026-10-12): Every attendance session, created or edited, must have an opening time, Present cutoff and Late cutoff. A session without them is rejected.
 
 Owner-approved amendment (2026-11-05): A session may end after midnight. Times later than the Opening time are on the session day; earlier times are on the next day ('next day'). The whole session must last under 24 hours.
+
+Owner decision (2026-11-06): A session lasts at most 12 hours; a longer session is rejected. This replaces "under 24 hours" in the 2026-11-05 amendment. Every session needs a room: one from the Dean's list, or a typed place ("Other place (custom)…") for anywhere else, including off-site.
+
+Owner decision (2026-11-06): Before a session is created or edited, DentiSys looks for overlaps with: (a) an open or scheduled session of another class in the same room; (b) an open or scheduled session of another class with the same Faculty; (c) a weekly meeting of another active class in the same room on that weekday within that class's term. These do not block. One pop-up lists each overlap (room, date or weekday, time, class code and title, Faculty name, and whether it is a booked session or a regular schedule) with Go back (default) and Book anyway. After Book anyway, the Faculty of each overlapped class gets an in-app notice (no email), and the confirmation is audited. Overlapping sessions of the same class stay rejected. Sessions that only touch (one ends when the next starts) do not overlap. Room names match ignoring case, spaces, dashes and dots. Existing bookings are not rechecked.
 
 ## ATT-002 — Geofencing and location privacy
 
@@ -970,6 +974,8 @@ For attendance rates, Excused counts as attended.
 Owner-approved amendment (2026-10-22): A Secretary cannot change an attendance record whose Excused status comes from a Faculty-approved Excused request; the Secretary attendance list shows "Approved by Faculty" instead of the override action, and only Faculty can change it. In attendance rates, Late counts as attended, the same as Present.
 
 Owner decision (2026-10-28): Every Secretary manual attendance change — a first mark (Present, Late, Absent, Excused) or a change to an existing record — is a request that only the class's Faculty may approve or reject. Until approved, the record stays as it was. Biometric check-ins still need no approval. When the session ends, a student whose request is still pending is resolved to Absent like any unrecorded student; a later approval changes that record. Faculty review these requests in the existing Excused requests panel, which lists every Secretary request type.
+
+Owner decision (2026-11-06): Faculty review Secretary requests in a Secretary requests tab on the Attendance Monitoring page.
 
 Students contact Secretary or Faculty outside DentiSys. Current scope has no Student-facing in-system excuse or dispute submission, no supporting-document upload requirement, and no specified dispute deadline. Manual correction audit MUST preserve the old status, new status, actor, timestamp, reason where applicable, and the original biometric outcome.
 
@@ -1041,6 +1047,8 @@ Faculty may edit authorized class-section fields through audited server-side API
 Owner decision (2026-10-01): Each lecture/laboratory meeting stores its weekday, start time and end time separately; different days may use different times. Existing schedules are preserved.
 
 Owner decision (2026-10-13): Saving a class schedule is blocked when one of its meetings overlaps, on the same weekday, a meeting of another active class section in the same school year that either uses the same room (any Faculty) or has the same instructor (any room). A meeting that starts exactly when another ends does not overlap. Rooms have their own schedules, and an instructor cannot teach two classes at the same time.
+
+Owner decision (2026-11-06): The schedule-conflict rule above compares only classes in the same school year and semester. Saving a class schedule whose meeting overlaps an open or scheduled session of another class in the same room, or of another class with the same instructor, shows the session overlap pop-up (ATT-001) and does not block.
 
 ## ID-001 - Split Student identity
 **Status: CURRENT**
@@ -1183,6 +1191,8 @@ Owner-approved amendment (2026-10-12): Attendance Monitoring shows an Assigned C
 
 Faculty may create classes only for the current school year. Past-school-year classes are view-only: Faculty cannot edit them, add students, or perform other mutations through those historical class surfaces. This narrows CLS-001's editing permission to eligible current-year classes. Obtain the current year from authoritative configuration, not the browser clock. The Owner selected 2026-2027 as the current school year on 2026-09-24. Any historical correction exception requires a separately approved rule. Class creation additionally requires a Dean-defined term (ACA-002).
 
+Owner decision (2026-11-06): Faculty cannot create a class in a term that has already ended (Asia/Manila).
+
 ## CLS-003 - Class archiving
 
 Owner decision (2026-10-22): Faculty may archive a current-school-year class section they teach. No other role may archive or restore a class section for now.
@@ -1215,6 +1225,8 @@ Use additive ordered migrations and explicit backfill/compatibility handling. Ne
 **Status: APPROVED**
 
 Owner decision (2026-11-05): The Dean manages the list of rooms: name (unique, ignoring case and extra spaces), group, and an optional location and radius. Faculty and Secretaries pick rooms from this list or type a custom room; classes and sessions keep the room name they saved. Renaming a room also renames it in classes, class meetings and scheduled sessions; sessions that already opened or ended keep the old name. The Dean may retire a room, which removes it from room lists. Classes and sessions already using it keep it, labelled "(retired)", with a warning where a room can be picked; saving is never blocked. A retired room can be restored. Only a retired room that no class, class meeting or session has ever used can be deleted. Retiring, deleting and renaming a room in use always ask for confirmation first. Picking a room with a saved location fills the session location and radius; geofence stays off until turned on (ATT-002). Every room change is audited.
+
+Owner decision (2026-11-06): Room groups are called categories and are their own list. The Dean may create, rename, retire and delete categories. A room is added to, or restored into, an active category. A category can be retired only after all its rooms are retired, and deleted only when it has no rooms. Renaming a room does not rename it in classes, class meetings or sessions of past school years. The starting list is CDM-1, CDM-2 and CDM-3 in the category Lecture/Laboratory; the earlier starting rooms are removed.
 
 ---
 
