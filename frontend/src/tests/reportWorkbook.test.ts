@@ -18,8 +18,8 @@ test('tidy table: title block, one frozen bold header, real numbers and dates', 
     rows: [[dayToDate('2026-10-27'), '2023-0101', 1.5], [null, '2023-0102', null]],
   });
   const d = sheet.data;
-  assert.deepEqual(d.slice(0, 3).map(r => cellValue(r[0])), ['Republic of the Philippines', 'BICOL UNIVERSITY', 'COLLEGE OF DENTAL MEDICINE']);
-  assert.deepEqual(d.slice(3, 7).map(r => cellValue(r[0])), ['ATTENDANCE REPORT', 'DM 116 · DMD-3A', '1ST SEMESTER, AY 2026-2027', 'Exported 27 Oct 2026 14:05 (Manila) by Dr. Ana Reyes']);
+  assert.deepEqual(d.slice(0, 3).map((r: any[]) => cellValue(r[0])), ['Republic of the Philippines', 'BICOL UNIVERSITY', 'COLLEGE OF DENTAL MEDICINE']);
+  assert.deepEqual(d.slice(3, 7).map((r: any[]) => cellValue(r[0])), ['ATTENDANCE REPORT', 'DM 116 · DMD-3A', '1ST SEMESTER, AY 2026-2027', 'Exported 27 Oct 2026 14:05 (Manila) by Dr. Ana Reyes']);
   assert.equal((d[3][0] as { fontWeight?: string }).fontWeight, 'bold');
   assert.equal(d[7].length, 0);
   assert.deepEqual(rowValues(d[HEADER_ROW_INDEX]), ['Date', 'Student Number', 'Grade']);
@@ -49,13 +49,13 @@ test('class list: header block, columns, name cell, total line, program and file
   const { fileName, sheet } = buildClassList(classInput);
   assert.equal(fileName, 'DM116_DMD-3A_Class_List_2026-2027_1st.xlsx');
   const d = sheet.data;
-  assert.deepEqual(d.slice(0, 5).map(r => cellValue(r[0])), ['Republic of the Philippines', 'BICOL UNIVERSITY', 'COLLEGE OF DENTAL MEDICINE', 'OFFICIAL LIST OF ENROLLED STUDENTS', '1ST SEMESTER, AY 2026-2027']);
-  const info = d.slice(6, 14).map(r => [cellValue(r[0]), cellValue(r[2])]);
+  assert.deepEqual(d.slice(0, 5).map((r: any[]) => cellValue(r[0])), ['Republic of the Philippines', 'BICOL UNIVERSITY', 'COLLEGE OF DENTAL MEDICINE', 'OFFICIAL LIST OF ENROLLED STUDENTS', '1ST SEMESTER, AY 2026-2027']);
+  const info = d.slice(6, 14).map((r: any[]) => [cellValue(r[0]), cellValue(r[2])]);
   assert.deepEqual(info, [
     ['Course Code', 'DM 116'], ['Course Title', 'Operative Dentistry 1'], ['Class Section', 'DMD-3A'], ['Year Level', '3'],
     ['Units', 'Academic 2.0 · Lab 1.0 · Credit 3.0'], ['Lab Hours', ''], ['Faculty', 'Dr. Ana Reyes'], ['Schedules', 'Mon 8:00-10:00 AM'],
   ]);
-  const head = d.findIndex(r => cellValue(r[0]) === '#');
+  const head = d.findIndex((r: any[]) => cellValue(r[0]) === '#');
   assert.deepEqual(rowValues(d[head]), ['#', 'Student No.', 'Program', 'Name', 'Sex', 'Year Level', 'Contact #']);
   // Sorted by last name; program from the section; name + email on two lines.
   assert.deepEqual(rowValues(d[head + 1]), [1, '2023-0101', 'DMD', 'Cruz, Ana\nana@bicol-u.edu.ph', 'F', 3, '0917']);

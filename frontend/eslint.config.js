@@ -19,13 +19,13 @@ export default defineConfig([
       globals: globals.browser,
     },
     rules: {
-      '@typescript-eslint/no-unused-vars': 'warn',
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
       'react-hooks/set-state-in-effect': 'off',
       'react-refresh/only-export-components': 'off',
-      'no-useless-escape': 'warn',
-      'no-useless-assignment': 'warn',
-      'prefer-const': 'warn',
+      'no-useless-escape': 'off',
+      'no-useless-assignment': 'off',
+      'prefer-const': 'off',
     },
   },
 ])

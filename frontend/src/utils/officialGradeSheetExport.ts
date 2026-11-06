@@ -71,7 +71,7 @@ export function officialGradeSheetFileName(c: { code: string; section: string; s
 
 /** Plain values of a sheet (merged-cell fillers are null): what the importer reads back, and what tests compare. */
 export function sheetValues(sheet: XlsxSheet): Array<Array<string | number | boolean | null>> {
-  return sheet.data.map(row => row.map(c => {
+  return sheet.data.map((row: any[]) => row.map((c: any) => {
     const v = c !== null && typeof c === 'object' ? (c as { value?: unknown }).value : c;
     return (v ?? null) as string | number | boolean | null;
   }));
