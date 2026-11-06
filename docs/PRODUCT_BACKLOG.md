@@ -220,3 +220,10 @@ Owner decisions (2026-10-15): both actions get the existing per-user limit used 
 ## 9.5 Live Google verification
 
 **Status: Externally blocked.** Automated (mocked) Google tests pass; live sign-in in a real browser is Owner-controlled. Do not request or store Owner credentials. If live testing finds a defect, scope the fix then.
+
+## 9.6 UI follow-ups from the November 2026 polish audit
+
+**Status: Not started (Owner: next session).** The 2026-11-06 device audit found these. They predate the polish pass (see docs/ui-polish-2026-11.md):
+- Academic Terms: a semester without dates ("2nd Semester", "Summer") has its name dimmed to about 2.6:1 contrast, which is hard to read. Use the standard small grey text.
+- Classes, Archived Classes tab: the "Edit" button pokes out of its card on 320 px phones and at desktop 1280.
+- The audit flags controls under the sticky header ("under-bar") because it scrolls while capturing. Check whether any are real before fixing.
