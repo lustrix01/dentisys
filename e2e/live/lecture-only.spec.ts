@@ -107,7 +107,7 @@ test('a lecture-only course is graded as Lecture only, end to end', async ({ pag
   // 6. Gradebook: one Lecture group, no Laboratory, hover shows the one-rounding steps.
   await page.goto('/grades?tab=scores');
   await page.getByRole('main').getByLabel(/^Class:/).selectOption(csId);
-  await page.getByRole('button', { name: /Full Matrix View/ }).first().click();
+  await page.getByRole('tab', { name: /Full Matrix View/ }).first().click();
   const table = page.locator('table').filter({ hasText: 'Student Info' }).first();
   await expect(table.locator('thead')).toContainText(/Lecture/i);
   await expect(table.locator('thead')).not.toContainText(/Laboratory/i);
