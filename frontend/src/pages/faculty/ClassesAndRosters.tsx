@@ -1699,7 +1699,8 @@ const handleSendAllStudentInvites = async () => {
               <SearchField
                 compact={activeTab === 'archived'}
                 color="emerald"
-                placeholder={activeTab === 'classes' ? "Search code, title, block..." : "Search archived classes..."}
+                placeholder={activeTab === 'classes' ? "Search code, title, block..." : "Search..."}
+                ariaLabel={activeTab === 'classes' ? undefined : 'Search archived classes'}
                 value={searchQuery}
                 onChange={setSearchQuery}
               />
