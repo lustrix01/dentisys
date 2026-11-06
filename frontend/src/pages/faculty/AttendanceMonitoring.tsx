@@ -1018,7 +1018,7 @@ export const AttendanceMonitoring: React.FC = () => {
           }`}
         >
           <BookOpen className="w-4 h-4 text-emerald-600" />
-          Classes
+          Assigned Classes
           <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold">
             {scopedClasses.length}
           </span>
@@ -1033,7 +1033,7 @@ export const AttendanceMonitoring: React.FC = () => {
           }`}
         >
           <UserCheck className="w-4 h-4 text-emerald-600" />
-          Secretary requests
+          Secretary Requests
           <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
             {pendingRows.length}
           </span>
@@ -1213,7 +1213,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
                       <Users className="w-4 h-4 text-slate-400" />
-                      <span>{c.enrolledCount} Students</span>
+                      <span>{c.enrolledCount} {c.enrolledCount === 1 ? 'Student' : 'Students'}</span>
                     </div>
 
                     <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -1357,7 +1357,7 @@ export const AttendanceMonitoring: React.FC = () => {
               <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-slate-500 dark:text-slate-400">
                 <div className="flex items-center gap-1.5">
                   <Users className="w-4 h-4 text-accent-500 shrink-0" />
-                  <span className="font-bold text-slate-700 dark:text-slate-200">{selectedClass?.enrolledCount ?? stats.total} Enrolled Students</span>
+                  <span className="font-bold text-slate-700 dark:text-slate-200">{selectedClass?.enrolledCount ?? stats.total} Enrolled {(selectedClass?.enrolledCount ?? stats.total) === 1 ? 'Student' : 'Students'}</span>
                 </div>
 
                 {(selectedClass?.lecRoom || selectedClass?.labRoom) && (
@@ -1491,7 +1491,7 @@ export const AttendanceMonitoring: React.FC = () => {
       {/* 4. One count summary for the roll call */}
       {worksheet && (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-3 shadow-xs">
-          <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100 mr-2">Class Roll Call ({stats.total} students)</span>
+          <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100 mr-2">Class Roll Call ({stats.total} {stats.total === 1 ? 'student' : 'students'})</span>
           <span className="rounded-lg bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">Present: {stats.present}</span>
           <span className="rounded-lg bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">Late: {stats.late}</span>
           <span className="rounded-lg bg-rose-500/10 px-2.5 py-1 text-[10px] font-bold text-rose-700 dark:text-rose-300">Absent: {stats.absent}</span>

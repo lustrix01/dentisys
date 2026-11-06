@@ -154,7 +154,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(row).toContainText('Oct 9, 2026');
     expect(posted.some(data => data.confirmedExpiringEnrollments === 3)).toBe(true);
     await section.getByRole('button', { name: 'Add next school year' }).click();
-    await expect(page.getByRole('dialog', { name: 'Add next school year' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Add Next School Year' })).toBeVisible();
     await page.getByRole('dialog').getByRole('button', { name: 'Copy terms', exact: true }).click();
     await expect(section).toContainText('Review and adjust their dates.');
     const copied = section.getByTestId('2027-2028-1ST');

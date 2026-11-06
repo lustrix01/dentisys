@@ -2537,7 +2537,7 @@ const handleSendAllStudentInvites = async () => {
             </div>
 
             {/* Section / Block, Year Level & Semester */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label htmlFor="create-block" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Section / Block *</label>
                 <input
@@ -2567,8 +2567,8 @@ const handleSendAllStudentInvites = async () => {
                   <option value={6}>Year 6</option>
                 </select>
               </div>
-              <div>
-                <label htmlFor="create-term" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Academic term *</label>
+              <div className="sm:col-span-2">
+                <label htmlFor="create-term" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Academic Term *</label>
                 <select id="create-term" required disabled={academicTerms.length === 0}
                   {...fieldAria('term')}
                   value={newTermId}

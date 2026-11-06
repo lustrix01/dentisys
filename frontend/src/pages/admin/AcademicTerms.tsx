@@ -193,7 +193,7 @@ export const AcademicTermsSettings: React.FC = () => {
             </div>
             <div>
               <h2 className="text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
-                Academic terms
+                Academic Terms
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
                 Set the dates Faculty use for classes and Student face enrollment. Dates use Asia/Manila; each term ends at the end of its end date.
@@ -271,7 +271,7 @@ export const AcademicTermsSettings: React.FC = () => {
                 key={year}
                 className={`min-w-0 overflow-hidden rounded-3xl border ${
                   isCurrentYear
-                    ? 'border-accent-300/80 dark:border-accent-800/80 bg-accent-50/15 dark:bg-accent-950/10 shadow-sm'
+                    ? 'border-accent-300/80 dark:border-accent-800/80 bg-white dark:bg-slate-900 shadow-sm'
                     : 'border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs'
                 }`}
               >
@@ -383,7 +383,7 @@ export const AcademicTermsSettings: React.FC = () => {
             setConfirmation(null);
           }
         }}
-        title={draft?.id ? 'Edit academic term' : 'Set academic term dates'}
+        title={draft?.id ? 'Edit Academic Term' : 'Set Academic Term Dates'}
       >
         {draft && (
           <form
@@ -482,7 +482,7 @@ export const AcademicTermsSettings: React.FC = () => {
         onClose={() => {
           if (!busy) setDeleteTerm(null);
         }}
-        title="Delete unused academic term"
+        title="Delete Unused Academic Term"
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-700 dark:text-slate-200">
@@ -529,7 +529,7 @@ export const AcademicTermsSettings: React.FC = () => {
         onClose={() => {
           if (!busy) setCopying(false);
         }}
-        title="Add next school year"
+        title="Add Next School Year"
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">

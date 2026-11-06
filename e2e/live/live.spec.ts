@@ -383,7 +383,7 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   // Open the Start session pop-up and verify the assigned class is shown (CLINIC-4B)
   await startSessionButton.click();
   const form = page.locator('form').filter({ hasText: 'Selected class' });
-  await expect(page.getByRole('heading', { name: 'Start session' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Start Session' })).toBeVisible();
   await expect(form.getByText('CLINIC-4B')).toBeVisible();
 
   // Verify localStorage has no active session key
@@ -450,7 +450,7 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   await page.getByRole('link', { name: 'Attendance Monitoring', exact: true }).click();
   await page.goto('/secretary/start-session');
   await expect(page).toHaveURL('/secretary/attendance');
-  await expect(page.getByRole('heading', { name: 'Start session' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Start Session' })).toBeVisible();
   await page.keyboard.press('Escape');
   await page.goto('/secretary/attendance?view=worksheet');
 

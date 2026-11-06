@@ -203,7 +203,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={() => { if (!submitting) { onClose(); setError(null); } }}
-      title="Start session"
+      title="Start Session"
     >
       <form onSubmit={handleSubmit} className="space-y-4 text-xs">
         {error && (
@@ -319,7 +319,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
         </div>
       </form>
     </Modal>
-    <OverlapConfirmModal overlaps={overlaps} busy={submitting} onCancel={() => setOverlaps(null)} onConfirm={() => void submit(true)} />
+    <OverlapConfirmModal overlaps={overlaps} accent={accent} busy={submitting} onCancel={() => setOverlaps(null)} onConfirm={() => void submit(true)} />
     </>
   );
 };

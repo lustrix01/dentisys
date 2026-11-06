@@ -356,7 +356,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
   const openStartPopup = async (page: Page) => {
     await page.goto('/secretary/attendance?view=worksheet');
     await page.getByRole('button', { name: 'Start session', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Start session' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Start Session' })).toBeVisible();
   };
   const startForm = (page: Page) => page.locator('form').filter({ hasText: 'Selected class' });
   const openSessionsModal = async (page: Page) => {
@@ -429,7 +429,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await time('Class end time').fill('02:00');
     await expect(form.getByTestId('caption-classEndTime')).toContainText('2:00 AM (next day)');
     await expect(form.getByTestId('time-summary')).toContainText('Session lasts 3 h');
-    await form.getByRole('button', { name: /^(Start|Schedule) session$/ }).click();
+    await form.getByRole('button', { name: /^(Start|Schedule) session$/i }).click();
     await expect.poll(() => payloads.length).toBe(1);
     expect(payloads[0]).toMatchObject({ openingTime: '23:00', presentCutoff: '23:30', lateCutoff: '01:00', classEndTime: '02:00' });
     await time('Class end time').fill('13:00');
@@ -542,7 +542,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await form.getByRole('button', { name: 'Start session', exact: true }).click();
 
     await expect(page.getByText('Attendance session started. The class roll call is now live. Session code: CS8-20260921-XYZ999').first()).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Start session' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Start Session' })).toHaveCount(0);
     expect(startApiPayload).not.toBeNull();
     expect((startApiPayload as Record<string, unknown>)?.csId).toBe(8);
     expect((startApiPayload as Record<string, unknown>)?.room).toBe('Dental Clinic Lab 2');
@@ -769,7 +769,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
 
     await page.goto('/secretary/attendance');
     await expect(page.getByText('A server error occurred. Please try again later.')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Start session' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Start Session' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Retry/i })).toBeVisible();
   });
 
@@ -839,6 +839,6 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
   test('the old /secretary/start-session address opens the Start Session pop-up on Attendance Monitoring', async ({ page }) => {
     await page.goto('/secretary/start-session');
     await expect(page).toHaveURL(/\/secretary\/attendance$/);
-    await expect(page.getByRole('heading', { name: 'Start session' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Start Session' })).toBeVisible();
   });
 });

@@ -997,13 +997,13 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByTestId('caption-lateCutoff')).toContainText('1:00 AM (next day)');
     await expect(page.getByTestId('caption-classEndTime')).toContainText('2:00 AM (next day)');
     await expect(page.getByTestId('time-summary')).toContainText('Session lasts 3 h');
-    await page.locator('form').getByRole('button', { name: /^(Start|Schedule) session$/ }).click();
+    await page.locator('form').getByRole('button', { name: /^(Start|Schedule) session$/i }).click();
     await expect.poll(() => payloads.length).toBe(1);
     expect(payloads[0]).toMatchObject({ openingTime: '23:00', presentCutoff: '23:30', lateCutoff: '01:00', classEndTime: '02:00' });
 
     await time('Class end time').fill('13:00');
     await expect(page.getByTestId('time-summary')).toHaveText('A session can last at most 12 hours.');
-    await page.locator('form').getByRole('button', { name: /^(Start|Schedule) session$/ }).click();
+    await page.locator('form').getByRole('button', { name: /^(Start|Schedule) session$/i }).click();
     await expect(page.getByRole('alert')).toContainText('A session can last at most 12 hours.');
     expect(payloads).toHaveLength(1); // refused in the browser, nothing sent
   });
@@ -1264,13 +1264,13 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
     await page.goto('/attendance?tab=requests');
     const panel = page.getByRole('region', { name: 'Secretary requests' });
-    await expect(panel).toContainText('Secretary requests · 3 waiting');
+    await expect(panel).toContainText('Secretary Requests · 3 waiting');
     await expect(panel).toContainText('Sent by class Secretaries. Approving applies the requested status; rejecting leaves the record unchanged.');
     const alice = panel.getByRole('listitem').filter({ hasText: 'Alice Green' });
     await expect(alice).toContainText('Present → Present');
     await expect(alice).toContainText('(face check-in)');
-    await expect(alice).toContainText('Present until 08:15');
-    await expect(alice).toContainText('Late until 08:45');
+    await expect(alice).toContainText('Present until 8:15 AM');
+    await expect(alice).toContainText('Late until 8:45 AM');
     await expect(panel.getByRole('listitem').filter({ hasText: 'Bob White' })).toContainText('Absent → Late');
     await expect(panel).not.toContainText('Old Decided');
     // Reject one with a note.
@@ -1309,7 +1309,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
     await page.goto('/attendance?tab=requests');
     const panel = page.getByRole('region', { name: 'Secretary requests' });
-    await expect(panel).toContainText('Secretary requests · 3 waiting');
+    await expect(panel).toContainText('Secretary Requests · 3 waiting');
     await expect(panel).toContainText('2 requests');
     // Cancel changes nothing.
     await panel.getByRole('button', { name: 'Approve all' }).first().click();
@@ -1353,7 +1353,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.route('**/api/faculty/excused-requests', route => route.fulfill({ json: { status: 'ok', requests: [pending] } }));
     await page.goto('/attendance');
     const panel = page.getByRole('region', { name: 'Secretary requests' });
-    await expect(page.getByRole('button', { name: /^Secretary requests/ })).toContainText('1'); // page and requests loaded
+    await expect(page.getByRole('button', { name: /^Secretary Requests/ })).toContainText('1'); // page and requests loaded
     await expect(panel).toBeHidden();
     await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-secretary-request', { detail: { id: '31' } })));
     await expect(panel).toBeVisible();
@@ -1649,10 +1649,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
     await page.getByRole('button', { name: 'Save Override', exact: true }).click();
     await expect.poll(() => writing).toBe(true);
-    await page.getByRole('button', { name: /^Secretary requests/ }).dispatchEvent('click');
+    await page.getByRole('button', { name: /^Secretary Requests/ }).dispatchEvent('click');
     await page.getByRole('region', { name: 'Secretary requests' }).getByRole('button', { name: 'Approve', exact: true }).dispatchEvent('click'); // the Save Override modal overlay now really covers the page (styles on)
     await expect(page.getByText('Bob approval saved.', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: /^Classes/ }).dispatchEvent('click'); // back to the roll call
+    await page.getByRole('button', { name: /^Assigned Classes/ }).dispatchEvent('click'); // back to the roll call
     expect(reads).toBe(1);
     releaseWrite();
     await expect(alice.getByTestId('attendance-status')).toHaveText(/Present$/);

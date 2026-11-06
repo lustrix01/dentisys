@@ -307,6 +307,8 @@ export const Rooms: React.FC = () => {
           {cards.map(({ cat, all, shown }) => {
             const catRetired = cat.status === 'retired';
             const retiredInCat = all.filter(r => r.status === 'retired').length;
+            const activeInCat = all.length - retiredInCat;
+            const hint = `Retire or move its ${plural(activeInCat, 'room')} first`;
             const subtitle = tab === 'rooms'
               ? `${plural(shown.length, 'room')}${retiredInCat > 0 ? ` · ${retiredInCat} in Retired` : ''}`
               : catRetired ? `Retired category · ${plural(all.length, 'room')}` : 'Category is active';
@@ -316,6 +318,7 @@ export const Rooms: React.FC = () => {
                   <div>
                     <span className="block text-base font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">{cat.name}</span>
                     <span className="block text-xs text-slate-500 dark:text-slate-400">{subtitle}</span>
+                    {tab === 'rooms' && !catRetired && activeInCat > 0 && <span className="block text-[11px] text-slate-500 dark:text-slate-400">{hint}</span>}
                   </div>
                   {(tab === 'rooms' || catRetired) && (
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -324,7 +327,7 @@ export const Rooms: React.FC = () => {
                       ) : (
                         <>
                           <button type="button" className={outlineButtonClass} disabled={busy} onClick={() => { setError(''); setCatDraft({ categoryId: cat.categoryId, name: cat.name }); }}>Rename</button>
-                          <button type="button" className={outlineButtonClass} disabled={busy} onClick={() => setConfirm({ kind: 'retireCategory', category: cat })}>Retire</button>
+                          <button type="button" className={outlineButtonClass} disabled={busy || activeInCat > 0} title={activeInCat > 0 ? hint : undefined} onClick={() => setConfirm({ kind: 'retireCategory', category: cat })}>Retire</button>
                         </>
                       )}
                       {all.length === 0 && (
@@ -378,7 +381,7 @@ export const Rooms: React.FC = () => {
                                   Delete
                                 </button>
                               ) : (
-                                <button type="button" disabled title="In use, so it can only stay retired." className="rounded-xl border border-slate-200 dark:border-slate-700 px-3.5 py-1.5 text-xs font-bold text-slate-400 dark:text-slate-500 cursor-not-allowed">Delete</button>
+                                <button type="button" disabled title="In use, so it cannot be deleted yet." className="rounded-xl border border-slate-200 dark:border-slate-700 px-3.5 py-1.5 text-xs font-bold text-slate-400 dark:text-slate-500 cursor-not-allowed">Delete</button>
                               )}
                             </>
                           ) : (
@@ -390,7 +393,7 @@ export const Rooms: React.FC = () => {
                         </span>
                         {retired && !room.deletable && (
                           <span className="col-span-2 lg:col-span-5 text-right text-[11px] text-slate-500 dark:text-slate-400">
-                            {usedBy(room.usage)} — it can only stay retired.
+                            {`${usedBy(room.usage)}. Move ${room.usage.classes + room.usage.meetings + room.usage.scheduledSessions === 1 ? 'it' : 'them'} to another room first; then it can be deleted.`}
                           </span>
                         )}
                       </div>
@@ -404,7 +407,7 @@ export const Rooms: React.FC = () => {
       )}
 
       {/* Add / Rename category */}
-      <Modal isOpen={catDraft !== null} onClose={() => { if (!busy) setCatDraft(null); }} title={catDraft?.categoryId === undefined ? 'Add category' : 'Rename category'}>
+      <Modal isOpen={catDraft !== null} onClose={() => { if (!busy) setCatDraft(null); }} title={catDraft?.categoryId === undefined ? 'Add Category' : 'Rename Category'}>
         {catDraft && (
           <form className="space-y-4" onSubmit={event => { event.preventDefault(); void saveCategory(); }}>
             {error && <p role="alert" className="text-sm font-semibold text-rose-600 dark:text-rose-400">{error}</p>}
@@ -421,7 +424,7 @@ export const Rooms: React.FC = () => {
       </Modal>
 
       {/* Add / Edit room */}
-      <Modal isOpen={draft !== null} onClose={() => { if (!busy) setDraft(null); }} title={draft?.roomId === undefined ? 'Add room' : 'Edit room'}>
+      <Modal isOpen={draft !== null} onClose={() => { if (!busy) setDraft(null); }} title={draft?.roomId === undefined ? 'Add Room' : 'Edit Room'}>
         {draft && (
           <form
             className="space-y-4"
@@ -488,11 +491,11 @@ export const Rooms: React.FC = () => {
         isOpen={confirm !== null}
         onClose={() => { if (!busy) setConfirm(null); }}
         title={
-          confirm?.kind === 'retire' ? 'Retire room'
-            : confirm?.kind === 'delete' ? 'Delete room'
-              : confirm?.kind === 'retireCategory' ? 'Retire category'
-                : confirm?.kind === 'deleteCategory' ? 'Delete category'
-                  : 'Rename room'
+          confirm?.kind === 'retire' ? 'Retire Room'
+            : confirm?.kind === 'delete' ? 'Delete Room'
+              : confirm?.kind === 'retireCategory' ? 'Retire Category'
+                : confirm?.kind === 'deleteCategory' ? 'Delete Category'
+                  : 'Rename Room'
         }
       >
         {confirm && (

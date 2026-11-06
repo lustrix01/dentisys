@@ -3,10 +3,13 @@ import { Filter as FilterIcon, Search } from 'lucide-react';
 import { Card } from './Card';
 import { Modal } from './Modal';
 import { formatManilaWhen } from '../services/auditService';
+import { formatSessionDate } from '../utils/sessionDate';
+import { formatTime12 } from '../utils/sessionTimes';
 import { AttendanceExcusedRequest, FacultyClassItem, decideFacultyExcusedRequestApi, getFacultyExcusedRequestsApi } from '../services/apiClient';
 
 type Filter = 'pending' | 'approved' | 'rejected';
 const word = (status?: string | null) => status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Not recorded';
+const time12 = (value?: string | null) => value ? formatTime12(value) : '—';
 const count = (n: number) => `${n} request${n === 1 ? '' : 's'}`;
 
 const OPEN_EVENT = 'open-secretary-request';
@@ -147,8 +150,9 @@ export const FacultyExcusedRequestsPanel: React.FC<{
     const group = groups.find(g => g.key === key);
     if (group) group.rows.push(request); else groups.push({ key, rows: [request] });
   }
-  const btn = 'rounded-lg px-2.5 py-1 text-xs font-bold disabled:opacity-50';
-  const approveBtn = `${btn} bg-emerald-600 text-white`;
+  const fieldBase = 'h-9 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs leading-4 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500';
+  const btn = 'rounded-lg px-2.5 py-1 text-xs font-bold whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed';
+  const approveBtn = `${btn} bg-emerald-600 text-white disabled:bg-slate-300 disabled:text-slate-500 disabled:opacity-100 disabled:cursor-not-allowed dark:disabled:bg-slate-700 dark:disabled:text-slate-400`;
   const rejectBtn = `${btn} border border-rose-300 text-rose-700 dark:border-rose-800 dark:text-rose-300`;
   const plainBtn = `${btn} border border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-200`;
 
@@ -156,7 +160,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
     <section aria-label="Secretary requests" className={active ? '' : 'hidden'}>
     <Card className="p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Secretary requests · {pending.length} waiting</h2>
+        <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Secretary Requests · {pending.length} waiting</h2>
       </div>
       {error && <p role="alert" className="text-xs text-rose-600">{error}</p>}
       {message && <p role="status" className="text-xs text-emerald-700 dark:text-emerald-400">{message}</p>}
@@ -171,16 +175,16 @@ export const FacultyExcusedRequestsPanel: React.FC<{
                 value={query}
                 onChange={event => setQuery(event.target.value)}
                 placeholder="Search student name or ID..."
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
+                className={`w-full pl-9 pr-3 py-2 ${fieldBase}`}
               />
             </div>
-            <div className="sm:flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
-              <FilterIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
+            <div className={`sm:flex-1 px-3 py-2 flex items-center gap-2 ${fieldBase} focus-within:border-emerald-500`}>
+              <FilterIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
               <select
                 value={classId}
                 onChange={event => setClassId(event.target.value)}
                 aria-label="Class"
-                className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
+                className="min-w-0 flex-1 pr-6 bg-transparent text-xs leading-4 font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
               >
                 <option value="">All Classes</option>
                 {classes.map(item => <option key={item.csId} value={String(item.csId)}>{item.courseCode} {item.csName}</option>)}
@@ -190,7 +194,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
               aria-label="Show requests"
               value={filter}
               onChange={event => setFilter(event.target.value as Filter)}
-              className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
+              className={`px-3 py-2 ${fieldBase}`}
             >
               <option value="pending">Pending ({countOf('pending')})</option>
               <option value="approved">Approved ({countOf('approved')})</option>
@@ -200,7 +204,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
               aria-label="Requested change"
               value={change}
               onChange={event => setChange(event.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
+              className={`px-3 py-2 ${fieldBase}`}
             >
               <option value="">All requested changes</option>
               <option value="present">Present</option>
@@ -213,8 +217,8 @@ export const FacultyExcusedRequestsPanel: React.FC<{
             )}
           </div>
           {pendingShown.length > 0 && (
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <label className="flex items-center gap-1.5 whitespace-nowrap text-xs font-bold text-slate-700 dark:text-slate-200">
                 <input
                   type="checkbox"
                   checked={pendingShown.every(request => selected.includes(request.id))}
@@ -236,11 +240,11 @@ export const FacultyExcusedRequestsPanel: React.FC<{
           <div className="space-y-3">
             {groups.map(({ key, rows }) => {
               const first = rows[0];
-              const label = `${first.courseCode} ${first.className} · ${first.sessionDate}`;
+              const label = `${first.courseCode} ${first.className} · ${formatSessionDate(first.sessionDate)}`;
               const ids = rows.map(row => row.id);
               return (
                 <div key={key} className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-                  <div className="flex flex-wrap items-center gap-2 bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5 bg-slate-50 px-3 py-2 sm:flex sm:flex-wrap sm:gap-2 dark:bg-slate-800/60">
                     {filter === 'pending' && (
                       <input
                         type="checkbox"
@@ -249,19 +253,20 @@ export const FacultyExcusedRequestsPanel: React.FC<{
                         onChange={event => setSelected(current => event.target.checked ? [...new Set([...current, ...ids])] : current.filter(id => !ids.includes(id)))}
                       />
                     )}
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100">{label}</span>
-                    <span className="text-xs text-slate-500">· {count(rows.length)}</span>
-                    <span className="flex-1" />
+                    <span className={`text-xs font-bold text-slate-800 dark:text-slate-100 ${filter === 'pending' ? '' : 'col-span-2'}`}>{label}</span>
+                    <span className={`text-xs text-slate-500 ${filter === 'pending' ? 'hidden sm:inline' : 'col-span-2 sm:col-span-1'}`}><span className="hidden sm:inline">· </span>{count(rows.length)}</span>
+                    <span className="hidden flex-1 sm:block" />
                     {filter === 'pending' && (
-                      <>
+                      <div className="col-start-2 flex flex-wrap items-center gap-1.5 sm:contents">
+                        <span className="mr-auto text-xs text-slate-500 sm:hidden">{count(rows.length)}</span>
                         <button type="button" disabled={busy} onClick={() => setConfirm({ ids, decision: 'approve', label })} className={approveBtn}>Approve all</button>
                         <button type="button" disabled={busy} onClick={() => setConfirm({ ids, decision: 'reject', label })} className={rejectBtn}>Reject all</button>
-                      </>
+                      </div>
                     )}
                   </div>
                   <ul className="divide-y divide-slate-100 dark:divide-slate-800">
                     {rows.map(request => (
-                      <li key={request.id} id={`secretary-request-${request.id}`} tabIndex={-1} className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 gap-y-1 px-3 py-2 text-xs outline-none focus:bg-sky-50 sm:grid-cols-[auto_minmax(0,1.1fr)_auto_minmax(0,1.3fr)_auto] dark:focus:bg-sky-950/30">
+                      <li key={request.id} id={`secretary-request-${request.id}`} tabIndex={-1} className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 gap-y-1 px-3 py-2 text-xs outline-none focus:bg-sky-50 sm:grid-cols-[auto_minmax(0,1fr)_7.5rem_minmax(0,1.6fr)_auto] dark:focus:bg-sky-950/30">
                         {filter === 'pending' ? (
                           <input
                             type="checkbox"
@@ -271,15 +276,15 @@ export const FacultyExcusedRequestsPanel: React.FC<{
                           />
                         ) : <span />}
                         <span className="min-w-0"><strong>{request.studentName}</strong><span className="block text-[11px] text-slate-500 dark:text-slate-400">{request.studentNumber}</span></span>
-                        <span className="col-start-2 whitespace-nowrap font-bold text-slate-800 sm:col-start-auto dark:text-slate-100">
+                        <span className="col-start-2 font-bold text-slate-800 sm:col-start-auto dark:text-slate-100">
                           {word(request.currentStatus)} → {word(request.requestedStatus ?? 'excused')}
-                          {request.currentMethod === 'biometric' && <span className="ml-1 font-normal text-slate-500 dark:text-slate-400">(face check-in)</span>}
+                          {request.currentMethod === 'biometric' && <span className="ml-1 font-normal text-slate-500 sm:ml-0 sm:block dark:text-slate-400">(face check-in)</span>}
                         </span>
                         <span className="col-start-2 min-w-0 text-slate-700 sm:col-start-auto dark:text-slate-200">
                           Reason: {request.reason || 'None given'}
                           <span className="block text-[11px] text-slate-500 dark:text-slate-400">
                             by {request.requestedBy ?? 'Secretary'}{request.requestedAt ? ` · sent ${formatManilaWhen(request.requestedAt)}` : ''}
-                            {(request.presentCutoff || request.lateCutoff) && ` · Present until ${request.presentCutoff || '—'} · Late until ${request.lateCutoff || '—'}`}
+                            {(request.presentCutoff || request.lateCutoff) && ` · Present until ${time12(request.presentCutoff)} · Late until ${time12(request.lateCutoff)}`}
                           </span>
                         </span>
                         <span className="col-start-2 flex flex-wrap items-center gap-1.5 sm:col-start-auto sm:justify-end">
