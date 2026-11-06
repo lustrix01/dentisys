@@ -22,6 +22,22 @@ The phone and desktop top bars share one `ProfileMenu` (inside `Layout.tsx`), so
 - `components/Card.tsx`: the rounded panel used for page sections, with optional hover and glow colours.
 - `components/SchoolYearFilter.tsx`: the "School year" dropdown on dashboards (current year by default, a past year, or all years).
 
+## Page patterns
+
+The standard look for each part of a signed-in page ([AGENTS.md](../AGENTS.md) "Interface consistency"). Copy the named example as it is; a different look needs Owner approval first.
+
+| Part | Standard | Copy from |
+|---|---|---|
+| Page wrapper | `space-y-6 animate-fade-in max-w-7xl mx-auto` around the whole page | `pages/faculty/RetentionMonitoring.tsx:789` |
+| Page section tabs (switch between the main sections of a page, such as Grades / Retention / Attendance) | White card bar: bordered white card, the selected tab filled with the role colour | `pages/faculty/Reports.tsx:1019` |
+| List switch (two or three views of one list, such as Assigned / Archived) | Grey segmented bar: grey track, the selected tab a white pill with role-colour text, count badge when the list has a count | `pages/admin/Rooms.tsx:278` |
+| Selected colour | The role's colour, as in the sidebar (`getRoleColors` in `components/Layout.tsx`): Dean purple (`accent`), Faculty green (`clinical`; Classes and Attendance use `emerald`), Student and Secretary blue | `components/Layout.tsx` |
+| Dialogs, panels, school-year filter | The shared components above | `Modal.tsx`, `Card.tsx`, `SchoolYearFilter.tsx` |
+
+Not settled yet: the page header, notice banners (three looks today), filter bars, tables and empty states. Until each has a standard here, copy the nearest page that does the same job.
+
+Known differences, kept for now: Student My Classes (separate buttons) and Student Retention (underlined row) use tab looks found nowhere else, and Faculty Attendance Monitoring uses the grey bar for its two sections. See backlog 9.8.
+
 ## Phone blocks
 
 On phones (below 768 px) these lists show each row as a stacked block instead of a table that scrolls sideways: Student Dashboard enrolled subjects, Student Attendance Logs, the Faculty and Secretary roll calls, the Faculty roster, the Reports grade summary, Email Management invitation lists, Faculty Invitations and the Audit Trail. A block shows every field of the desktop row in the same data format; it may put the name or date first, join two related fields on one line and leave out a field that is empty for that row. Fields without a visible label get a screen-reader label. Tablets and desktop keep the table. Other tables scroll sideways inside their card on phones, never the whole page. The rule is recorded in `spec.md` UI-001 ([amendment of 2026-11-03](spec-amendments-2026-11-03-responsive-audit.md)).

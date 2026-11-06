@@ -237,3 +237,13 @@ Owner decisions (2026-10-15): both actions get the existing per-user limit used 
 - "Course Instructor", "Instructor" and "Faculty" are used for the same role.
 - "Student No." and "Student Number" are used for the same field.
 - Only 6 of 41 tables show their column headers in small capitals by style; the rest use normal text.
+
+## 9.8 Tab bar UX follow-ups
+
+**Status: Not started (after the expert evaluation hold).** The 2026-11-06 tab bar review measured all 12 tab bars on the running app; Before / After previews and the numbers are in the Owner's private Tab Bar Standard demo (https://claude.ai/artifact/EBfuzdD5bdrWAdxVw3S1fL). The standards are in [frontend.md](frontend.md) "Page patterns". Each item needs Owner approval before work starts:
+- U1: in the grey list switch the selected tab stands out only 1.1:1 from the others (target 3:1). Mark it with an outline, fill or underline (outline recommended). Rooms, Dean Class Sections, Classes, Score Entry view, Attendance Monitoring.
+- U2: tab text below 4.5:1 becomes one shade darker: green selected text on Classes and Attendance (3.8:1), grey text on Dean Class Sections and Score Entry view (3.1–4.3:1).
+- U3: no tab bar tells screen readers that it is a set of tabs or which tab is selected. Best done with one shared tab component that replaces the 12 copies.
+- U4: on phones the section tabs of Grades, Reports and Email take 3 rows and Retention 2. Short phone names, as Dean Reports already uses, bring them to 2, 2, 1 and 1 rows (a wording change).
+- U5: on phones the Student My Classes tab names split onto two lines. Moving the year out of the tab and tightening the padding keeps both tabs on one line, side by side; not yet measured below 390 px.
+- Student My Classes and Student Retention use two tab looks found nowhere else, so a student sees two different tab bars.

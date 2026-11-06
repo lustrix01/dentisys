@@ -35,6 +35,15 @@ These rules apply to everyone who changes this repository — people working by 
 - Compare changes against the working baseline and preserve existing capabilities and safeguards. If a proposed change requires degraded or removed behavior, explain the exact impact and obtain explicit Owner approval before implementing it; existing specification change-control rules still apply.
 - Any unapproved regression introduced by the change blocks completion, commit, merge, and push. Fix it or obtain explicit Owner approval for that specific exception. Never conceal regressions or weaken meaningful tests to make checks pass.
 
+## Interface consistency
+
+- Build new pages and tabs from the app's existing page parts; do not design them from scratch. Start from the nearest existing page that does the same kind of job and copy its parts: page wrapper, notice banner, header or toolbar, tab bar, filter bar, cards, tables, dialogs and empty states. `docs/frontend.md` "Page patterns" names the standard for each part and the file to copy it from.
+- One look per job. Do not add a second look for a part that already has a standard for that job, such as a new tab-bar style.
+- A better look is allowed. When a new look makes a page clearer or easier to use, propose it with a demo next to the current standard, on real pages. Once the Owner approves it, it becomes the standard for that job: update "Page patterns", and either change the existing pages in the same work or list them in the product backlog. Two looks for one job never stay by accident.
+- Where "Page patterns" has no standard for a part yet, copy the nearest page that does the same job and name that page in the change description.
+- Misalignment found in existing pages goes in the product backlog; do not fix it on the side. Changing an existing screen's look is its own approved change.
+- The description of a visible change lists each part with the page or component it copies, and marks anything new with the reason.
+
 ## Working together
 
 - Start each feature with a stable contract: agree on fields, errors, and examples before implementation.
