@@ -975,7 +975,7 @@ export const Reports: React.FC = () => {
             aria-label="School year"
             className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
           >
-            <option value="all">All School Years</option>
+            <option value="all">All school years</option>
             {availableSchoolYears.map(sy => (
               <option key={sy} value={sy}>
                 S.Y. {sy}{sy === currentSchoolYear ? ' (Current)' : ''}
@@ -1153,7 +1153,7 @@ export const Reports: React.FC = () => {
             <table className="w-full text-left">
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
-                  <th className="px-5 py-3">Student details</th>
+                  <th className="px-5 py-3">Student Details</th>
                   {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Midterm Lecture</th>}
                   {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Midterm Laboratory</th>}
                   <th className="px-5 py-3 text-center">Midterm</th>
@@ -1267,7 +1267,7 @@ export const Reports: React.FC = () => {
             <table className="w-full text-left">
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
-                  <th className="px-5 py-3">Student details</th>
+                  <th className="px-5 py-3">Student Details</th>
                   <th className="px-5 py-3 text-center">Standing Grade</th>
                   <th className="px-5 py-3 text-center">At-Risk Courses</th>
                   <th className="px-5 py-3 text-center">Risk Level</th>
@@ -1298,7 +1298,7 @@ export const Reports: React.FC = () => {
                         <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${
                           retentionUnavailable ? 'bg-slate-100 text-slate-600' : isAtRisk ? 'bg-rose-100 text-rose-700' : ''
                         }`}>
-                          {retentionUnavailable ? 'UNAVAILABLE' : isAtRisk ? 'At Risk' : ''}
+                          {retentionUnavailable ? 'UNAVAILABLE' : isAtRisk ? 'At risk' : ''}
                         </span>
                       </td>
                       <td className="px-5 py-3.5 dark:text-slate-400">
@@ -1388,7 +1388,7 @@ export const Reports: React.FC = () => {
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
                   <th className="px-5 py-3">Date</th>
-                  <th className="px-5 py-3">Student details</th>
+                  <th className="px-5 py-3">Student Details</th>
                   <th className="px-5 py-3">Subject Code</th>
                   <th className="px-5 py-3">Recorded Status</th>
                 </tr>
@@ -1613,7 +1613,7 @@ export const Reports: React.FC = () => {
                   ))}
                 </div>)}
               </div>
-              <h3 className="analytics-data-heading">Chart data</h3>
+              <h3 className="analytics-data-heading">Chart Data</h3>
               {renderTable(['Dataset', 'Metric', 'Value', 'Unit'], bundle.analyticsRows.map(row => [row.dataset, row.metric, row.value, row.unit]))}
             </section>,
           ];

@@ -755,11 +755,11 @@ export const RetentionMonitoring: React.FC = () => {
         ? `Remedial exam passed! Student cleared.${notifiedText}`
         : resolveAttemptNumber === 1
           ? (attempt2Failed
-              ? `Attempt 1 was saved but Attempt 2 could not be scheduled. Schedule it again from Retention Monitoring.${notifiedText}`
+              ? `Attempt 1 was saved but attempt 2 could not be scheduled. Schedule it again from Retention Monitoring.${notifiedText}`
               : reattemptDate.trim()
-                ? `Attempt 1 marked for Re-attempt and Attempt 2 scheduled.${notifiedText}`
-                : `Attempt 1 marked for Re-attempt.${notifiedText}`)
-          : `Attempt 2 recorded as not passed. Student moved to Cost Recovery.${notifiedText}`;
+                ? `Attempt 1 marked for re-attempt and attempt 2 scheduled.${notifiedText}`
+                : `Attempt 1 marked for re-attempt.${notifiedText}`)
+          : `Attempt 2 recorded as not passed. Student moved to cost recovery.${notifiedText}`;
 
       setNotification({
         type: attempt2Failed ? 'info' : refreshed ? 'success' : 'info',
@@ -872,7 +872,7 @@ export const RetentionMonitoring: React.FC = () => {
               aria-label="School year"
               className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
-              <option value="all">All School Years</option>
+              <option value="all">All school years</option>
               {availableSchoolYears.map(sy => (
                 <option key={sy} value={sy}>
                   S.Y. {sy}{sy === currentSchoolYear ? ' (Current)' : ''}
@@ -889,7 +889,7 @@ export const RetentionMonitoring: React.FC = () => {
               aria-label="Class: course code, section, and course title"
               className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
-              <option value="all">All Classes</option>
+              <option value="all">All classes</option>
               {subjectGroupedClasses.flatMap(group => [
                 ...(group.classes.length > 1 ? [
                   <option key={`subject:${group.subjectCode}`} value={`subject:${group.subjectCode}`}>All {group.subjectCode} Sections</option>,
@@ -920,7 +920,7 @@ export const RetentionMonitoring: React.FC = () => {
             onClick={() => { setSelectedSchoolYear(currentSchoolYear); setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); }}
             className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer"
           >
-            Switch to Current S.Y. ({currentSchoolYear})
+            Switch to current S.Y. ({currentSchoolYear})
           </button>
         </div>
       )}
@@ -957,7 +957,7 @@ export const RetentionMonitoring: React.FC = () => {
                 }`}
               >
                 <Filter className="w-3.5 h-3.5" />
-                <span>Show At-Risk Only</span>
+                <span>Show at-risk only</span>
                 {atRiskMidtermCount > 0 && (
                   <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
                     showAtRiskOnly ? 'bg-amber-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
@@ -994,7 +994,7 @@ export const RetentionMonitoring: React.FC = () => {
                           <div className="font-mono">
                             <span className="font-bold">{record.midtermPercentage.toFixed(2)}%</span>
                             <span className="text-[11px] text-slate-500 dark:text-slate-400 ml-1.5 font-normal">
-                              (Final Midterm Grade: <GradeValue percentage={record.midtermPercentage} raw={record.midtermRawPercentage} period="Midterm">{percentageToGWA(record.midtermPercentage, 'Midterm').toFixed(1)}</GradeValue>)
+                              (Final Midterm grade: <GradeValue percentage={record.midtermPercentage} raw={record.midtermRawPercentage} period="Midterm">{percentageToGWA(record.midtermPercentage, 'Midterm').toFixed(1)}</GradeValue>)
                             </span>
                           </div>
                         ) : (
@@ -1003,7 +1003,7 @@ export const RetentionMonitoring: React.FC = () => {
                       </td>
                       <td className="p-3">
                         {isMidtermAtRisk(record) && (
-                          <span className="inline-flex rounded-full px-2 py-1 text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300">At Risk</span>
+                          <span className="inline-flex rounded-full px-2 py-1 text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300">At risk</span>
                         )}
                       </td>
                       <td className="p-3">
@@ -1081,7 +1081,7 @@ export const RetentionMonitoring: React.FC = () => {
           ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Original grade</th><th className="py-3 px-4">Attempts</th><th className="py-3 px-4">Current stage</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
+              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Original Grade</th><th className="py-3 px-4">Attempts</th><th className="py-3 px-4">Current Stage</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {remedialRows.map(row => (
                   <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
@@ -1158,7 +1158,7 @@ export const RetentionMonitoring: React.FC = () => {
                             onClick={() => openSchedule(row.record)}
                             className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs"
                           >
-                            Schedule Attempt {allowedAttemptNumbers(row.progression)[0]}
+                            Schedule attempt {allowedAttemptNumbers(row.progression)[0]}
                           </button>
                         )}
                         {pendingAttemptNumber(row.progression) && row.record.state !== 'archived' && (
@@ -1167,7 +1167,7 @@ export const RetentionMonitoring: React.FC = () => {
                             onClick={() => openResolve(row)}
                             className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs"
                           >
-                            Grade Attempt {pendingAttemptNumber(row.progression)}
+                            Grade attempt {pendingAttemptNumber(row.progression)}
                           </button>
                         )}
                         {row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived' && (
@@ -1176,12 +1176,12 @@ export const RetentionMonitoring: React.FC = () => {
                             onClick={() => openCostRecovery(row)}
                             className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs"
                           >
-                            Record Cost Recovery
+                            Record cost recovery
                           </button>
                         )}
                         {typeof row.progression.costRecoveryGrade === 'number' && (
                           <span className="text-[10px] text-slate-500 font-mono">
-                            Cost recovery: {formatGrade(row.progression.costRecoveryGrade)}
+                            Cost Recovery: {formatGrade(row.progression.costRecoveryGrade)}
                           </span>
                         )}
                         {row.progression.legacyUnclassified && (
@@ -1212,10 +1212,10 @@ export const RetentionMonitoring: React.FC = () => {
                 <div><dt className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Section</dt><dd className="font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(selectedScheduleRecord.className, `Class name unavailable (${selectedScheduleRecord.classId})`)}</dd></div>
               </dl>
             )}
-            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Attempt</label><select required value={scheduleAttempt} onChange={(event) => setScheduleAttempt(Number(event.target.value) as AllowedAttempt)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer" disabled={!selectedScheduleProgression || allowedAttemptNumbers(selectedScheduleProgression).length <= 1}>{selectedScheduleProgression && allowedAttemptNumbers(selectedScheduleProgression).map(attemptNumber => <option key={attemptNumber} value={attemptNumber}>Attempt {attemptNumber}</option>)}</select><p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">The server-authorized stage determines whether Attempt 1 or Attempt 2 can be scheduled.</p></div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Attempt</label><select required value={scheduleAttempt} onChange={(event) => setScheduleAttempt(Number(event.target.value) as AllowedAttempt)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer" disabled={!selectedScheduleProgression || allowedAttemptNumbers(selectedScheduleProgression).length <= 1}>{selectedScheduleProgression && allowedAttemptNumbers(selectedScheduleProgression).map(attemptNumber => <option key={attemptNumber} value={attemptNumber}>Attempt {attemptNumber}</option>)}</select><p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">The server-authorized stage determines whether attempt 1 or attempt 2 can be scheduled.</p></div>
             <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Remedial Exam Date <span className="font-normal text-slate-500 dark:text-slate-400">(optional)</span></label><input type="date" min={manilaToday()} value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /><p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Today or later.</p></div>
             <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Notes <span className="font-normal text-slate-500 dark:text-slate-400">(optional)</span></label><textarea value={scheduleNotes} onChange={(event) => setScheduleNotes(event.target.value)} maxLength={500} rows={2} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100" /></div>
-            <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={resetScheduleForm} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button><button type="submit" disabled={isSubmitting || !selectedScheduleRecord || !canScheduleRecord(selectedScheduleRecord)} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-600/20">{isSubmitting ? 'Saving...' : 'Confirm & Schedule Exam'}</button></div>
+            <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={resetScheduleForm} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button><button type="submit" disabled={isSubmitting || !selectedScheduleRecord || !canScheduleRecord(selectedScheduleRecord)} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-600/20">{isSubmitting ? 'Saving...' : 'Confirm & schedule exam'}</button></div>
           </form>
         </Modal>
       )}
@@ -1280,8 +1280,8 @@ export const RetentionMonitoring: React.FC = () => {
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                     {resolveAttemptNumber === 1
-                      ? 'Score < 50%. Flagged for Attempt 2 re-attempt.'
-                      : 'Score < 50%. Move to Cost Recovery program.'}
+                      ? 'Score < 50%. Flagged for attempt 2 re-attempt.'
+                      : 'Score < 50%. Move to cost recovery program.'}
                   </p>
                 </button>
               </div>
@@ -1304,7 +1304,7 @@ export const RetentionMonitoring: React.FC = () => {
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold text-sm"
               />
               <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-1">
-                The server determines Pass or Fail at 50% or higher. This form sends only the attempt number and percentage.
+                The server determines pass or fail at 50% or higher. This form sends only the attempt number and percentage.
               </span>
             </div>
 
@@ -1312,7 +1312,7 @@ export const RetentionMonitoring: React.FC = () => {
             {resolveOutcome === 'fail' && resolveAttemptNumber === 1 && (
               <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20 space-y-2">
                 <label className="font-bold text-amber-900 dark:text-amber-200 block text-xs">
-                  Schedule Re-attempt Date <span className="font-normal text-amber-700 dark:text-amber-400">(optional)</span>
+                  Schedule Re-Attempt Date <span className="font-normal text-amber-700 dark:text-amber-400">(optional)</span>
                 </label>
                 <input
                   type="date"
@@ -1322,7 +1322,7 @@ export const RetentionMonitoring: React.FC = () => {
                   className="w-full px-3 py-2 rounded-lg border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
                 />
                 <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                  Optionally schedule Attempt 2 now (today or later).
+                  Optionally schedule attempt 2 now (today or later).
                 </p>
               </div>
             )}
@@ -1334,7 +1334,7 @@ export const RetentionMonitoring: React.FC = () => {
                   Cost Recovery Progression
                 </p>
                 <p className="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5">
-                  Both remedial attempts will be failed. The student will be transferred to Cost Recovery.
+                  Both remedial attempts will be failed. The student will be transferred to cost recovery.
                 </p>
               </div>
             )}
@@ -1378,10 +1378,10 @@ export const RetentionMonitoring: React.FC = () => {
                 {isSubmitting
                   ? 'Saving...'
                   : resolveOutcome === 'pass'
-                    ? 'Save Exam Grade (Pass)'
+                    ? 'Save exam grade (pass)'
                     : resolveAttemptNumber === 1
-                      ? 'Record Re-attempt'
-                      : 'Record Cost Recovery'}
+                      ? 'Record re-attempt'
+                      : 'Record cost recovery'}
               </button>
             </div>
           </form>
@@ -1394,13 +1394,13 @@ export const RetentionMonitoring: React.FC = () => {
             <p className="text-slate-600 dark:text-slate-300">{textOrUnavailable(costRecoveryRecord.studentName, 'Student name unavailable')} · {textOrUnavailable(costRecoveryRecord.subjectCode, 'Subject code unavailable')}</p>
             <p className="text-slate-500 dark:text-slate-400">Both remedial attempts were failed. Enter the final grade earned in the cost recovery program. A grade better than the retention trigger clears the student; otherwise the course is failed. The original course grade is not changed.</p>
             <label className="font-bold text-slate-700 dark:text-slate-300 block">
-              Cost recovery final grade (1.00 – 5.00)
+              Cost Recovery Final Grade (1.00 – 5.00)
               <input type="number" min="1" max="5" step="0.01" required value={costRecoveryGrade} onChange={(event) => setCostRecoveryGrade(event.target.value)} placeholder="e.g. 2.25"
                 className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" />
             </label>
             <div className="pt-2 flex justify-end gap-2">
               <button type="button" onClick={() => setCostRecoveryRecord(null)} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button>
-              <button type="submit" disabled={isSubmitting} className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 text-white font-bold">{isSubmitting ? 'Saving…' : 'Record Result'}</button>
+              <button type="submit" disabled={isSubmitting} className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 text-white font-bold">{isSubmitting ? 'Saving…' : 'Record result'}</button>
             </div>
           </form>
         </Modal>
@@ -1426,7 +1426,7 @@ export const RetentionMonitoring: React.FC = () => {
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
                 <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-500 dark:text-slate-400">Final Grade</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.gwa) ? <GradeValue percentage={selectedPolicyRecord.percentage} grade={selectedPolicyRecord.gwa}>{formatGrade(selectedPolicyRecord.gwa)}</GradeValue> : 'Unavailable'}</span></div>
-                <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-500 dark:text-slate-400">Recorded score</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.percentage) ? `${selectedPolicyRecord.percentage.toFixed(2)}%` : 'Unavailable'}</span></div>
+                <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-500 dark:text-slate-400">Recorded Score</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.percentage) ? `${selectedPolicyRecord.percentage.toFixed(2)}%` : 'Unavailable'}</span></div>
               </div>
             </div>
             {selectedPolicyProgression && (

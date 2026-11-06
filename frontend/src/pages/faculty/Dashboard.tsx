@@ -282,7 +282,7 @@ export const Dashboard: React.FC = () => {
       setReattemptDate('');
       setRemedialOutcome('passed');
       const notifiedText = saved.notification?.created === true ? ' Student notified.' : '';
-      if (attempt2Failed) showFeedback(`Attempt 1 was saved but Attempt 2 could not be scheduled. Schedule it again from Retention Monitoring.${notifiedText}`, 'error');
+      if (attempt2Failed) showFeedback(`Attempt 1 was saved but attempt 2 could not be scheduled. Schedule it again from Retention Monitoring.${notifiedText}`, 'error');
       else showFeedback(`Remedial exam result recorded successfully.${notifiedText}`, 'success');
       loadDashboard();
     } catch (err) {
@@ -309,7 +309,7 @@ export const Dashboard: React.FC = () => {
           onClick={loadDashboard}
           className="px-5 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white text-xs font-bold transition-all shadow-md"
         >
-          Retry Loading
+          Retry loading
         </button>
       </div>
     );
@@ -340,10 +340,10 @@ export const Dashboard: React.FC = () => {
       {dashboardKpis && activeSubjects.length === 0 && (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold font-heading text-slate-800 dark:text-slate-100">First steps</h2>
+            <h2 className="text-sm font-bold font-heading text-slate-800 dark:text-slate-100">First Steps</h2>
             <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">1 Create your class &middot; 2 Add students &middot; 3 Set grade weights</p>
           </div>
-          <button type="button" onClick={() => navigate('/classes')} className="px-4 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white text-xs font-bold">Create Class</button>
+          <button type="button" onClick={() => navigate('/classes')} className="px-4 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white text-xs font-bold">Create class</button>
         </div>
       )}
 
@@ -369,7 +369,7 @@ export const Dashboard: React.FC = () => {
                 onClick={() => navigate('/classes')}
                 className="self-start sm:self-center flex items-center gap-2 px-5 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-clinical-600/20 transition-all cursor-pointer flex-shrink-0"
               >
-                <span>Manage Classes</span>
+                <span>Manage classes</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -479,7 +479,7 @@ export const Dashboard: React.FC = () => {
                   onClick={() => navigate('/retention')}
                   className="whitespace-nowrap text-[10px] font-semibold text-clinical-600 hover:text-clinical-700 dark:text-clinical-400 hover:underline"
                 >
-                  View All &rarr;
+                  View all &rarr;
                 </button>
               </div>
             </div>
@@ -523,15 +523,15 @@ export const Dashboard: React.FC = () => {
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
                 Class Details
               </h3>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Current classes</span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Current Classes</span>
             </div>
 
             <div className="space-y-2.5 text-xs">
               {activeSubjects.length === 0 && <p className="text-slate-500 dark:text-slate-400">No classes yet.</p>}
               {activeSubjects.slice(0, 2).map((subj, idx) => (
-                <div key={subj.code} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between max-xl:flex-col max-xl:items-stretch max-xl:gap-2">
+                <div key={subj.code} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 max-xl:flex-col max-xl:items-stretch max-xl:gap-2">
                   <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-xl bg-clinical-50 dark:bg-clinical-950/60 text-clinical-600 dark:text-clinical-400 flex items-center justify-center font-bold text-xs">
+                    <div className="w-7 h-7 shrink-0 rounded-xl bg-clinical-50 dark:bg-clinical-950/60 text-clinical-600 dark:text-clinical-400 flex items-center justify-center font-bold text-xs">
                       {idx + 1}
                     </div>
                     <div>
@@ -561,7 +561,7 @@ export const Dashboard: React.FC = () => {
                 onClick={() => navigate('/faculty/audit-trail')}
                 className="text-[10px] font-bold text-clinical-600 dark:text-clinical-400 hover:underline"
               >
-                View Log
+                View log
               </button>
             </div>
 
@@ -627,19 +627,19 @@ export const Dashboard: React.FC = () => {
                 onChange={event => setRemedialOutcome(event.target.value as 'passed' | 'failed')}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-clinical-500 text-xs outline-none"
               >
-                <option value="passed">Pass (Grade Cleared)</option>
+                <option value="passed">Pass (grade cleared)</option>
                 {activeRemedialToRecord.attemptNumber === 1 ? (
-                  <option value="failed">Re-attempt (Allow Attempt 2)</option>
+                  <option value="failed">Re-attempt (allow attempt 2)</option>
                 ) : (
-                  <option value="failed">Cost Recovery (Transfer to Cost Recovery)</option>
+                  <option value="failed">Cost recovery (transfer to cost recovery)</option>
                 )}
               </select>
               <p className="text-[10px] text-slate-500 dark:text-slate-400">
                 {remedialOutcome === 'passed'
                   ? 'Student will be marked as cleared and notified.'
                   : activeRemedialToRecord.attemptNumber === 1
-                    ? 'Student will be marked for Attempt 2 re-attempt.'
-                    : 'Student will be moved to Cost Recovery program.'}
+                    ? 'Student will be marked for attempt 2 re-attempt.'
+                    : 'Student will be moved to cost recovery program.'}
               </p>
             </div>
 
@@ -694,7 +694,7 @@ export const Dashboard: React.FC = () => {
                   type="submit"
                   className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-clinical-600 hover:bg-clinical-700 shadow-md shadow-clinical-600/20 transition-all"
                 >
-                  Save Result
+                  Save result
                 </button>
               </div>
             </div>

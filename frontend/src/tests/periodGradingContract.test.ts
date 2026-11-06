@@ -35,13 +35,13 @@ test('Grade Weights banner shows the current schema and the saved or unsaved bad
       React, loadedConfig, { lecture: '60', laboratory: '40' }, { midterm, final }, componentMode
     )
   );
-  assert.equal(render({ version: 1 }, '35', '65'), '<span>BU Dental Medicine Schema Active: Lecture 60% / Lab 40% • Midterm 35% / Final 65%</span>');
-  assert.equal(render(null, '35', '65'), '<span>BU Dental Medicine Default Grade Weights: Lecture 60% / Lab 40% • Midterm 35% / Final 65%</span>');
-  assert.equal(render({ version: 1 }, '30', '70', 'lecture'), '<span>BU Dental Medicine Schema Active: Lecture only • Midterm 30% / Final 70%</span>');
-  assert.equal(render(null, '50', '50', 'lecture'), '<span>BU Dental Medicine Default Grade Weights: Lecture only • Midterm 50% / Final 50%</span>');
+  assert.equal(render({ version: 1 }, '35', '65'), '<span>BU Dental Medicine Schema active: Lecture 60% / Lab 40% • Midterm 35% / Final 65%</span>');
+  assert.equal(render(null, '35', '65'), '<span>BU Dental Medicine Default grade weights: Lecture 60% / Lab 40% • Midterm 35% / Final 65%</span>');
+  assert.equal(render({ version: 1 }, '30', '70', 'lecture'), '<span>BU Dental Medicine Schema active: Lecture only • Midterm 30% / Final 70%</span>');
+  assert.equal(render(null, '50', '50', 'lecture'), '<span>BU Dental Medicine Default grade weights: Lecture only • Midterm 50% / Final 50%</span>');
   // Unsaved edits replace the banner; saved versus unsaved presets are badges.
   assert.match(source, /\{isDirty \? \(/);
-  assert.match(source, /You have unsaved changes\. Adjust weights or categories directly below, then click Save Grade Weights\./);
+  assert.match(source, /You have unsaved changes\. Adjust weights or categories directly below, then click Save grade weights\./);
   assert.match(source, /Version \{loadedConfig\.version\}/);
   assert.match(source, /Suggested starting preset — unsaved/);
   assert.match(source, /activePeriodEditorTab === 'Midterm' \? 'Midterm' : 'Finals'\} • \{activeComponentEditorTab\} Categories/);
@@ -51,8 +51,8 @@ test('Score panels keep one manual Save per view, show the clear count, and warn
   const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../pages/faculty/GradeComputation.tsx'), 'utf8');
   assert.equal((source.match(/onClick=\{handleManualSaveScores\}/g) ?? []).length, 1);
   assert.equal((source.match(/onClick=\{handleSaveMatrixScores\}/g) ?? []).length, 1);
-  assert.match(source, /`Save Scores Sheet\$\{singlePendingClears\.size > 0 \? ` \(\$\{singlePendingClears\.size\} to clear\)` : ''\}`/);
-  assert.match(source, /`Save All Matrix Scores\$\{matrixPendingClears\.size > 0 \? ` \(\$\{matrixPendingClears\.size\} to clear\)` : ''\}`/);
+  assert.match(source, /`Save scores sheet\$\{singlePendingClears\.size > 0 \? ` \(\$\{singlePendingClears\.size\} to clear\)` : ''\}`/);
+  assert.match(source, /`Save all matrix scores\$\{matrixPendingClears\.size > 0 \? ` \(\$\{matrixPendingClears\.size\} to clear\)` : ''\}`/);
   // Save buttons are never disabled while a save runs; the next save is queued instead.
   const saveButtons = [...source.matchAll(/<button\s+onClick=\{(?:handleManualSaveScores|handleSaveMatrixScores)\}[^>]*>/g)];
   assert.equal(saveButtons.length, 2);

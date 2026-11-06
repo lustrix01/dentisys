@@ -13,7 +13,7 @@ const readDownloadedXlsxText = async (download: Download) => {
 // Attendance Monitoring opens on the Assigned Classes grid; this enters a class's roll-call worksheet.
 const openWorksheet = async (page: Page, section: string) => {
   const card = page.locator('div.group').filter({ has: page.getByText(section, { exact: true }) });
-  await card.getByRole('button', { name: 'View Attendance', exact: true }).click();
+  await card.getByRole('button', { name: 'View attendance', exact: true }).click();
 };
 
 test.describe('Faculty Module E2E Tests', () => {
@@ -53,8 +53,8 @@ test.describe('Faculty Module E2E Tests', () => {
       { id: 11, schoolYear: '2025-2026', semester: '1ST', startDate: '2025-08-01', endDate: '2025-12-31', classCount: 0 },
     ] }) }));
     await page.click('a[href="/classes"]');
-    await page.getByRole('button', { name: 'Create Class', exact: true }).first().click();
-    const terms = page.getByLabel('Academic term *');
+    await page.getByRole('button', { name: 'Create class', exact: true }).first().click();
+    const terms = page.getByLabel('Academic Term *');
     await expect(terms).toHaveValue('12');
     await expect(terms.locator('option')).toHaveCount(2);
     await expect(terms).toContainText('Summer 2026-2027');
@@ -65,11 +65,11 @@ test.describe('Faculty Module E2E Tests', () => {
   test('Faculty creation explains when the Dean has no current-year term', async ({ page }) => {
     await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [], academicTerms: [] }) }));
     await page.click('a[href="/classes"]');
-    await page.getByRole('button', { name: 'Create Class', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Create class', exact: true }).first().click();
     await expect(page.getByText('No open term. Ask the Dean to add the terms for 2026-2027.')).toBeVisible();
-    await expect(page.getByLabel('Academic term *')).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Save Class Section' })).toBeEnabled();
-    await page.getByRole('button', { name: 'Save Class Section' }).click();
+    await expect(page.getByLabel('Academic Term *')).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Save class section' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Save class section' }).click();
     await expect(page.getByText('Choose an academic term.').first()).toBeVisible();
   });
 
@@ -175,7 +175,7 @@ test.describe('Faculty Module E2E Tests', () => {
       await appPage.getByRole('button', { name: /Send Invitations \(2\)/i }).click();
 
       await expect(appPage.getByRole('main').getByText('Student invitations: 1 issued, 1 email deliveries failed, 1 failed or skipped.')).toBeVisible();
-      await expect(appPage.getByText('Invitation Issued · Delivery Failed')).toBeVisible();
+      await expect(appPage.getByText('Invitation issued · Delivery failed')).toBeVisible();
       await appPage.getByRole('button', { name: /Email History Log \(1\)/i }).click();
       const historyTable = appPage.getByRole('table').filter({ hasText: 'Date Sent' });
       await expect(historyTable.getByText('Student Invitation', { exact: true })).toBeVisible();
@@ -234,7 +234,7 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.getByPlaceholder('e.g. Juan')).toHaveValue('Returning');
     await expect(page.getByPlaceholder('e.g. Dela Cruz')).toHaveValue('Student');
     await expect(page.getByPlaceholder('e.g. Juan')).toHaveAttribute('readonly', '');
-    await page.getByRole('button', { name: 'Enroll Existing Student' }).click();
+    await page.getByRole('button', { name: 'Enroll existing Student' }).click();
     await expect(page.getByText('Enrolled 1 student.')).toBeVisible();
     expect(enrollPayloads).toEqual([{ csId: 77, studentIds: [501] }]);
     expect(createCalled).toBe(false);
@@ -247,10 +247,10 @@ test.describe('Faculty Module E2E Tests', () => {
       else await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', academicTerms: [{ id: 1, schoolYear: '2026-2027', semester: '1ST', startDate: '2026-08-01', endDate: '2026-12-31', classCount: 0 }], classes: [] }) });
     });
     await page.click('a[href="/classes"]');
-    await page.getByRole('button', { name: 'Create Class', exact: true }).first().click();
-    await page.getByLabel('Academic term *').selectOption('');
+    await page.getByRole('button', { name: 'Create class', exact: true }).first().click();
+    await page.getByLabel('Academic Term *').selectOption('');
     await expect(page.getByText('Enter a course code.')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Save Class Section' }).click();
+    await page.getByRole('button', { name: 'Save class section' }).click();
     await expect(page.getByText(/details need attention before saving:/)).toBeVisible();
     await expect(page.getByText('Enter a course code.', { exact: true })).toBeVisible();
     await expect(page.getByText('Choose an academic term.', { exact: true })).toBeVisible();
@@ -273,7 +273,7 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.route('**/api/faculty/students', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) }));
 
     await page.click('a[href="/classes"]');
-    await page.getByRole('button', { name: 'Create Class' }).first().click();
+    await page.getByRole('button', { name: 'Create class' }).first().click();
     await page.getByPlaceholder('e.g. DENT 301').fill('NEW601');
     await page.getByPlaceholder('e.g. Restorative Dentistry I').fill('Advanced Clinic');
     await page.getByPlaceholder('e.g. 4B or Section 3-A').fill('6A');
@@ -290,12 +290,12 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.getByLabel('Lecture Tue start time').selectOption('03:00 PM');
     await page.getByLabel('Lecture Tue end time').selectOption('05:00 PM');
     await expect(page.getByText('Room 101 • Mon 08:00 AM - 10:00 AM; Tue 03:00 PM - 05:00 PM')).toBeVisible();
-    await page.getByRole('button', { name: 'Save Class Section' }).click();
+    await page.getByRole('button', { name: 'Save class section' }).click();
     await expect.poll(() => created?.meetings).toEqual([
       { component: 'Lecture', day: 'Mon', room: 'Room 101', startTime: '08:00', endTime: '10:00' },
       { component: 'Lecture', day: 'Tue', room: 'Room 101', startTime: '15:00', endTime: '17:00' },
     ]);
-    await page.getByRole('button', { name: 'Create Class', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Create class', exact: true }).first().click();
     // Lab only: the lecture units and lecture schedule disappear.
     await page.getByRole('radio', { name: 'Lab only' }).click();
     await expect(page.getByLabel('Lecture Units *')).toHaveCount(0);
@@ -318,14 +318,14 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.click('a[href="/classes"]');
     const warning = page.getByTestId('retired-room-warning');
     await expect(warning).toHaveText('Simulation Lab was retired by the Dean. Pick another room.');
-    await page.getByTitle('Edit Class Section Details').first().click();
+    await page.getByTitle('Edit class section details').first().click();
     const lab = page.getByLabel('Laboratory Room Venue');
     await expect(lab.locator('option:checked')).toHaveText('Simulation Lab (retired)');
     await expect(lab.locator('option', { hasText: 'Simulation Lab' })).toHaveCount(1);
     await expect(page.getByTestId('retired-room-warning')).toHaveCount(2); // card behind the form + the form
     await lab.selectOption('Dental Clinic Lab 1');
     await expect(page.getByTestId('retired-room-warning')).toHaveCount(1); // only the card still warns
-    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await expect.poll(() => updates.length).toBe(1);
   });
 
@@ -341,12 +341,12 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.route('**/api/faculty/students', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) }));
 
     await page.click('a[href="/classes"]');
-    await page.getByTitle('Edit Class Section Details').first().click();
+    await page.getByTitle('Edit class section details').first().click();
     await expect(page.getByRole('radio', { name: 'Lecture & Lab' })).toHaveAttribute('aria-checked', 'true');
     await page.getByRole('radio', { name: 'Lab only' }).click();
     await expect(page.getByText('Lecture Venue & Schedule')).toHaveCount(0);
     await page.getByLabel('Laboratory Units *').fill('3');
-    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await expect.poll(() => updates.length).toBe(1);
     expect(updates[0]).toMatchObject({ csId: 91, lectureUnits: null, labUnits: 3, lecRoom: '' });
   });
@@ -363,14 +363,14 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.route('**/api/faculty/students', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) }));
 
     await page.click('a[href="/classes"]');
-    await page.getByTitle('Edit Class Section Details').first().click();
-    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await page.getByTitle('Edit class section details').first().click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await expect.poll(() => updates.length).toBe(1);
     expect(updates[0]).not.toHaveProperty('csName');
 
-    await page.getByTitle('Edit Class Section Details').first().click();
+    await page.getByTitle('Edit class section details').first().click();
     await page.getByPlaceholder('Section 4-A').fill('C');
-    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await expect.poll(() => updates.length).toBe(2);
     expect(updates[1]).toMatchObject({ csName: 'CLIN401-C', block: 'C' });
   });
@@ -388,16 +388,16 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.route('**/api/faculty/students', route => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
     await page.goto('/classes');
     await expect(page.getByText(/Unfinished/).first()).toBeVisible();
-    await page.getByTitle('Edit Class Section Details').first().click();
+    await page.getByTitle('Edit class section details').first().click();
     await expect(page.getByLabel('Lecture Mon start time', { exact: true })).toHaveValue('08:00 AM');
     await expect(page.getByLabel('Lecture Mon meeting 2 start time')).toHaveValue('03:00 PM');
-    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await expect.poll(() => updates.length).toBe(1);
     expect(updates[0]).not.toHaveProperty('meetings');
     expect(updates[0]).not.toHaveProperty('lecRoom');
-    await page.getByTitle('Edit Class Section Details').first().click();
+    await page.getByTitle('Edit class section details').first().click();
     await page.getByLabel('Lecture Mon meeting 2 end time').selectOption('06:00 PM');
-    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await expect.poll(() => updates.length).toBe(2);
     expect(updates[1].meetings).toEqual([meetings[0], { ...meetings[1], endTime: '18:00' }]);
   });
@@ -422,11 +422,11 @@ test.describe('Faculty Module E2E Tests', () => {
     });
 
     await page.click('a[href="/classes"]');
-    await expect(page.getByRole('button', { name: 'View Roster' })).toBeVisible();
-    await page.getByRole('button', { name: 'View Roster' }).click();
+    await expect(page.getByRole('button', { name: 'View roster' })).toBeVisible();
+    await page.getByRole('button', { name: 'View roster' }).click();
     await expect(page.getByText('Active Student')).toBeVisible();
     await page.getByRole('button', { name: 'Actions for Active Student' }).click();
-    await page.getByRole('button', { name: 'Send Invite', exact: true }).click();
+    await page.getByRole('button', { name: 'Send invite', exact: true }).click();
     await expect(page.getByRole('main').getByText('This Student identity is already linked to an active account.')).toBeVisible();
     await expect(page.getByText('An unexpected error occurred. Please try again.')).toHaveCount(0);
   });
@@ -462,7 +462,7 @@ test.describe('Faculty Module E2E Tests', () => {
       await appPage.locator('tbody input[type="checkbox"]').first().check();
       await appPage.getByRole('button', { name: /Send Invitations \(1\)/i }).click();
       await expect(appPage.getByRole('main').getByText('Student invitations: 1 issued, 0 failed or skipped.')).toBeVisible();
-      await expect(appPage.getByText('Invitation Sent')).toBeVisible();
+      await expect(appPage.getByText('Invitation sent')).toBeVisible();
       await appPage.getByRole('button', { name: /Email History Log \(1\)/i }).click();
       await expect(appPage.getByRole('table').getByText('Student Invitation', { exact: true })).toBeVisible();
       await expect(appPage.getByText('1 sent', { exact: true })).toBeVisible();
@@ -557,21 +557,21 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.getByText('Schedule Remedial Exam', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Midterm Evaluation Rules')).toHaveCount(0);
     await page.getByRole('row').filter({ hasText: 'Remedial Candidate' }).getByTitle('Schedule remedial exam').click();
-    const dialog = page.locator('form').filter({ hasText: 'Confirm & Schedule Exam' });
+    const dialog = page.locator('form').filter({ hasText: 'Confirm & schedule exam' });
     await expect(dialog.getByText('Remedial Candidate')).toBeVisible();
     await expect(dialog.getByText('CLIN401-A')).toBeVisible();
     await expect(dialog.locator('select').filter({ hasText: 'Remedial Candidate' })).toHaveCount(0);
     const dateInput = dialog.locator('input[type="date"]');
     await expect(dateInput).toHaveAttribute('min', /^\d{4}-\d{2}-\d{2}$/);
     await dialog.locator('textarea').fill('Bring the lab manual.');
-    await dialog.getByRole('button', { name: 'Confirm & Schedule Exam' }).click();
+    await dialog.getByRole('button', { name: 'Confirm & schedule exam' }).click();
     await expect.poll(() => remedialPosts.length).toBe(1);
     expect(remedialPosts[0]).toMatchObject({ enrollmentId: '901', attemptNumber: 1, notes: 'Bring the lab manual.' });
   });
 
   test('person names block digits while typing, sanitize paste and preserve accents, punctuation and IME', async ({ page }) => {
     await page.goto('/faculty/profile');
-    await page.getByRole('button', { name: 'Change Name' }).click();
+    await page.getByRole('button', { name: 'Change name' }).click();
     const first = page.getByRole('textbox', { name: /First name/ });
     await first.fill('Ana');
     await first.pressSequentially('123@#$');
@@ -650,15 +650,15 @@ test.describe('Faculty Module E2E Tests', () => {
     const emailInput = page.locator('input[readonly]').first();
     await expect(emailInput).toHaveValue('faculty@bicol-u.edu.ph');
     await expect(page.getByText('Your login email cannot be changed.')).toBeVisible();
-    await page.getByRole('button', { name: 'Change Name' }).click();
+    await page.getByRole('button', { name: 'Change name' }).click();
     const saveName = page.getByRole('button', { name: 'Save name' });
     await expect(saveName).toBeDisabled();
-    await expect(page.getByLabel('Authenticator code')).toHaveAttribute('autocomplete', 'one-time-code');
-    await page.getByLabel('First name *').fill('Janet');
-    await page.getByLabel('Authenticator code').fill('111111');
+    await expect(page.getByLabel('Authenticator Code')).toHaveAttribute('autocomplete', 'one-time-code');
+    await page.getByLabel('First Name *').fill('Janet');
+    await page.getByLabel('Authenticator Code').fill('111111');
     await saveName.click();
     await expect(page.getByRole('alert')).toContainText('Invalid or already used authenticator code.');
-    await page.getByLabel('Authenticator code').fill('123456');
+    await page.getByLabel('Authenticator Code').fill('123456');
     await saveName.click();
     await expect.poll(() => postedProfile).not.toBeNull();
     expect(postedProfile).not.toHaveProperty('email');
@@ -723,7 +723,7 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.locator('#current-password').fill('OldPassword1!');
     await page.locator('#new-password').fill('weakpass');
     await page.locator('#confirm-password').fill('weakpass');
-    const submit = page.getByRole('button', { name: /Update Password/i });
+    const submit = page.getByRole('button', { name: /Update password/i });
     await expect(submit).toBeDisabled();
     await expect(requirements).toContainText('An uppercase letter (A-Z) (not met)');
 
@@ -917,7 +917,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     const oldCard = page.locator('div.group').filter({ hasText: 'OLD401' });
     await expect(oldCard).toHaveCount(1);
     await expect(oldCard.getByRole('button', { name: 'Sessions', exact: true })).toBeDisabled();
-    await oldCard.getByRole('button', { name: 'View Attendance', exact: true }).click();
+    await oldCard.getByRole('button', { name: 'View attendance', exact: true }).click();
     await expect(page.getByText('Past school-year attendance is view-only.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Start session', exact: true })).toBeDisabled();
     await expect(page.locator('tbody tr').filter({ hasText: 'Alice Green' }).getByRole('button', { name: 'Mark', exact: true })).toBeDisabled();
@@ -953,10 +953,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.getByLabel('Assigned course').selectOption('101');
     await page.getByLabel('Class section').selectOption('1');
     await page.getByRole('button', { name: 'Start session', exact: true }).click();
-    const date = page.getByLabel('Session date (Asia/Manila)');
+    const date = page.getByLabel('Session Date (Asia/Manila)');
     expect(await date.getAttribute('min')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await date.fill('2099-10-02');
-    await page.getByLabel('Room or session location').selectOption('Dental Clinic Lab 1');
+    await page.getByLabel('Room or Session Location').selectOption('Dental Clinic Lab 1');
     await expect(page.getByRole('checkbox', { name: /Geofence/ })).not.toBeChecked(); // ATT-002: off by default
     await page.getByRole('checkbox', { name: /Geofence/ }).uncheck();
     await page.locator('form').getByRole('button', { name: 'Schedule session', exact: true }).click();
@@ -977,21 +977,21 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.getByRole('button', { name: 'Start session', exact: true }).click();
     const time = (label: string) => page.getByLabel(label, { exact: true });
     const expectTimes = async (v: string[]) => {
-      for (const [i, label] of ['Opening', 'Present cutoff', 'Late cutoff', 'Class end time'].entries()) await expect(time(label)).toHaveValue(v[i]);
+      for (const [i, label] of ['Opening', 'Present Cutoff', 'Late Cutoff', 'Class end time'].entries()) await expect(time(label)).toHaveValue(v[i]);
     };
     await time('Opening').fill('02:00');
     await expectTimes(['02:00', '03:00', '06:00', '07:00']);
-    await time('Late cutoff').fill('14:00');
+    await time('Late Cutoff').fill('14:00');
     await expect(time('Class end time')).toHaveValue('14:00');
-    await time('Present cutoff').fill('15:00');
+    await time('Present Cutoff').fill('15:00');
     await expectTimes(['02:00', '15:00', '15:01', '15:01']);
     await time('Opening').fill('07:00');
     await expectTimes(['07:00', '20:00', '20:01', '20:01']);
 
-    await page.getByLabel('Room or session location').selectOption('Dental Clinic Lab 1');
+    await page.getByLabel('Room or Session Location').selectOption('Dental Clinic Lab 1');
     await time('Opening').fill('23:00');
-    await time('Present cutoff').fill('23:30');
-    await time('Late cutoff').fill('01:00');
+    await time('Present Cutoff').fill('23:30');
+    await time('Late Cutoff').fill('01:00');
     await time('Class end time').fill('02:00');
     await expect(page.getByTestId('caption-presentCutoff')).toHaveText('11:30 PM · same day');
     await expect(page.getByTestId('caption-lateCutoff')).toContainText('1:00 AM (next day)');
@@ -1025,8 +1025,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.getByLabel('Assigned course').selectOption('101');
     await page.getByLabel('Class section').selectOption('1');
     await page.getByRole('button', { name: 'Start session', exact: true }).click();
-    await page.getByLabel('Session date (Asia/Manila)').fill('2099-10-02');
-    await page.getByLabel('Room or session location').selectOption('Dental Clinic Lab 1');
+    await page.getByLabel('Session Date (Asia/Manila)').fill('2099-10-02');
+    await page.getByLabel('Room or Session Location').selectOption('Dental Clinic Lab 1');
     await page.locator('form').getByRole('button', { name: 'Schedule session', exact: true }).click();
     const popup = page.getByTestId('overlap-confirm');
     await expect(popup).toContainText('Booked session');
@@ -1053,7 +1053,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.getByLabel('Class section').selectOption('1');
     await page.getByRole('button', { name: 'Start session', exact: true }).click();
     const expectTimes = async (times: string[], room: string) => {
-      for (const [label, value] of [['Opening', times[0]], ['Present cutoff', times[1]], ['Late cutoff', times[2]], ['Class end time', times[3]]]) await expect(page.getByLabel(label, { exact: true })).toHaveValue(value);
+      for (const [label, value] of [['Opening', times[0]], ['Present Cutoff', times[1]], ['Late Cutoff', times[2]], ['Class end time', times[3]]]) await expect(page.getByLabel(label, { exact: true })).toHaveValue(value);
       await expect(page.getByLabel('Custom room name')).toHaveValue(room);
     };
     const chips = page.getByRole('button', { name: /^(Mon|Thu) · / });
@@ -1062,18 +1062,18 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByText('Times from Mon · Lecture · 09:00–11:00. Pick another meeting or edit the times.')).toBeVisible();
     await expectTimes(['08:45', '09:15', '09:30', '11:00'], 'CDM 1');
     await expect(page.getByText('On: students check in with their face. Off: you mark attendance in the roll call.')).toBeVisible();
-    await page.getByLabel('Present cutoff', { exact: true }).fill('10:00');
+    await page.getByLabel('Present Cutoff', { exact: true }).fill('10:00');
     await page.getByLabel('Custom room name').fill('Hand room');
     await chips.nth(2).click();
     await expect(chips.nth(2)).toHaveAttribute('aria-pressed', 'true');
     await expect(chips.nth(0)).toHaveAttribute('aria-pressed', 'false');
     await expectTimes(['11:45', '12:15', '12:30', '17:00'], 'CDM 2');
-    await expect(page.getByLabel('Session date (Asia/Manila)')).toHaveValue('2026-10-26');
+    await expect(page.getByLabel('Session Date (Asia/Manila)')).toHaveValue('2026-10-26');
   });
 
   for (const [title, pickRoom, expected] of [
-    ['picking a listed room from the dropdown', async (page: import('@playwright/test').Page) => { await page.getByLabel('Room or session location').selectOption('Dental Clinic Lab 1'); }, 'Dental Clinic Lab 1'],
-    ['choosing Custom and typing a room', async (page: import('@playwright/test').Page) => { await page.getByLabel('Room or session location').selectOption({ label: 'Other place (custom)…' }); await page.getByLabel('Custom room name').fill('Room 405'); }, 'Room 405'],
+    ['picking a listed room from the dropdown', async (page: import('@playwright/test').Page) => { await page.getByLabel('Room or Session Location').selectOption('Dental Clinic Lab 1'); }, 'Dental Clinic Lab 1'],
+    ['choosing Custom and typing a room', async (page: import('@playwright/test').Page) => { await page.getByLabel('Room or Session Location').selectOption({ label: 'Other place (custom)…' }); await page.getByLabel('Custom room name').fill('Room 405'); }, 'Room 405'],
   ] as const) {
     test(`Start Session sends the room when ${title}`, async ({ page }) => {
       let payload: Record<string, unknown> | null = null;
@@ -1086,7 +1086,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByLabel('Assigned course').selectOption('101');
       await page.getByLabel('Class section').selectOption('1');
       await page.getByRole('button', { name: 'Start session', exact: true }).click();
-      await page.getByLabel('Session date (Asia/Manila)').fill('2099-10-02');
+      await page.getByLabel('Session Date (Asia/Manila)').fill('2099-10-02');
       await pickRoom(page);
       await page.getByRole('checkbox', { name: /Geofence/ }).uncheck();
       await page.locator('form').getByRole('button', { name: 'Schedule session', exact: true }).click();
@@ -1181,12 +1181,12 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await openWorksheet(page, 'CLIN401 - Section A');
     await page.getByRole('button', { name: 'Sessions', exact: true }).click();
     await expect(page.getByText('End 12:00', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'End Session', exact: true }).click();
-    await expect(page.getByText(/Students without an attendance record will be marked Absent/)).toBeVisible();
-    await page.getByRole('button', { name: 'Confirm End Session' }).click();
+    await page.getByRole('button', { name: 'End session', exact: true }).click();
+    await expect(page.getByText(/Students without an attendance record will be marked absent/)).toBeVisible();
+    await page.getByRole('button', { name: 'Confirm end session' }).click();
     await expect.poll(() => endPayload).toEqual({ sessionId: '900' });
     await expect(page.getByRole('main').getByText(/Attendance session ended/)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'End Session' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'End session' })).toHaveCount(0);
   });
 
   test('worksheet: End Session works when the class has an active and a scheduled session on one date', async ({ page }) => {
@@ -1210,11 +1210,11 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.goto('/attendance');
     await openWorksheet(page, 'CLIN401 - Section A');
     await page.getByRole('button', { name: 'Sessions', exact: true }).click();
-    await page.getByRole('button', { name: 'End Session', exact: true }).click();
+    await page.getByRole('button', { name: 'End session', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'End Attendance Session' });
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText('CS1-ACTIVE');
-    await dialog.getByRole('button', { name: 'Confirm End Session' }).click();
+    await dialog.getByRole('button', { name: 'Confirm end session' }).click();
     await expect.poll(() => endPayload).toEqual({ sessionId: '900' });
   });
 
@@ -1451,7 +1451,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.keyboard.press('Escape');
     const aliceRow = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
     const overrideButton = aliceRow.getByRole('button', { name: 'Mark', exact: true });
-    const bulkButton = page.getByRole('button', { name: 'Mark all unrecorded as Present', exact: true });
+    const bulkButton = page.getByRole('button', { name: 'Mark all unrecorded as present', exact: true });
     const overrideButtons = page.locator('tbody tr').getByRole('button', { name: /^(Mark|Override)$/ });
     await expect(overrideButtons).toHaveCount(mockWorksheetSectionA.roster.length);
     for (const button of await overrideButtons.all()) await expect(button).toBeDisabled();
@@ -1490,15 +1490,15 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       // Begin the write just before the 30-second poll, within the API timeout.
       await page.clock.fastForward(28000);
       if (operation === 'bulk') {
-        await page.getByRole('button', { name: 'Mark all unrecorded as Present' }).click();
-        await page.getByRole('button', { name: 'Mark Present', exact: true }).click();
+        await page.getByRole('button', { name: 'Mark all unrecorded as present' }).click();
+        await page.getByRole('button', { name: 'Mark present', exact: true }).click();
       } else {
         await row.getByRole('button', { name: operation === 'correction' ? 'Override' : 'Mark', exact: true }).click();
         await page.locator('form').getByRole('button', { name: operation === 'correction' ? 'absent' : 'present', exact: true }).click();
         if (operation === 'correction') {
           await page.locator('textarea').fill('Student was absent due to illness');
         }
-        await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+        await page.getByRole('button', { name: 'Save override', exact: true }).click();
       }
       await expect.poll(() => writing).toBe(true);
       await expect(page.locator('input[type="date"]')).toBeDisabled();
@@ -1542,7 +1542,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const alice = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
       await alice.getByRole('button', { name: 'Mark', exact: true }).click();
     await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
-    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+    await page.getByRole('button', { name: 'Save override', exact: true }).click();
       await expect.poll(() => writing).toBe(true);
       if (newerRead !== 'refresh') {
         await expect(page.locator('input[type="date"]')).toBeDisabled();
@@ -1591,8 +1591,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
     await page.goto('/attendance');
     await openWorksheet(page, 'CLIN401 - Section A');
-    await page.getByRole('button', { name: 'Mark all unrecorded as Present' }).click();
-    await page.getByRole('button', { name: 'Mark Present', exact: true }).click();
+    await page.getByRole('button', { name: 'Mark all unrecorded as present' }).click();
+    await page.getByRole('button', { name: 'Mark present', exact: true }).click();
     const refresh = page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true });
     for (let index = 0; index < roster.length; ++index) {
       await expect.poll(() => writes).toBe(index + 1);
@@ -1601,7 +1601,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       if (action === 'session revocation' && index === 1) {
         await page.getByRole('button', { name: 'Sessions', exact: true }).click();
         await page.getByRole('button', { name: 'Revoke', exact: true }).click();
-        await page.getByRole('button', { name: 'Confirm Revoke Session', exact: true }).click();
+        await page.getByRole('button', { name: 'Confirm revoke session', exact: true }).click();
         await expect(page.getByRole('main').getByText(/Attendance session revoked\. Already-recorded/)).toBeVisible();
         expect(reads).toBe(1);
         await page.keyboard.press('Escape');
@@ -1647,10 +1647,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     const alice = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
     await alice.getByRole('button', { name: 'Mark', exact: true }).click();
     await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
-    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+    await page.getByRole('button', { name: 'Save override', exact: true }).click();
     await expect.poll(() => writing).toBe(true);
     await page.getByRole('button', { name: /^Secretary Requests/ }).dispatchEvent('click');
-    await page.getByRole('region', { name: 'Secretary requests' }).getByRole('button', { name: 'Approve', exact: true }).dispatchEvent('click'); // the Save Override modal overlay now really covers the page (styles on)
+    await page.getByRole('region', { name: 'Secretary requests' }).getByRole('button', { name: 'Approve', exact: true }).dispatchEvent('click'); // the Save override modal overlay now really covers the page (styles on)
     await expect(page.getByText('Bob approval saved.', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: /^Assigned Classes/ }).dispatchEvent('click'); // back to the roll call
     expect(reads).toBe(1);
@@ -1698,7 +1698,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     const aliceRow = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
     await aliceRow.getByRole('button', { name: 'Mark', exact: true }).click();
     await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
-    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+    await page.getByRole('button', { name: 'Save override', exact: true }).click();
 
     await expect(page.getByRole('main').getByText(/Attendance updated for Alice Green \(present\)/i)).toBeVisible();
     expect(overridePayload).not.toBeNull();
@@ -1755,7 +1755,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByText(/PRESENT → ABSENT/i)).toBeVisible();
 
     // Try submitting without reason
-    await page.getByRole('button', { name: 'Save Override' }).click();
+    await page.getByRole('button', { name: 'Save override' }).click();
     await expect(page.getByText(/justification reason is required/i)).toBeVisible();
     expect(overridePayload).toBeNull();
 
@@ -1770,7 +1770,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.locator('textarea')).toHaveValue('');
     await page.locator('form').getByRole('button', { name: 'absent', exact: true }).click();
     await page.fill('textarea', 'Student was absent due to illness');
-    await page.getByRole('button', { name: 'Save Override' }).click();
+    await page.getByRole('button', { name: 'Save override' }).click();
 
     await expect(page.getByRole('main').getByText(/Attendance corrected for Bob White \(absent\)/i)).toBeVisible();
     expect(overridePayload).not.toBeNull();
@@ -1799,14 +1799,14 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await row.getByRole('button', { name: 'Override', exact: true }).click();
     await page.locator('form').getByRole('button', { name: 'absent', exact: true }).click();
     await page.locator('textarea').fill('  Verified absence with the Student  ');
-    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+    await page.getByRole('button', { name: 'Save override', exact: true }).click();
     await expect(page.getByText('A server error occurred. Please try again later.', { exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Manual Attendance Override', exact: true })).toBeVisible();
     await expect(page.locator('textarea')).toHaveValue('  Verified absence with the Student  ');
     await expect(row.getByTestId('attendance-status')).toHaveText(/Present$/);
     await expect(page.getByText('Attendance corrected for Bob White (absent).', { exact: true })).toHaveCount(0);
     expect(payloads).toEqual([{ recordId: '50', status: 'absent', reason: 'Verified absence with the Student' }]);
-    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+    await page.getByRole('button', { name: 'Save override', exact: true }).click();
     await expect(page.getByRole('main').getByText('Attendance corrected for Bob White (absent).', { exact: true })).toBeVisible();
     await expect(row.getByTestId('attendance-status')).toHaveText(/Absent$/);
     await expect(page.getByRole('heading', { name: 'Manual Attendance Override', exact: true })).toHaveCount(0);
@@ -1840,10 +1840,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(row.getByRole('button', { name: 'Mark', exact: true })).toBeDisabled();
     await page.getByRole('combobox', { name: 'Attendance session', exact: true }).selectOption('42');
     await row.getByRole('button', { name: 'Mark', exact: true }).click();
-    await expect(page.getByText('Initial Entry Reason (Optional)', { exact: true })).toBeVisible();
+    await expect(page.getByText('Initial Entry Reason (optional)', { exact: true })).toBeVisible();
     await page.locator('form').getByRole('button', { name: 'late', exact: true }).click();
     await page.locator('textarea').fill('  Verified arrival for the afternoon session  ');
-    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+    await page.getByRole('button', { name: 'Save override', exact: true }).click();
     await expect(page.getByRole('main').getByText('Attendance updated for Alice Green (late).', { exact: true })).toBeVisible();
     expect(payloads).toEqual([{ csId: 1, enrollmentId: 10, sessionDate: '2026-09-20', sessionId: 42,
       status: 'late', reason: 'Verified arrival for the afternoon session' }]);
@@ -1876,7 +1876,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     const row = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
     await row.getByRole('button', { name: 'Mark', exact: true }).click();
     await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
-    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+    await page.getByRole('button', { name: 'Save override', exact: true }).click();
     await expect(page.getByRole('main').getByText('Attendance updated for Alice Green (present).', { exact: true })).toBeVisible();
     expect(payloads).toEqual([expect.objectContaining({ csId: 1, enrollmentId: 10, sessionDate: '2026-10-14', status: 'present' })]);
     // An explicit date is respected.
@@ -1907,7 +1907,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     // Bob White is already 'present'. Click 'Present'
     const bobRow = page.locator('tbody tr').filter({ hasText: 'Bob White' });
     await bobRow.getByRole('button', { name: 'Override', exact: true }).click();
-    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+    await page.getByRole('button', { name: 'Save override', exact: true }).click();
     await expect(page.getByText('Choose a different attendance status.')).toBeVisible();
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 
@@ -1936,19 +1936,19 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await openWorksheet(page, 'CLIN401 - Section A');
     await expect(page.getByText('Alice Green')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Mark all unrecorded as Present' }).click();
+    await page.getByRole('button', { name: 'Mark all unrecorded as present' }).click();
     await expect(page.getByRole('heading', { name: 'Mark Unrecorded Students Present' })).toBeVisible();
     await page.getByRole('button', { name: 'Cancel' }).click();
     expect(payloads).toHaveLength(0);
 
-    await page.getByRole('button', { name: 'Mark all unrecorded as Present' }).click();
-    await page.getByRole('button', { name: 'Mark Present', exact: true }).click();
+    await page.getByRole('button', { name: 'Mark all unrecorded as present' }).click();
+    await page.getByRole('button', { name: 'Mark present', exact: true }).click();
     await expect(page.getByRole('main').getByText('Marked 1 student as present.')).toBeVisible();
     expect(payloads).toHaveLength(1);
     expect(payloads[0]?.enrollmentId).toBe(10);
     expect(payloads[0]?.status).toBe('present');
     await expect(page.locator('tbody tr').filter({ hasText: 'Alice Green' }).getByText('Present', { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Mark all unrecorded as Present' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Mark all unrecorded as present' })).toBeDisabled();
   });
 
   test('Faculty edits a Secretary scheduled session, preserves settings, and handles overlap before retry', async ({ page }) => {
@@ -1970,15 +1970,15 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByText('08:00 – 11:30', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(page.getByText(`Date: ${session.sessionDate} (Asia/Manila)`, { exact: true })).toBeVisible();
-    await expect(page.getByLabel('Present cutoff', { exact: true })).toHaveValue('08:30');
-    await expect(page.getByLabel('Allowed radius (meters)')).toHaveValue('250');
+    await expect(page.getByLabel('Present Cutoff', { exact: true })).toHaveValue('08:30');
+    await expect(page.getByLabel('Allowed Radius (meters)')).toHaveValue('250');
     await expect(page.getByRole('checkbox', { name: /Face biometric/ })).not.toBeChecked();
     await expect(page.getByText('Location set: 13.15, 123.75')).toBeVisible();
     await page.getByLabel('Custom room name').fill('Changed room');
-    await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('created by Faculty Jane Doe');
     expect(payloads).toEqual([{ sessionId: '700', room: 'Changed room' }]);
-    await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
     await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
     expect(payloads[1]).toEqual(payloads[0]);
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -2006,49 +2006,49 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await openEdit(page, baseSession);
       await expect(page.getByText('Date: 2099-10-03 (Asia/Manila)', { exact: true })).toBeVisible();
       await expect(page.getByLabel('Custom room name')).toHaveValue('Lab 5');
-      await expect(page.getByLabel('Opening time', { exact: true })).toHaveValue('07:45');
-      await expect(page.getByLabel('Present cutoff', { exact: true })).toHaveValue('08:20');
-      await expect(page.getByLabel('Late cutoff', { exact: true })).toHaveValue('09:40');
+      await expect(page.getByLabel('Opening Time', { exact: true })).toHaveValue('07:45');
+      await expect(page.getByLabel('Present Cutoff', { exact: true })).toHaveValue('08:20');
+      await expect(page.getByLabel('Late Cutoff', { exact: true })).toHaveValue('09:40');
       await expect(page.getByLabel('Class end time', { exact: true })).toHaveValue('10:15');
       await expect(page.getByRole('checkbox', { name: /Face biometric/ })).toBeChecked();
       await expect(page.getByRole('checkbox', { name: /Geofence/ })).not.toBeChecked();
-      await expect(page.getByLabel('Allowed radius (meters)')).toHaveCount(0);
+      await expect(page.getByLabel('Allowed Radius (meters)')).toHaveCount(0);
     });
 
     test('opens with the saved radius and pin when geofence is on, not the 100 m default', async ({ page }) => {
       await openEdit(page, { ...baseSession, geofenceEnabled: true, geofenceLatitude: 13.15, geofenceLongitude: 123.75, geofenceRadiusMeters: 250 });
       await expect(page.getByRole('checkbox', { name: /Geofence/ })).toBeChecked();
-      await expect(page.getByLabel('Allowed radius (meters)')).toHaveValue('250');
+      await expect(page.getByLabel('Allowed Radius (meters)')).toHaveValue('250');
       await expect(page.getByText('Location set: 13.15, 123.75')).toBeVisible();
     });
 
     test('a saved non-listed room opens as Custom and changing only the time does not send the room', async ({ page }) => {
       const payloads = await openEdit(page, baseSession);
-      await expect(page.getByLabel('Room or session location')).toHaveValue('CUSTOM');
+      await expect(page.getByLabel('Room or Session Location')).toHaveValue('CUSTOM');
       await expect(page.getByLabel('Custom room name')).toHaveValue('Lab 5');
       await page.getByLabel('Class end time', { exact: true }).fill('10:30');
-      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', classEndTime: '10:30' }]);
     });
 
     test('changing Opening shifts the other times and sends only the four changed time fields', async ({ page }) => {
       const payloads = await openEdit(page, baseSession);
-      await page.getByLabel('Opening time', { exact: true }).fill('22:00');
-      await expect(page.getByLabel('Present cutoff', { exact: true })).toHaveValue('22:35');
-      await expect(page.getByLabel('Late cutoff', { exact: true })).toHaveValue('23:55');
+      await page.getByLabel('Opening Time', { exact: true }).fill('22:00');
+      await expect(page.getByLabel('Present Cutoff', { exact: true })).toHaveValue('22:35');
+      await expect(page.getByLabel('Late Cutoff', { exact: true })).toHaveValue('23:55');
       await expect(page.getByLabel('Class end time', { exact: true })).toHaveValue('00:30');
       await expect(page.getByTestId('caption-classEndTime')).toContainText('12:30 AM (next day)');
       await expect(page.getByTestId('time-summary')).toContainText('Session lasts 2 h 30 min');
-      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', openingTime: '22:00', presentCutoff: '22:35', lateCutoff: '23:55', classEndTime: '00:30' }]);
     });
 
     test('moving a cutoff earlier than the later fields sends only that field', async ({ page }) => {
       const payloads = await openEdit(page, baseSession);
-      await page.getByLabel('Present cutoff', { exact: true }).fill('08:00');
-      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await page.getByLabel('Present Cutoff', { exact: true }).fill('08:00');
+      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', presentCutoff: '08:00' }]);
     });
@@ -2056,7 +2056,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     test('changing only the room sends the session id and room', async ({ page }) => {
       const payloads = await openEdit(page, baseSession);
       await page.getByLabel('Custom room name').fill('Lab 6');
-      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', room: 'Lab 6' }]);
     });
@@ -2073,17 +2073,17 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: 'Sessions', exact: true }).click();
       await page.getByRole('button', { name: /Upcoming Sessions/ }).click();
       await page.getByRole('button', { name: 'Edit', exact: true }).click();
-      for (const label of ['Opening time', 'Present cutoff', 'Late cutoff']) await page.getByLabel(label, { exact: true }).fill('');
-      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      for (const label of ['Opening Time', 'Present Cutoff', 'Late Cutoff']) await page.getByLabel(label, { exact: true }).fill('');
+      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(page.getByRole('alert')).toContainText('Opening time, Present cutoff, and Late cutoff are required.');
       expect(payloads).toEqual([{ sessionId: '710', openingTime: '', presentCutoff: '', lateCutoff: '' }]);
-      await expect(page.getByLabel('Room or session location')).toBeVisible();
+      await expect(page.getByLabel('Room or Session Location')).toBeVisible();
     });
 
     test('turning geofence off sends geofenceEnabled false and no biometric field', async ({ page }) => {
       const payloads = await openEdit(page, { ...baseSession, geofenceEnabled: true, geofenceLatitude: 13.15, geofenceLongitude: 123.75 });
       await page.getByRole('checkbox', { name: /Geofence/ }).uncheck();
-      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', geofenceEnabled: false }]);
     });
@@ -2091,38 +2091,38 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     test('turning geofence on sends the setting with the location and radius', async ({ page }) => {
       const payloads = await openEdit(page, { ...baseSession, geofenceLatitude: 13.15, geofenceLongitude: 123.75 });
       await page.getByRole('checkbox', { name: /Geofence/ }).check();
-      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', geofenceEnabled: true, geofenceRadiusMeters: 250, geofenceLatitude: 13.15, geofenceLongitude: 123.75 }]);
     });
 
     test('changing only the radius of a geofenced session sends only the radius', async ({ page }) => {
       const payloads = await openEdit(page, { ...baseSession, geofenceEnabled: true, geofenceLatitude: 13.15, geofenceLongitude: 123.75 });
-      await page.getByLabel('Allowed radius (meters)').fill('300');
-      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await page.getByLabel('Allowed Radius (meters)').fill('300');
+      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', geofenceRadiusMeters: 300 }]);
     });
 
     test('radius keeps typed text without leading zeros and blocks empty or out-of-range', async ({ page }) => {
       const payloads = await openEdit(page, { ...baseSession, geofenceEnabled: true, geofenceLatitude: 13.15, geofenceLongitude: 123.75 });
-      const radius = page.getByLabel('Allowed radius (meters)');
+      const radius = page.getByLabel('Allowed Radius (meters)');
       await radius.fill('01000');
       await expect(radius).toHaveValue('1000');
       await radius.fill('');
       await expect(radius).toHaveValue('');
-      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(page.getByText('Allowed radius must be between 50 and 2000 meters.')).toBeVisible();
       await radius.fill('2001');
-      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(page.getByText('Allowed radius must be between 50 and 2000 meters.')).toBeVisible();
       expect(payloads).toEqual([]);
     });
 
     test('saving with no change sends no request and closes the form', async ({ page }) => {
       const payloads = await openEdit(page, baseSession);
-      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
-      await expect(page.getByRole('button', { name: 'Save Changes', exact: true })).toHaveCount(0);
+      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toHaveCount(0);
       expect(payloads).toEqual([]);
     });
   });
@@ -2226,7 +2226,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(finalRatioInput).toHaveValue('50');
 
       // Save Initial Schema button
-      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Save initial schema/i })).toBeVisible();
     });
 
     test('supports adding dynamic categories, reordering, weight updates, and live percentage validation across period tabs', async ({ page }) => {
@@ -2251,20 +2251,20 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       // Check sum shows 100% and valid initially
       await expect(page.getByText(/^100(\.0+)?% \/ 100%$/).first()).toBeVisible();
-      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeEnabled();
+      await expect(page.getByRole('button', { name: /Save initial schema/i })).toBeEnabled();
 
       // Update Term Exam weight to 60 -> sum is 110% (invalid)
       await weightInputs.nth(0).fill('60');
       await expect(page.getByText(/^[\d.]+% \/ 100%$/).first()).not.toHaveText(/^100(\.0+)?% \/ 100%$/);
-      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeDisabled();
+      await expect(page.getByRole('button', { name: /Save initial schema/i })).toBeDisabled();
 
       // Reduce Quiz to 10 -> sum returns to 100% (valid)
       await weightInputs.nth(1).fill('10');
       await expect(page.getByText(/^100(\.0+)?% \/ 100%$/).first()).toBeVisible();
-      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeEnabled();
+      await expect(page.getByRole('button', { name: /Save initial schema/i })).toBeEnabled();
 
       // Add a dynamic category to Midterm
-      await page.getByRole('button', { name: 'Add Category', exact: true }).click();
+      await page.getByRole('button', { name: 'Add category', exact: true }).click();
       await nameInputs.nth(4).fill('Extra Assessment');
       await weightInputs.nth(4).fill('5');
 
@@ -2354,7 +2354,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.locator('#final-start-date').fill('2026-10-16');
       await page.locator('#final-end-date').fill('2026-12-20');
 
-      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      await page.getByRole('button', { name: /Save initial schema/i }).click();
       // Saving asks for confirmation first.
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
@@ -2452,7 +2452,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await weightInputs.nth(1).fill('30');
 
       // Add a third category (new)
-      await page.getByRole('button', { name: /Add Category/i }).click();
+      await page.getByRole('button', { name: /Add category/i }).click();
       await nameInputs.nth(2).fill('Practicum');
       await weightInputs.nth(2).fill('30');
 
@@ -2468,7 +2468,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(nameInputs.nth(0)).toHaveValue('Exams');
       await expect(nameInputs.nth(1)).toHaveValue('Quizzes');
 
-      await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+      await page.getByRole('button', { name: /Save grade weights/i }).click();
       // Saving asks for confirmation first.
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
@@ -2543,7 +2543,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await weightInputs.nth(0).fill('60');
       await weightInputs.nth(1).fill('40');
 
-      await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+      await page.getByRole('button', { name: /Save grade weights/i }).click();
       // Saving asks for confirmation first.
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
@@ -2556,7 +2556,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(weightInputs.nth(1)).toHaveValue('40');
 
       // Click Reload Latest in conflict banner
-      const reloadBannerBtn = page.locator('button', { hasText: 'Reload Latest' }).last();
+      const reloadBannerBtn = page.locator('button', { hasText: 'Reload latest' }).last();
       await reloadBannerBtn.click();
 
       // Confirmation modal appears
@@ -2604,12 +2604,12 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const nameInputs = page.locator('input[placeholder*="Category name"]');
       const weightInputs = page.locator('input[placeholder="0"]');
 
-      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      await page.getByRole('button', { name: /Save initial schema/i }).click();
       // Saving asks for confirmation first.
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
       // 422 warning banner appears
-      await expect(page.getByText(/Existing Assessments Require Category Mappings/i)).toBeVisible();
+      await expect(page.getByText(/Existing assessments require category mappings/i)).toBeVisible();
       await expect(page.getByText('Practical Exam 1')).toBeVisible();
       await expect(page.getByText('Dental Radiography Lab')).toBeVisible();
       await expect(page.getByText('Laboratory').first()).toBeVisible();
@@ -2640,7 +2640,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=components');
-      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      await page.getByRole('button', { name: /Save initial schema/i }).click();
       // Saving asks for confirmation first.
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
       const picker = page.getByRole('combobox', { name: 'Category for Practical Exam 1' });
@@ -2654,7 +2654,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       expect(putPayloads[0].assessmentAssignments).toBeUndefined();
 
       await picker.selectOption({ label: 'Laboratory · Practical Exam' });
-      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      await page.getByRole('button', { name: /Save initial schema/i }).click();
       // Saving asks for confirmation first.
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
       await expect.poll(() => putPayloads.length).toBe(2);
@@ -2699,7 +2699,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.locator('#period-component-mode')).toHaveCount(0);
       await expect(page.getByRole('tab', { name: 'Lecture Categories' })).toBeVisible();
       await expect(page.locator('input[placeholder*="Category name"]')).toHaveCount(4);
-      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      await page.getByRole('button', { name: /Save initial schema/i }).click();
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
       const picker = page.getByRole('combobox', { name: 'Category for Unperioded Legacy Quiz' });
@@ -2708,7 +2708,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const finalLectureOption = picker.locator('option').filter({ hasText: /Final.*Lecture.*Quiz/ });
       await expect(finalLectureOption).toHaveCount(1);
       await picker.selectOption((await finalLectureOption.getAttribute('value'))!);
-      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      await page.getByRole('button', { name: /Save initial schema/i }).click();
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
       await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
 
@@ -2841,7 +2841,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByText('This course offering uses single-list overall grading categories.')).toBeVisible();
 
       // Click "Convert to Period Grading"
-      await page.getByRole('button', { name: /Convert to Period Grading/i }).click();
+      await page.getByRole('button', { name: /Convert to period grading/i }).click();
 
       // Conversion review modal should be visible
       const modal = page.getByRole('dialog').filter({ hasText: /Convert Course Offering to Period Grading/i });
@@ -2856,7 +2856,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(modal.getByText('(#303)').first()).toBeVisible();
 
       // Continue into the editable split draft; conversion is saved only after every list totals 100%.
-      await page.getByRole('button', { name: 'Continue to Lecture/Laboratory Mapping', exact: true }).click();
+      await page.getByRole('button', { name: 'Continue to Lecture/Laboratory mapping', exact: true }).click();
       await expect(page.getByTestId('unassigned-component-categories')).toBeVisible();
 
       const assignCurrentPeriodCategoriesToLecture = async () => {
@@ -2865,7 +2865,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       };
       const addLaboratoryCategory = async (period: 'Midterm' | 'Final') => {
         await page.getByRole('tab', { name: 'Laboratory Categories', exact: true }).click();
-        await page.getByRole('button', { name: 'Add Category', exact: true }).click();
+        await page.getByRole('button', { name: 'Add category', exact: true }).click();
         const names = page.locator('input[placeholder*="Category name"]');
         const weights = page.locator('input[placeholder="0"]');
         const newIndex = (await names.count()) - 1;
@@ -2879,9 +2879,9 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await assignCurrentPeriodCategoriesToLecture();
       await addLaboratoryCategory('Final');
       await page.getByRole('tab', { name: 'Lecture Categories', exact: true }).click();
-      await expect(page.getByRole('button', { name: /Save Grade Weights/i })).toBeEnabled();
+      await expect(page.getByRole('button', { name: /Save grade weights/i })).toBeEnabled();
 
-      await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+      await page.getByRole('button', { name: /Save grade weights/i }).click();
       await expect(page.getByText(/Confirm forward grading conversion/i)).toBeVisible();
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
@@ -2970,7 +2970,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const printTable = page.locator('.print-only table');
       await expect(printTable.locator('th', { hasText: 'Midterm %' })).toBeAttached();
       await expect(printTable.locator('th', { hasText: 'Final %' })).toBeAttached();
-      await expect(printTable.locator('th', { hasText: 'Final Grade' })).toBeAttached();
+      await expect(printTable.locator('th', { hasText: 'Final grade' })).toBeAttached();
 
       // Verify no hardcoded 80.0% exists in the printable table
       await expect(printTable.getByText('80.0%')).toHaveCount(0);
@@ -3066,7 +3066,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.goto('/grades?tab=summary');
 
       // Click Recompute Grades
-      await page.getByRole('button', { name: /Recompute Grades/i }).click();
+      await page.getByRole('button', { name: /Recompute grades/i }).click();
 
       // Expect confirmation dialog
       const confirmModal = page.getByRole('dialog').filter({ hasText: /Confirm Grade Recomputation/i });
@@ -3074,7 +3074,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       expect(recomputeRequested).toBe(false);
 
       // Confirm recomputation
-      await page.getByRole('button', { name: /Confirm Recomputation/i }).click();
+      await page.getByRole('button', { name: /Confirm recomputation/i }).click();
       expect(recomputeRequested).toBe(true);
 
       // Table should now display historical prior grade and INCOMPLETE status badge (NOT PASS)
@@ -3259,8 +3259,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=summary');
-      await page.getByRole('button', { name: /Recompute Grades/i }).click();
-      await page.getByRole('button', { name: /Confirm Recomputation/i }).click();
+      await page.getByRole('button', { name: /Recompute grades/i }).click();
+      await page.getByRole('button', { name: /Confirm recomputation/i }).click();
 
       const row = page.locator('.no-print tbody tr').filter({ hasText: 'Danilo Cruz' });
       await expect(row).toBeVisible();
@@ -3295,11 +3295,11 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=summary');
-      await page.getByRole('button', { name: /Recompute Grades/i }).click();
-      await page.getByRole('button', { name: /Confirm Recomputation/i }).click();
+      await page.getByRole('button', { name: /Recompute grades/i }).click();
+      await page.getByRole('button', { name: /Confirm recomputation/i }).click();
 
       // Even a stale server field is ignored: there is no exam-date matching to warn about.
-      await expect(page.getByRole('button', { name: /Recompute Grades/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Recompute grades/i })).toBeVisible();
       await expect(page.getByTestId('transmutation-warnings')).toHaveCount(0);
       await expect(page.getByText('Attendance session could not be matched for transmutation')).toHaveCount(0);
     });
@@ -3341,7 +3341,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=components');
-      await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+      await page.getByRole('button', { name: /Save grade weights/i }).click();
       // Saving asks for confirmation first.
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
@@ -3398,7 +3398,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=components');
-      await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+      await page.getByRole('button', { name: /Save grade weights/i }).click();
       // Saving asks for confirmation first.
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
@@ -3446,7 +3446,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByText(/Midterm start date must be a valid calendar date in YYYY-MM-DD format/i).first()).toBeVisible();
 
       // Save button is disabled
-      const saveBtn = page.getByRole('button', { name: /Save Grade Weights/i });
+      const saveBtn = page.getByRole('button', { name: /Save grade weights/i });
       await expect(saveBtn).toBeDisabled();
     });
   });
@@ -3578,10 +3578,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=assessments');
-      await page.getByRole('button', { name: 'Add Assessment' }).click();
+      await page.getByRole('button', { name: 'Add assessment' }).click();
 
       const modalForm = page.locator('form').last();
-      await expect(page.getByRole('heading', { name: 'Create New Assessment activity' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Create New Assessment Activity' })).toBeVisible();
 
       // Check category options in the modal. The category select renders once the
       // grading configuration has loaded, so wait for it before reading options.
@@ -3661,7 +3661,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       // The active editor draft now conflicts with the saved picker configuration.
       await page.locator('input[placeholder="0"]').first().fill('25');
       await page.getByRole('button', { name: 'Assessments Manager' }).click();
-      await page.getByRole('button', { name: 'Add Assessment' }).click();
+      await page.getByRole('button', { name: 'Add assessment' }).click();
       const modalForm = page.locator('form').last();
       const categorySelect = modalForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) });
       await expect(categorySelect.locator('optgroup[label="Lecture Categories"] option[value="101"]')).toHaveText('Lecture · Quiz (100%)');
@@ -3832,7 +3832,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       // The page has one class selector; the modal has none of its own.
       await expect(page.locator('select').nth(1)).toHaveValue('1'); // wait for the first class to be chosen before choosing another
       await page.locator('select').nth(1).selectOption('2');
-      await page.getByRole('button', { name: 'Add Assessment' }).click();
+      await page.getByRole('button', { name: 'Add assessment' }).click();
 
       const modalForm = page.locator('form').last();
       await expect(modalForm.getByTestId('assessment-target-class')).toContainText('CLIN401-B');
@@ -3852,16 +3852,16 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=assessments');
-      await page.getByRole('button', { name: 'Add Assessment' }).click();
+      await page.getByRole('button', { name: 'Add assessment' }).click();
 
       await expect(page.getByRole('heading', { name: 'Set up grade weights first' })).toBeVisible();
       await expect(page.getByText(/has no saved grade weights yet/i)).toBeVisible();
       await expect(page.getByRole('button', { name: 'Confirm Assessment' })).toHaveCount(0);
 
-      await page.getByRole('button', { name: 'Go to Grade Weights' }).click();
+      await page.getByRole('button', { name: 'Go to grade weights' }).click();
       await expect(page.getByRole('heading', { name: 'Set up grade weights first' })).toHaveCount(0);
       await expect(page.getByText(/^\s*Suggested starting preset.*unsaved\s*$/i).first()).toBeVisible();
-      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Save initial schema/i })).toBeVisible();
       expect(postCount).toBe(0);
     });
 
@@ -3913,7 +3913,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       // Table displays "Unassigned Category" badge
       const row = page.getByRole('row').filter({ hasText: 'Uncategorized Lab Exam' });
       await expect(row).toBeVisible();
-      await expect(row.getByText('Unassigned Category')).toBeVisible();
+      await expect(row.getByText('Unassigned category')).toBeVisible();
 
       // Click Edit
       await row.getByRole('button', { name: 'Edit' }).click();
@@ -3962,13 +3962,13 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=assessments');
-      await page.getByRole('button', { name: 'Add Assessment' }).click();
+      await page.getByRole('button', { name: 'Add assessment' }).click();
 
       const modalForm = page.locator('form').last();
 
       // Error banner with retry is visible
       await expect(page.getByText('Failed to load database config')).toBeVisible();
-      const retryBtn = modalForm.getByRole('button', { name: 'Retry Loading Configuration' });
+      const retryBtn = modalForm.getByRole('button', { name: 'Retry loading configuration' });
       await expect(retryBtn).toBeVisible();
 
       // Confirm button is disabled
@@ -4139,7 +4139,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       // selector, then open the modal: it loads that offering's categories.
       await expect(page.locator('select').nth(1)).toHaveValue('1'); // wait for the first class to be chosen before choosing another
       await page.locator('select').nth(1).selectOption('4');
-      await page.getByRole('button', { name: 'Add Assessment' }).click();
+      await page.getByRole('button', { name: 'Add assessment' }).click();
 
       const modalForm = page.locator('form').last();
       await expect(modalForm.getByTestId('assessment-target-class')).toContainText('CLIN401-Sem2');
@@ -4254,11 +4254,11 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.locator('input[placeholder*="Category name"]').nth(0)).toHaveValue('Practical Exam');
       await expect(page.locator('input[placeholder*="Category name"]').nth(2)).toHaveValue('Quiz');
       await page.getByRole('tab', { name: 'Lecture Categories' }).click();
-      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeEnabled();
+      await expect(page.getByRole('button', { name: /Save initial schema/i })).toBeEnabled();
 
       // Defaults are editable and unsaved until the Faculty explicitly saves them.
       expect(puts).toHaveLength(0);
-      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      await page.getByRole('button', { name: /Save initial schema/i }).click();
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
       await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
 
@@ -4322,14 +4322,14 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=components');
-      await expect(page.getByText('BU Dental Medicine Default Grade Weights: Lecture only • Midterm 50% / Final 50%')).toBeVisible();
+      await expect(page.getByText('BU Dental Medicine Default grade weights: Lecture only • Midterm 50% / Final 50%')).toBeVisible();
       await expect(page.getByText("Lecture only, from this course's units (Lecture 3 · Laboratory 0). No Laboratory part.")).toBeVisible();
       await expect(page.getByText(/2\. Midterm Components/)).toBeVisible();
       await expect(page.getByRole('tab', { name: 'Laboratory Categories' })).toHaveCount(0);
       await expect(page.locator('#lecture-component-weight')).toHaveCount(0);
       await expect(page.locator('input[placeholder*="Category name"]')).toHaveCount(4);
 
-      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      await page.getByRole('button', { name: /Save initial schema/i }).click();
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
       await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
       expect(puts).toHaveLength(1);
@@ -4390,10 +4390,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       await page.goto('/grades?tab=summaries');
       await expect(page.getByRole('heading', { name: 'Academic Grade Summaries' })).toBeVisible();
-      const recompute = page.getByRole('button', { name: 'Recompute Grades' });
+      const recompute = page.getByRole('button', { name: 'Recompute grades' });
       await expect(recompute).toBeEnabled();
       await recompute.click();
-      await page.getByRole('button', { name: 'Confirm Recomputation', exact: true }).click();
+      await page.getByRole('button', { name: 'Confirm recomputation', exact: true }).click();
 
       const row = page.locator('.no-print tbody tr').filter({ hasText: 'Alice Reyes' });
       await expect(row).toContainText('81.00%');
@@ -4456,13 +4456,13 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       await page.goto('/grades?tab=components');
       await expect(page.getByRole('heading', { name: 'Configure Grading Weights & Schema' })).toBeVisible();
-      await expect(page.getByText('Saved combined period grading')).toBeVisible();
+      await expect(page.getByText('Saved Combined Period Grading')).toBeVisible();
       await expect(page.locator('#period-component-mode')).toHaveCount(0);
       await expect(page.locator('#lecture-component-weight')).toHaveCount(0);
       const savedName = page.locator('input[placeholder*="Category name"]').first();
       await expect(savedName).toBeDisabled();
       await expect(savedName).toHaveValue('Quiz');
-      await expect(page.getByRole('button', { name: /Save Grade Weights/i })).toBeDisabled();
+      await expect(page.getByRole('button', { name: /Save grade weights/i })).toBeDisabled();
       expect(saves).toHaveLength(0);
 
       await page.getByRole('button', { name: 'Convert to Lecture/Laboratory' }).click();
@@ -4483,9 +4483,9 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.locator('input[placeholder="0"]').fill('100');
       await expect(page.locator('#midterm-ratio-input')).toHaveValue('40');
       await expect(page.locator('#final-ratio-input')).toHaveValue('60');
-      await expect(page.getByRole('button', { name: /Save Grade Weights/i })).toBeEnabled();
+      await expect(page.getByRole('button', { name: /Save grade weights/i })).toBeEnabled();
 
-      await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+      await page.getByRole('button', { name: /Save grade weights/i }).click();
       await expect(page.getByText(/Confirm forward grading conversion/i)).toBeVisible();
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
       await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();

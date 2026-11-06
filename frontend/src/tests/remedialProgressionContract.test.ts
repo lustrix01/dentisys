@@ -113,7 +113,7 @@ test('Faculty UI exposes both attempts and the truthful terminal stage', () => {
   // result form specifically so that its distinct 50% policy stays enforced.
   const resultForm = facultyPage.match(/title="Grade Remedial Exam Result"[\s\S]*?<\/form>/)?.[0];
   assert.ok(resultForm, 'Remedial result form exists');
-  assert.match(resultForm, /Pass or Fail at 50% or higher/);
+  assert.match(resultForm, /pass or fail at 50% or higher/);
   assert.doesNotMatch(resultForm, /75\s*%|>=\s*75|>=\s*0\.75/);
   assert.doesNotMatch(facultyPage, /status\s*:\s*['"](?:passed|failed)['"]/i);
 });

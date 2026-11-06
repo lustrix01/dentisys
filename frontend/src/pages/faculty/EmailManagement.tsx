@@ -453,7 +453,7 @@ export const EmailManagement: React.FC = () => {
               aria-label="Class: course code, section, and course title"
               className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
-              <option value="all">All Class Sections</option>
+              <option value="all">All class sections</option>
               {assignedClasses.map((classItem: any) => {
                 const classId = classIdOf(classItem);
                 const courseCode = classItem.courseCode || 'Course';
@@ -473,7 +473,7 @@ export const EmailManagement: React.FC = () => {
               aria-label="School year"
               className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
-              <option value="all">All School Years</option>
+              <option value="all">All school years</option>
               {availableSchoolYears.map(sy => (
                 <option key={sy} value={sy}>
                   S.Y. {sy}{sy === currentSchoolYear ? ' (Current)' : ''}
@@ -522,7 +522,7 @@ export const EmailManagement: React.FC = () => {
                 }}
                 className="whitespace-nowrap px-4 max-sm:px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-slate-200 transition-all cursor-pointer"
               >
-                Preview Email
+                Preview email
               </button>
 
               <button
@@ -532,7 +532,7 @@ export const EmailManagement: React.FC = () => {
                 className="inline-flex whitespace-nowrap items-center gap-2 px-5 max-sm:px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
               >
                 <Send className="w-3.5 h-3.5" />
-                <span>{isSending ? 'Sending Emails...' : `Send Invitations (${selected.length})`}</span>
+                <span>{isSending ? 'Sending emails...' : `Send invitations (${selected.length})`}</span>
               </button>
             </div>
           </div>
@@ -583,32 +583,32 @@ export const EmailManagement: React.FC = () => {
                         </td>
 
                         <td className="py-3.5 px-4 max-md:p-0 max-md:w-full max-md:min-w-0">
-                          <span className="sr-only md:hidden">Student details: </span>
+                          <span className="sr-only md:hidden">Student Details: </span>
                           <span className="font-bold text-slate-800 dark:text-slate-100 block">{student.name}</span>
                           <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId}<span className="max-md:hidden"> • </span><span className="max-md:block max-md:break-words">{student.email}</span></span>
                         </td>
 
                         <td className="py-3.5 px-4 max-md:p-0">
-                          <span className="sr-only md:hidden">Enrolled class section: </span>
+                          <span className="sr-only md:hidden">Enrolled Class Section: </span>
                           <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-[11px] text-slate-700 dark:text-slate-300">
                             {student.classSections?.[0]?.className || 'Section 4-A'}
                           </span>
                         </td>
 
                         <td className="py-3.5 px-4 text-center max-md:p-0">
-                          <span className="sr-only md:hidden">Roster invitation status: </span>
+                          <span className="sr-only md:hidden">Roster Invitation Status: </span>
                           {(() => {
                             const invitation = studentInvitationStates[student.email.toLowerCase()];
                             const accountStatus = student.accountStatus ?? 'none';
                             if (accountStatus === 'active' || accountStatus === 'secretary' || accountStatus === 'disabled') {
-                              const registeredLabel = accountStatus === 'active' ? 'Registered' : accountStatus === 'secretary' ? 'Secretary Account' : 'Account Disabled';
+                              const registeredLabel = accountStatus === 'active' ? 'Registered' : accountStatus === 'secretary' ? 'Secretary account' : 'Account disabled';
                               return <span className="whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60">{registeredLabel}</span>;
                             }
                             const label = invitation
-                              ? invitation.status === 'Sent' ? 'Invitation Sent'
-                                : invitation.status === 'Failed' ? 'Invitation Issued · Delivery Failed'
-                                  : 'Invitation Pending'
-                              : accountStatus === 'pending' ? 'Invitation Pending' : 'Enrolled & Ready';
+                              ? invitation.status === 'Sent' ? 'Invitation sent'
+                                : invitation.status === 'Failed' ? 'Invitation issued · Delivery failed'
+                                  : 'Invitation pending'
+                              : accountStatus === 'pending' ? 'Invitation pending' : 'Enrolled & ready';
                             const tone = invitation?.status === 'Failed'
                               ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/60'
                               : invitation
@@ -696,20 +696,20 @@ export const EmailManagement: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 px-4 max-md:p-0 max-md:w-full max-md:min-w-0">
-                        <span className="sr-only md:hidden">Student details: </span>
+                        <span className="sr-only md:hidden">Student Details: </span>
                         <span className="font-bold text-slate-800 dark:text-slate-100 block">{student.name}</span>
                         <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId}<span className="max-md:hidden"> • </span><span className="max-md:block max-md:break-words">{student.email}</span></span>
                       </td>
 
                       <td className="py-3.5 px-4 max-md:p-0">
-                        <span className="sr-only md:hidden">Class section: </span>
+                        <span className="sr-only md:hidden">Class Section: </span>
                         <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-[11px] text-slate-700 dark:text-slate-300">
                           {section.className || '—'}
                         </span>
                       </td>
 
                       <td className="py-3.5 px-4 text-center max-md:p-0 max-md:text-left">
-                        <span className="sr-only md:hidden">Role standing: </span>
+                        <span className="sr-only md:hidden">Role Standing: </span>
                         {section.isSecretary ? (
                           <span className="inline-flex items-center gap-2">
                             <span className="whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">Class Secretary</span>
@@ -756,7 +756,7 @@ export const EmailManagement: React.FC = () => {
                           className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
                         >
                           <Copy className="w-3 h-3" />
-                          Copy Dev Link
+                          Copy dev link
                         </button>
                       )}
 

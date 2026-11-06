@@ -60,10 +60,10 @@ export const EmailHistoryTable: React.FC<EmailHistoryTableProps> = ({
             className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs outline-none focus:ring-2 focus:ring-clinical-500 font-semibold"
           >
             <option value="all">All email categories</option>
-            <option value="Privacy Consent">Privacy Consent</option>
-            <option value="At-Risk Notification">At-Risk Notification</option>
-            <option value="Secretary Invitation">Class Secretary Invitation</option>
-            <option value="Student Invitation">Student Invitation</option>
+            <option value="Privacy Consent">Privacy consent</option>
+            <option value="At-Risk Notification">At-risk notification</option>
+            <option value="Secretary Invitation">Class Secretary invitation</option>
+            <option value="Student Invitation">Student invitation</option>
             <option value="Other">Other</option>
           </select>
         )}

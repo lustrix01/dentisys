@@ -10,7 +10,7 @@ test('Dean term dates persist and Faculty selects only current-year Dean terms',
   const section = page.locator('#academic-terms');
   await section.getByRole('button', { name: 'Add term', exact: true }).click();
   let dialog = page.getByRole('dialog');
-  await dialog.getByLabel('School year').fill('2097-2098');
+  await dialog.getByLabel('School Year').fill('2097-2098');
   await dialog.getByLabel('Start date').fill('2097-08-01');
   await dialog.getByLabel('End date').fill('2097-12-31');
   await dialog.getByRole('button', { name: 'Save term', exact: true }).click();
@@ -37,8 +37,8 @@ test('Dean term dates persist and Faculty selects only current-year Dean terms',
     await facultyPage.locator('button[type="submit"]').click();
     await expect(facultyPage).toHaveURL('/');
     await facultyPage.locator('a[href="/classes"]').click();
-    await facultyPage.getByRole('button', { name: 'Create Class', exact: true }).first().click();
-    const dropdown = facultyPage.getByLabel('Academic term *');
+    await facultyPage.getByRole('button', { name: 'Create class', exact: true }).first().click();
+    const dropdown = facultyPage.getByLabel('Academic Term *');
     await expect(dropdown).toBeEnabled();
     await expect(dropdown).toContainText('1st Semester 2026-2027');
     await expect(dropdown).toContainText('2nd Semester 2026-2027');

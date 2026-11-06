@@ -69,7 +69,7 @@ export const Dashboard: React.FC = () => {
           onClick={loadKpis}
           className="px-5 py-2.5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white text-xs font-bold transition-all shadow-md"
         >
-          Retry Loading
+          Retry loading
         </button>
       </div>
     );
@@ -98,7 +98,7 @@ export const Dashboard: React.FC = () => {
 
       {apiData?.academicTermReminder && <div role="status" className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-4 text-sm text-amber-800 dark:text-amber-200">
         This term ends on {apiData.academicTermReminder.endDate}. Add dates for {apiData.academicTermReminder.semester} {apiData.academicTermReminder.schoolYear}.
-        <button type="button" onClick={() => navigate('/admin/terms')} className="ml-2 font-bold underline">Open Academic terms</button>
+        <button type="button" onClick={() => navigate('/admin/terms')} className="ml-2 font-bold underline">Open academic terms</button>
       </div>}
       {/* 2-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -169,7 +169,7 @@ export const Dashboard: React.FC = () => {
           {/* 3. Charts from the server's dashboard data */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <section aria-label="Grade distribution" className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Grade distribution</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Grade Distribution</h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Graded enrollments by course grade</p>
               <div className="h-48 mt-3">
                 {hasGrades ? (
@@ -187,7 +187,7 @@ export const Dashboard: React.FC = () => {
             </section>
 
             <section aria-label="Standing breakdown" className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Standing breakdown</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Standing Breakdown</h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Students by most serious standing</p>
               <div className="h-48 mt-3">
                 {hasStanding ? (
@@ -207,7 +207,7 @@ export const Dashboard: React.FC = () => {
             </section>
 
             <section aria-label="Attendance by class" className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Attendance by class</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Attendance by Class</h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Present, late or excused, as a share of records</p>
               <div className="h-48 mt-3">
                 {classAttendance.length > 0 ? (
@@ -228,7 +228,7 @@ export const Dashboard: React.FC = () => {
           {/* 4. Latest audit events */}
           <section aria-label="Latest audit events" className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Latest audit events</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Latest Audit Events</h3>
               <button type="button" onClick={() => navigate('/admin/audit-trail')} className="text-xs font-bold whitespace-nowrap text-accent-600 hover:underline cursor-pointer">View audit trail</button>
             </div>
             {recentAuditEvents.length === 0 ? (

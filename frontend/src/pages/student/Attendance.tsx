@@ -166,7 +166,7 @@ const UPCOMING_PILL_CLASSES: Record<'open' | 'late' | 'soon' | 'done' | 'idle', 
   idle: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
 };
 
-const LOCATION_REQUIRED_MESSAGE = 'Location is required for this session. Allow location for this site, or ask your Class Secretary or Course Instructor to record your attendance.';
+const LOCATION_REQUIRED_MESSAGE = 'Location is required for this session. Allow location for this site, or ask your Class Secretary or course instructor to record your attendance.';
 
 type LocationReading = { latitude: number; longitude: number; accuracy: number };
 
@@ -502,7 +502,7 @@ export const Attendance: React.FC = () => {
         if (check.result === 'imprecise') {
           impreciseRef.current.count += 1;
           setLocationProblem(impreciseRef.current.count >= 2
-            ? "Your phone can't get a precise enough location here. Ask your Class Secretary or Course Instructor to record your attendance."
+            ? "Your phone can't get a precise enough location here. Ask your Class Secretary or course instructor to record your attendance."
             : reading.accuracy > 1000
               ? 'Precise location seems to be off. Turn on Precise Location for your browser (iPhone: Settings > Privacy > Location Services; Android: Location > Google Location Accuracy), then retry.'
               : `Your location is too imprecise (±${formatMeters(reading.accuracy)} m). Turn on Wi-Fi (you don't need to connect), move near a window or doorway, then retry.`);
@@ -540,7 +540,7 @@ export const Attendance: React.FC = () => {
       cameraAbortRef.current = abortController;
       const video = videoRef.current;
       if (!video) {
-        throw new Error('The camera preview is not ready. Choose Retry Camera Access.');
+        throw new Error('The camera preview is not ready. Choose Retry camera access.');
       }
 
       const stream = await startCameraStream(
@@ -680,7 +680,7 @@ export const Attendance: React.FC = () => {
         setPendingAttendancePayload(payload);
         setCanRetryUpload(true);
         const msg = err instanceof Error ? err.message : 'Biometric service or network connection is temporarily unavailable.';
-        setFailureNotice(`${msg} Your verification frames and server challenge have been preserved. You can click "Retry Submission" to resubmit with the existing idempotency key, or report to your Class Secretary or Course Instructor for authorized manual check-in.`);
+        setFailureNotice(`${msg} Your verification frames and server challenge have been preserved. You can click "Retry submission" to resubmit with the existing idempotency key, or report to your Class Secretary or course instructor for authorized manual check-in.`);
         setCheckInStage('camera');
       } else {
         // Semantic rejection: consume challenge and return to idle
@@ -688,7 +688,7 @@ export const Attendance: React.FC = () => {
         setPendingAttendancePayload(null);
         setCanRetryUpload(false);
         const msg = err instanceof Error ? err.message : 'Biometric verification failed.';
-        setFailureNotice(`${msg} Your attendance was not recorded. Please report to your Class Secretary or Course Instructor for authorized manual check-in.`);
+        setFailureNotice(`${msg} Your attendance was not recorded. Please report to your Class Secretary or course instructor for authorized manual check-in.`);
         setCheckInStage('idle');
       }
     } finally {
@@ -1018,7 +1018,7 @@ export const Attendance: React.FC = () => {
               onClick={() => navigate('/student/face-registration')}
               className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold flex items-center gap-1.5 flex-shrink-0 cursor-pointer"
             >
-              <span>{profile?.enrollmentStatus === 'expired' || profile?.enrollmentStatus === 'revoked' ? 'Re-Enroll' : 'Register Face'}</span>
+              <span>{profile?.enrollmentStatus === 'expired' || profile?.enrollmentStatus === 'revoked' ? 'Re-Enroll' : 'Register face'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -1034,7 +1034,7 @@ export const Attendance: React.FC = () => {
               onClick={() => navigate('/student/face-registration')}
               className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold flex items-center gap-1.5 flex-shrink-0 cursor-pointer"
             >
-              <span>Register Face</span>
+              <span>Register face</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -1090,7 +1090,7 @@ export const Attendance: React.FC = () => {
               <div className="flex items-start gap-2.5">
                 <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                 <div>
-                  <strong className="block font-bold">Network or Biometric Service Interruption</strong>
+                  <strong className="block font-bold">Network or biometric service interruption</strong>
                   <p className="mt-0.5 leading-relaxed">
                     Your captured frames and attendance challenge have been preserved. You can retry submission with the same idempotency key without re-capturing.
                   </p>
@@ -1101,14 +1101,14 @@ export const Attendance: React.FC = () => {
                   onClick={handleDiscardAndRestart}
                   className="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
                 >
-                  Discard & Fresh Challenge
+                  Discard & fresh challenge
                 </button>
                 <button
                   onClick={handleRetryAttendanceUpload}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Retry Submission</span>
+                  <span>Retry submission</span>
                 </button>
               </div>
             </div>
@@ -1123,7 +1123,7 @@ export const Attendance: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest block">
-                    Attendance Recorded
+                    Attendance recorded
                   </span>
                   <h2 className="text-xl font-extrabold text-slate-800 dark:text-slate-100">
                     {verificationResult.message || 'Attendance verified successfully!'}
@@ -1155,7 +1155,7 @@ export const Attendance: React.FC = () => {
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Verification Method</span>
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block flex items-center gap-1.5">
                     <ShieldCheck className="w-4 h-4 text-blue-600" />
-                    Biometric 1:1 Verification
+                    Biometric 1:1 verification
                   </span>
                 </div>
               </div>
@@ -1165,13 +1165,13 @@ export const Attendance: React.FC = () => {
                   onClick={() => setCheckInStage('idle')}
                   className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
                 >
-                  Check In Another Session
+                  Check in another session
                 </button>
                 <button
                   onClick={() => navigate('/student/attendance-logs')}
                   className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span>View All Attendance Logs</span>
+                  <span>View all Attendance Logs</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
@@ -1271,7 +1271,7 @@ export const Attendance: React.FC = () => {
                 {upcomingLater.length > 0 && (
                   <div className="space-y-2">
                     <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      {upcomingRange === 'week' ? 'Next 7 days' : 'Later'}
+                      {upcomingRange === 'week' ? 'Next 7 Days' : 'Later'}
                     </h4>
                     {upcomingLater.map(sess => (
                       <div
@@ -1303,7 +1303,7 @@ export const Attendance: React.FC = () => {
                     className="text-xs text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Refresh Sessions</span>
+                    <span>Refresh sessions</span>
                   </button>
                 </div>
 
@@ -1311,10 +1311,10 @@ export const Attendance: React.FC = () => {
                   <div className="p-8 text-center rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
                     <Clock className="w-8 h-8 text-slate-400 mx-auto" />
                     <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                      No Active Attendance Sessions Open
+                      No active attendance sessions open
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-                      There are no active attendance sessions open for your enrolled courses right now. Your Course Instructor or Class Secretary must open a session before check-in begins.
+                      There are no active attendance sessions open for your enrolled courses right now. Your course instructor or Class Secretary must open a session before check-in begins.
                     </p>
                   </div>
                 ) : (
@@ -1341,7 +1341,7 @@ export const Attendance: React.FC = () => {
                                 {sess.courseCode}
                               </span>
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
-                                Session Active
+                                Session active
                               </span>
                             </div>
                             <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">
@@ -1362,7 +1362,7 @@ export const Attendance: React.FC = () => {
                               )}
                               <p className="flex items-center gap-1.5">
                                 <MapPin className="w-3.5 h-3.5 text-blue-500" />
-                                <span>{requiresGeofence ? 'Geofence Verification Required' : 'No Geofence Required'}</span>
+                                <span>{requiresGeofence ? 'Geofence verification required' : 'No geofence required'}</span>
                               </p>
                               {sess.alreadyRecordedStatus && (
                                 <p className="text-emerald-600 dark:text-emerald-400 font-semibold pt-1">
@@ -1451,13 +1451,13 @@ export const Attendance: React.FC = () => {
                     <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-3">
                       <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <strong className="block font-bold">{cameraErrorIsChallenge ? 'Liveness Check Unavailable' : 'Camera Access Required'}</strong>
+                        <strong className="block font-bold">{cameraErrorIsChallenge ? 'Liveness check unavailable' : 'Camera access required'}</strong>
                         <p className="mt-0.5 leading-relaxed">{cameraError}</p>
                         <button
                           onClick={() => { void startCameraAndChallenge(selectedCameraIdRef.current || undefined); }}
                           className="mt-2.5 px-3 py-1.5 bg-amber-600 text-white rounded-lg font-bold text-[11px] hover:bg-amber-700 cursor-pointer"
                         >
-                          {cameraErrorIsChallenge ? 'Retry' : 'Retry Camera Access'}
+                          {cameraErrorIsChallenge ? 'Retry' : 'Retry camera access'}
                         </button>
                       </div>
                     </div>
@@ -1465,7 +1465,7 @@ export const Attendance: React.FC = () => {
 
                   {cameraDevices.length > 1 && (
                     <label className="flex flex-col gap-1 max-w-md mx-auto text-xs font-semibold text-slate-600 dark:text-slate-300">
-                      <span>Camera source</span>
+                      <span>Camera Source</span>
                       <select
                         value={selectedCameraId}
                         onChange={event => {
@@ -1507,7 +1507,7 @@ export const Attendance: React.FC = () => {
                           onClick={handleCancelAttendance}
                           className="px-5 py-3 rounded-xl font-bold text-xs border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all cursor-pointer"
                         >
-                          Cancel Capture
+                          Cancel capture
                         </button>
                       )}
 
@@ -1523,12 +1523,12 @@ export const Attendance: React.FC = () => {
                           {capturePhase !== 'idle' ? (
                             <>
                               <Loader2 className="w-4 h-4 animate-spin" />
-                              <span>Paced Capture Active…</span>
+                              <span>Paced capture active…</span>
                             </>
                           ) : (
                             <>
                               <Camera className="w-4 h-4" />
-                              <span>Start Guided Biometric Check-in</span>
+                              <span>Start guided biometric check-in</span>
                             </>
                           )}
                         </button>
@@ -1629,7 +1629,7 @@ export const Attendance: React.FC = () => {
                       }`}
                   >
                     <Camera className="w-4 h-4" />
-                    <span>{currentSelectedSession.alreadyRecordedStatus ? 'Attendance Already Recorded' : 'Begin Attendance Check-In'}</span>
+                    <span>{currentSelectedSession.alreadyRecordedStatus ? 'Attendance already recorded' : 'Begin attendance check-in'}</span>
                   </button>
                 </div>
               )}
@@ -1705,7 +1705,7 @@ export const Attendance: React.FC = () => {
               }`}
           >
             <Camera className="w-4 h-4" />
-            <span>{mockVerifying ? 'Verifying Simulation…' : 'Take Attendance (Simulated)'}</span>
+            <span>{mockVerifying ? 'Verifying simulation…' : 'Take attendance (simulated)'}</span>
           </button>
         </div>
       )}

@@ -82,7 +82,7 @@ export function RecoveryCodes() {
               ) : (
                 <>
                   <Copy className="w-4 h-4" />
-                  Copy All Codes
+                  Copy all codes
                 </>
               )}
             </button>
@@ -105,7 +105,7 @@ export function RecoveryCodes() {
               className="w-full py-3 px-4 rounded-xl font-bold text-sm text-white bg-accent-600 hover:bg-accent-700 active:scale-[0.99] transition-all shadow-lg shadow-accent-600/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CheckCircle2 className="w-4 h-4" />
-              Continue to Dashboard
+              Continue to dashboard
             </button>
           </div>
         </div>

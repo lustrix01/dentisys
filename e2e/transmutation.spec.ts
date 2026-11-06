@@ -145,7 +145,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     await page.getByLabel('Enable Auto-Save').uncheck();
     const scoreInput = page.getByRole('spinbutton').nth(0);
     await scoreInput.fill('25');
-    await page.getByRole('button', { name: 'Save Scores Sheet' }).click();
+    await page.getByRole('button', { name: 'Save scores sheet' }).click();
     await expect.poll(() => postedScorePayload).not.toBeNull();
     // The save recomputes grades itself and returns the results; no separate compute call.
     expect(computeRequestCount).toBe(0);
@@ -179,9 +179,9 @@ test.describe('Assessment transmutation UI coverage', () => {
     failScoreSave = true;
     await page.getByLabel('Enable Auto-Save').uncheck();
     await reloadedScoreInput.fill('30');
-    await page.getByRole('button', { name: 'Save Scores Sheet' }).click();
+    await page.getByRole('button', { name: 'Save scores sheet' }).click();
     await expect(page.getByText('A server error occurred. Please try again later.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Scores Saved Successfully!' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Scores saved successfully!' })).toHaveCount(0);
     await expect(reloadedScoreInput).toHaveValue('30');
     expect(computeRequestCount).toBe(0);
   });
@@ -215,8 +215,8 @@ test.describe('Assessment transmutation UI coverage', () => {
 
     await page.click('a[href="/admin/settings"] >> visible=true');
     await expect(page).toHaveURL('/admin/settings');
-    const minimum = page.locator('label').filter({ hasText: 'Minimum percentage' }).locator('input');
-    const maximum = page.locator('label').filter({ hasText: 'Maximum percentage' }).locator('input');
+    const minimum = page.locator('label').filter({ hasText: 'Minimum Percentage' }).locator('input');
+    const maximum = page.locator('label').filter({ hasText: 'Maximum Percentage' }).locator('input');
     await expect(minimum).toHaveValue('42');
     await expect(maximum).toHaveValue('88');
     await minimum.fill('45');
@@ -323,7 +323,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     await expect(page).toHaveURL('/grades');
     await page.getByRole('button', { name: 'Assessments Manager' }).click();
     await expect(page.locator('select').nth(1)).toHaveValue('7');
-    await page.getByRole('button', { name: 'Add Assessment' }).click();
+    await page.getByRole('button', { name: 'Add assessment' }).click();
     await page.getByPlaceholder('e.g. Molar Crown Prep quiz').fill('Unlinked assessment survives refresh');
     await page.getByPlaceholder('e.g. 50').fill('50'); // a new assessment's max score starts empty
     // A course with a single section shows it as text instead of a picker.
@@ -335,8 +335,8 @@ test.describe('Assessment transmutation UI coverage', () => {
     const toggle = page.getByRole('checkbox', { name: /Enable attendance-linked transmutation/i });
     await expect(toggle).toBeVisible();
     await toggle.check();
-    await expect(page.locator('label').filter({ hasText: 'Minimum percentage' }).locator('input')).toHaveValue('42');
-    await expect(page.locator('label').filter({ hasText: 'Maximum percentage' }).locator('input')).toHaveValue('88');
+    await expect(page.locator('label').filter({ hasText: 'Minimum Percentage' }).locator('input')).toHaveValue('42');
+    await expect(page.locator('label').filter({ hasText: 'Maximum Percentage' }).locator('input')).toHaveValue('88');
     await expect(page.getByLabel('Attendance session date')).toBeVisible();
     await expect(page.getByLabel('Attendance session code')).toBeVisible();
     await expect(page.getByLabel('Attendance session date').locator('option').first()).toHaveText('No link (attendance not considered)');
@@ -381,7 +381,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     await page.getByLabel(/^Class:/).selectOption('8');
     await expect(page.getByLabel(/^Class:/)).toHaveValue('8');
     await page.getByRole('button', { name: 'Assessments Manager' }).click();
-    await page.getByRole('button', { name: 'Add Assessment' }).click();
+    await page.getByRole('button', { name: 'Add assessment' }).click();
     await expect(page.locator('form').last().getByText('CLINIC-4B', { exact: true })).toBeVisible();
     await expect(page.locator('form').last().getByText('CLINIC-4A', { exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Cancel' }).click();

@@ -12,28 +12,28 @@ import { Link } from 'react-router-dom';
 const features = [
   {
     icon: Users,
-    title: 'Classes and rosters',
+    title: 'Classes and Rosters',
     badge: 'Enrollment',
     description: 'Manage class sections, student enrollment lists, and course allocations without spreadsheet discrepancies.',
     tags: ['PDF / CSV import', 'Section tracking', 'Class secretary']
   },
   {
     icon: ClipboardCheck,
-    title: 'Session attendance',
+    title: 'Session Attendance',
     badge: 'Verification',
     description: 'Accurate session logs for classroom lectures and laboratory periods with structured faculty review.',
     tags: ['Lecture & lab sessions', 'Faculty verification', 'Audit records']
   },
   {
     icon: GraduationCap,
-    title: 'Grading and criteria',
+    title: 'Grading and Criteria',
     badge: 'BUCDM scale',
     description: 'Transparent grade computation adhering to approved BUCDM weighting and conversion standards.',
     tags: ['100% weight matrix', 'Official conversion table', 'Excel grade sheets']
   },
   {
     icon: LineChart,
-    title: 'Retention monitoring',
+    title: 'Retention Monitoring',
     badge: 'Advising',
     description: 'Early visibility into student standing and remedial milestones to support academic progress proactively.',
     tags: ['Midterm watchlist', 'Remedial progression', 'Administrative reports']

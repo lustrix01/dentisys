@@ -67,7 +67,7 @@ export function AboutPage() {
         >
           <div className="border-b border-slate-100 pb-3">
             <h2 className="text-base font-bold text-slate-900 font-heading">
-              Roles and access
+              Roles and Access
             </h2>
             <p className="mt-0.5 text-xs text-slate-500">
               How each group works in DentiSYS

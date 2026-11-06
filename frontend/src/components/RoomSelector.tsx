@@ -61,7 +61,7 @@ export const RoomSelector: React.FC<RoomSelectorProps> = ({
   label,
   value,
   onChange,
-  placeholder = 'Select Room Venue',
+  placeholder = 'Select room venue',
   id,
   fieldClassName,
   onPickRoom,

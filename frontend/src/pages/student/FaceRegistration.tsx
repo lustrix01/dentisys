@@ -195,7 +195,7 @@ export const FaceRegistration: React.FC = () => {
         setLivenessChallenge(null);
         setCameraLoading(false);
         setCameraErrorIsChallenge(false);
-        setCameraError('Camera access and capture were paused because this tab is no longer active. Choose Retry Camera Access when you return.');
+        setCameraError('Camera access and capture were paused because this tab is no longer active. Choose Retry camera access when you return.');
       }
     };
 
@@ -254,7 +254,7 @@ export const FaceRegistration: React.FC = () => {
       // This prevents a successful stream from being lost during the loading render.
       const video = videoRef.current;
       if (!video) {
-        throw new Error('The camera preview is not ready. Choose Retry Camera Access.');
+        throw new Error('The camera preview is not ready. Choose Retry camera access.');
       }
 
       const stream = await startCameraStream(
@@ -388,7 +388,7 @@ export const FaceRegistration: React.FC = () => {
         } : null);
         setAuthStep(3); setScrollToStep3(true);
       } else {
-        setAuthError(result.message || 'Verification could not accept sufficient usable frames. Please adjust lighting and try again, or seek manual attendance check-in from your Secretary or Instructor.');
+        setAuthError(result.message || 'Verification could not accept sufficient usable frames. Please adjust lighting and try again, or seek manual attendance check-in from your Secretary or instructor.');
         setPendingPayload(null);
         setCanRetryUpload(false);
         void startCameraAndChallenge(undefined, true);
@@ -410,7 +410,7 @@ export const FaceRegistration: React.FC = () => {
         setPendingPayload(null);
         setCanRetryUpload(false);
         const msg = err instanceof Error ? err.message : 'Facial enrollment failed.';
-        setAuthError(`${msg} Please adjust lighting, face the camera directly, and start a fresh capture, or contact your Course Instructor/Secretary for manual attendance.`);
+        setAuthError(`${msg} Please adjust lighting, face the camera directly, and start a fresh capture, or contact your course instructor/Secretary for manual attendance.`);
         void startCameraAndChallenge(undefined, true);
       }
     } finally {
@@ -716,7 +716,7 @@ export const FaceRegistration: React.FC = () => {
         <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div>
-            <strong className="block font-bold">Enrollment Expired for Current Semester</strong>
+            <strong className="block font-bold">Enrollment expired for current semester</strong>
             <p className="mt-0.5 leading-relaxed">
               Biometric enrollment expires at the end of each semester per institutional policy. Please complete consent and re-enroll your facial reference below.
             </p>
@@ -841,11 +841,11 @@ export const FaceRegistration: React.FC = () => {
               {isSubmittingConsent ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Recording Consent…</span>
+                  <span>Recording consent…</span>
                 </>
               ) : (
                 <>
-                  <span>Continue to Camera Scan</span>
+                  <span>Continue to camera scan</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -880,7 +880,7 @@ export const FaceRegistration: React.FC = () => {
               }}
               className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
             >
-              Back to Terms
+              Back to terms
             </button>
           </div>
 
@@ -889,13 +889,13 @@ export const FaceRegistration: React.FC = () => {
                 <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                   <div>
-                    <strong className="block font-bold">{cameraErrorIsChallenge ? 'Liveness Check Unavailable' : 'Camera Access Required'}</strong>
+                    <strong className="block font-bold">{cameraErrorIsChallenge ? 'Liveness check unavailable' : 'Camera access required'}</strong>
                     <p className="mt-0.5 leading-relaxed">{cameraError}</p>
                     <button
                       onClick={() => { void startCameraAndChallenge(selectedCameraIdRef.current || undefined); }}
                       className="mt-2.5 px-3 py-1.5 bg-amber-600 text-white rounded-lg font-bold text-[11px] hover:bg-amber-700 cursor-pointer"
                     >
-                      {cameraErrorIsChallenge ? 'Retry' : 'Retry Camera Access'}
+                      {cameraErrorIsChallenge ? 'Retry' : 'Retry camera access'}
                     </button>
                   </div>
                 </div>
@@ -938,7 +938,7 @@ export const FaceRegistration: React.FC = () => {
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 to-transparent p-4 text-center text-white space-y-1.5">
                     <p className="text-xs font-bold animate-pulse flex items-center justify-center gap-1.5">
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Extracting Facial Feature Vector... {mockProgress}%
+                      Extracting facial feature vector... {mockProgress}%
                     </p>
                     <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
                       <div
@@ -973,7 +973,7 @@ export const FaceRegistration: React.FC = () => {
 
               {isAuthoritative && cameraDevices.length > 1 && (
                 <label className="flex flex-col gap-1 max-w-md mx-auto text-xs font-semibold text-slate-600 dark:text-slate-300">
-                  <span>Camera source</span>
+                  <span>Camera Source</span>
                   <select
                     value={selectedCameraId}
                     onChange={event => {
@@ -1000,7 +1000,7 @@ export const FaceRegistration: React.FC = () => {
                   <div className="flex items-start gap-2.5">
                     <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                     <div>
-                      <strong className="block font-bold">Network or Biometric Service Disruption</strong>
+                      <strong className="block font-bold">Network or biometric service disruption</strong>
                       <p className="mt-0.5 leading-relaxed">
                         Your captured candidate frames and server challenge session have been preserved. You can retry submission with the same idempotency key without re-capturing.
                       </p>
@@ -1012,7 +1012,7 @@ export const FaceRegistration: React.FC = () => {
                       disabled={isProcessingEnrollment}
                       className="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
                     >
-                      Discard & Fresh Capture
+                      Discard & fresh capture
                     </button>
                     <button
                       onClick={handleRetryUpload}
@@ -1022,12 +1022,12 @@ export const FaceRegistration: React.FC = () => {
                       {isProcessingEnrollment ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Retrying Upload…</span>
+                          <span>Retrying upload…</span>
                         </>
                       ) : (
                         <>
                           <RefreshCw className="w-3.5 h-3.5" />
-                          <span>Retry Upload</span>
+                          <span>Retry upload</span>
                         </>
                       )}
                     </button>
@@ -1048,7 +1048,7 @@ export const FaceRegistration: React.FC = () => {
                       onClick={handleCancelCapture}
                       className="px-5 py-3 rounded-xl font-bold text-xs border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all cursor-pointer"
                     >
-                      Cancel Capture
+                      Cancel capture
                     </button>
                   )}
 
@@ -1064,19 +1064,19 @@ export const FaceRegistration: React.FC = () => {
                       {isProcessingEnrollment ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Verifying with Server…</span>
+                          <span>Verifying with server…</span>
                         </>
                       ) : capturePhase !== 'idle' ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Paced Capture Active…</span>
+                          <span>Paced capture active…</span>
                         </>
                       ) : mockScanning ? (
                         <span>Scanning...</span>
                       ) : isAuthoritative ? (
                         <span>Start face capture</span>
                       ) : (
-                        <span>Capture & Submit Enrollment</span>
+                        <span>Capture & submit enrollment</span>
                       )}
                     </button>
                   )}
@@ -1118,7 +1118,7 @@ export const FaceRegistration: React.FC = () => {
               <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block">
                 {isAuthoritative
                   ? (profile?.enrolledAt ? new Date(profile.enrolledAt).toLocaleDateString() : 'Active')
-                  : (mockRegisteredAt || 'Active Session')}
+                  : (mockRegisteredAt || 'Active session')}
               </span>
               <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Status: Active ✓</span>
             </div>
@@ -1127,8 +1127,8 @@ export const FaceRegistration: React.FC = () => {
               <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Semester Expiration</span>
               <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block">
                 {isAuthoritative
-                  ? (profile?.expiresAt ? new Date(profile.expiresAt).toLocaleDateString() : 'End of Semester')
-                  : 'End of Semester'}
+                  ? (profile?.expiresAt ? new Date(profile.expiresAt).toLocaleDateString() : 'End of semester')
+                  : 'End of semester'}
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400">Expires seasonally</span>
             </div>
@@ -1154,7 +1154,7 @@ export const FaceRegistration: React.FC = () => {
                     className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 font-bold text-xs transition-all cursor-pointer flex-shrink-0"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    Revoke Registration
+                    Revoke registration
                   </button>
                   <button
                     onClick={() => navigate('/student/attendance')}
@@ -1171,7 +1171,7 @@ export const FaceRegistration: React.FC = () => {
                     className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 font-bold text-xs transition-all cursor-pointer flex-shrink-0"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    Revoke Registration
+                    Revoke registration
                   </button>
                   <button
                     onClick={() => navigate('/student/attendance')}
@@ -1197,7 +1197,7 @@ export const FaceRegistration: React.FC = () => {
             <span className="w-10 h-10 shrink-0 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 flex items-center justify-center">
               <Trash2 className="w-5 h-5" />
             </span>
-            Revoke Face Registration?
+            Revoke face registration?
           </span>
         }
       >
@@ -1231,7 +1231,7 @@ export const FaceRegistration: React.FC = () => {
                   <span>Revoking…</span>
                 </>
               ) : (
-                <span>Yes, Revoke Registration</span>
+                <span>Yes, revoke registration</span>
               )}
             </button>
           </div>

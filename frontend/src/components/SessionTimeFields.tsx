@@ -43,11 +43,11 @@ export const SessionTimeFields: React.FC<SessionTimeFieldsProps> = ({ times, onC
     <div className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {field('openingTime', openingLabel)}
-        {field('presentCutoff', 'Present cutoff')}
-        {field('lateCutoff', 'Late cutoff')}
+        {field('presentCutoff', 'Present Cutoff')}
+        {field('lateCutoff', 'Late Cutoff')}
       </div>
       <div>
-        {field('classEndTime', 'Class end time', { required: true, ariaLabel: 'Class end time' })}
+        {field('classEndTime', 'Class End Time', { required: true, ariaLabel: 'Class end time' })}
         <small className="block text-slate-500 dark:text-slate-400">{endHint}</small>
       </div>
       {problem && times.openingTime && times.presentCutoff && times.lateCutoff && times.classEndTime && (

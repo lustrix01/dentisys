@@ -41,19 +41,19 @@ test('class list for a class that does not exist creates the class and enrolls t
   });
 
   await page.locator('a[href="/classes"]').click();
-  await page.getByRole('button', { name: 'Import Class and Roster', exact: true }).click();
+  await page.getByRole('button', { name: 'Import class and roster', exact: true }).click();
   await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'made-up-class-list.pdf', mimeType: 'application/pdf', buffer: pdf });
   await expect(page.getByText('Parsed Students (3)', { exact: true })).toBeVisible({ timeout: 45_000 }); // the PDF reader loads on first use
   await expect(page.getByText('✓ 3 of 3 students read')).toBeVisible();
   await expect(page.getByText('None of your classes matches this file, so a new class is created from it.', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Target class section')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Import into one of my existing classes instead' })).toBeVisible();
-  await expect(page.getByLabel('Course code', { exact: true })).toHaveValue(code);
-  await expect(page.getByLabel('Course title', { exact: true })).toHaveValue('Made Up Perspectives');
+  await expect(page.getByLabel('Course Code', { exact: true })).toHaveValue(code);
+  await expect(page.getByLabel('Course Title', { exact: true })).toHaveValue('Made Up Perspectives');
   await expect(page.getByLabel('Section', { exact: true })).toHaveValue('DMD-1A');
-  await expect(page.getByLabel('Lecture units')).toHaveValue('3');
-  await expect(page.getByLabel('Laboratory units')).toHaveValue('0');
-  await expect(page.getByLabel('Academic term')).toHaveValue(String(term!.id));
+  await expect(page.getByLabel('Lecture Units')).toHaveValue('3');
+  await expect(page.getByLabel('Laboratory Units')).toHaveValue('0');
+  await expect(page.getByLabel('Academic Term')).toHaveValue(String(term!.id));
   await expect(page.getByLabel('Meeting 1 room')).toHaveValue('CDM 1');
   for (const id of ids) await page.getByLabel(`Include student ${id}`, { exact: true }).check();
   await page.getByRole('checkbox', { name: /I reviewed the class details/ }).check();

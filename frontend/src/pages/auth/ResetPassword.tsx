@@ -109,7 +109,7 @@ export function ResetPassword() {
               <>
             <div className="space-y-1">
               <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-heading">
-                Create new password
+                Create New Password
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 Choose a strong password for your account
@@ -133,7 +133,7 @@ export function ResetPassword() {
             <form className="space-y-3.5" onSubmit={handleSubmit}>
               <div>
                 <label htmlFor="password" className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-                  New password
+                  New Password
                 </label>
                 <div className="relative rounded-xl">
                   <input
@@ -190,7 +190,7 @@ export function ResetPassword() {
 
               <div>
                 <label htmlFor="confirm-password" className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-                  Confirm new password
+                  Confirm New Password
                 </label>
                 <div className="relative rounded-xl">
                   <input

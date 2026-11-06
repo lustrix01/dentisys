@@ -19,19 +19,19 @@ const contactChannels = [
   },
   {
     icon: Mail,
-    label: 'Email address',
+    label: 'Email Address',
     primary: 'bu-cdm@bicol-u.edu.ph',
     secondary: 'Administrative and portal account inquiries'
   },
   {
     icon: Phone,
-    label: 'Telephone line',
+    label: 'Telephone Line',
     primary: '(052) 480-0100',
     secondary: 'Direct college trunkline extension'
   },
   {
     icon: Clock,
-    label: 'Office hours',
+    label: 'Office Hours',
     primary: 'Monday – Friday, 8:00 AM – 5:00 PM',
     secondary: 'Excluding university and national holidays'
   }

@@ -68,7 +68,7 @@ export const Settings: React.FC = () => {
               <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <Sun className="w-4.5 h-4.5 text-blue-500" />
-                  Interface appearance
+                  Interface Appearance
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-5">
@@ -109,22 +109,22 @@ export const Settings: React.FC = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <ClipboardCheck className="w-4.5 h-4.5 text-blue-500" />
-                  Assignment tools
+                  Assignment Tools
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-slate-500 dark:text-slate-400">Assigned class</span>
+                  <span className="text-slate-500 dark:text-slate-400">Assigned Class</span>
                   <span className="font-bold text-slate-700 dark:text-slate-200">
                     {assignedClassName || 'Not assigned'}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500 dark:text-slate-400">Manual attendance override</span>
+                  <span className="text-slate-500 dark:text-slate-400">Manual Attendance Override</span>
                   <span className="font-bold text-emerald-600">Allowed</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500 dark:text-slate-400">Audit trail review</span>
+                  <span className="text-slate-500 dark:text-slate-400">Audit Trail Review</span>
                   <span className="font-bold text-emerald-600">Allowed</span>
                 </div>
               </CardContent>
@@ -134,7 +134,7 @@ export const Settings: React.FC = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <Camera className="w-4.5 h-4.5 text-blue-500" />
-                  Restricted controls
+                  Restricted Controls
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">

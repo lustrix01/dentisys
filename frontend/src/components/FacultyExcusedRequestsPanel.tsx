@@ -186,7 +186,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
                 aria-label="Class"
                 className="min-w-0 flex-1 pr-6 bg-transparent text-xs leading-4 font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
               >
-                <option value="">All Classes</option>
+                <option value="">All classes</option>
                 {classes.map(item => <option key={item.csId} value={String(item.csId)}>{item.courseCode} {item.csName}</option>)}
               </select>
             </div>
@@ -304,7 +304,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
                             value={notes[request.id] ?? ''}
                             onChange={event => setNotes(current => ({ ...current, [request.id]: event.target.value }))}
                             maxLength={500}
-                            placeholder="Optional note (for Reject)"
+                            placeholder="Optional note (for reject)"
                             className="col-start-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 sm:col-span-4 dark:border-slate-700 dark:bg-slate-900"
                           />
                         )}

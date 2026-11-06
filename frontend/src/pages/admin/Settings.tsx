@@ -96,7 +96,7 @@ export const Settings: React.FC = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-sm">
                 <SlidersHorizontal className="w-4.5 h-4.5 text-accent-500" />
-                Interface appearance
+                Interface Appearance
               </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-2">
@@ -134,7 +134,7 @@ export const Settings: React.FC = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-sm">
                 <ShieldAlert className="w-4.5 h-4.5 text-rose-500" />
-                Grading policy
+                Grading Policy
               </CardTitle>
             </CardHeader>
             <CardContent className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
@@ -157,7 +157,7 @@ export const Settings: React.FC = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-sm">
                 <RotateCcw className="w-4.5 h-4.5 text-rose-500" />
-                Browser cache
+                Browser Cache
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -179,7 +179,7 @@ export const Settings: React.FC = () => {
           <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Percent className="w-4.5 h-4.5 text-accent-500" />
-              Assessment transmutation defaults
+              Assessment Transmutation Defaults
             </CardTitle>
           </CardHeader>
           <CardContent className="p-5">
@@ -222,7 +222,7 @@ export const Settings: React.FC = () => {
       <Modal
         isOpen={showResetConfirmation}
         onClose={() => setShowResetConfirmation(false)}
-        title="Clear browser cache"
+        title="Clear Browser Cache"
       >
         <p className="text-sm text-slate-600 dark:text-slate-300">
           Clear locally cached compatibility data? Persisted database records

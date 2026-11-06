@@ -14,11 +14,11 @@ export function livenessActionTitle(action: LivenessAction): string {
     case 'blink':
       return 'Blink';
     case 'turn_left':
-      return 'Turn Head Left';
+      return 'Turn head left';
     case 'turn_right':
-      return 'Turn Head Right';
+      return 'Turn head right';
     default:
-      return 'Look Forward';
+      return 'Look forward';
   }
 }
 

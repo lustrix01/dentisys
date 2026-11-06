@@ -412,7 +412,7 @@ export const Rooms: React.FC = () => {
           <form className="space-y-4" onSubmit={event => { event.preventDefault(); void saveCategory(); }}>
             {error && <p role="alert" className="text-sm font-semibold text-rose-600 dark:text-rose-400">{error}</p>}
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-              Category name
+              Category Name
               <input required maxLength={100} className={inputClass} value={catDraft.name} onChange={e => setCatDraft({ ...catDraft, name: e.target.value })} />
             </label>
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
@@ -432,7 +432,7 @@ export const Rooms: React.FC = () => {
           >
             {error && <p role="alert" className="text-sm font-semibold text-rose-600 dark:text-rose-400">{error}</p>}
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-              Room name
+              Room Name
               <input required maxLength={100} className={inputClass} value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} />
             </label>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -444,7 +444,7 @@ export const Rooms: React.FC = () => {
             </label>
             {draft.categoryId === NEW_CATEGORY && (
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                New category name
+                New Category Name
                 <input required maxLength={100} className={inputClass} value={draft.newCategory} onChange={e => setDraft({ ...draft, newCategory: e.target.value })} />
               </label>
             )}
@@ -452,7 +452,7 @@ export const Rooms: React.FC = () => {
               <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Location <span className="font-medium text-slate-500 dark:text-slate-400">(optional; fills the session location when this room is picked)</span></p>
               <div className="flex flex-wrap items-end gap-3">
                 <label className="block flex-1 min-w-[8rem] text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Allowed radius (meters)
+                  Allowed Radius (meters)
                   <input type="number" min={50} max={2000} className={inputClass} value={draft.radius} onChange={e => setDraft({ ...draft, radius: cleanRadiusText(e.target.value) })} />
                 </label>
                 <button type="button" onClick={useDeviceLocation} disabled={locating} className="inline-flex items-center gap-1.5 rounded-xl bg-accent-600 px-3 py-2.5 text-[11px] font-bold text-white disabled:opacity-50">

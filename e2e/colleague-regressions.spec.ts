@@ -26,10 +26,10 @@ test('Student pending standing stays unresolved and past-only courses never beco
   } } }));
   await page.goto('/student/retention');
   await expect(page.getByText('No grade yet', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText('Active Standing · Cleared')).toHaveCount(0);
+  await expect(page.getByText('Active standing · Cleared')).toHaveCount(0);
   await page.getByRole('button', { name: /Remedial Exams/ }).click();
   await expect(page.getByText('Remedial Requirements Pending', { exact: true })).toBeVisible();
-  await expect(page.getByText('No Remedial Exams Required', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('No remedial exams required', { exact: true })).toHaveCount(0);
   records = [{ ...course, schoolYear: '2025-2026', isCurrent: false, isPast: true }];
   await page.reload();
   await expect(page.getByText('No courses enrolled for the active term.')).toBeVisible();
@@ -45,7 +45,7 @@ test('Student standing reads "Grades pending", not "No grade yet", once one curr
   } } }));
   await page.goto('/student/retention');
   await expect(page.getByText('Grades pending', { exact: true })).toBeVisible();
-  await expect(page.getByText('Active Standing · Cleared')).toHaveCount(0);
+  await expect(page.getByText('Active standing · Cleared')).toHaveCount(0);
 });
 
 test('Student Classes reads canonical meetings including Sunday and avoids fabricating identity/year', async ({ page }) => {
@@ -68,7 +68,7 @@ test('Student profile route and sidebar remain within Student self-service', asy
   await expect(page.getByRole('heading', { level: 1, name: 'My Profile' })).toBeVisible();
   await expect(page.locator('aside').getByRole('link', { name: /profile/i })).toHaveCount(0);
   await openAccountMenu(page);
-  await expect(page.getByRole('link', { name: 'My Profile', exact: true }).first()).toHaveAttribute('href', '/student/profile');
+  await expect(page.getByRole('link', { name: 'My profile', exact: true }).first()).toHaveAttribute('href', '/student/profile');
 });
 
 for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 'phone', width: 390, height: 844 }]) {
@@ -81,7 +81,7 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 
     await expect(page.locator('aside').getByRole('link', { name: /profile/i })).toHaveCount(0);
     const header = page.locator('header').nth(phone ? 0 : 1);
     await (phone ? header.getByTitle('Profile menu') : header.getByRole('button', { name: /Real Student/ })).click();
-    const menuProfile = header.getByRole('link', { name: 'My Profile', exact: true });
+    const menuProfile = header.getByRole('link', { name: 'My profile', exact: true });
     await expect(menuProfile).toHaveAttribute('href', '/student/profile');
     await menuProfile.click();
     await expect(page).toHaveURL('/student/profile');
@@ -123,9 +123,9 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 
       if (await backdrop.count()) await backdrop.first().click({ position: { x: 5, y: 5 } });
     };
     await openProfile();
-    await expect(header.getByRole('link', { name: 'Switch to Student View', exact: true })).toHaveCount(0);
-    await expect(header.getByRole('link', { name: 'Return to Secretary View', exact: true })).toHaveCount(0);
-    await expect(header.getByRole('link', { name: 'My Profile', exact: true })).toBeVisible();
+    await expect(header.getByRole('link', { name: 'Switch to Student view', exact: true })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: 'Return to Secretary view', exact: true })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: 'My profile', exact: true })).toBeVisible();
     if (!phone) {
       await expect(header.getByTitle('Switch to Linked Student Self-Service')).toHaveCount(0);
       await expect(header.getByTitle('Return to Secretary Dashboard')).toHaveCount(0);
@@ -137,9 +137,9 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 
     await expect(page.getByRole('main')).toContainText('Welcome, Real Student!');
     await expect(toggle.getByRole('button', { name: 'Student', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await openProfile();
-    await expect(header.getByRole('link', { name: 'My Profile', exact: true })).toHaveAttribute('href', '/secretary/profile');
-    await expect(header.getByRole('link', { name: 'Switch to Student View', exact: true })).toHaveCount(0);
-    await expect(header.getByRole('link', { name: 'Return to Secretary View', exact: true })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: 'My profile', exact: true })).toHaveAttribute('href', '/secretary/profile');
+    await expect(header.getByRole('link', { name: 'Switch to Student view', exact: true })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: 'Return to Secretary view', exact: true })).toHaveCount(0);
     if (!phone) {
       await expect(header.getByTitle('Switch to Linked Student Self-Service')).toHaveCount(0);
       await expect(header.getByTitle('Return to Secretary Dashboard')).toHaveCount(0);
@@ -187,9 +187,9 @@ test('future and unclassified enrollments remain visible outside current and pas
   await expect(page.getByRole('heading', { name: 'Other School-Year Enrollments', exact: true })).toBeVisible();
   await expect(page.getByRole('row').filter({ hasText: 'FUTURE' })).toContainText('2027-2028');
   await expect(page.getByRole('row').filter({ hasText: 'UNKNOWN' })).toContainText('Unavailable');
-  await expect(page.getByRole('main')).toContainText('No Active Classes for S.Y. 2026-2027');
+  await expect(page.getByRole('main')).toContainText('No active classes for S.Y. 2026-2027');
   await page.getByRole('button', { name: /Archived Classes/ }).click();
-  await expect(page.getByText('No Archived Classes Found', { exact: true })).toBeVisible();
+  await expect(page.getByText('No archived classes found', { exact: true })).toBeVisible();
 });
 
 test('completed cost recovery is labelled passed rather than required', async ({ page }) => {
@@ -250,7 +250,7 @@ test('Secretary missing attendance is reachable for an exact session and writes 
   await page.getByLabel('Switch Session').selectOption('900');
   await expect(row).toContainText('Present requested');
   // Cancel goes through an in-app confirmation and clears the chip.
-  await row.getByRole('button', { name: 'Cancel request' }).click();
+  await row.getByRole('button', { name: 'Cancel Request' }).click();
   await page.getByRole('button', { name: 'Yes, cancel' }).click();
   await expect.poll(() => cancelled).toBe(true);
   await expect(row).not.toContainText('Present requested');
@@ -285,7 +285,7 @@ test('Secretary revoked sessions are hidden by default, revealed on request and 
   await picker.selectOption('901');
   const row = page.getByRole('row').filter({ hasText: 'Revoked Student' });
   await expect(row).toContainText('present');
-  await expect(page.getByText('Session Revoked', { exact: true })).toBeVisible();
+  await expect(page.getByText('Session revoked', { exact: true })).toBeVisible();
   await expect(page.getByText('Revoked sessions cannot be overridden.')).toBeVisible();
   await expect(row).toContainText('View-only');
   await expect(page.getByRole('button', { name: 'Override', exact: true })).toHaveCount(0);
@@ -307,7 +307,7 @@ test('Student Midterm Advisory flags only fully graded 2.5-or-worse midterms and
   await page.goto('/student/retention');
   await page.getByRole('button', { name: /Midterm Advisory/ }).click();
   const row = page.getByRole('row').filter({ hasText: 'DENT401' });
-  await expect(row).toContainText('At Risk · Midterm');
+  await expect(row).toContainText('At risk · Midterm');
   await expect(row).not.toContainText('projection');
   await expect(page.getByRole('row').filter({ hasText: 'NO-DATA' })).toHaveCount(0);
   await expect(page.getByText('Waiting for all midterm scores in NO-DATA (1 of 3 graded).', { exact: true })).toBeVisible();
@@ -422,7 +422,7 @@ test('Student academic details remain available in Classes and Dashboard', async
   await expect(page.getByText('Grade:', { exact: true }).locator('..')).toContainText('2.8');
   await expect(page.getByText('14 hrs', { exact: true })).toBeVisible();
   await expect(page.getByText('Remedial', { exact: true })).toBeVisible();
-  await expect(page.getByRole('main')).toContainText('Retention Standing Warning');
+  await expect(page.getByRole('main')).toContainText('Retention standing warning');
   await page.goto('/student/dashboard');
   await expect(page.getByText('Overall Grade', { exact: true })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Score %', exact: true })).toBeVisible();
@@ -440,14 +440,14 @@ test('Remedial work is separated from completed and historical courses', async (
   const assignedRow = page.getByRole('row').filter({ hasText: 'DENT401' });
   await expect(assignedRow.getByRole('cell').nth(2)).toContainText('2.8');
   await expect(assignedRow.getByRole('cell').nth(3)).toContainText('Deficient');
-  await expect(assignedRow.getByRole('button', { name: 'View Exam', exact: true })).toBeVisible();
+  await expect(assignedRow.getByRole('button', { name: 'View exam', exact: true })).toBeVisible();
   await page.getByRole('button', { name: /Remedial Exams/ }).click();
   await expect(page.getByRole('heading', { name: 'Active Remediation', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Completed / Historical Remediation', exact: true })).toBeVisible();
   const codes = await page.getByRole('main').locator('span.font-mono').allTextContents();
   expect(codes.filter(code => ['DENT401', 'DONE', 'PAST'].includes(code.trim())).map(code => code.trim())).toEqual(['DENT401', 'DONE', 'PAST']);
   await expect(page.getByText('Passed Exam Date')).toBeVisible();
-  await expect(page.getByText('Exam date: 2026-09-30', { exact: true })).toBeVisible();
+  await expect(page.getByText('Exam Date: 2026-09-30', { exact: true })).toBeVisible();
 });
 
 test('Faculty Midterm Watchlist uses the server flag and drops courses once a final grade or remedial record exists', async ({ page }) => {
@@ -462,18 +462,18 @@ test('Faculty Midterm Watchlist uses the server flag and drops courses once a fi
   await page.goto('/retention');
   await page.getByRole('button', { name: /Midterm Watchlist/ }).click();
   await expect(page.getByRole('heading', { name: 'Midterm Watchlist', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Show At-Risk Only/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: /Show at-risk only/ })).toHaveAttribute('aria-pressed', 'true');
   const failing = page.getByRole('row').filter({ hasText: 'Failing Midterm' });
   await expect(failing).toBeVisible();
-  await expect(failing).toContainText('At Risk');
+  await expect(failing).toContainText('At risk');
   await expect(page.getByRole('row').filter({ hasText: 'Strong Midterm' })).toHaveCount(0);
-  await expect(page.getByRole('row').filter({ hasText: 'Final Graded' })).toHaveCount(0);
+  await expect(page.getByRole('row').filter({ hasText: 'Final graded' })).toHaveCount(0);
   await expect(page.getByRole('row').filter({ hasText: 'Remedial Started' })).toHaveCount(0);
-  await page.getByRole('button', { name: /Show At-Risk Only/ }).click();
+  await page.getByRole('button', { name: /Show at-risk only/ }).click();
   const strong = page.getByRole('row').filter({ hasText: 'Strong Midterm' });
   await expect(strong).toBeVisible();
-  await expect(strong).not.toContainText('At Risk');
-  await expect(page.getByRole('row').filter({ hasText: 'Final Graded' })).toHaveCount(0);
+  await expect(strong).not.toContainText('At risk');
+  await expect(page.getByRole('row').filter({ hasText: 'Final graded' })).toHaveCount(0);
   await expect(page.getByRole('row').filter({ hasText: 'Remedial Started' })).toHaveCount(0);
   await page.getByRole('button', { name: /^Retention Status\s*\d*$/ }).click();
   await expect(page.getByRole('columnheader', { name: 'Risk', exact: true })).toHaveCount(0);

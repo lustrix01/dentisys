@@ -240,8 +240,8 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
             <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10">
               <tr className="text-left font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400 tracking-wider">
                 <th className="px-3 py-2">Row</th>
-                <th className="px-3 py-2">Name in sheet</th>
-                <th className="px-3 py-2">DentiSys student</th>
+                <th className="px-3 py-2">Name in Sheet</th>
+                <th className="px-3 py-2">DentiSys Student</th>
                 {used.map(v => (
                   <th key={v.item.key} className="px-3 py-2 whitespace-nowrap">{periodLabel(v.item.period)} {v.item.title}{v.item.kind === 'percent' ? ' %' : ` /${v.effMax}`}</th>
                 ))}
@@ -291,10 +291,10 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
   };
 
   // ---------- render ----------
-  const configProblem = configStatus === 'loading' ? 'Loading Grade Weights…'
-    : configStatus === 'error' ? (configError || 'Grade Weights could not be loaded.')
-    : configStatus === 'unconfigured' ? 'Grade weights required. Save this course\'s Grade Weights first.'
-    : !periodMode ? 'Importing a grade sheet needs Midterm and Finals Grade Weights for this course.'
+  const configProblem = configStatus === 'loading' ? 'Loading grade weights…'
+    : configStatus === 'error' ? (configError || 'Grade weights could not be loaded.')
+    : configStatus === 'unconfigured' ? 'Grade weights required. Save this course\'s grade weights first.'
+    : !periodMode ? 'Importing a grade sheet needs Midterm and Finals grade weights for this course.'
     : '';
 
   return (
@@ -304,14 +304,14 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
           <div>
             <CardTitle className="text-lg font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2.5">
               <Upload className="w-5 h-5 text-clinical-600 dark:text-clinical-400" />
-              <span>Import Grade Sheets</span>
+              <span>Import grade sheets</span>
             </CardTitle>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               Upload the official grade sheet workbook (.xlsx) exactly as the school gives it. Only raw scores are imported; DentiSys calculates the grades.
             </p>
           </div>
           <span className="shrink-0 text-[10px] font-bold px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 self-start">
-            Official grade sheet (.xlsx)
+            Official Grade Sheet (.xlsx)
           </span>
         </div>
       </CardHeader>
@@ -334,7 +334,7 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
             <p>{configProblem}</p>
             <div className="mt-2 flex gap-2">
               {configStatus === 'error' && <button type="button" className={btnCls} onClick={onRetryConfig}>Retry</button>}
-              {configStatus === 'unconfigured' && <button type="button" className={btnCls} onClick={onOpenWeights}>Open Grade Weights Editor</button>}
+              {configStatus === 'unconfigured' && <button type="button" className={btnCls} onClick={onOpenWeights}>Open grade weights editor</button>}
             </div>
           </div>
         )}
@@ -358,7 +358,7 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
             ))}
             {preview.weightWarnings.length > 0 && (
               <div className={note.amber}>
-                <b>The sheet's weights differ from your saved Grade Weights.</b> Import does not change them.
+                <b>The sheet's weights differ from your saved grade weights.</b> Import does not change them.
                 <ul className="list-disc pl-5 mt-1">{preview.weightWarnings.map(w => <li key={w}>{w}</li>)}</ul>
               </div>
             )}
@@ -394,7 +394,7 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
             )}
             {fresh.length > 0 && (
               <section className="space-y-2">
-                <h4 className={sectionTitle}>New in the sheet</h4>
+                <h4 className={sectionTitle}>New in the Sheet</h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Nothing is created unless you tick it. Or use an existing assessment with a different name.</p>
                 {createAllEligible.length > 1 && (
                   <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer">
@@ -407,7 +407,7 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
             )}
             {preview.notInSheet.length > 0 && (
               <section className="space-y-2">
-                <h4 className={sectionTitle}>Not in the sheet</h4>
+                <h4 className={sectionTitle}>Not in the Sheet</h4>
                 {preview.notInSheet.map(n => (
                   <div key={n.assessment.id} className={rowCls}>
                     <div className="min-w-0 text-xs font-bold text-slate-800 dark:text-slate-100">
@@ -424,7 +424,7 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
             )}
             {diffMax.length > 0 && (
               <section className="space-y-2">
-                <h4 className={sectionTitle}>Different max</h4>
+                <h4 className={sectionTitle}>Different Max</h4>
                 {diffMax.map(diffRow)}
               </section>
             )}

@@ -126,7 +126,7 @@ const StudentComponentGradeSummary: React.FC<{ cls: StudentAcademicClass }> = ({
   if (cls.gradingComponentMode !== 'lecture_laboratory' && !hasSavedComponentBreakdown(cls)) return null;
   return (
     <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 p-3" aria-label="Lecture and Laboratory grade components">
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">Lecture / Laboratory breakdown</p>
+      <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">Lecture / Laboratory Breakdown</p>
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
         <span>Midterm Lecture: <strong>{getComponentGradeText(cls, 'midterm', 'lecture')}</strong></span>
         <span>Midterm Laboratory: <strong>{getComponentGradeText(cls, 'midterm', 'laboratory')}</strong></span>
@@ -220,7 +220,7 @@ export const Classes: React.FC = () => {
           <div className="flex items-start gap-3">
             <AlertCircle className="w-6 h-6 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
             <div className="space-y-2">
-              <h2 className="font-bold text-base text-rose-950 dark:text-rose-100">Unable to load Course Enrollments</h2>
+              <h2 className="font-bold text-base text-rose-950 dark:text-rose-100">Unable to load course enrollments</h2>
               <p className="text-xs text-rose-800 dark:text-rose-300">{error}</p>
               <button
                 type="button"
@@ -249,7 +249,7 @@ export const Classes: React.FC = () => {
       <p className="text-xs text-slate-500 dark:text-slate-400">Course grades and retention status come from official academic records. Missing grades remain pending.</p>
 
       {currentClasses.some(cls => cls.retentionState?.toLowerCase() === 'remedial') && (
-        <div role="status" className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs font-semibold">Retention Standing Warning: review your flagged courses with Faculty.</div>
+        <div role="status" className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs font-semibold">Retention standing warning: review your flagged courses with Faculty.</div>
       )}
 
       {/* 2. Top Stats & Navigation Bar */}
@@ -300,7 +300,7 @@ export const Classes: React.FC = () => {
             className="inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
           >
             <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-            <span>View Retention Standing →</span>
+            <span>View retention standing →</span>
           </Link>
         </div>
       </div>
@@ -355,7 +355,7 @@ export const Classes: React.FC = () => {
 
         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
           {activeTab === 'current'
-            ? `Showing active classes enrolled for School Year ${currentSchoolYear ?? 'unavailable'}`
+            ? `Showing active classes enrolled for school year ${currentSchoolYear ?? 'unavailable'}`
             : 'Historical classes from previous academic school years'}
         </p>
       </div>
@@ -366,7 +366,7 @@ export const Classes: React.FC = () => {
           currentClasses.length === 0 ? (
             <div className="p-10 text-center text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-2">
               <BookOpen className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
-              <p className="font-bold text-slate-600 dark:text-slate-300 text-sm">{currentSchoolYear ? `No Active Classes for S.Y. ${currentSchoolYear}` : 'Current school year unavailable'}</p>
+              <p className="font-bold text-slate-600 dark:text-slate-300 text-sm">{currentSchoolYear ? `No active classes for S.Y. ${currentSchoolYear}` : 'Current school year unavailable'}</p>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 You do not have any registered enrollments for the current academic year. Check the Archived Classes tab for past coursework.
               </p>
@@ -475,7 +475,7 @@ export const Classes: React.FC = () => {
           archivedClasses.length === 0 ? (
             <div className="p-10 text-center text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-2">
               <Archive className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
-              <p className="font-bold text-slate-600 dark:text-slate-300 text-sm">No Archived Classes Found</p>
+              <p className="font-bold text-slate-600 dark:text-slate-300 text-sm">No archived classes found</p>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 No enrollments from previous academic school years are available.
               </p>

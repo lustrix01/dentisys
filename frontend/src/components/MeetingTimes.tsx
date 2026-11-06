@@ -14,7 +14,7 @@ export function MeetingTimes({ component, days, value, defaultStart, defaultEnd,
         const key = meetingDayKey(days, index);
         const current = value[key] ?? { startTime: defaultStart, endTime: defaultEnd };
         return <label key={field} className="text-[10px] font-semibold text-slate-500">
-          {field === 'startTime' ? 'Start time' : 'End time'}
+          {field === 'startTime' ? 'Start Time' : 'End Time'}
           <select aria-label={`${component} ${day}${key === day ? '' : ` meeting ${Number(key.split(':')[1]) + 1}`} ${field === 'startTime' ? 'start' : 'end'} time`} value={current[field]}
             onChange={event => onChange({ ...value, [key]: { ...current, [field]: event.target.value } })}
             className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">

@@ -22,6 +22,7 @@ Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) 
 - [Local demo on lighthal7](local-demo-lighthal7.md) and [Lecture/Laboratory grading](lecture-laboratory-grading.md).
 - [UI polish, October 2026](ui-polish-2026-10.md): device-audit fixes 1–6 and batches 2A–2H, the Owner's layout rulings, and how they were checked.
 - [UI polish, November 2026](ui-polish-2026-11.md): polish of the rooms, overlap pop-up and Secretary Requests screens, the casing ruling (Title Case only for titles), and how it was checked.
+- [Casing rule, November 2026](casing-2026-11.md): the interface casing rule (spec.md UI-001), applied across the app, plus the Academic Terms, Archived Classes and dashboard alignment fixes.
 - [User walkthrough, October 2026](walkthrough-2026-10.md): Dean, Faculty, Secretary and Student fixes, Secretary attendance requests that need Faculty approval, the Owner's rulings, and how they were checked.
 - [Official imports, October 2026](official-imports-2026-10.md): the Dean's class list PDF and grade sheet workbook as import formats, and the grade sheet's grade math.
 - [Lecture-only courses, October 2026](lecture-only-2026-10.md): courses with no Laboratory graded as Lecture only, with a provisional one-rounding course grade.

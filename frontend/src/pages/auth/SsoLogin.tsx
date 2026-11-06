@@ -317,7 +317,7 @@ export function SsoLogin() {
             {/* University email */}
             <div>
               <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700 mb-1.5">
-                University email
+                University Email
               </label>
               <div className="relative rounded-xl">
                 <div className="flex">
@@ -440,7 +440,7 @@ export function SsoLogin() {
               to="/forgot-password"
               className="whitespace-nowrap text-xs font-semibold text-purple-600 hover:text-purple-700 hover:underline transition-colors"
             >
-              Forgot Password?
+              Forgot password?
             </Link>
           </div>
 

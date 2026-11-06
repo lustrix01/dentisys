@@ -52,7 +52,7 @@ test('Email History table has no Subject column, an accessible toggle and a Dean
   assert.match(table, /No email records match your filters\./);
   assert.match(table, /No emails sent yet\./);
   const dean = read('../pages/admin/FacultyInvitation.tsx');
-  assert.match(dean, /<span>Email history<\/span>/);
+  assert.match(dean, /<span>Email History<\/span>/);
   assert.match(dean, /Invitation emails you sent\. View-only\./);
   assert.match(dean, /<EmailHistoryTable actions=\{emailActions\} search=\{emailSearch\} onSearch=\{setEmailSearch\} \/>/);
   const faculty = read('../pages/faculty/EmailManagement.tsx');

@@ -360,7 +360,7 @@ export const RetentionMonitoring: React.FC = () => {
                 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60'
                 : standingPending ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
           }`}>
-            {isStandingAtRisk ? 'Retention Warning' : midtermAtRiskCount > 0 ? 'Midterm Advisory' : standingPending ? (noGradeYet ? 'No grade yet' : 'Grades pending') : 'Active Standing · Cleared'}
+            {isStandingAtRisk ? 'Retention warning' : midtermAtRiskCount > 0 ? 'Midterm advisory' : standingPending ? (noGradeYet ? 'No grade yet' : 'Grades pending') : 'Active standing · Cleared'}
           </span>
           <span className="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-xl font-bold text-slate-600 dark:text-slate-300">
             Limit: 2.50
@@ -503,7 +503,7 @@ export const RetentionMonitoring: React.FC = () => {
                               </span>
                               {cls.midtermEvaluation.isAtRisk && (
                                 <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">
-                                  At Risk
+                                  At risk
                                 </span>
                               )}
                             </div>
@@ -525,7 +525,7 @@ export const RetentionMonitoring: React.FC = () => {
                                   ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
                                   : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                             }`}>
-                              {(isPending ? 'In Progress' : isAtRisk ? 'Deficient' : 'Cleared')}
+                              {(isPending ? 'In progress' : isAtRisk ? 'Deficient' : 'Cleared')}
                             </span>
                             {hasRemedial && (
                               <button
@@ -533,7 +533,7 @@ export const RetentionMonitoring: React.FC = () => {
                                 onClick={() => setActiveTab('remedials')}
                                 className="text-[10px] font-bold text-rose-600 underline cursor-pointer"
                               >
-                                View Exam
+                                View exam
                               </button>
                             )}
                           </div>
@@ -553,7 +553,7 @@ export const RetentionMonitoring: React.FC = () => {
         deficientRecords.length === 0 ? (
           <Card className="p-8 text-center space-y-2 border border-slate-200 dark:border-slate-800">
             <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">{standingPending ? 'Remedial Requirements Pending' : 'No Remedial Exams Required'}</h3>
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">{standingPending ? 'Remedial Requirements Pending' : 'No remedial exams required'}</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">{standingPending ? 'Final grades are pending; remedial requirements cannot yet be confirmed.' : 'No remedial requirements are recorded.'}</p>
           </Card>
         ) : (
@@ -637,7 +637,7 @@ export const RetentionMonitoring: React.FC = () => {
                           </div>
                           <span className="font-mono text-[10px] text-slate-500 block">
                             {typeof att?.percentage === 'number' ? `Score: ${att.percentage.toFixed(1)}%` : 'No score yet'}
-                            {att?.scheduledDate && <span className="block">Exam date: {att.scheduledDate}</span>}
+                            {att?.scheduledDate && <span className="block">Exam Date: {att.scheduledDate}</span>}
                           </span>
                         </div>
                       );
@@ -647,7 +647,7 @@ export const RetentionMonitoring: React.FC = () => {
                   {/* Cost Recovery Warning */}
                   {isCostRecovery && (
                     <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200 text-xs font-semibold">
-                      {progression.stage === 'cost_recovery_passed' ? 'Cost recovery passed · Course cleared.' : progression.stage === 'cost_recovery_failed' ? 'Cost recovery failed · Course remains unresolved.' : 'Cost recovery required (Both remedial attempts completed without passing).'}
+                      {progression.stage === 'cost_recovery_passed' ? 'Cost recovery passed · Course cleared.' : progression.stage === 'cost_recovery_failed' ? 'Cost recovery failed · Course remains unresolved.' : 'Cost recovery required (both remedial attempts completed without passing).'}
                     </div>
                   )}
                 </Card>
@@ -710,7 +710,7 @@ export const RetentionMonitoring: React.FC = () => {
                           {typeof cls.midtermEvaluation?.grade === 'number' ? <GradeValue percentage={cls.midtermEvaluation.percentage} raw={cls.midtermEvaluation.rawPercentage} period="Midterm" grade={cls.midtermEvaluation.grade}>{formatGrade(cls.midtermEvaluation.grade)}</GradeValue> : 'Pending'}
                         </td>
                         <td className="py-3.5 px-4 text-slate-500">
-                          <span className="block font-bold">At Risk · Midterm</span>
+                          <span className="block font-bold">At risk · Midterm</span>
                           Review lessons and consult instructor before finals.
                         </td>
                       </tr>

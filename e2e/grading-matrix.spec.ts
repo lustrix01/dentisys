@@ -85,7 +85,7 @@ test('grading matrix groups assessments by period and category and shows server 
   await expect(table.getByRole('columnheader', { name: 'Student Info' })).toBeVisible();
   await expect(table.getByRole('columnheader', { name: 'Full Name' })).toBeVisible();
   await expect(table.getByRole('columnheader', { name: 'Midterm', exact: true })).toBeVisible();
-  await expect(table.getByRole('columnheader', { name: 'Tentative Final Grade' })).toBeVisible();
+  await expect(table.getByRole('columnheader', { name: 'Tentative Final grade' })).toBeVisible();
   await expect(table.getByRole('columnheader', { name: 'Learning Outputs (60%)' })).toBeVisible();
   await expect(table.getByRole('columnheader', { name: 'Attendance (10%)' })).toBeVisible();
 
@@ -228,7 +228,7 @@ test('single activity keeps and saves a score typed while another save is in fli
   await expect.poll(() => server['lo-1|24']).toBe(30);
   await expect(carlo).toHaveValue('40');
   await expect(page.getByText('All changes saved')).toHaveCount(0);
-  await expect(page.getByText('Scores Saved Successfully!')).toHaveCount(0);
+  await expect(page.getByText('Scores saved successfully!')).toHaveCount(0);
   await expect.poll(() => server['lo-1|25'], { timeout: 20000 }).toBe(40);
   await expect(carlo).toHaveValue('40');
   await expect(bea).toHaveValue('30');

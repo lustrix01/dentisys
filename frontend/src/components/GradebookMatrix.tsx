@@ -507,11 +507,11 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
 
       {!periodMode && (
         <p className="px-5 pt-1 text-[11px] text-amber-700 dark:text-amber-400">
-          This course has no saved period Grade Weights, so the matrix shows score inputs only. Set up the weights in the Grade Weights Editor to see the category and period totals.
+          This course has no saved period grade weights, so the matrix shows score inputs only. Set up the weights in the grade weights editor to see the category and period totals.
         </p>
       )}
       {computeNotice && <p className="px-5 pt-1 text-[11px] text-slate-500">Calculated columns: {computeNotice}</p>}
-      <p className="px-5 text-[10px] text-slate-500 dark:text-slate-400">Calculated columns use the server's grade computation of the saved scores; they update after “Save All Matrix Scores”.</p>
+      <p className="px-5 text-[10px] text-slate-500 dark:text-slate-400">Calculated columns use the server's grade computation of the saved scores; they update after “Save all matrix scores”.</p>
 
       <div className="overflow-x-auto max-h-[600px] max-xl:max-h-[max(600px,calc(100dvh-6rem))] overflow-y-auto">
         <table className="min-w-full border-collapse text-xs">
@@ -523,7 +523,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                 <th key={period.key} className={th} colSpan={periodColumnCount(period.key)}>{period.label}</th>
               ))}
               {showFinalGrade && <th className={th} colSpan={2}>Final Grade</th>}
-              {ungrouped.length > 0 && <th className={th} colSpan={ungrouped.length}>{periodMode ? 'Not in a category' : 'Assessments'}</th>}
+              {ungrouped.length > 0 && <th className={th} colSpan={ungrouped.length}>{periodMode ? 'Not in a Category' : 'Assessments'}</th>}
             </tr>
 
             {/* ROW 2: Component Separation (Lecture vs Laboratory) */}
@@ -697,7 +697,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                             <td className={`${totalCell} ${cellBg} font-extrabold`} title={`${period.totalLabel}: ${format(pct)}%`}>
                               {format(pct)}
                             </td>
-                            <td className={`${totalCell} ${cellBg} font-extrabold`} title={`${isMidterm ? 'Final Midterm Grade' : 'Final Grade'} (1.0–5.0): ${periodEquivalentGrade(pct, isMidterm ? 'Midterm' : 'Final')}`}>
+                            <td className={`${totalCell} ${cellBg} font-extrabold`} title={`${isMidterm ? 'Final Midterm grade' : 'Final grade'} (1.0–5.0): ${periodEquivalentGrade(pct, isMidterm ? 'Midterm' : 'Final')}`}>
                               <GradeValue percentage={pct} raw={periodBreakdown(student.id, period.key)?.rawPercentage} period={isMidterm ? 'Midterm' : 'Final'}>{periodEquivalentGrade(pct, isMidterm ? 'Midterm' : 'Final')}</GradeValue>
                             </td>
                           </>

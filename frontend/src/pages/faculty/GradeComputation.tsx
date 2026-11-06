@@ -1744,8 +1744,8 @@ export const GradeComputation: React.FC = () => {
     setMidtermCategories(buildDefaultLectureLaboratoryCategories('Midterm').filter(row => !lectureOnly || row.component === 'Lecture'));
     setFinalCategories(buildDefaultLectureLaboratoryCategories('Final').filter(row => !lectureOnly || row.component === 'Lecture'));
     showFeedback(lectureOnly
-      ? 'Applied BU Grading System standard (Lecture only | Midterm 50%, Finals 50%). Click Save to apply.'
-      : 'Applied BU Grading System standard (Lecture 60%, Lab 40% | Midterm 50%, Finals 50%). Click Save to apply.', 'success');
+      ? 'Applied BU grading system standard (Lecture only | Midterm 50%, Finals 50%). Click Save to apply.'
+      : 'Applied BU grading system standard (Lecture 60%, Lab 40% | Midterm 50%, Finals 50%). Click Save to apply.', 'success');
   };
 
   // Keep selected offering key synchronized with the active course filter
@@ -2434,7 +2434,7 @@ export const GradeComputation: React.FC = () => {
 
   const periodValidationError = useMemo(() => {
     if (!termRatioCalc.isExact100) {
-      return `Term ratio weights must equal 100% (Current: ${termRatioCalc.displayPercent}).`;
+      return `Term ratio weights must equal 100% (current: ${termRatioCalc.displayPercent}).`;
     }
 
     if (componentMode === 'lecture_laboratory') {
@@ -2453,7 +2453,7 @@ export const GradeComputation: React.FC = () => {
       if (rows.length === 0) return `At least one ${label} category is required.`;
       if (rows.some(row => !row.name.trim())) return `All ${label} category names must be filled out.`;
       if (rows.filter(row => row.sourceKind === 'attendance').length > 1) {
-        return 'Each period may contain only one authoritative Attendance category.';
+        return 'Each period may contain only one authoritative attendance category.';
       }
 
       const groups: Array<{ label: string; rows: PeriodCategoryDraftRow[]; calculation: CategoryWeightSummary }> = componentMode === 'lecture_laboratory'
@@ -2483,7 +2483,7 @@ export const GradeComputation: React.FC = () => {
           }
         }
         if (!group.calculation.isExact100) {
-          return `${group.label} category weights must equal 100% (Current: ${group.calculation.displayPercent}).`;
+          return `${group.label} category weights must equal 100% (current: ${group.calculation.displayPercent}).`;
         }
       }
       return null;
@@ -3131,7 +3131,7 @@ export const GradeComputation: React.FC = () => {
             className="shrink-0 px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
           >
             <RefreshCw className="w-3 h-3" />
-            Reload Latest
+            Reload latest
           </button>
         </div>
       )}
@@ -3366,7 +3366,7 @@ export const GradeComputation: React.FC = () => {
                     className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-bold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    <span>{isMatrixSavedAlert && matrixPendingClears.size === 0 ? 'Saved!' : `Save All Matrix Scores${matrixPendingClears.size > 0 ? ` (${matrixPendingClears.size} to clear)` : ''}`}</span>
+                    <span>{isMatrixSavedAlert && matrixPendingClears.size === 0 ? 'Saved!' : `Save all matrix scores${matrixPendingClears.size > 0 ? ` (${matrixPendingClears.size} to clear)` : ''}`}</span>
                   </button>
                 </div>
               </div>
@@ -3470,7 +3470,7 @@ export const GradeComputation: React.FC = () => {
                             onChange={(e) => changeActivityFilter(activityFilterPeriod, e.target.value)}
                             className="w-full pl-2 pr-7 py-1.5 rounded-lg border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-clinical-500"
                           >
-                            <option value="all">All Categories</option>
+                            <option value="all">All categories</option>
                             {availableActivityTypes.map((t) => (
                               <option key={t} value={t}>{t}</option>
                             ))}
@@ -3603,7 +3603,7 @@ export const GradeComputation: React.FC = () => {
                         className="rounded border-slate-300 text-clinical-600 focus:ring-clinical-500"
                       />
                       <label htmlFor="autosave" className="text-xs font-semibold">
-                        Enable Auto-Save (saves 10 seconds after you stop typing)
+                        Enable auto-save (saves 10 seconds after you stop typing)
                       </label>
                     </div>
                   </CardContent>
@@ -3707,7 +3707,7 @@ export const GradeComputation: React.FC = () => {
                       {scoresSavedThisVisit && (
                         <span className="text-xs text-slate-600 dark:text-slate-300 mr-auto">
                           Grades update when you recompute them in Summaries &amp; Export.{' '}
-                          <button type="button" onClick={() => setActiveSubTab('summaries')} className="font-bold text-clinical-600 dark:text-clinical-400 hover:underline">Go to Summaries</button>
+                          <button type="button" onClick={() => setActiveSubTab('summaries')} className="font-bold text-clinical-600 dark:text-clinical-400 hover:underline">Go to summaries</button>
                         </span>
                       )}
                       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
@@ -3724,7 +3724,7 @@ export const GradeComputation: React.FC = () => {
                         className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-semibold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
                       >
                         <Save className="w-3.5 h-3.5" />
-                        <span>{isScoresSavedAlert && singlePendingClears.size === 0 ? 'Scores Saved Successfully!' : `Save Scores Sheet${singlePendingClears.size > 0 ? ` (${singlePendingClears.size} to clear)` : ''}`}</span>
+                        <span>{isScoresSavedAlert && singlePendingClears.size === 0 ? 'Scores saved successfully!' : `Save scores sheet${singlePendingClears.size > 0 ? ` (${singlePendingClears.size} to clear)` : ''}`}</span>
                       </button>
                     </div>
                   )}
@@ -3759,7 +3759,7 @@ export const GradeComputation: React.FC = () => {
                   title="Retry loading configuration"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
-                  Retry Config
+                  Retry config
                 </button>
               )}
               <button
@@ -3768,7 +3768,7 @@ export const GradeComputation: React.FC = () => {
                 className="flex items-center gap-1 whitespace-nowrap px-3 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs transition-colors shadow-sm disabled:opacity-50"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Add Assessment
+                Add assessment
               </button>
             </div>
           </div>
@@ -3811,7 +3811,7 @@ export const GradeComputation: React.FC = () => {
                 }}
                 className="px-3 py-1.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-clinical-500"
               >
-                <option value="all">All Periods</option>
+                <option value="all">All periods</option>
                 <option value="Midterm">Midterm</option>
                 <option value="Final">Final</option>
               </select>
@@ -3823,7 +3823,7 @@ export const GradeComputation: React.FC = () => {
                   onChange={(e) => setAssessmentCategoryFilter(e.target.value)}
                   className="px-3 py-1.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-clinical-500 max-w-[200px] truncate"
                 >
-                  <option value="all">All Categories</option>
+                  <option value="all">All categories</option>
                   {assessmentConfig.categories
                     .filter(c => {
                       if (c.sourceKind === 'attendance') return false;
@@ -3847,7 +3847,7 @@ export const GradeComputation: React.FC = () => {
                 onChange={(e) => setAssessmentStatusFilter(e.target.value)}
                 className="px-3 py-1.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-clinical-500"
               >
-                <option value="all">All Statuses</option>
+                <option value="all">All statuses</option>
                 <option value="Active">Active</option>
                 <option value="Closed">Closed</option>
               </select>
@@ -3864,7 +3864,7 @@ export const GradeComputation: React.FC = () => {
                   }}
                   className="text-[11px] font-bold text-clinical-600 dark:text-clinical-400 hover:underline px-1.5 py-1 whitespace-nowrap"
                 >
-                  Clear Filters
+                  Clear filters
                 </button>
               )}
             </div>
@@ -3954,7 +3954,7 @@ export const GradeComputation: React.FC = () => {
                             return (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 uppercase text-[9px] tracking-wide">
                                 <AlertTriangle className="w-3 h-3" />
-                                Unassigned Category
+                                Unassigned category
                               </span>
                             );
                           }
@@ -4068,7 +4068,7 @@ export const GradeComputation: React.FC = () => {
                     )}
                     {isDirty && loadedConfig && (
                       <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">
-                        Unsaved Changes
+                        Unsaved changes
                       </span>
                     )}
                   </div>
@@ -4099,7 +4099,7 @@ export const GradeComputation: React.FC = () => {
                 <div className="flex items-start gap-2.5">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
                   <div>
-                    <div className="font-bold">Existing Assessments Require Category Mappings</div>
+                    <div className="font-bold">Existing assessments require category mappings</div>
                     <div className="text-[11px] mt-0.5">
                       {componentMode === 'lecture_laboratory'
                         ? 'Choose the exact Lecture or Laboratory category for each assessment. Existing category IDs and scores remain attached to their current records.'
@@ -4158,7 +4158,7 @@ export const GradeComputation: React.FC = () => {
                 <div className="flex items-start gap-2.5">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
                   <div>
-                    <div className="font-bold">Existing Assessments Require Period Category Mappings</div>
+                    <div className="font-bold">Existing assessments require period category mappings</div>
                     <div className="text-[11px] mt-0.5">
                       Every existing assessment must have a category mapping for its grading period during conversion. Please review the missing mappings below:
                     </div>
@@ -4214,7 +4214,7 @@ export const GradeComputation: React.FC = () => {
                   <div>
                     <div className="font-bold flex items-center gap-1.5">
                       <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                      Legacy Overall Grading Active
+                      Legacy overall grading active
                     </div>
                     <p className="text-[11px] dark:text-slate-300 mt-0.5">
                       This course offering uses single-list overall grading categories. You can continue editing or convert to period grading.
@@ -4226,7 +4226,7 @@ export const GradeComputation: React.FC = () => {
                     className="shrink-0 px-3.5 py-1.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
                   >
                     <Zap className="w-3.5 h-3.5" />
-                    Convert to Period Grading
+                    Convert to period grading
                   </button>
                 </div>
 
@@ -4242,7 +4242,7 @@ export const GradeComputation: React.FC = () => {
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-clinical-50 dark:bg-clinical-950/40 text-clinical-600 dark:text-clinical-400 hover:bg-clinical-100 font-bold text-xs transition-colors"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        Add Category
+                        Add category
                       </button>
                     </div>
 
@@ -4337,7 +4337,7 @@ export const GradeComputation: React.FC = () => {
                       )}
                       {isDirty && (
                         <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
-                          Unsaved Changes
+                          Unsaved changes
                         </span>
                       )}
                     </div>
@@ -4348,7 +4348,7 @@ export const GradeComputation: React.FC = () => {
                       className="flex items-center gap-1.5 whitespace-nowrap px-5 py-2.5 rounded-2xl bg-clinical-500 hover:bg-clinical-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md transition-all"
                     >
                       <Save className="w-4 h-4" />
-                      <span>{configSaving ? 'Saving...' : 'Save Grade Weights'}</span>
+                      <span>{configSaving ? 'Saving...' : 'Save grade weights'}</span>
                     </button>
                   </div>
                 </form>
@@ -4362,7 +4362,7 @@ export const GradeComputation: React.FC = () => {
                     <div className="p-3 sm:p-3.5 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                       <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 font-semibold">
                         <Edit className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                        <span>You have unsaved changes. Adjust weights or categories directly below, then click Save Grade Weights.</span>
+                        <span>You have unsaved changes. Adjust weights or categories directly below, then click Save grade weights.</span>
                       </div>
                       {loadedConfig && (
                         <button
@@ -4370,7 +4370,7 @@ export const GradeComputation: React.FC = () => {
                           onClick={handleReload}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-amber-800 dark:text-amber-200 font-bold text-xs hover:bg-amber-100/50 transition-colors cursor-pointer shrink-0"
                         >
-                          <span>Reset Changes</span>
+                          <span>Reset changes</span>
                         </button>
                       )}
                     </div>
@@ -4378,7 +4378,7 @@ export const GradeComputation: React.FC = () => {
                     <div className="p-3 sm:p-3.5 rounded-2xl bg-clinical-50/70 dark:bg-clinical-950/30 border border-clinical-200/80 dark:border-clinical-800/50 flex flex-wrap items-center justify-between gap-3 text-xs">
                       <div className="flex-1 basis-48 min-w-0 flex items-center gap-2 text-clinical-800 dark:text-clinical-200 font-semibold">
                         <CheckCircle className="w-4 h-4 text-clinical-600 dark:text-clinical-400 shrink-0" />
-                        <span>BU Dental Medicine {loadedConfig ? 'Schema Active' : 'Default Grade Weights'}: {componentMode === 'lecture' ? 'Lecture only' : `Lecture ${componentWeights.lecture}% / Lab ${componentWeights.laboratory}%`} • Midterm {termRatio.midterm}% / Final {termRatio.final}%</span>
+                        <span>BU Dental Medicine {loadedConfig ? 'Schema active' : 'Default grade weights'}: {componentMode === 'lecture' ? 'Lecture only' : `Lecture ${componentWeights.lecture}% / Lab ${componentWeights.laboratory}%`} • Midterm {termRatio.midterm}% / Final {termRatio.final}%</span>
                       </div>
                       <span className="text-[11px] font-bold text-clinical-600 dark:text-clinical-400 shrink-0 whitespace-nowrap">
                         Directly editable
@@ -4407,7 +4407,7 @@ export const GradeComputation: React.FC = () => {
                   {isLegacyCombinedPeriodConfig && (
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-300/70 dark:border-amber-800/70 bg-amber-50/60 dark:bg-amber-950/20 p-4 text-xs">
                       <div className="space-y-0.5">
-                        <h3 className="font-bold text-amber-900 dark:text-amber-200">Saved combined period grading</h3>
+                        <h3 className="font-bold text-amber-900 dark:text-amber-200">Saved Combined Period Grading</h3>
                         <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80">
                           This setup remains active until converted. Assign categories to Lecture or Laboratory to apply standard split.
                         </p>
@@ -4663,7 +4663,7 @@ export const GradeComputation: React.FC = () => {
                   {componentMode === 'lecture_laboratory' && activePeriodUnassignedCategories.length > 0 && (
                     <div className="p-4 rounded-2xl border border-amber-300/70 dark:border-amber-800/70 bg-amber-50/60 dark:bg-amber-950/20 space-y-3" data-testid="unassigned-component-categories">
                       <div>
-                        <h4 className="text-xs font-extrabold text-amber-900 dark:text-amber-200">Assign existing categories to a component</h4>
+                        <h4 className="text-xs font-extrabold text-amber-900 dark:text-amber-200">Assign Existing Categories to a Component</h4>
                         <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80 mt-0.5">Category IDs and linked assessment history are retained when you choose Lecture or Laboratory.</p>
                       </div>
                       {activePeriodUnassignedCategories.map(row => (
@@ -4713,7 +4713,7 @@ export const GradeComputation: React.FC = () => {
                           className="inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold text-xs transition-colors cursor-pointer shadow-2xs"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>Add Category</span>
+                          <span>Add category</span>
                         </button>
                       </div>
                     </div>
@@ -4924,7 +4924,7 @@ export const GradeComputation: React.FC = () => {
                         className="inline-flex items-center gap-2 whitespace-nowrap px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                       >
                         <Save className="w-4 h-4" />
-                        <span>{configSaving ? 'Saving...' : loadedConfig ? 'Save Grade Weights' : 'Save Initial Schema'}</span>
+                        <span>{configSaving ? 'Saving...' : loadedConfig ? 'Save grade weights' : 'Save initial schema'}</span>
                       </button>
                     </div>
                   </div>
@@ -4967,7 +4967,7 @@ export const GradeComputation: React.FC = () => {
                 }}
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
               >
-                Go to Grade Weights
+                Go to grade weights
               </button>
             </div>
           </div>
@@ -5087,7 +5087,7 @@ export const GradeComputation: React.FC = () => {
                 onClick={handlePrepareOverallPeriodConversion}
                 className="px-5 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 disabled:opacity-50 text-white font-bold text-xs shadow-md"
               >
-                Continue to Lecture/Laboratory Mapping
+                Continue to Lecture/Laboratory mapping
               </button>
             </div>
           </div>
@@ -5131,7 +5131,7 @@ export const GradeComputation: React.FC = () => {
                 className="px-5 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 disabled:opacity-50 text-white font-bold text-xs shadow-md flex items-center gap-1.5"
               >
                 <Zap className="w-3.5 h-3.5 text-amber-300" />
-                Confirm Recomputation
+                Confirm recomputation
               </button>
             </div>
           </div>
@@ -5162,7 +5162,7 @@ export const GradeComputation: React.FC = () => {
                 className="flex items-center gap-1.5 rounded-xl bg-clinical-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-clinical-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinical-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isRecomputing ? 'animate-spin' : ''}`} />
-                <span>{isRecomputing ? 'Recomputing...' : 'Recompute Grades'}</span>
+                <span>{isRecomputing ? 'Recomputing...' : 'Recompute grades'}</span>
               </button>}
 
               {/* Clean Export Group (Excel & PDF) */}
@@ -5660,7 +5660,7 @@ export const GradeComputation: React.FC = () => {
       <Modal
         isOpen={isAssessmentModalOpen}
         onClose={() => setIsAssessmentModalOpen(false)}
-        title={editingAssessment ? 'Edit Assessment Spec' : 'Create New Assessment activity'}
+        title={editingAssessment ? 'Edit Assessment Spec' : 'Create New Assessment Activity'}
       >
         <form onSubmit={handleAssessmentSubmit} className="space-y-4">
           <div className="space-y-1.5">
@@ -5704,8 +5704,8 @@ export const GradeComputation: React.FC = () => {
                 onChange={(e) => handlePeriodChange(e.target.value as any)}
                 className="w-full pl-4 pr-10 truncate py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
               >
-                <option value="Midterm">Midterm Period</option>
-                <option value="Final">Final Period</option>
+                <option value="Midterm">Midterm period</option>
+                <option value="Final">Final period</option>
               </select>
             </div>
 
@@ -5735,7 +5735,7 @@ export const GradeComputation: React.FC = () => {
                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs"
                   >
                     <RefreshCw className="w-3 h-3" />
-                    Retry Loading Configuration
+                    Retry loading configuration
                   </button>
                 </div>
               )}
@@ -5744,7 +5744,7 @@ export const GradeComputation: React.FC = () => {
                   {modalCategoryWarning && (
                     <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
                       <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
-                      <div>This assessment requires a valid grading category assignment configured in Grade Weights.</div>
+                      <div>This assessment requires a valid grading category assignment configured in grade weights.</div>
                     </div>
                   )}
                   <select
@@ -5831,7 +5831,7 @@ export const GradeComputation: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label htmlFor="assessment-max-score" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
-                Maximum Score (Points)
+                Maximum Score (points)
               </label>
               <input
                 id="assessment-max-score"
@@ -5914,7 +5914,7 @@ export const GradeComputation: React.FC = () => {
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Minimum percentage
+                        Minimum Percentage
                         <input
                           type="number"
                           min="0"
@@ -5926,7 +5926,7 @@ export const GradeComputation: React.FC = () => {
                         />
                       </label>
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Maximum percentage
+                        Maximum Percentage
                         <input
                           type="number"
                           min="0"
@@ -5943,7 +5943,7 @@ export const GradeComputation: React.FC = () => {
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Attendance session date (Optional)
+                        Attendance Session Date (optional)
                         <select
                           value={assAttendanceDate}
                           onChange={(event) => {
@@ -5961,7 +5961,7 @@ export const GradeComputation: React.FC = () => {
                         </select>
                       </label>
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Attendance session code (Optional)
+                        Attendance Session Code (optional)
                         <select
                           value={assAttendanceCode}
                           onChange={(event) => setAssAttendanceCode(event.target.value)}
@@ -6043,7 +6043,7 @@ export const GradeComputation: React.FC = () => {
               }
               className="px-4 py-2.5 rounded-xl bg-clinical-500 hover:bg-clinical-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md"
             >
-              Confirm Assessment
+              Confirm assessment
             </button>
           </div>
         </form>

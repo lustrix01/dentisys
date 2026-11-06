@@ -197,7 +197,7 @@ test('new offering defaults to split grading and requires an explicit mapping fo
   );
   const recordedErrors = (page as Page & { __groupedLiveErrors?: string[] }).__groupedLiveErrors ?? [];
   const errorCountBeforeExpected422 = recordedErrors.length;
-  await editor.getByRole('button', { name: 'Save Initial Schema', exact: true }).click();
+  await editor.getByRole('button', { name: 'Save initial schema', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm', exact: true }).click();
   const failedSaveResponse = await failedSavePromise;
   expect(failedSaveResponse.status()).toBe(422);
@@ -207,7 +207,7 @@ test('new offering defaults to split grading and requires an explicit mapping fo
   expect(unmappedAssessments).toEqual([
     expect.objectContaining({ title: defaultsFixtureAssessmentTitle, gradingPeriod: 'Midterm' }),
   ]);
-  await expect(page.getByText('Existing Assessments Require Category Mappings', { exact: true })).toBeVisible();
+  await expect(page.getByText('Existing assessments require category mappings', { exact: true })).toBeVisible();
   const expected422ConsoleErrors = recordedErrors
     .map((error, index) => ({ error, index }))
     .filter(({ error, index }) => index >= errorCountBeforeExpected422
@@ -228,7 +228,7 @@ test('new offering defaults to split grading and requires an explicit mapping fo
     successfulSavePayload = response.request().postDataJSON() as JsonRecord;
     return true;
   });
-  await editor.getByRole('button', { name: 'Save Initial Schema', exact: true }).click();
+  await editor.getByRole('button', { name: 'Save initial schema', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm', exact: true }).click();
   const successfulSaveResponse = await successfulSavePromise;
   expect(successfulSaveResponse.status()).toBe(201);
@@ -338,7 +338,7 @@ test('fresh grouped offering saves in the editor, recomputes from live scores, a
   const savePromise = page.waitForResponse(response =>
     response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT'
   );
-  await editor.getByRole('button', { name: 'Save Initial Schema', exact: true }).click();
+  await editor.getByRole('button', { name: 'Save initial schema', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm', exact: true }).click();
   const saveResponse = await savePromise;
   const savePayload = await jsonResponse(saveResponse);
@@ -440,13 +440,13 @@ test('fresh grouped offering saves in the editor, recomputes from live scores, a
 
   await page.goto('/grades?tab=summaries');
   const main = page.getByRole('main');
-  await expect(main.getByRole('button', { name: 'Recompute Grades', exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(main.getByRole('button', { name: 'Recompute grades', exact: true })).toBeVisible({ timeout: 15000 });
   await selectFixtureOffering(page, String(targetClass.courseCode), classId);
   const recomputeResponsePromise = page.waitForResponse(response =>
     response.url().includes('/api/faculty/grades/compute') && response.request().method() === 'POST'
   );
-  await main.getByRole('button', { name: 'Recompute Grades', exact: true }).click();
-  await page.getByRole('button', { name: 'Confirm Recomputation', exact: true }).click();
+  await main.getByRole('button', { name: 'Recompute grades', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm recomputation', exact: true }).click();
   const recomputeResponse = await recomputeResponsePromise;
   const recomputePayload = await jsonResponse(recomputeResponse);
   expect(recomputeResponse.ok(), JSON.stringify(recomputePayload)).toBeTruthy();

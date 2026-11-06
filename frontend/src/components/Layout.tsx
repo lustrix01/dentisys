@@ -72,9 +72,9 @@ const ProfileMenu: React.FC<{
     : accountRole === 'secretary' ? '/secretary/profile'
     : viewRole === 'student' ? '/student/profile'
     : '/faculty/profile';
-  const profileLabel = viewRole === 'admin' ? 'My Dean Profile'
-    : (accountRole === 'secretary' || viewRole === 'student') ? 'My Profile'
-    : 'My Faculty Profile';
+  const profileLabel = viewRole === 'admin' ? 'My Dean profile'
+    : (accountRole === 'secretary' || viewRole === 'student') ? 'My profile'
+    : 'My Faculty profile';
   const itemClass = 'flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-slate-100/50 dark:hover:bg-slate-900/50 dark:hover:text-slate-100 text-xs font-semibold transition-all';
 
   return (
@@ -98,7 +98,7 @@ const ProfileMenu: React.FC<{
             className={itemClass}
           >
             <SettingsIcon className="w-4 h-4 text-slate-400" />
-            <span>{viewRole === 'admin' ? 'System Settings' : 'My Settings'}</span>
+            <span>{viewRole === 'admin' ? 'System settings' : 'My settings'}</span>
           </Link>
         )}
 
@@ -107,7 +107,7 @@ const ProfileMenu: React.FC<{
           className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 text-xs font-bold transition-all border-t border-slate-100 dark:border-slate-800 pt-2 cursor-pointer"
         >
           <LogOut className="w-4 h-4 text-rose-500" />
-          <span>Sign Out</span>
+          <span>Sign out</span>
         </button>
       </div>
     </>
@@ -566,7 +566,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       {/* Mobile Header */}
       <header className="print:hidden md:hidden flex items-center justify-between px-6 max-[359px]:px-3 py-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-40 relative z-10">
         <div className="flex items-center space-x-2">
-          <img src="/bu-cdm-logo.png" alt="BU CDM Logo" className="w-9 h-9 rounded-full object-cover" />
+          <img src="/bu-cdm-logo.png" alt="BU CDM logo" className="w-9 h-9 rounded-full object-cover" />
           <span className="font-heading font-bold text-xl tracking-tight bg-gradient-to-r from-clinical-600 to-accent-600 dark:from-clinical-400 dark:to-accent-400 bg-clip-text text-transparent">
             DentiSYS
           </span>
@@ -655,7 +655,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'space-x-3'} min-w-0`}>
             <img
               src="/bu-cdm-logo.png"
-              alt="BU CDM Logo"
+              alt="BU CDM logo"
               className={`w-10 h-10 rounded-full object-cover shadow-lg ${colors.logoRing} flex-shrink-0 transition-transform duration-300`}
             />
             {!isSidebarCollapsed && (
@@ -735,7 +735,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
               {!isSidebarCollapsed && <span>Secretary</span>}
               {isSidebarCollapsed && (
                 <div className="pointer-events-none absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 text-white text-xs font-bold rounded-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap shadow-xl border border-slate-700/50 flex items-center">
-                  Secretary View
+                  Secretary view
                   <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
                 </div>
               )}
@@ -761,7 +761,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
               {!isSidebarCollapsed && <span>Student</span>}
               {isSidebarCollapsed && (
                 <div className="pointer-events-none absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 text-white text-xs font-bold rounded-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap shadow-xl border border-slate-700/50 flex items-center">
-                  Student View
+                  Student view
                   <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
                 </div>
               )}

@@ -78,7 +78,7 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(page.getByText('Class: CLIN401-SecA')).toBeVisible();
     await expect(page.getByText('Student account activation is unavailable.')).toHaveCount(0);
     await page.getByLabel(/^Password$/i).fill('Student123!');
-    await page.getByLabel(/Confirm password/i).fill('Student123!');
+    await page.getByLabel(/Confirm Password/i).fill('Student123!');
     await page.getByRole('button', { name: /Accept invitation and activate/i }).click();
     await expect(page).toHaveURL('/login?activated=1');
   });
@@ -114,7 +114,7 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(page.getByRole('button', { name: 'Continue with Google' })).toHaveCount(0);
     await expect(page.getByText(/verify this invited institutional email with Google/i)).toHaveCount(0);
     await page.getByLabel(/^Password$/i).fill('Student123!');
-    await page.getByLabel(/Confirm password/i).fill('Student123!');
+    await page.getByLabel(/Confirm Password/i).fill('Student123!');
     await page.getByRole('button', { name: /Accept invitation and activate/i }).click();
     await expect(page).toHaveURL(/\/login\?activated=1/);
     expect(submittedPayload).toEqual({ token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', password: 'Student123!' });
@@ -227,7 +227,7 @@ test.describe('P03 Student identity and authentication', () => {
 
     await page.goto('/student/profile');
     await expect(page.getByRole('heading', { level: 1, name: 'My Profile', exact: true })).toBeVisible();
-    await expect(page.getByText('Two-factor authentication')).toBeVisible();
+    await expect(page.getByText('Two-Factor Authentication')).toBeVisible();
     await expect(page.getByRole('main').getByText(realStudent.student.student_number, { exact: true })).toBeVisible();
     for (const value of fabricatedValues) {
       await expect(page.locator('body')).not.toContainText(value);
@@ -294,10 +294,10 @@ test.describe('P03 Student identity and authentication', () => {
     const main = page.getByRole('main');
     await expect(main.getByText('Your face is registered for attendance')).toBeVisible();
     await expect(main.getByText('Privacy Agreement')).toHaveCount(0);
-    await expect(main.getByRole('button', { name: /Re-Enroll|Re-Register|Continue to Camera Scan/i })).toHaveCount(0);
+    await expect(main.getByRole('button', { name: /Re-Enroll|Re-Register|Continue to camera scan/i })).toHaveCount(0);
 
-    await main.getByRole('button', { name: 'Revoke Registration' }).click();
-    await page.getByRole('button', { name: 'Yes, Revoke Registration' }).click();
+    await main.getByRole('button', { name: 'Revoke registration' }).click();
+    await page.getByRole('button', { name: 'Yes, revoke registration' }).click();
     await expect.poll(() => revoked).toBe(true);
     await expect(main.getByText('Data Privacy & Facial Biometrics Consent')).toBeVisible();
     await expect(main.getByText('Your face is registered for attendance')).toHaveCount(0);
@@ -528,7 +528,7 @@ test.describe('P03 Student identity and authentication', () => {
     await main.getByRole('button', { name: 'Take attendance' }).click();
     await expect(main.getByText(/Your location is too imprecise \(±25 m\)\. Turn on Wi-Fi/)).toBeVisible();
     await main.getByRole('button', { name: 'Retry' }).click();
-    await expect(main.getByText("Your phone can't get a precise enough location here. Ask your Class Secretary or Course Instructor to record your attendance.")).toBeVisible();
+    await expect(main.getByText("Your phone can't get a precise enough location here. Ask your Class Secretary or course instructor to record your attendance.")).toBeVisible();
     await expect(main.getByRole('button', { name: 'Retry' })).toBeVisible();
     await expect(main.getByRole('heading', { name: 'Active Liveness & Face Verification' })).toHaveCount(0);
   });
@@ -539,7 +539,7 @@ test.describe('P03 Student identity and authentication', () => {
     await openGeofencedAttendance(page, true, checks, () => ({ result: 'inside', distanceMeters: 1, accuracyMeters: 1 }));
     const main = page.getByRole('main');
     await main.getByRole('button', { name: 'Take attendance' }).click();
-    await expect(main.getByText('Location is required for this session. Allow location for this site, or ask your Class Secretary or Course Instructor to record your attendance.')).toBeVisible();
+    await expect(main.getByText('Location is required for this session. Allow location for this site, or ask your Class Secretary or course instructor to record your attendance.')).toBeVisible();
     await expect(main.getByRole('heading', { name: 'Active Liveness & Face Verification' })).toHaveCount(0);
     expect(checks).toHaveLength(0);
   });
@@ -600,7 +600,7 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(main.getByRole('heading', { name: 'Active Liveness & Face Verification' })).toHaveCount(0);
 
     await main.getByRole('button', { name: 'Take attendance' }).click();
-    await dialog.getByRole('button', { name: 'Register Face' }).click();
+    await dialog.getByRole('button', { name: 'Register face' }).click();
     await expect(page).toHaveURL('/student/face-registration');
   });
 

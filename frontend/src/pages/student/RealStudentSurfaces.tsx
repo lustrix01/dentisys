@@ -81,15 +81,15 @@ export function StudentIdentityFields({ profile }: { profile?: StudentAcademicPr
           <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">{displayName}</p>
         </div>
         <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Login email</span>
+          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Login Email</span>
           <p className="font-semibold text-slate-800 dark:text-slate-100 text-sm break-all">{loginEmail}</p>
         </div>
         <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Student number</span>
+          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Student Number</span>
           <p className="font-mono font-bold text-slate-800 dark:text-slate-100 text-sm">{studentNum}</p>
         </div>
         <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
-          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Student status</span>
+          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Student Status</span>
           <p className="font-bold capitalize text-slate-800 dark:text-slate-100 text-sm">{studentStatus}</p>
         </div>
       </div>
@@ -172,7 +172,7 @@ export const RealStudentDashboard: React.FC = () => {
               : 'capitalize bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
         }`}
       >
-        {noGradeYet ? 'No grade yet' : cls.retentionState || 'Good Standing'}
+        {noGradeYet ? 'No grade yet' : cls.retentionState || 'Good standing'}
       </span>
     );
   };
@@ -214,7 +214,7 @@ export const RealStudentDashboard: React.FC = () => {
             onClick={() => navigate('/student/face-registration')}
             className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer whitespace-nowrap"
           >
-            Register Face
+            Register face
           </button>
         </div>
       )}
@@ -308,7 +308,7 @@ export const RealStudentDashboard: React.FC = () => {
               onClick={() => navigate('/student/classes')}
               className="whitespace-nowrap text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
             >
-              View Full Grades →
+              View full grades →
             </button>
           </div>
         </CardHeader>
@@ -421,7 +421,7 @@ export const RealStudentDashboard: React.FC = () => {
               </div>
             ))}
           </div>
-          <button onClick={() => navigate('/student/attendance')} className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-1.5 lg:max-xl:flex-col lg:max-xl:gap-1 text-center cursor-pointer"><Camera className="w-4 h-4 shrink-0" />Go to Attendance Check-In</button>
+          <button onClick={() => navigate('/student/attendance')} className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-1.5 lg:max-xl:flex-col lg:max-xl:gap-1 text-center cursor-pointer"><Camera className="w-4 h-4 shrink-0" />Go to attendance check-in</button>
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
           <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400" /><h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">Designated Attendance Location</h4></div>

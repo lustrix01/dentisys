@@ -14,19 +14,19 @@ export function describeCameraError(error: unknown): string {
   switch (mediaDeviceErrorName(error)) {
     case 'NotAllowedError':
     case 'SecurityError':
-      return 'Camera access was blocked. Allow camera access for this local DentiSys site, then choose Retry Camera Access.';
+      return 'Camera access was blocked. Allow camera access for this local DentiSys site, then choose Retry camera access.';
     case 'NotReadableError':
-      return 'The camera could not be opened. Close other apps or browser tabs using the camera, then choose Retry Camera Access or select another camera.';
+      return 'The camera could not be opened. Close other apps or browser tabs using the camera, then choose Retry camera access or select another camera.';
     case 'OverconstrainedError':
       return 'The selected camera does not support the requested preview mode. Choose another camera or retry with the default camera.';
     case 'NotFoundError':
-      return 'No camera was detected. Connect or enable a camera, then choose Retry Camera Access.';
+      return 'No camera was detected. Connect or enable a camera, then choose Retry camera access.';
     case 'AbortError':
-      return 'The camera start was interrupted. Choose Retry Camera Access.';
+      return 'The camera start was interrupted. Choose Retry camera access.';
     default:
       return error instanceof Error && error.message
         ? `Unable to start the camera: ${error.message}`
-        : 'Unable to start the camera. Check camera access and choose Retry Camera Access.';
+        : 'Unable to start the camera. Check camera access and choose Retry camera access.';
   }
 }
 

@@ -101,7 +101,7 @@ export function ActivateStudent() {
               </div>
             </label>
             <label htmlFor="student-password-confirmation" className="mt-4 block text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Confirm password
+              Confirm Password
               <div className="relative mt-2">
                 <input id="student-password-confirmation" aria-label="Confirm password" type={showConfirmation ? 'text' : 'password'} autoComplete="new-password" required minLength={8} aria-invalid={Boolean(confirmation && password !== confirmation)} value={confirmation} onChange={event => setConfirmation(event.target.value)} className="w-full rounded-lg border border-slate-300 p-3 pr-11 dark:border-slate-700 dark:bg-slate-800" />
                 <button type="button" onClick={() => setShowConfirmation(value => !value)} aria-label={showConfirmation ? 'Hide password confirmation' : 'Show password confirmation'} className="absolute inset-y-0 right-0 px-3 text-slate-500">{showConfirmation ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>

@@ -82,20 +82,20 @@ const formatCheckInTime = (value?: string | null) => {
 };
 
 const attendanceMethodLabel = (method?: string | null, overrideReason?: string | null): string => {
-  if (overrideReason && method !== 'secretary_approved') return 'Manual Override';
+  if (overrideReason && method !== 'secretary_approved') return 'Manual override';
   switch (method) {
     case 'biometric':
-      return 'Face Biometric';
+      return 'Face biometric';
     case 'manual_faculty':
     case 'faculty_manual':
-      return 'Faculty Manual Entry';
+      return 'Faculty manual entry';
     case 'manual_secretary':
     case 'secretary_manual':
-      return 'Secretary Manual Entry';
+      return 'Secretary manual entry';
     case 'secretary_approved':
       return 'Secretary (approved by Faculty)';
     case 'system_resolution':
-      return 'System Resolution';
+      return 'System resolution';
     default:
       return 'Not recorded';
   }
@@ -834,7 +834,7 @@ export const AttendanceMonitoring: React.FC = () => {
     try {
       await endFacultyAttendanceSessionApi({ sessionId: targetSessionId });
       setIsEndModalOpen(false);
-      setNotification({ type: 'success', message: 'Attendance session ended. Students without a record were marked Absent.' });
+      setNotification({ type: 'success', message: 'Attendance session ended. Students without a record were marked absent.' });
       const csIdNum = parseInt(selectedCsId, 10);
       if (csIdNum > 0 && worksheetScope.current === writeScope) {
         await loadWorksheet(csIdNum, selectedDate);
@@ -1239,7 +1239,7 @@ export const AttendanceMonitoring: React.FC = () => {
                         }}
                         className="inline-flex items-center justify-center text-xs font-bold px-3 xl:max-[1439px]:px-2 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/70 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/50 transition-all cursor-pointer shadow-xs whitespace-nowrap"
                       >
-                        <span>View Attendance</span>
+                        <span>View attendance</span>
                       </button>
                     </div>
                   </div>
@@ -1281,7 +1281,7 @@ export const AttendanceMonitoring: React.FC = () => {
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                     </span>
-                    <span>Live Session</span>
+                    <span>Live session</span>
                     {liveCurrentSession.sessionCode && (
                       <span className="font-mono text-[11px] font-bold text-emerald-800 dark:text-emerald-200">
                         ({liveCurrentSession.sessionCode})
@@ -1290,7 +1290,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   </button>
                 ) : worksheet?.attendanceSession?.status === 'scheduled' ? (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20">
-                    <span>Scheduled Session</span>
+                    <span>Scheduled session</span>
                   </span>
                 ) : null}
 
@@ -1326,7 +1326,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   disabled={loadingWorksheet || attendanceWritePending}
                   aria-label="Refresh attendance worksheet"
                   className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:opacity-50"
-                  title="Refresh Worksheet"
+                  title="Refresh worksheet"
                 >
                   <RefreshCw className={`w-4 h-4 ${loadingWorksheet ? 'animate-spin' : ''}`} />
                 </button>
@@ -1390,7 +1390,7 @@ export const AttendanceMonitoring: React.FC = () => {
               value={selectedCourseId !== null ? String(selectedCourseId) : ''}
               onChange={(e) => handleCourseChange(e.target.value)}
             >
-              <option value="">-- Select Assigned Course --</option>
+              <option value="">-- Select assigned course --</option>
               {assignedCourses.map(c => (
                 <option key={c.id} value={c.id}>
                   {c.code} — {c.name}
@@ -1412,7 +1412,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   ? 'Select course first'
                   : availableSections.length === 0
                   ? 'No sections available'
-                  : '-- Select Class Section --'}
+                  : '-- Select class section --'}
               </option>
               {availableSections.map(s => (
                 <option key={s.csId} value={s.csId}>
@@ -1427,7 +1427,7 @@ export const AttendanceMonitoring: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700">
                 <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Attendance date:</span>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Attendance Date:</span>
                 <input
                   type="date"
                   value={selectedDate}
@@ -1443,7 +1443,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   onClick={() => { dateChosen.current = true; setWorksheet(null); setSelectedDate(manilaDateToday()); setSelectedSessionId(''); }}
                   className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
                 >
-                  Jump to Today
+                  Jump to today
                 </button>
               )}
             </div>
@@ -1505,7 +1505,7 @@ export const AttendanceMonitoring: React.FC = () => {
         <Card className="p-12 text-center text-slate-500 dark:text-slate-400">
           <Layers className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
           <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-            Please click &ldquo;View Attendance&rdquo; on one of your class cards above to view the roll call worksheet.
+            Please click &ldquo;View attendance&rdquo; on one of your class cards above to view the roll call worksheet.
           </p>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Attendance records are loaded directly from the authoritative database.
@@ -1549,7 +1549,7 @@ export const AttendanceMonitoring: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-end gap-3">
             {shownSessions.length > 0 && (
             <label className="block flex-1 text-xs font-bold text-slate-700 dark:text-slate-300">
-              Switch Attendance Session on this Date:
+              Switch Attendance Session on This Date:
               <select
                 aria-label="Attendance session"
                 value={selectedSessionId}
@@ -1585,7 +1585,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-300 font-extrabold text-[10px] uppercase tracking-wider">
                     <Ban className="w-3 h-3 text-rose-600" />
-                    Session Revoked
+                    Session revoked
                   </span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-300 font-extrabold text-[10px] uppercase tracking-wider">
                     View-only
@@ -1656,7 +1656,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold whitespace-nowrap transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
               >
                 {bulkMarking ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                <span>{bulkMarking ? 'Marking…' : 'Mark all unrecorded as Present'}</span>
+                <span>{bulkMarking ? 'Marking…' : 'Mark all unrecorded as present'}</span>
               </button>
               )}
             </div>
@@ -1678,12 +1678,12 @@ export const AttendanceMonitoring: React.FC = () => {
                       <div className="shrink-0">{actionControl(item)}</div>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                      <div data-testid="attendance-status"><span className="sr-only">Attendance status: </span>{statusChip(item)}</div>
+                      <div data-testid="attendance-status"><span className="sr-only">Attendance Status: </span>{statusChip(item)}</div>
                       <div className="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200">
                         <Clock className="w-4 h-4 text-slate-400 stroke-[2.2]" />
-                        <span><span className="sr-only">Check-in time: </span>{item.timeRecorded ? formatCheckInTime(item.timeRecorded) : '—'}</span>
+                        <span><span className="sr-only">Check-In Time: </span>{item.timeRecorded ? formatCheckInTime(item.timeRecorded) : '—'}</span>
                       </div>
-                      {item.status && <div><span className="sr-only">Verification method: </span>{methodChip(item)}</div>}
+                      {item.status && <div><span className="sr-only">Verification Method: </span>{methodChip(item)}</div>}
                     </div>
                   </div>
                 ))
@@ -1695,11 +1695,11 @@ export const AttendanceMonitoring: React.FC = () => {
             <table className="w-full min-w-[640px] text-left text-xs border-collapse">
               <thead className="sticky top-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-xs border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
                 <tr>
-                  <th className="py-3 px-4 sm:py-4 sm:px-6">STUDENT DETAILS</th>
-                  <th className="py-3 px-4 sm:py-4 sm:px-6">CHECK-IN TIME</th>
-                  <th className="py-3 px-4 sm:py-4 sm:px-6">VERIFICATION METHOD</th>
-                  <th className="py-3 px-4 sm:py-4 sm:px-6">ATTENDANCE STATUS</th>
-                  <th className="py-3 px-4 sm:py-4 sm:px-6 text-right">ACTIONS</th>
+                  <th className="py-3 px-4 sm:py-4 sm:px-6">Student Details</th>
+                  <th className="py-3 px-4 sm:py-4 sm:px-6">Check-In Time</th>
+                  <th className="py-3 px-4 sm:py-4 sm:px-6">Verification Method</th>
+                  <th className="py-3 px-4 sm:py-4 sm:px-6">Attendance Status</th>
+                  <th className="py-3 px-4 sm:py-4 sm:px-6 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
@@ -1802,7 +1802,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 onClick={() => { void handleBulkMarkPresent(); }}
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
               >
-                Mark Present
+                Mark present
               </button>
             </div>
           </div>
@@ -1883,7 +1883,7 @@ export const AttendanceMonitoring: React.FC = () => {
 
             <div>
               <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                {correctionTarget.id ? 'Correction Justification Reason (Required)' : 'Initial Entry Reason (Optional)'}
+                {correctionTarget.id ? 'Correction Justification Reason (required)' : 'Initial Entry Reason (optional)'}
               </label>
               <textarea
                 rows={3}
@@ -1917,7 +1917,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
               >
                 {submittingCorrection && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                <span>Save Override</span>
+                <span>Save override</span>
               </button>
             </div>
           </form>
@@ -1942,7 +1942,7 @@ export const AttendanceMonitoring: React.FC = () => {
               </div>
             )}
             <p className="text-slate-700 dark:text-slate-300">
-              End session <span className="font-mono font-bold">{(liveCurrentSession ?? worksheet?.attendanceSession)?.sessionCode}</span> now? Students without an attendance record will be marked Absent. Corrections remain possible afterwards.
+              End session <span className="font-mono font-bold">{(liveCurrentSession ?? worksheet?.attendanceSession)?.sessionCode}</span> now? Students without an attendance record will be marked absent. Corrections remain possible afterwards.
             </p>
             <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
               <button
@@ -1961,7 +1961,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 onClick={() => void handleEndSession()}
                 className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold disabled:opacity-50 cursor-pointer"
               >
-                {submittingEnd ? 'Ending…' : 'Confirm End Session'}
+                {submittingEnd ? 'Ending…' : 'Confirm end session'}
               </button>
             </div>
           </div>
@@ -1992,7 +1992,7 @@ export const AttendanceMonitoring: React.FC = () => {
               <ul className="list-disc list-inside space-y-1 text-[11px]">
                 <li>Revoking immediately closes biometric capture and blocks further student submissions.</li>
                 <li><strong>All attendance already recorded is strictly preserved.</strong></li>
-                <li>A revoked session is treated as if it never happened: it does not count toward attendance rates or grades, and no student is marked Absent for it.</li>
+                <li>A revoked session is treated as if it never happened: it does not count toward attendance rates or grades, and no student is marked absent for it.</li>
               </ul>
             </div>
 
@@ -2011,7 +2011,7 @@ export const AttendanceMonitoring: React.FC = () => {
 
             <div>
               <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                Revocation Reason (Optional, max 500 characters)
+                Revocation Reason (optional, max 500 characters)
               </label>
               <textarea
                 rows={3}
@@ -2047,7 +2047,7 @@ export const AttendanceMonitoring: React.FC = () => {
               >
                 {submittingRevocation && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                 <Ban className="w-3.5 h-3.5" />
-                <span>Confirm Revoke Session</span>
+                <span>Confirm revoke session</span>
               </button>
             </div>
           </form>
@@ -2084,7 +2084,7 @@ export const AttendanceMonitoring: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="edit-session-room" className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Room or session location</label>
+              <label htmlFor="edit-session-room" className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Room or Session Location</label>
               <RoomSelector
                 id="edit-session-room"
                 value={editRoom}
@@ -2100,7 +2100,7 @@ export const AttendanceMonitoring: React.FC = () => {
               <div className="mt-2"><RetiredRoomWarning rooms={rooms} names={[editRoom]} /></div>
             </div>
 
-            <SessionTimeFields times={editTimes} onChange={setEditTimes} sessionDate={editingSession?.sessionDate ?? ''} openingLabel="Opening time" endHint="The session ends automatically at this time; unrecorded students are marked Absent." />
+            <SessionTimeFields times={editTimes} onChange={setEditTimes} sessionDate={editingSession?.sessionDate ?? ''} openingLabel="Opening Time" endHint="The session ends automatically at this time; unrecorded students are marked Absent." />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
@@ -2127,7 +2127,7 @@ export const AttendanceMonitoring: React.FC = () => {
               <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900/70 dark:bg-emerald-950/20">
                 <div className="flex items-center justify-between gap-3">
                   <label className="block flex-1">
-                    <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Allowed radius (meters)</span>
+                    <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Allowed Radius (meters)</span>
                     <input
                       type="number"
                       min={50}
@@ -2186,7 +2186,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 font-bold text-white shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>{submittingEdit ? 'Saving…' : 'Save Changes'}</span>
+                <span>{submittingEdit ? 'Saving…' : 'Save changes'}</span>
               </button>
             </div>
           </form>
@@ -2280,7 +2280,7 @@ export const AttendanceMonitoring: React.FC = () => {
                           {liveCurrentSession.biometricRequired && (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200/60 dark:bg-purple-950/40 dark:text-purple-300">
                               <Camera className="w-3 h-3 text-purple-600" />
-                              Face Biometric
+                              Face biometric
                             </span>
                           )}
                           {liveCurrentSession.geofenceEnabled && (
@@ -2319,7 +2319,7 @@ export const AttendanceMonitoring: React.FC = () => {
                         className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-2xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/70 text-xs font-bold transition-all shadow-xs cursor-pointer dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/50"
                       >
                         <Pencil className="w-3.5 h-3.5 text-purple-600 dark:text-purple-300" />
-                        <span>Edit Session Parameters</span>
+                        <span>Edit session parameters</span>
                       </button>
 
                       <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
@@ -2333,7 +2333,7 @@ export const AttendanceMonitoring: React.FC = () => {
                             className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/70 text-xs font-bold transition-all cursor-pointer shadow-xs dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/50"
                           >
                             <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>End Session</span>
+                            <span>End session</span>
                           </button>
                         )}
                         {liveCurrentSession.status !== 'revoked' && (
@@ -2358,7 +2358,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   <div className="p-8 text-center space-y-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700">
                     <Clock className="w-8 h-8 mx-auto text-slate-400" />
                     <div>
-                      <p className="font-bold text-slate-700 dark:text-slate-200 text-sm">No Active Session Right Now</p>
+                      <p className="font-bold text-slate-700 dark:text-slate-200 text-sm">No active session right now</p>
                       <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">There is no attendance session currently running for this class at this time.</p>
                     </div>
                     <button
@@ -2472,7 +2472,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 ) : (
                   <div className="p-8 text-center text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700">
                     <Calendar className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                    <p className="font-semibold text-slate-600 dark:text-slate-300">No Upcoming Sessions Scheduled</p>
+                    <p className="font-semibold text-slate-600 dark:text-slate-300">No upcoming sessions scheduled</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Use "+ Schedule New" to schedule an attendance session for future dates.</p>
                   </div>
                 )}
@@ -2510,7 +2510,7 @@ export const AttendanceMonitoring: React.FC = () => {
           value={selectedCourseId !== null ? String(selectedCourseId) : ''}
           onChange={(e) => handleCourseChange(e.target.value)}
         >
-          <option value="">-- Select Assigned Course --</option>
+          <option value="">-- Select assigned course --</option>
           {assignedCourses.map(c => (
             <option key={c.id} value={c.id}>
               {c.code} — {c.name}
@@ -2533,7 +2533,7 @@ export const AttendanceMonitoring: React.FC = () => {
               ? 'Select course first'
               : availableSections.length === 0
               ? 'No sections available'
-              : '-- Select Class Section --'}
+              : '-- Select class section --'}
           </option>
           {availableSections.map(s => (
             <option key={s.csId} value={s.csId}>

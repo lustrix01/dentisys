@@ -164,7 +164,7 @@ export function ActivateSecretary() {
                 {!useFallbackSvg ? (
                   <img
                     src="/tooth-logo.png"
-                    alt="DentiSys Tooth"
+                    alt="DentiSys tooth"
                     className="max-w-full max-h-full object-contain hover:scale-105 transition-transform duration-300"
                     onError={() => setUseFallbackSvg(true)}
                   />
@@ -233,7 +233,7 @@ export function ActivateSecretary() {
                     to="/login"
                     className="inline-flex items-center justify-center px-6 py-2.5 rounded-xl font-bold text-xs text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-md gap-2"
                   >
-                    Proceed to Sign In <ArrowRight className="w-4 h-4" />
+                    Proceed to sign in <ArrowRight className="w-4 h-4" />
                   </Link>
                 </div>
               </div>
@@ -244,13 +244,13 @@ export function ActivateSecretary() {
                   <CheckCircle2 className="w-7 h-7" />
                 </div>
                 <h3 className="text-xl font-extrabold text-emerald-900 dark:text-emerald-200 font-heading">
-                  Account Activated!
+                  Account activated!
                 </h3>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed max-w-md mx-auto">
                   {successMessage}
                 </p>
                 <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  Redirecting to Sign In in{' '}
+                  Redirecting to sign in in{' '}
                   <span className="text-blue-600 dark:text-blue-400 font-extrabold text-sm">
                     {redirectCountdown ?? 3}s
                   </span>
@@ -261,7 +261,7 @@ export function ActivateSecretary() {
                     to="/login"
                     className="inline-flex items-center justify-center px-6 py-2.5 rounded-xl font-bold text-xs text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-md gap-2"
                   >
-                    Sign In Now <ArrowRight className="w-4 h-4" />
+                    Sign in now <ArrowRight className="w-4 h-4" />
                   </Link>
                 </div>
               </div>
@@ -310,7 +310,7 @@ export function ActivateSecretary() {
                 {/* Pre-filled Full Name (Disabled) */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                    Full Name (Pre-filled)
+                    Full Name (pre-filled)
                   </label>
                   <div className="relative rounded-xl shadow-sm bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 dark:text-slate-400">
@@ -328,7 +328,7 @@ export function ActivateSecretary() {
                 {/* Pre-filled BU Email (Disabled) */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                    Official BU Email Address (Pre-filled)
+                    Official BU Email Address (pre-filled)
                   </label>
                   <div className="relative rounded-xl shadow-sm bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 dark:text-slate-400">
@@ -382,19 +382,19 @@ export function ActivateSecretary() {
                         </div>
                         <div className={`flex items-center gap-1.5 ${passwordCriteria.hasUppercase ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
                           {passwordCriteria.hasUppercase ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 opacity-60" />}
-                          <span>1+ Uppercase letter</span>
+                          <span>1+ uppercase letter</span>
                         </div>
                         <div className={`flex items-center gap-1.5 ${passwordCriteria.hasLowercase ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
                           {passwordCriteria.hasLowercase ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 opacity-60" />}
-                          <span>1+ Lowercase letter</span>
+                          <span>1+ lowercase letter</span>
                         </div>
                         <div className={`flex items-center gap-1.5 ${passwordCriteria.hasNumber ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
                           {passwordCriteria.hasNumber ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 opacity-60" />}
-                          <span>1+ Number (0-9)</span>
+                          <span>1+ number (0-9)</span>
                         </div>
                         <div className={`flex items-center gap-1.5 ${passwordCriteria.hasSpecial ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'} col-span-2`}>
                           {passwordCriteria.hasSpecial ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 opacity-60" />}
-                          <span>1+ Special character (!@#$%^&*)</span>
+                          <span>1+ special character (!@#$%^&*)</span>
                         </div>
                       </div>
                     </div>
@@ -451,7 +451,7 @@ export function ActivateSecretary() {
                     {isLoading ? (
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     ) : (
-                      'Accept Invitation & Activate Account'
+                      'Accept invitation & activate account'
                     )}
                   </button>
                 </div>
@@ -464,7 +464,7 @@ export function ActivateSecretary() {
                 to="/login"
                 className="text-blue-600 dark:text-blue-400 hover:underline font-bold transition-all"
               >
-                Sign In
+                Sign in
               </Link>
             </div>
           </div>

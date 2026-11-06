@@ -378,7 +378,7 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
 
   // 4. Verify initial state: Start Session is offered, no live session badge
   await expect(startSessionButton).toBeVisible({ timeout: 15000 });
-  await expect(page.getByText('Live Session')).toHaveCount(0);
+  await expect(page.getByText('Live session')).toHaveCount(0);
 
   // Open the Start session pop-up and verify the assigned class is shown (CLINIC-4B)
   await startSessionButton.click();
@@ -398,11 +398,11 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   await expect(form.getByRole('checkbox', { name: /Geolocation|Geofence/ })).not.toBeChecked();
   const sessionWindow = manilaSessionWindow();
   await form.getByLabel('Opening').fill(sessionWindow.openingTime);
-  await form.getByLabel('Present cutoff').fill(sessionWindow.presentCutoff);
-  await form.getByLabel('Late cutoff').fill(sessionWindow.lateCutoff);
+  await form.getByLabel('Present Cutoff').fill(sessionWindow.presentCutoff);
+  await form.getByLabel('Late Cutoff').fill(sessionWindow.lateCutoff);
   // Open the session in the past while keeping its same-day end time ahead.
-  await form.getByLabel('Class End Time').fill(sessionWindow.classEndTime);
-  await form.getByLabel('Room or session location').selectOption('CUSTOM');
+  await form.getByLabel('Class end time').fill(sessionWindow.classEndTime);
+  await form.getByLabel('Room or Session Location').selectOption('CUSTOM');
   await form.getByLabel('Custom room name').fill('Live Test Room');
   await form.getByRole('button', { name: 'Start session', exact: true }).click();
 
@@ -417,10 +417,10 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
 
   // 6. Verify UI transitions to active state
   await expect(page.getByText(`Session code: ${authoritativeSessionCode}`).first()).toBeVisible();
-  await expect(page.getByText('Live Session')).toBeVisible();
+  await expect(page.getByText('Live session')).toBeVisible();
   await sessionsModalButton.click();
   await expect(page.getByText(authoritativeSessionCode).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'End Session', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'End session', exact: true })).toBeVisible();
 
   // Verify localStorage was NOT used as authoritative storage
   const localSessionAfterStart = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
@@ -438,10 +438,10 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   expect(restoredSession).toBeTruthy();
 
   // Active session restored after reload
-  await expect(page.getByText('Live Session')).toBeVisible();
+  await expect(page.getByText('Live session')).toBeVisible();
   await sessionsModalButton.click();
   await expect(page.getByText(authoritativeSessionCode).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'End Session', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'End session', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
 
   // 8. Test navigation away and back
@@ -454,12 +454,12 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   await page.keyboard.press('Escape');
   await page.goto('/secretary/attendance?view=worksheet');
 
-  await expect(page.getByText('Live Session')).toBeVisible();
+  await expect(page.getByText('Live session')).toBeVisible();
   await sessionsModalButton.click();
   await expect(page.getByText(authoritativeSessionCode).first()).toBeVisible();
 
   // 9. End active session
-  await page.getByRole('button', { name: 'End Session', exact: true }).click();
+  await page.getByRole('button', { name: 'End session', exact: true }).click();
 
   // Confirm modal is shown
   await expect(page.getByText(/End Attendance Session/i).first()).toBeVisible();
@@ -468,7 +468,7 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   const endPromise = page.waitForResponse(
     response => response.url().includes('/api/secretary/attendance/session/end') && response.request().method() === 'POST'
   );
-  await page.getByRole('button', { name: /Confirm End Session/i }).click();
+  await page.getByRole('button', { name: /Confirm end session/i }).click();
 
   const endResponse = await endPromise;
   expect(endResponse.status()).toBe(200);
@@ -477,12 +477,12 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   expect(endPayload.session.status).toBe('ended');
 
   // 10. Verify UI returns to inactive state
-  await expect(page.getByText('Live Session')).toHaveCount(0);
+  await expect(page.getByText('Live session')).toHaveCount(0);
   await expect(startSessionButton).toBeVisible({ timeout: 15000 });
 
   // 11. Refresh browser again to confirm inactive state persists
   await page.reload();
-  await expect(page.getByText('Live Session')).toHaveCount(0);
+  await expect(page.getByText('Live session')).toHaveCount(0);
   await expect(startSessionButton).toBeVisible({ timeout: 15000 });
 
   console.log('LIVE BROWSER VALIDATION PASSED FOR SESSION ID:', authoritativeSessionId);
@@ -526,7 +526,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   await expect(page.getByText('My Assigned Classes')).toBeVisible();
   const openWorksheet = async () => {
     const card = page.locator('div.group').filter({ hasText: String(targetClass.courseCode) }).first();
-    await card.getByRole('button', { name: 'View Attendance', exact: true }).click();
+    await card.getByRole('button', { name: 'View attendance', exact: true }).click();
   };
 
   // Clear any legacy localStorage to verify Attendance Monitoring does not write to it
@@ -548,7 +548,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   );
   await studentRow.getByRole('button', { name: 'Mark', exact: true }).click();
   await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
-  await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+  await page.getByRole('button', { name: 'Save override', exact: true }).click();
 
   const initialOverrideRes = await initialOverridePromise;
   expect(initialOverrideRes.status()).toBe(200);
@@ -588,7 +588,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   await expect(page.getByText('PRESENT → LATE', { exact: true })).toBeVisible();
 
   // Submitting without reason triggers in-app validation error
-  await page.getByRole('button', { name: 'Save Override' }).click();
+  await page.getByRole('button', { name: 'Save override' }).click();
   await expect(page.getByText(/justification reason is required/i)).toBeVisible();
 
   // Enter valid reason and submit correction
@@ -598,7 +598,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   const correctionPromise = page.waitForResponse(
     response => response.url().includes('/api/faculty/attendance/override') && response.request().method() === 'POST'
   );
-  await page.getByRole('button', { name: 'Save Override' }).click();
+  await page.getByRole('button', { name: 'Save override' }).click();
 
   const correctionRes = await correctionPromise;
   expect(correctionRes.status()).toBe(200);
@@ -627,7 +627,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
     }
   });
   await studentRowAfterCorrectionReload.getByRole('button', { name: 'Override', exact: true }).click();
-  await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+  await page.getByRole('button', { name: 'Save override', exact: true }).click();
   await expect(page.getByText('Choose a different attendance status.')).toBeVisible();
   expect(overrideCalledAgain).toBe(false);
 
@@ -708,7 +708,7 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
       if (request.url().includes('/api/faculty/grades/compute') && request.method() === 'POST') recomputeCalls += 1;
     });
 
-    await expect(page.getByText('Saved combined period grading', { exact: true })).toBeVisible();
+    await expect(page.getByText('Saved Combined Period Grading', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Convert to Lecture/Laboratory', exact: true }).click();
 
     const assignCurrentPeriodCategoriesToLecture = async () => {
@@ -737,7 +737,7 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
     const conversionPromise = page.waitForResponse(
       response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT',
     );
-    await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+    await page.getByRole('button', { name: /Save grade weights/i }).click();
     await page.getByRole('button', { name: 'Confirm', exact: true }).click();
     const conversionResponse = await conversionPromise;
     expect(conversionResponse.status()).toBe(200);
@@ -776,7 +776,7 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
       const firstSaveFailPromise = page.waitForResponse(
         response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT'
       );
-      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      await page.getByRole('button', { name: /Save initial schema/i }).click();
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
       const failRes = await firstSaveFailPromise;
@@ -787,7 +787,7 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
       expect(failData.assessments.some((assessment: any) => String(assessment.legacyType).toLowerCase() === 'quiz'))
         .toBeTruthy();
 
-      await expect(page.getByText('Existing Assessments Require Category Mappings', { exact: true })).toBeVisible();
+      await expect(page.getByText('Existing assessments require category mappings', { exact: true })).toBeVisible();
       for (const assessment of failData.assessments) {
         const normalizedType = String(assessment.legacyType ?? '').toLowerCase();
         const isActivity = normalizedType === 'activity';
@@ -834,7 +834,7 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
     const savePromise = page.waitForResponse(
       response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT'
     );
-    await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+    await page.getByRole('button', { name: /Save initial schema/i }).click();
     // Saving asks for confirmation first.
     await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
@@ -873,7 +873,7 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
   const updatePromise = page.waitForResponse(
     response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT'
   );
-  await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+  await page.getByRole('button', { name: /Save grade weights/i }).click();
   // Saving asks for confirmation first.
   await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
@@ -912,7 +912,7 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
   const reorderSavePromise = page.waitForResponse(
     response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT'
   );
-  await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+  await page.getByRole('button', { name: /Save grade weights/i }).click();
   // Saving asks for confirmation first.
   await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
@@ -1092,18 +1092,18 @@ test('authoritative faculty assessment manager: create and edit assessments with
 
   // 4. Navigate to Assessments Tab
   await page.goto('/grades?tab=assessments');
-  await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole('button', { name: 'Add assessment' })).toBeVisible({ timeout: 15000 });
   await page.getByRole('main').getByLabel(/^Class:/).selectOption(String(activeClass.id));
-  await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Add assessment' })).toBeEnabled();
 
   // 5. Open Create Assessment Modal
   const testTitle = `Live Assessment ${Date.now()}`;
   const createConfigRequest = page.waitForRequest(isTargetOfferingConfigRequest);
-  await page.getByRole('button', { name: 'Add Assessment' }).click();
+  await page.getByRole('button', { name: 'Add assessment' }).click();
   await assertSavedOfferingConfigRead(createConfigRequest);
 
   const modalForm = page.locator('form').last();
-  await expect(page.getByRole('heading', { name: 'Create New Assessment activity' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create New Assessment Activity' })).toBeVisible();
 
   // 6. Check category dropdown contains dynamic categories from PostgreSQL
   const categorySelect = modalForm.locator('select').filter({ has: page.locator(`option[value="${firstCategory.id}"]`) });
@@ -1190,8 +1190,8 @@ test('authoritative faculty assessment manager: create and edit assessments with
   const persistedEditedAssessment = persistedAssessments.find((assessment: any) => assessment.title === testTitle);
   expect(String(persistedEditedAssessment?.gradingCategoryId)).toBe(String(secondCategory.id));
 
-  await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Add assessment' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add assessment' })).toBeEnabled();
 
   const reloadedRow = page.getByRole('row').filter({ hasText: testTitle });
   await expect(reloadedRow).toBeVisible();

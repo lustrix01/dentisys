@@ -246,11 +246,11 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
         )}
         {note}
 
-        <label className="block font-bold text-slate-700 dark:text-slate-300">Session date (Asia/Manila)
+        <label className="block font-bold text-slate-700 dark:text-slate-300">Session Date (Asia/Manila)
           <input type="date" required min={manilaToday()} value={sessionDate} onChange={event => setSessionDate(event.target.value)} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900" />
         </label>
         <div>
-          <label htmlFor="start-session-room" className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Room or session location</label>
+          <label htmlFor="start-session-room" className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Room or Session Location</label>
           <RoomSelector id="start-session-room" value={room} onChange={setRoom} onPickRoom={picked => {
             // ATT-002: a picked room fills the location and radius; the Faculty still turns the geofence on.
             if (picked.latitude != null && picked.longitude != null) setLocation({ latitude: picked.latitude, longitude: picked.longitude });
@@ -261,7 +261,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
 
         {sortedMeetings.length > 0 && (
           <div>
-            <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Class meetings</span>
+            <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Class Meetings</span>
             <div className="flex flex-wrap gap-2">
               {sortedMeetings.map((meeting, index) => (
                 <button
@@ -299,7 +299,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
         {geofenceEnabled && (
           <div className={`rounded-xl border p-3 ${a.box}`}>
             <div className="flex items-center justify-between gap-3">
-              <label className="block flex-1"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Allowed radius (meters)</span><input type="number" min={50} max={2000} value={geofenceRadius} onChange={(event) => setGeofenceRadius(cleanRadiusText(event.target.value))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /><small className="mt-1 block text-[10px] text-slate-500 dark:text-slate-400">{RADIUS_HINT}</small></label>
+              <label className="block flex-1"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Allowed Radius (meters)</span><input type="number" min={50} max={2000} value={geofenceRadius} onChange={(event) => setGeofenceRadius(cleanRadiusText(event.target.value))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /><small className="mt-1 block text-[10px] text-slate-500 dark:text-slate-400">{RADIUS_HINT}</small></label>
               <button type="button" onClick={handleAcquireLocation} disabled={locating} className={`mt-5 inline-flex items-center gap-1.5 rounded-xl ${a.solid} px-3 py-2.5 text-[11px] font-bold text-white disabled:opacity-50`}><Navigation className="w-3.5 h-3.5" />{locating ? 'Locating…' : 'Use device location'}</button>
               <button type="button" onClick={() => setShowMap(shown => !shown)} className={`mt-5 inline-flex items-center gap-1.5 rounded-xl border ${a.outline} px-3 py-2.5 text-[11px] font-bold`}><MapPin className="w-3.5 h-3.5" />{showMap ? 'Hide map' : 'Pick on map'}</button>
             </div>

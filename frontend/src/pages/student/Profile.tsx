@@ -73,7 +73,7 @@ export const Profile: React.FC = () => {
                     {studentName}
                   </h2>
                   <span className="px-3 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 text-[10px] font-extrabold uppercase">
-                    Active Standing ✓
+                    Active standing ✓
                   </span>
                 </div>
 

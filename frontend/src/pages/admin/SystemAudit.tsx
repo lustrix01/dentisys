@@ -399,7 +399,7 @@ export const DeanReports: React.FC = () => {
       {revokeNotice && (
         <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300 no-print">{revokeNotice}</div>
       )}
-      <Modal isOpen={revokeTarget !== null} onClose={() => setRevokeTarget(null)} title="Revoke biometric enrollment">
+      <Modal isOpen={revokeTarget !== null} onClose={() => setRevokeTarget(null)} title="Revoke Biometric Enrollment">
         <form
           className="space-y-4 text-xs"
           onSubmit={async (event) => {
@@ -537,7 +537,7 @@ export const DeanReports: React.FC = () => {
                   {classSectionTab === 'archived' ? <Archive className="w-6 h-6" /> : <GraduationCap className="w-6 h-6" />}
                 </div>
                 <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                  {classSectionTab === 'archived' ? 'No Archived Classes' : 'No Active Classes Found'}
+                  {classSectionTab === 'archived' ? 'No archived classes' : 'No active classes found'}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
                   {classSearch
@@ -600,7 +600,7 @@ export const DeanReports: React.FC = () => {
                       <div className="mt-4 flex flex-wrap gap-1.5 items-center">
                         {cls.activeCount > 0 && (
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400">
-                            {cls.activeCount} Good Standing
+                            {cls.activeCount} Good standing
                           </span>
                         )}
                         {cls.noGradeCount > 0 && (
@@ -648,7 +648,7 @@ export const DeanReports: React.FC = () => {
                   className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
-                  <span className="hidden xs:inline">Back to Classes</span>
+                  <span className="hidden xs:inline">Back to classes</span>
                   <span className="xs:hidden">Back</span>
                 </button>
                 <div className="min-w-0 flex-1">
@@ -687,8 +687,8 @@ export const DeanReports: React.FC = () => {
                     onChange={e => setStatusFilter(e.target.value)}
                     className="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500"
                   >
-                    <option value="all">All Statuses</option>
-                    <option value="active">Good Standing</option>
+                    <option value="all">All statuses</option>
+                    <option value="active">Good standing</option>
                     <option value="noGrade">No grade yet</option>
                     <option value="remedial">Remedial</option>
                     <option value="cleared">Cleared</option>
@@ -717,7 +717,7 @@ export const DeanReports: React.FC = () => {
                       <th className="py-2.5 px-3">Year</th>
                       <th className="py-2.5 px-3">Grade</th>
                       <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-3">Face check-in</th>
+                      <th className="py-2.5 px-3">Face Check-In</th>
                       <th className="py-2.5 px-3">Remedials</th>
                     </tr>
                   </thead>
@@ -879,7 +879,7 @@ export const DeanReports: React.FC = () => {
                   {classSectionTab === 'archived' ? <Archive className="w-6 h-6" /> : <GraduationCap className="w-6 h-6" />}
                 </div>
                 <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                  {classSectionTab === 'archived' ? 'No Archived Classes' : 'No Active Classes Found'}
+                  {classSectionTab === 'archived' ? 'No archived classes' : 'No active classes found'}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
                   {classSearch
@@ -948,11 +948,11 @@ export const DeanReports: React.FC = () => {
                             </span>
                           ) : atRisk > 0 ? (
                             <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400">
-                              {atRisk} Flagged / At Risk
+                              {atRisk} Flagged / At risk
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400">
-                              All Clear
+                              All clear
                             </span>
                           )}
                         </div>
@@ -964,7 +964,7 @@ export const DeanReports: React.FC = () => {
                           {cls.students.length} student{cls.students.length !== 1 ? 's' : ''}
                         </span>
                         <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                          View Retention
+                          View retention
                           <ChevronRight className="w-3.5 h-3.5" />
                         </span>
                       </div>
@@ -991,7 +991,7 @@ export const DeanReports: React.FC = () => {
                   className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
-                  <span className="hidden xs:inline">Back to Classes</span>
+                  <span className="hidden xs:inline">Back to classes</span>
                   <span className="xs:hidden">Back</span>
                 </button>
                 <div className="min-w-0 flex-1">
@@ -1030,8 +1030,8 @@ export const DeanReports: React.FC = () => {
                     onChange={e => setStatusFilter(e.target.value)}
                     className="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500"
                   >
-                    <option value="all">All Statuses</option>
-                    <option value="active">Good Standing</option>
+                    <option value="all">All statuses</option>
+                    <option value="active">Good standing</option>
                     <option value="noGrade">No grade yet</option>
                     <option value="remedial">Remedial</option>
                     <option value="cleared">Cleared</option>
@@ -1235,7 +1235,7 @@ export const DeanReports: React.FC = () => {
                   {classSectionTab === 'archived' ? <Archive className="w-6 h-6" /> : <GraduationCap className="w-6 h-6" />}
                 </div>
                 <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                  {classSectionTab === 'archived' ? 'No Archived Classes' : 'No Active Classes Found'}
+                  {classSectionTab === 'archived' ? 'No archived classes' : 'No active classes found'}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
                   {classSearch
@@ -1318,7 +1318,7 @@ export const DeanReports: React.FC = () => {
                           {cls.students.length} students · {totalRecs} records
                         </span>
                         <span className="font-bold text-sky-600 dark:text-sky-400 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                          View History
+                          View history
                           <ChevronRight className="w-3.5 h-3.5" />
                         </span>
                       </div>
@@ -1345,7 +1345,7 @@ export const DeanReports: React.FC = () => {
                   className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
-                  <span className="hidden xs:inline">Back to Classes</span>
+                  <span className="hidden xs:inline">Back to classes</span>
                   <span className="xs:hidden">Back</span>
                 </button>
                 <div className="min-w-0 flex-1">
@@ -1384,7 +1384,7 @@ export const DeanReports: React.FC = () => {
                     onChange={e => setStatusFilter(e.target.value)}
                     className="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500"
                   >
-                    <option value="all">All Statuses</option>
+                    <option value="all">All statuses</option>
                     <option value="present">Present</option>
                     <option value="late">Late</option>
                     <option value="absent">Absent</option>

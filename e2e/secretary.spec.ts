@@ -115,7 +115,7 @@ test.describe('Class Secretary Module E2E Tests', () => {
     await page.click('a[href="/secretary/profile"] >> visible=true');
     await expect(page).toHaveURL('/secretary/profile');
     await expect(page.locator('body')).toContainText(/Profile|Alex Smith/i);
-    await expect(page.getByText('Two-factor authentication', { exact: true })).toBeVisible();
+    await expect(page.getByText('Two-Factor Authentication', { exact: true })).toBeVisible();
 
     await openAccountMenu(page);
 
@@ -147,7 +147,7 @@ test.describe('Class Secretary Module E2E Tests', () => {
     await page.click('a[href="/secretary/profile"] >> visible=true');
     await expect(page).toHaveURL('/secretary/profile');
 
-    await expect(page.getByText('Two-factor authentication', { exact: true })).toBeVisible();
+    await expect(page.getByText('Two-Factor Authentication', { exact: true })).toBeVisible();
     await expect(page.locator('body')).toContainText(/Google Authenticator compatible.*8 recovery codes/i);
     await expect(page.locator('button', { hasText: 'Set up' })).toHaveCount(0);
   });
@@ -376,9 +376,9 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await openStartPopup(page);
     const form = startForm(page);
     await expect(form.getByText('CLINIC-4B')).toBeVisible();
-    await expect(form.getByLabel('Room or session location')).toHaveValue('Dental Clinic Lab 2');
+    await expect(form.getByLabel('Room or Session Location')).toHaveValue('Dental Clinic Lab 2');
     await expect(form.getByRole('button', { name: 'Start session', exact: true })).toBeVisible();
-    await expect(page.getByText('Live Session')).toHaveCount(0);
+    await expect(page.getByText('Live session')).toHaveCount(0);
   });
 
   test('Start Session pop-up: a retired room is kept as "(retired)" with a warning, and is not offered for other classes', async ({ page }) => {
@@ -386,7 +386,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ json: { status: 'ok', activeSession: null } }));
     await openStartPopup(page);
     const form = startForm(page);
-    const room = form.getByLabel('Room or session location');
+    const room = form.getByLabel('Room or Session Location');
     await expect(room).toHaveValue('Dental Clinic Lab 2');
     await expect(room.locator('option:checked')).toHaveText('Dental Clinic Lab 2 (retired)');
     await expect(room.locator('option', { hasText: 'Dental Clinic Lab 1' })).toHaveCount(1);
@@ -401,10 +401,10 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ json: { status: 'ok', activeSession: null } }));
     await openStartPopup(page);
     const form = startForm(page);
-    await form.getByLabel('Room or session location').selectOption('Room 101');
+    await form.getByLabel('Room or Session Location').selectOption('Room 101');
     await expect(form.getByLabel('Geofence')).not.toBeChecked();
     await form.getByLabel('Geofence').check();
-    await expect(form.getByLabel('Allowed radius (meters)')).toHaveValue('150');
+    await expect(form.getByLabel('Allowed Radius (meters)')).toHaveValue('150');
     await expect(form.getByText('Location acquired: 13.1436, 123.7438')).toBeVisible();
   });
 
@@ -420,12 +420,12 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     const form = startForm(page);
     const time = (label: string) => form.getByLabel(label, { exact: true });
     await time('Opening').fill('02:00');
-    await expect(time('Present cutoff')).toHaveValue('03:00');
-    await expect(time('Late cutoff')).toHaveValue('06:00');
+    await expect(time('Present Cutoff')).toHaveValue('03:00');
+    await expect(time('Late Cutoff')).toHaveValue('06:00');
     await expect(time('Class end time')).toHaveValue('07:00');
     await time('Opening').fill('23:00');
-    await time('Present cutoff').fill('23:30');
-    await time('Late cutoff').fill('01:00');
+    await time('Present Cutoff').fill('23:30');
+    await time('Late Cutoff').fill('01:00');
     await time('Class end time').fill('02:00');
     await expect(form.getByTestId('caption-classEndTime')).toContainText('2:00 AM (next day)');
     await expect(form.getByTestId('time-summary')).toContainText('Session lasts 3 h');
@@ -456,7 +456,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     });
     await openStartPopup(page);
     const form = startForm(page);
-    const date = form.getByLabel('Session date (Asia/Manila)');
+    const date = form.getByLabel('Session Date (Asia/Manila)');
     expect(await date.getAttribute('min')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await date.fill('2099-10-02');
     await expect(form.getByRole('checkbox', { name: /Geolocation|Geofence/ })).not.toBeChecked(); // ATT-002: off by default
@@ -467,7 +467,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await openSessionsModal(page);
     await page.getByRole('button', { name: 'Upcoming Sessions' }).click();
     await expect(page.getByText('(CS8-20260921-ABC123)')).toBeVisible();
-    await expect(page.getByText('Live Session')).toHaveCount(0);
+    await expect(page.getByText('Live session')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Start session', exact: true }).click();
     await startForm(page).getByRole('button', { name: 'Schedule session', exact: true }).click();
@@ -477,10 +477,10 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
   test('initial state: active lookup returns session -> live session shown and the header Start Session is hidden', async ({ page }) => {
     await page.route('**/api/secretary/attendance', sessionsReply([mockActiveSession]));
     await page.goto('/secretary/attendance?view=worksheet');
-    await expect(page.getByText('Live Session')).toBeVisible();
+    await expect(page.getByText('Live session')).toBeVisible();
     await openSessionsModal(page);
     await expect(page.getByText('CS8-20260921-ABC123').first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'End Session', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'End session', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('button', { name: 'Start session', exact: true })).toHaveCount(0);
   });
@@ -499,8 +499,8 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await page.getByRole('button', { name: 'Revoke', exact: true }).click();
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.getByRole('button', { name: 'Current Session' }).click();
-    await page.getByRole('button', { name: 'Revoke Session', exact: true }).click();
-    await page.getByRole('button', { name: 'Confirm Revoke Session', exact: true }).click();
+    await page.getByRole('button', { name: 'Revoke session', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm revoke session', exact: true }).click();
     await expect.poll(() => revokedId).toBe('42');
   });
 
@@ -643,22 +643,22 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     });
 
     await page.goto('/secretary/attendance?view=worksheet');
-    await expect(page.getByText('Live Session')).toBeVisible();
+    await expect(page.getByText('Live session')).toBeVisible();
 
     // Open confirmation modal
     await openSessionsModal(page);
-    await page.getByRole('button', { name: 'End Session', exact: true }).click();
+    await page.getByRole('button', { name: 'End session', exact: true }).click();
     await expect(page.getByText('Are you sure you want to end active attendance session')).toBeVisible();
 
     // Confirm end session
-    await page.getByRole('button', { name: /Confirm End Session/i }).click();
+    await page.getByRole('button', { name: /Confirm end session/i }).click();
 
     await expect.poll(() => endApiCalled).toBe(true);
     expect((endPayload as Record<string, unknown>)?.sessionId).toBe('42');
 
     // Page returns to inactive state
     await expect(page.getByText('Session CS8-20260921-ABC123 ended successfully.').first()).toBeVisible();
-    await expect(page.getByText('Live Session')).toHaveCount(0);
+    await expect(page.getByText('Live session')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Start session', exact: true })).toBeVisible();
   });
 
@@ -714,18 +714,18 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', session: { ...liveSession, status: 'ended' } }) });
     });
     await page.goto('/secretary/attendance?view=worksheet');
-    await expect(page.getByText('Live Session')).toBeVisible();
+    await expect(page.getByText('Live session')).toBeVisible();
     gateArmed = true;
     await page.clock.fastForward(31000);
     await expect.poll(() => pollWaiting).toBe(true);
     await openSessionsModal(page);
-    await page.getByRole('button', { name: 'End Session', exact: true }).click();
-    await page.getByRole('button', { name: /Confirm End Session/i }).click();
+    await page.getByRole('button', { name: 'End session', exact: true }).click();
+    await page.getByRole('button', { name: /Confirm end session/i }).click();
     await expect(page.getByText('Session CS8-20260921-ABC123 ended successfully.').first()).toBeVisible();
-    await expect(page.getByText('Live Session')).toHaveCount(0);
+    await expect(page.getByText('Live session')).toHaveCount(0);
     releasePoll();
     await page.clock.runFor(100);
-    await expect(page.getByText('Live Session')).toHaveCount(0);
+    await expect(page.getByText('Live session')).toHaveCount(0);
   });
 
   test('errors: 409 conflict does not create local session', async ({ page }) => {
@@ -752,7 +752,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await startForm(page).getByRole('button', { name: 'Start session', exact: true }).click();
 
     await expect(startForm(page).getByRole('alert')).toContainText('An active attendance session already exists for this class section.');
-    await expect(page.getByText('Live Session')).toHaveCount(0);
+    await expect(page.getByText('Live session')).toHaveCount(0);
 
     const storedItem = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
     expect(storedItem).toBeNull();

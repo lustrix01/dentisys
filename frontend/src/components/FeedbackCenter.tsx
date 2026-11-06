@@ -82,7 +82,7 @@ export const FeedbackCenter: React.FC = () => {
       <Modal
         isOpen={Boolean(confirmation)}
         onClose={() => settle(false)}
-        title={confirmation?.title || 'Confirm action'}
+        title={confirmation?.title || 'Confirm Action'}
       >
         <div className="space-y-5">
           <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-800 dark:text-amber-300">

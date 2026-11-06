@@ -166,7 +166,7 @@ export const Dashboard: React.FC = () => {
                   onClick={() => navigate('/student/classes')}
                   className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
                 >
-                  View Subject Details <ArrowRight className="w-3.5 h-3.5" />
+                  View subject details <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
@@ -180,7 +180,7 @@ export const Dashboard: React.FC = () => {
             </div>
             <div>
               <span className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 uppercase tracking-widest block">
-                Retention Compliant
+                Retention compliant
               </span>
               <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 mt-0.5">
                 Your clinical grades and attendance meet all retention standards.
@@ -191,7 +191,7 @@ export const Dashboard: React.FC = () => {
             onClick={() => navigate('/student/classes')}
             className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 transition-colors"
           >
-            View Standing
+            View standing
           </button>
         </div>
       )}
@@ -301,7 +301,7 @@ export const Dashboard: React.FC = () => {
                 <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
                   Today's Class Sessions & Check-In Status
                 </h3>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Track Time-In & Time-Out for today's scheduled classes</p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Track time-in & time-out for today's scheduled classes</p>
               </div>
             </div>
 
@@ -342,7 +342,7 @@ export const Dashboard: React.FC = () => {
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 text-[10px] font-bold">
-                            Pending Time-In
+                            Pending time-in
                           </span>
                         )}
                       </td>
@@ -356,7 +356,7 @@ export const Dashboard: React.FC = () => {
                           </span>
                         ) : session.timeInStatus === 'done' ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[10px] font-bold">
-                            Ready for Time-Out
+                            Ready for time-out
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 text-[10px] font-bold">
@@ -372,14 +372,14 @@ export const Dashboard: React.FC = () => {
                             onClick={() => navigate('/student/attendance')}
                             className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs"
                           >
-                            Check-In (Time In)
+                            Check-in (time in)
                           </button>
                         ) : session.timeOutStatus !== 'done' ? (
                           <button
                             onClick={() => handleTimeOut(session.code)}
                             className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs"
                           >
-                            Check-Out (Time Out)
+                            Check-out (time out)
                           </button>
                         ) : (
                           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Completed ✓</span>

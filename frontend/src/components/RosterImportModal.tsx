@@ -493,7 +493,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
         {parsedStudents.length > 0 && !studentsOnly && (!isNewClass || chooseExistingClass) && (
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
             <label className={labelCls}>
-              Target class section *
+              Target Class Section *
               <select
                 value={selectedClassId}
                 aria-label="Target class section"
@@ -537,13 +537,13 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
 
         {isNewClass && draft && (
           <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 space-y-2">
-            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">New class from this file</h3>
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">New Class from This File</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <label className={labelCls}>Course code
+              <label className={labelCls}>Course Code
                 <input type="text" value={draft.code} onChange={e => updateDraft({ code: e.target.value.toUpperCase() })} aria-invalid={Boolean(problemFor('Enter a course code.'))} className={`mt-1 ${fieldCls} ${problemFor('Enter a course code.') ? invalidFieldCls : ''}`} />
                 {problemFor('Enter a course code.') && <span role="alert" className="mt-1 block text-xs font-medium text-rose-700 dark:text-rose-300">Enter a course code.</span>}
               </label>
-              <label className={labelCls}>Course title
+              <label className={labelCls}>Course Title
                 <input type="text" value={draft.title} onChange={e => updateDraft({ title: e.target.value })} aria-invalid={Boolean(problemFor('Enter the course title.'))} className={`mt-1 ${fieldCls} ${problemFor('Enter the course title.') ? invalidFieldCls : ''}`} />
                 {problemFor('Enter the course title.') && <span role="alert" className="mt-1 block text-xs font-medium text-rose-700 dark:text-rose-300">Enter the course title.</span>}
               </label>
@@ -551,20 +551,20 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                 <input type="text" value={draft.section} onChange={e => updateDraft({ section: e.target.value.toUpperCase() })} aria-invalid={Boolean(problemFor('Enter the section or block.'))} className={`mt-1 ${fieldCls} ${problemFor('Enter the section or block.') ? invalidFieldCls : ''}`} />
                 {problemFor('Enter the section or block.') && <span role="alert" className="mt-1 block text-xs font-medium text-rose-700 dark:text-rose-300">Enter a section or block.</span>}
               </label>
-              <label className={labelCls}>Year level
+              <label className={labelCls}>Year Level
                 <select value={draft.yearLevel} onChange={e => updateDraft({ yearLevel: Number(e.target.value) })} className={`mt-1 cursor-pointer ${fieldCls}`}>
                   {[1, 2, 3, 4, 5, 6].map(year => <option key={year} value={year}>Year {year}</option>)}
                 </select>
               </label>
-              <label className={labelCls}>Lecture units
+              <label className={labelCls}>Lecture Units
                 <input type="number" min={0} max={20} step={0.5} value={lectureUnits} disabled={catalogLocked} onChange={e => updateDraft({ lectureUnits: e.target.value })} aria-invalid={Boolean(problemFor('Enter units between 0.5 and 20.'))} className={`mt-1 ${fieldCls} ${problemFor('Enter units between 0.5 and 20.') ? invalidFieldCls : ''}`} />
                 {problemFor('Enter units between 0.5 and 20.') && <span role="alert" className="mt-1 block text-xs font-medium text-rose-700 dark:text-rose-300">Use 0.5–20 units, or 0 if not offered. Lecture or Laboratory must have units.</span>}
               </label>
-              <label className={labelCls}>Laboratory units
+              <label className={labelCls}>Laboratory Units
                 <input type="number" min={0} max={20} step={0.5} value={labUnits} disabled={catalogLocked} onChange={e => updateDraft({ labUnits: e.target.value })} aria-invalid={Boolean(problemFor('Enter units between 0.5 and 20.'))} className={`mt-1 ${fieldCls} ${problemFor('Enter units between 0.5 and 20.') ? invalidFieldCls : ''}`} />
                 {problemFor('Enter units between 0.5 and 20.') && <span role="alert" className="mt-1 block text-xs font-medium text-rose-700 dark:text-rose-300">Use 0.5–20 units, or 0 if not offered. Lecture or Laboratory must have units.</span>}
               </label>
-              <label className={`${labelCls} col-span-2 sm:col-span-3`}>Academic term
+              <label className={`${labelCls} col-span-2 sm:col-span-3`}>Academic Term
                 <select value={termId} onChange={e => updateDraft({ termChoice: e.target.value })} aria-invalid={Boolean(termProblem)} className={`mt-1 cursor-pointer ${fieldCls} ${termProblem ? invalidFieldCls : ''}`}>
                   <option value="">Choose a term</option>
                   {academicTerms.filter(term => term.id !== null).map(term => <option key={term.id} value={String(term.id)}>{term.semester} {term.schoolYear}{term.schoolYear.replace(/\s/g, '') === currentSchoolYear.replace(/\s/g, '') ? ' (Current year)' : ''} ({term.startDate} – {term.endDate})</option>)}
@@ -632,7 +632,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
               className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              Download Sample CSV
+              Download sample CSV
             </button>
           </div>
 
@@ -750,15 +750,15 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                       </div>
                     </div>
                     <label role="cell" className="col-span-2 block min-w-0 sm:col-span-4 lg:col-span-6">
-                      <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Institutional email *</span>
+                      <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Institutional Email *</span>
                       <input type="text" value={st.email} aria-label={`Email for ${st.studentId}`} required onChange={event => handleUpdateStudentField(st.tempKey, 'email', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" />
                     </label>
                     <label role="cell" className="col-span-1 block min-w-0 sm:col-span-1 lg:col-span-2">
-                      <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Year level</span>
+                      <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Year Level</span>
                       <input type="number" min="1" max="6" value={st.yearLevel !== null && Number.isFinite(st.yearLevel) ? st.yearLevel : ''} aria-label={`Year level for ${st.studentId}`} onChange={event => handleUpdateStudentField(st.tempKey, 'yearLevel', event.target.value === '' ? null : Number(event.target.value))} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-center text-sm font-semibold dark:border-slate-700 dark:bg-slate-900" />
                     </label>
                     <div role="cell" className="col-span-2 min-w-0 sm:col-span-3 lg:col-span-4">
-                      <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Sex and contact</span>
+                      <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Sex and Contact</span>
                       <div className="grid min-w-0 grid-cols-2 gap-1.5">
                         <select aria-label={`Sex for ${st.studentId}`} value={st.sex ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'sex', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900">
                           <option value="">—</option>
@@ -789,7 +789,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
 
         {parsedStudents.length > 0 && <label className="flex items-start gap-2 text-xs leading-5 text-slate-700 dark:text-slate-300"><input type="checkbox" checked={targetReviewed} onChange={event => setTargetReviewed(event.target.checked)} />{isNewClass ? 'I reviewed the class details and student rows from this file.' : studentsOnly ? 'I reviewed the student rows for this class.' : 'I reviewed the source course, section, semester and school year against the selected target class.'}</label>}
         {classNotice && <p role="alert" className="text-rose-600 font-bold">{classNotice}</p>}
-        {importErrors.length > 0 && <div role="alert" className="text-rose-600"><strong>Rows requiring correction</strong><ul>{importErrors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>}
+        {importErrors.length > 0 && <div role="alert" className="text-rose-600"><strong>Rows Requiring Correction</strong><ul>{importErrors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>}
 
         {/* Progress Bar during import */}
         {isImporting && importProgress && (
@@ -814,7 +814,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
 
         {/* Action Buttons */}
         <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
-          {isNewClass && pdfInfo && !isParsing && !parsedStudents.some(st => st.status !== 'error') && <span className="text-slate-500 dark:text-slate-400 text-xs mr-auto">No students are ready to add. To make an empty class, use Create Class.</span>}
+          {isNewClass && pdfInfo && !isParsing && !parsedStudents.some(st => st.status !== 'error') && <span className="text-slate-500 dark:text-slate-400 text-xs mr-auto">No students are ready to add. To make an empty class, use Create class.</span>}
           <button
             type="button"
             onClick={onClose}
@@ -834,7 +834,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
             <span>
               {isImporting
                 ? `Importing (${importProgress?.current || 0}/${importProgress?.total || 0})...`
-                : isNewClass ? `Create class and add ${readyStudents.length} students` : studentsOnly ? `Import ${readyStudents.length} students` : `Confirm & Import (${readyStudents.length}) Students`}
+                : isNewClass ? `Create class and add ${readyStudents.length} students` : studentsOnly ? `Import ${readyStudents.length} students` : `Confirm & import (${readyStudents.length}) Students`}
             </span>
           </button>
         </div>

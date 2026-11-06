@@ -103,7 +103,7 @@ export function buildOfficialGradeSheet(input: OfficialGradeSheetInput): XlsxShe
   const split = config.componentMode === 'lecture_laboratory';
   const lectureOnly = config.componentMode === 'lecture';
   if (!isOfficialLayout(config)) {
-    throw new Error('Set up and save the Grade Weights (Midterm and Finals) before exporting the grade sheet.');
+    throw new Error('Set up and save the grade weights (Midterm and Finals) before exporting the grade sheet.');
   }
   const midShare = Number(config.termRatio?.midterm ?? 50);
   const finShare = Number(config.termRatio?.final ?? 50);

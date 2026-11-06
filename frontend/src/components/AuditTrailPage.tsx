@@ -383,7 +383,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
         <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">
           <CardTitle className="flex items-center gap-2 text-sm">
             <ShieldCheck className={`w-4.5 h-4.5 ${theme.icon}`} />
-            Activity records
+            Activity Records
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0 md:overflow-x-auto md:max-h-[500px] md:overflow-y-auto">
@@ -569,7 +569,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
         </div>
       ); })()}
 
-      <Modal isOpen={Boolean(selected)} onClose={() => setSelected(null)} title="Audit log details" size="lg" fullScreenOnMobile>
+      <Modal isOpen={Boolean(selected)} onClose={() => setSelected(null)} title="Audit Log Details" size="lg" fullScreenOnMobile>
         {selected && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <Field label="When">{formatManilaWhen(selected.occurredAt)}</Field>
@@ -583,7 +583,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
             </Field>
             <Field label="What">{selected.what}</Field>
             <Field label="Record">{selected.record}</Field>
-            <Field label="From where">{[selected.details.fromWhere.ip, selected.details.fromWhere.device].filter(Boolean).join(' · ') || '—'}</Field>
+            <Field label="From Where">{[selected.details.fromWhere.ip, selected.details.fromWhere.device].filter(Boolean).join(' · ') || '—'}</Field>
             <Field label="Status"><StatusBadge status={selected.status} /></Field>
             <div className="sm:col-span-2"><Field label="Reason">{selected.details.reason || '—'}</Field></div>
             <div className="sm:col-span-2 min-w-0">
@@ -594,7 +594,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
               <details className="sm:col-span-2 min-w-0">
                 <summary className="min-h-[44px] xl:min-h-0 flex items-center cursor-pointer text-[11px] font-bold text-slate-500">Technical details</summary>
                 <div className="space-y-2">
-                  <Field label="Action code">{selected.details.technical.actionCode}</Field>
+                  <Field label="Action Code">{selected.details.technical.actionCode}</Field>
                   <Field label="Module">{selected.details.technical.module}</Field>
                   <Field label="Operation">{selected.details.technical.operationUuid ?? '—'}</Field>
                   {(['before', 'after'] as const).map(k => (

@@ -253,12 +253,12 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
               {submitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Updating Password…</span>
+                  <span>Updating password…</span>
                 </>
               ) : (
                 <>
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Update Password</span>
+                  <span>Update password</span>
                 </>
               )}
             </button>

@@ -176,7 +176,7 @@ test('DATA: whole percent 0-100 to grade', () => {
 
 test('no saved Grade Weights: refuses', () => {
   const bad = { ...input(), config: { ...input().config, schemaMode: 'overall' as const } };
-  assert.throws(() => buildOfficialGradeSheet(bad), /Grade Weights/);
+  assert.throws(() => buildOfficialGradeSheet(bad), /grade weights/);
 });
 
 test('saved breakdown of a past class becomes a result', () => {

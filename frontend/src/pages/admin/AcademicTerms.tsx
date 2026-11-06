@@ -229,7 +229,7 @@ export const AcademicTermsSettings: React.FC = () => {
 
       {/* 2. One-line summary */}
       <p className="px-1.5 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
-        <span>Current school year <b className="text-slate-800 dark:text-slate-100">{currentYear || 'Not configured'}</b></span>
+        <span>Current School Year <b className="text-slate-800 dark:text-slate-100">{currentYear || 'Not configured'}</b></span>
         <span>{currentTermObj ? `${semesterLabel(currentTermObj.semester)} active` : 'No active semester today'}</span>
         <span><b className="text-slate-800 dark:text-slate-100">{years.length}</b> {years.length === 1 ? 'school year' : 'school years'} · {definedTerms.length} {definedTerms.length === 1 ? 'term' : 'terms'}</span>
         <span><b className="text-slate-800 dark:text-slate-100">{totalClassesCount}</b> {totalClassesCount === 1 ? 'class' : 'classes'} linked</span>
@@ -312,10 +312,10 @@ export const AcademicTermsSettings: React.FC = () => {
                           data-testid={`${year}-${semester}`}
                           className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[9rem_minmax(0,1fr)_7rem_6rem_9rem] items-center gap-x-3 gap-y-1 py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-b-0"
                         >
-                          <span className={`text-sm font-bold ${slot ? 'text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100'}`}>
+                          <span className={`text-sm font-bold ${slot ? 'text-slate-500 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>
                             {semesterLabel(semester)}
                           </span>
-                          <span className={`col-span-2 sm:col-span-1 row-start-2 sm:row-start-auto text-xs ${slot ? 'italic text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200'}`}>
+                          <span className={`col-span-2 sm:col-span-1 row-start-2 sm:row-start-auto text-xs ${slot ? 'italic text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-200'}`}>
                             {formatDates(term?.startDate ?? null, term?.endDate ?? null)}
                           </span>
                           <span className="row-start-1 sm:row-start-auto col-start-2 sm:col-start-auto justify-self-end sm:justify-self-start">
@@ -407,7 +407,7 @@ export const AcademicTermsSettings: React.FC = () => {
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                    School year
+                    School Year
                     <input
                       required
                       pattern="[0-9]{4}-[0-9]{4}"
@@ -441,7 +441,7 @@ export const AcademicTermsSettings: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {(['startDate', 'endDate'] as const).map((field) => (
                     <label key={field} className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                      {field === 'startDate' ? 'Start date' : 'End date'}
+                      {field === 'startDate' ? 'Start Date' : 'End Date'}
                       <input
                         type="date"
                         required

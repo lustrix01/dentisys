@@ -71,8 +71,8 @@ export const Profile: React.FC = () => {
     .toUpperCase() || 'S';
 
   const details = [
-    { label: 'Email address', value: profile.email || 'Not available', icon: Mail },
-    { label: 'Assigned class', value: profile.assignedClassName || 'Not assigned', icon: Users },
+    { label: 'Email Address', value: profile.email || 'Not available', icon: Mail },
+    { label: 'Assigned Class', value: profile.assignedClassName || 'Not assigned', icon: Users },
     { label: 'Classroom', value: profile.classroomName || 'Not assigned', icon: MapPin },
   ];
 
@@ -118,7 +118,7 @@ export const Profile: React.FC = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <ShieldCheck className="w-4.5 h-4.5 text-blue-500" />
-                  Access scope
+                  Access Scope
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
@@ -132,7 +132,7 @@ export const Profile: React.FC = () => {
               <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <UserRound className="w-4.5 h-4.5 text-blue-500" />
-                  Assignment details
+                  Assignment Details
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-5">
@@ -172,7 +172,7 @@ export const Profile: React.FC = () => {
               </p>
             </div>
             <span className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-              Role Scoped
+              Role scoped
             </span>
           </div>
 

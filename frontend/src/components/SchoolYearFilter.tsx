@@ -17,7 +17,7 @@ export const SchoolYearFilter: React.FC<SchoolYearFilterProps> = ({
   const otherYears = availableSchoolYears.filter(year => year !== currentSchoolYear);
   return (
     <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
-      <span>School year</span>
+      <span>School Year</span>
       <select
         value={value}
         onChange={event => onChange(event.target.value)}

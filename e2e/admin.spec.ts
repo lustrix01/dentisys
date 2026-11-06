@@ -136,7 +136,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(row.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
     await row.getByRole('button', { name: 'Edit', exact: true }).click();
     dialog = page.getByRole('dialog');
-    await expect(dialog.getByLabel('School year')).toHaveAttribute('readonly', '');
+    await expect(dialog.getByLabel('School Year')).toHaveAttribute('readonly', '');
     await expect(dialog.getByLabel('Semester')).toBeDisabled();
     await dialog.getByLabel('End date').fill('2026-10-10');
     await dialog.getByRole('button', { name: 'Save term' }).click();
@@ -192,7 +192,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
 
     await section.getByTestId('2026-2027-Summer').getByRole('button', { name: 'Add dates' }).click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByLabel('School year')).toHaveValue('2026-2027');
+    await expect(dialog.getByLabel('School Year')).toHaveValue('2026-2027');
     await expect(dialog.getByLabel('Semester')).toHaveValue('Summer');
   });
 
@@ -200,7 +200,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.route('**/api/admin/dashboard/kpis**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', kpis: {}, academicTermReminder: { semester: '2ND', schoolYear: '2026-2027', endDate: '2026-10-20' } }) }));
     await page.reload();
     await expect(page.getByRole('status')).toContainText('Add dates for 2ND 2026-2027');
-    await page.getByRole('button', { name: 'Open Academic terms' }).click();
+    await page.getByRole('button', { name: 'Open academic terms' }).click();
     await expect(page).toHaveURL('/admin/terms');
     await expect(page.getByRole('heading', { level: 1, name: 'Academic Terms' })).toBeVisible();
     await expect(page.locator('#academic-terms')).toBeVisible();
@@ -361,10 +361,10 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
       });
     });
     await page.goto('/');
-    await expect(page.getByRole('region', { name: 'Grade distribution' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Standing breakdown' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Attendance by class' })).toBeVisible();
-    const events = page.getByRole('region', { name: 'Latest audit events' });
+    await expect(page.getByRole('region', { name: 'Grade Distribution' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Standing Breakdown' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Attendance by Class' })).toBeVisible();
+    const events = page.getByRole('region', { name: 'Latest Audit Events' });
     await expect(events).toContainText('Dr. Roberto Santos');
     await expect(events).toContainText('Faculty');
     await expect(events).toContainText('Recomputed grades');
@@ -560,7 +560,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     const posted = await mockRooms(page);
     await page.goto('/admin/rooms');
     await page.getByRole('button', { name: 'Add category' }).click();
-    await page.getByLabel('Category name').fill('Clinics');
+    await page.getByLabel('Category Name').fill('Clinics');
     await page.getByRole('button', { name: 'Save category' }).click();
     await expect.poll(() => posted.length).toBe(1);
     expect(posted[0]).toEqual({ path: 'cat/', name: 'Clinics' });
@@ -576,7 +576,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     const posted = await mockRooms(page);
     await page.goto('/admin/rooms');
     await page.getByTestId('room-Room 302').getByRole('button', { name: 'Edit' }).click();
-    await page.getByLabel('Room name').fill('Room 302A');
+    await page.getByLabel('Room Name').fill('Room 302A');
     await page.getByRole('button', { name: 'Save room' }).click();
     const confirm = page.getByRole('dialog').filter({ hasText: 'Renaming Room 302 changes' });
     await expect(confirm).toContainText('Renaming Room 302 changes 3 classes, 4 class meetings and 1 scheduled session this school year. Past school years and sessions that already ran keep the old name. Each affected Faculty is notified.');
@@ -591,7 +591,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     const posted = await mockRooms(page);
     await page.goto('/admin/rooms');
     await page.getByTestId('room-Annex').getByRole('button', { name: 'Edit' }).click();
-    await page.getByLabel('Room name').fill('Annex B');
+    await page.getByLabel('Room Name').fill('Annex B');
     await page.getByRole('button', { name: 'Save room' }).click();
     const confirm = page.getByRole('dialog').filter({ hasText: 'Renaming Annex changes' });
     await expect(confirm).toContainText('changes 2 class meetings this school year.');
@@ -601,7 +601,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click(); // the edit form
 
     await page.getByTestId('room-Ran Hall').getByRole('button', { name: 'Edit' }).click();
-    await page.getByLabel('Room name').fill('Ran Hall B');
+    await page.getByLabel('Room Name').fill('Ran Hall B');
     await page.getByRole('button', { name: 'Save room' }).click();
     await expect(page.getByTestId('room-Ran Hall B')).toBeVisible();
     await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -612,9 +612,9 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     const posted = await mockRooms(page);
     await page.goto('/admin/rooms');
     await page.getByRole('button', { name: 'Add room' }).click();
-    await page.getByLabel('Room name').fill('Skills Lab');
+    await page.getByLabel('Room Name').fill('Skills Lab');
     await page.getByRole('dialog').locator('select').selectOption('New category…');
-    await page.getByLabel('New category name').fill('Skills');
+    await page.getByLabel('New Category Name').fill('Skills');
     await page.getByRole('button', { name: 'Save room' }).click();
     await expect.poll(() => posted.length).toBe(2);
     expect(posted[0]).toEqual({ path: 'cat/', name: 'Skills' });

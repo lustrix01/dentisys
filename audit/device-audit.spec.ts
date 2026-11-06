@@ -12,9 +12,9 @@ const ROUTES: Record<Role, string[]> = {
   public: ['/landing', '/login'],
   // Redirect aliases (/admin/faculty-approval, /retention-criteria, /users, /audit, /rules) are left out:
   // they only land on pages already listed here.
-  admin: ['/', '/admin/terms', '/admin/faculty-invite', '/admin/reports', '/admin/audit-trail', '/admin/profile', '/admin/settings'],
+  admin: ['/', '/admin/terms', '/admin/rooms', '/admin/faculty-invite', '/admin/reports', '/admin/audit-trail', '/admin/profile', '/admin/settings'],
   faculty: ['/', '/classes', '/students', '/grades', '/retention', '/attendance', '/reports', '/email-management',
-    '/faculty/audit-trail', '/attendance?tab=activity','/faculty/profile', '/faculty/settings'],
+    '/faculty/audit-trail', '/attendance?tab=activity', '/attendance?tab=requests', '/faculty/profile', '/faculty/settings'],
   secretary: ['/', '/secretary/start-session', '/secretary/attendance', '/secretary/override', '/secretary/audit-trail',
     '/secretary/profile', '/secretary/settings', '/student/attendance', '/student/classes'],
   student: ['/student/dashboard', '/student/attendance', '/student/attendance-logs', '/student/face-registration',
@@ -35,7 +35,8 @@ const routeFilter = process.env.AUDIT_ROUTES;
 type Finding = { kind: string; severity: 'high' | 'medium' | 'low'; selector: string; text: string; rect: number[] };
 
 // Runs in the page. Returns raw findings for the current scroll position.
-function inPageCheck(): Finding[] {
+// scrolled: the sweep has scrolled, so controls under a sticky bar are just scrolled away, not hidden.
+function inPageCheck(scrolled: boolean): Finding[] {
   const out: Finding[] = [];
   const W = window.innerWidth, H = window.innerHeight;
   const css = (e: Element) => getComputedStyle(e);
@@ -107,6 +108,12 @@ function inPageCheck(): Finding[] {
 
   const interactive = Array.from(document.querySelectorAll('button, a[href], input, select, textarea, [role=button], [tabindex]:not([tabindex="-1"])'))
     .filter(e => !(e as HTMLInputElement).disabled && (e as HTMLInputElement).type !== 'hidden' && visible(e));
+  // A full-screen fixed layer (pop-up backdrop, drawer scrim) covers the page behind it on purpose.
+  const scrims = Array.from(document.querySelectorAll('body *')).filter(n => {
+    if (css(n).position !== 'fixed' || !visible(n)) return false;
+    const b = n.getBoundingClientRect();
+    return b.width >= W * 0.9 && b.height >= H * 0.9;
+  });
   for (const e of interactive) {
     const r = e.getBoundingClientRect();
     // 3. small targets (inline text links are exempt)
@@ -117,10 +124,13 @@ function inPageCheck(): Finding[] {
       const top = document.elementFromPoint(cx, cy);
       const label = (e as HTMLInputElement).labels?.[0];
       if (top && !(e.contains(top) || top.contains(e) || (label && (label.contains(top) || top.contains(label))))) {
-        // Scrolled under a sticky/fixed bar is normal scrolling, so it is only a low 'under-bar' note.
+        // An open pop-up or drawer covers the page on purpose. A control under a sticky/fixed bar has only
+        // scrolled away once the sweep has scrolled; before that, the bar really hides it.
         let bar = false;
         for (let n: Element | null = top; n; n = n.parentElement) if (/fixed|sticky/.test(css(n).position)) bar = true;
-        add(bar ? 'under-bar' : 'covered', bar ? 'low' : 'high', e, r);
+        if (scrims.length && !scrims.some(o => o.contains(e))) continue;
+        if (bar && scrolled) continue;
+        add('covered', 'high', e, r);
         out[out.length - 1].text += ' <- ' + path(top).slice(-60);
       }
     }
@@ -349,9 +359,9 @@ for (const device of wantedDevices()) for (const role of wantedRoles()) {
       // false low-contrast ratios, so wait until no CSS transition is still running.
       await page.waitForFunction(() => !document.getAnimations().some(a => a instanceof CSSTransition && a.playState === 'running'),
         null, { timeout: 3_000 }).catch(() => {});
-      findings.push(...await page.evaluate(inPageCheck));
+      findings.push(...await page.evaluate(inPageCheck, false));
       await scrollAll(page);
-      findings.push(...await page.evaluate(inPageCheck));
+      findings.push(...await page.evaluate(inPageCheck, true));
       const shot = `${OUT}/${device.name.replace(/\s+/g, '-')}/${role}/${theme}/${slug(label)}.png`;
       mkdirSync(shot.replace(/\/[^/]+$/, ''), { recursive: true });
       await page.screenshot({ path: shot, fullPage: true }).catch(() => {});

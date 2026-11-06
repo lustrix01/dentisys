@@ -80,7 +80,7 @@ export function ChangeNameDialog({
         onClick={() => setOpen(true)}
         className="mt-3 rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
       >
-        Change Name
+        Change name
       </button>
       <Modal isOpen={open} onClose={() => setOpen(false)} title="Change Name" size="lg">
         <form onSubmit={submit} className="space-y-5">
@@ -88,7 +88,7 @@ export function ChangeNameDialog({
           <PersonNameFields value={parts} onChange={setParts} />
           {(authenticatorEnabled || requiresCode) && (
             <label className="block max-w-xs text-xs font-bold text-slate-600 dark:text-slate-300">
-              Authenticator code
+              Authenticator Code
               <input
                 aria-label="Authenticator code"
                 type="text"

@@ -223,7 +223,17 @@ Owner decisions (2026-10-15): both actions get the existing per-user limit used 
 
 ## 9.6 UI follow-ups from the November 2026 polish audit
 
-**Status: Not started (Owner: next session).** The 2026-11-06 device audit found these. They predate the polish pass (see docs/ui-polish-2026-11.md):
+**Status: Done (2026-11-06, see docs/casing-2026-11.md).** The 2026-11-06 device audit found these. They predate the polish pass (see docs/ui-polish-2026-11.md):
 - Academic Terms: a semester without dates ("2nd Semester", "Summer") has its name dimmed to about 2.6:1 contrast, which is hard to read. Use the standard small grey text.
 - Classes, Archived Classes tab: the "Edit" button pokes out of its card on 320 px phones and at desktop 1280.
 - The audit flags controls under the sticky header ("under-bar") because it scrolls while capturing. Check whether any are real before fixing.
+
+## 9.7 Wording follow-ups from the November 2026 casing pass
+
+**Status: Not started (needs Owner wording decisions).** Found while applying the casing rule; these are word choices, not casing, so they were left as they are:
+- "DentiSYS" (capital SYS) in the page-title fallback in `Layout.tsx` and the "View about DentiSYS" landing links, where the product name is DentiSys.
+- "Student Info" (`GradebookMatrix.tsx`) and "Student Details" (other tables) name the same column.
+- "The Admin invitation" (`FacultyInvitation.tsx`) where the role is called Dean.
+- "Course Instructor", "Instructor" and "Faculty" are used for the same role.
+- "Student No." and "Student Number" are used for the same field.
+- Only 6 of 41 tables show their column headers in small capitals by style; the rest use normal text.

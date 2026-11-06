@@ -63,7 +63,7 @@ export const Profile: React.FC = () => {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm"><ShieldCheck className="w-4.5 h-4.5 text-accent-500" />Role capabilities</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-sm"><ShieldCheck className="w-4.5 h-4.5 text-accent-500" />Role Capabilities</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-xs text-slate-500 dark:text-slate-400">
               <p>Academic policy configuration</p>
@@ -74,7 +74,7 @@ export const Profile: React.FC = () => {
         <div className="lg:col-span-8 space-y-5">
           <Card className="p-0 overflow-hidden">
             <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">
-              <CardTitle className="flex items-center gap-2 text-sm"><UserRound className="w-4.5 h-4.5 text-accent-500" />Executive contact information</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-sm"><UserRound className="w-4.5 h-4.5 text-accent-500" />Executive Contact Information</CardTitle>
             </CardHeader>
             <CardContent className="p-5">
               <ReadOnlyEmail value={email} />
@@ -91,7 +91,7 @@ export const Profile: React.FC = () => {
 /** The login email is permanent after activation (REG-009), so it is shown, not edited. */
 const ReadOnlyEmail = ({ value }: { value: string }) => (
   <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-    Email address
+    Email Address
     <span className="relative block">
       <span className="absolute left-3.5 top-4 z-10 text-slate-500 dark:text-slate-400"><Mail className="w-4 h-4" /></span>
       <input type="text" value={value} readOnly aria-readonly="true" className="mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 pl-10 px-3.5 py-2.5 text-sm text-slate-600 dark:text-slate-300 outline-none cursor-not-allowed" />

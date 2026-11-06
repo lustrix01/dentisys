@@ -372,7 +372,7 @@ export const FacultyInvitation: React.FC = () => {
               </label>
 
               <label htmlFor="admin-faculty-create-first" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-3">
-                First name *
+                First Name *
                 <input
                   id="admin-faculty-create-first"
                   required
@@ -384,7 +384,7 @@ export const FacultyInvitation: React.FC = () => {
               </label>
 
               <label htmlFor="admin-faculty-create-middle" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-2">
-                Middle name
+                Middle Name
                 <input
                   id="admin-faculty-create-middle"
                   value={middleName}
@@ -395,7 +395,7 @@ export const FacultyInvitation: React.FC = () => {
               </label>
 
               <label htmlFor="admin-faculty-create-last" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-3">
-                Last name *
+                Last Name *
                 <input
                   id="admin-faculty-create-last"
                   required
@@ -421,7 +421,7 @@ export const FacultyInvitation: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
             <div className="space-y-1 lg:col-span-9">
               <label htmlFor="admin-faculty-create-email" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Institutional email *
+                Institutional Email *
               </label>
               <div className="flex">
                 <input
@@ -458,7 +458,7 @@ export const FacultyInvitation: React.FC = () => {
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-600 px-4 py-2.5 text-xs font-bold text-white shadow-md hover:bg-accent-700 active:scale-[0.99] disabled:opacity-50 cursor-pointer"
               >
                 {sending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                Send Invite
+                Send invite
               </button>
             </div>
           </div>
@@ -470,7 +470,7 @@ export const FacultyInvitation: React.FC = () => {
         <CardHeader className="mb-4 flex flex-col justify-between gap-3 border-b border-slate-100 p-0 pb-4 dark:border-slate-800 sm:flex-row sm:items-center">
           <CardTitle className="flex items-center gap-2 text-base">
             <Users className="h-5 w-5 text-accent-600" />
-            <span>Invitation status</span>
+            <span>Invitation Status</span>
           </CardTitle>
           <div className="flex flex-wrap xl:flex-nowrap gap-2">
             <select
@@ -532,7 +532,7 @@ export const FacultyInvitation: React.FC = () => {
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                 <th className="px-4 py-3">Faculty</th>
-                <th className="px-4 py-3">Institutional email</th>
+                <th className="px-4 py-3">Institutional Email</th>
                 <th className="px-4 py-3">Invited</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Actions</th>
@@ -566,7 +566,7 @@ export const FacultyInvitation: React.FC = () => {
         <CardHeader className="mb-4 flex flex-col justify-between gap-1 border-b border-slate-100 p-0 pb-4 dark:border-slate-800">
           <CardTitle className="flex items-center gap-2 text-base">
             <Mail className="h-5 w-5 text-accent-600" />
-            <span>Email history</span>
+            <span>Email History</span>
           </CardTitle>
           <p className="text-xs text-slate-500">Invitation emails you sent. View-only.</p>
         </CardHeader>
@@ -591,7 +591,7 @@ export const FacultyInvitation: React.FC = () => {
             {!editStructuredName ? (
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Faculty name
+                  Faculty Name
                   <input
                     required
                     value={editFullName}
@@ -617,7 +617,7 @@ export const FacultyInvitation: React.FC = () => {
               </label>
 
               <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-4">
-                First name *
+                First Name *
                 <input
                   required
                   value={editFirstName}
@@ -627,7 +627,7 @@ export const FacultyInvitation: React.FC = () => {
               </label>
 
               <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-5">
-                Middle name
+                Middle Name
                 <input
                   value={editMiddleName}
                   onChange={event => setEditMiddleName(filterPersonNameInput('middleName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditMiddleName(filterPersonNameInput('middleName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('middleName', event)}
@@ -636,7 +636,7 @@ export const FacultyInvitation: React.FC = () => {
               </label>
 
               <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-8">
-                Last name *
+                Last Name *
                 <input
                   required
                   value={editLastName}
@@ -658,7 +658,7 @@ export const FacultyInvitation: React.FC = () => {
             )}
 
             <label className="block space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300">
-              Institutional email *
+              Institutional Email *
               <div className="flex">
                 <input
                   required
@@ -703,7 +703,7 @@ export const FacultyInvitation: React.FC = () => {
                 className="rounded-xl bg-accent-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-accent-700 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
               >
                 {editSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                Save Changes
+                Save changes
               </button>
             </div>
           </form>
@@ -743,7 +743,7 @@ export const FacultyInvitation: React.FC = () => {
                 className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-rose-700 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
               >
                 {revoking ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                Revoke Invitation
+                Revoke invitation
               </button>
             </div>
           </div>

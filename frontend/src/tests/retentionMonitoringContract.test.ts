@@ -106,7 +106,7 @@ test('Student Midterm Advisory reads the server flag and waits for ungraded midt
   assert.match(studentPage, /<span>Midterm Advisory<\/span>/);
   assert.match(studentPage, /Boolean\(r\.midtermEvaluation\?\.isAtRisk\)/);
   assert.match(studentPage, /Waiting for all midterm scores in \{record\.courseCode\} \(\{record\.midtermEvaluation\?\.gradedCount \?\? 0\} of \{record\.midtermEvaluation\?\.totalCount \?\? 0\} graded\)\./);
-  assert.match(studentPage, /At Risk · Midterm/);
+  assert.match(studentPage, /At risk · Midterm/);
   assert.match(studentPage, /Advisory Reminder:/);
   assert.doesNotMatch(studentPage, /projection|Advisory Pending|Midterm Risk|midtermEvaluation\?\.risk/);
   assert.match(types, /gradedCount: number;/);
@@ -121,11 +121,11 @@ test('Remedial outcomes preserve entered scores and report partial success truth
   assert.match(retentionPage, /if \(outcomeContradictsScore\)/);
   assert.match(retentionPage, /percentage: score/);
   assert.match(retentionPage, /notification\?\.created === true/);
-  assert.match(retentionPage, /Attempt 1 was saved but Attempt 2 could not be scheduled/);
+  assert.match(retentionPage, /Attempt 1 was saved but attempt 2 could not be scheduled/);
   const dashboard = fs.readFileSync(path.join(currentDirectory, '../pages/faculty/Dashboard.tsx'), 'utf8');
   assert.match(dashboard, /if \(outcomeContradictsScore\)/);
   assert.match(dashboard, /notification\?\.created === true/);
-  assert.match(dashboard, /Attempt 1 was saved but Attempt 2 could not be scheduled/);
+  assert.match(dashboard, /Attempt 1 was saved but attempt 2 could not be scheduled/);
 });
 
 test('Reports and dashboards show computed retention only, with At Risk and no levels', () => {

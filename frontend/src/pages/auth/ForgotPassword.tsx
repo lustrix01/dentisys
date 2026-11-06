@@ -103,7 +103,7 @@ export function ForgotPassword() {
             <div className="w-full max-w-sm mx-auto my-auto py-6 space-y-6">
               <div className="space-y-1.5">
                 <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-heading">
-                  Reset password
+                  Reset Password
                 </h1>
                 <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                   Enter your institutional email address to receive a secure password reset link.
@@ -120,7 +120,7 @@ export function ForgotPassword() {
               <form className="space-y-4" onSubmit={handleSubmit}>
                 <div>
                   <label htmlFor="email" className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2">
-                    University email
+                    University Email
                   </label>
                   <div className="relative rounded-xl">
                     <div className="flex">

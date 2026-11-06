@@ -135,7 +135,7 @@ export const MfaSettingsCard: React.FC<{
   return (
     <Card className="p-0 overflow-hidden">
       <CardHeader className="border-b border-slate-100 dark:border-slate-800">
-        <CardTitle className="text-sm">Two-factor authentication</CardTitle>
+        <CardTitle className="text-sm">Two-Factor Authentication</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 p-5">
         {loading && <p className="text-xs text-slate-500">Loading security settings…</p>}
@@ -149,7 +149,7 @@ export const MfaSettingsCard: React.FC<{
           </div>
           {authenticatorEnabled && (
             <div className="flex flex-wrap items-end gap-2">
-              <label className="text-xs font-bold">Current code<input value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="mt-1 block rounded-xl border px-3 py-2 font-mono tracking-widest dark:bg-slate-950" placeholder="000000" /></label>
+              <label className="text-xs font-bold">Current Code<input value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="mt-1 block rounded-xl border px-3 py-2 font-mono tracking-widest dark:bg-slate-950" placeholder="000000" /></label>
               <button type="button" onClick={() => void regenerate()} disabled={working || code.length !== 6} className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><RefreshCw className="h-4 w-4" />New recovery codes</button>
               <button type="button" onClick={() => void disableAuthenticator()} disabled={working || code.length !== 6} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Disable</button>
             </div>
@@ -159,7 +159,7 @@ export const MfaSettingsCard: React.FC<{
         {recoveryCodes.length > 0 && <div className="rounded-xl bg-amber-50 p-4"><p className="text-xs font-bold text-amber-800">Save these recovery codes now.</p><div className="mt-2 grid gap-2 font-mono text-xs sm:grid-cols-2">{recoveryCodes.map(item => <span key={item}>{item}</span>)}</div></div>}
       </CardContent>
 
-      <Modal isOpen={enrollment !== null} onClose={() => setEnrollment(null)} title="Set up authenticator">
+      <Modal isOpen={enrollment !== null} onClose={() => setEnrollment(null)} title="Set Up Authenticator">
         {enrollment && <div className="space-y-4 text-center">
           <img src={enrollment.qrDataUri} alt="Authenticator provisioning QR code" className="mx-auto h-60 w-60 rounded-xl bg-white p-2" />
           <p className="text-xs text-slate-500">Scan this QR code in Google Authenticator, then enter its six-digit code.</p>
