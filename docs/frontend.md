@@ -35,7 +35,21 @@ The standard look for each part of a signed-in page ([AGENTS.md](../AGENTS.md) "
 | Selected colour | The role's colour, as in the sidebar (`getRoleColors` in `components/Layout.tsx`): Dean purple (`accent`), Faculty green (`clinical`; Classes and Attendance use `emerald`), Student and Secretary blue | `components/Layout.tsx` |
 | Dialogs, panels, school-year filter | The shared components above | `Modal.tsx`, `Card.tsx`, `SchoolYearFilter.tsx` |
 
-Not settled yet: the page header, notice banners (three looks today), filter bars, tables and empty states. Until each has a standard here, copy the nearest page that does the same job.
+Not settled yet: the page header, notice banners (three looks today), tables and empty states. Until each has a standard here, copy the nearest page that does the same job.
+
+### Filters, search and list actions
+
+Today's pages are the reference: a page's filter row stays where it is, and changes happen inside it (Owner review of 2026-11-07, [Filter Bar Standard demo](https://claude.ai/artifact/1CP17gGHrRwuEA33J7hVGK)). A new page copies the filter row of the nearest existing page that does the same job.
+
+1. **Improve inside the current layout.** Never add a separate bar or card for one or two controls.
+2. **School Year sits inside the page's existing filter row** (or at the right of a dashboard header), never in a bar of its own.
+3. **Do not split a compact row.** A title with its filters or actions on one line stays one line.
+4. **Keep the positions people know.** Do not swap sides or push controls to the right that were on the left.
+5. **Keep icons placed on purpose**, such as the filter and calendar icons inside selects.
+6. **A list switch with search and actions shares one row** with them: `ListToolbar` in `components/FilterBars.tsx`, switch and search on the left, actions on the right, main action last and filled. Copy `pages/admin/Rooms.tsx` or `pages/faculty/ClassesAndRosters.tsx`.
+7. **Roll calls and other busy screens get simpler:** fewer bars, not more.
+
+Show only one search box per view. On phones a filter row wraps onto the next line; it never scrolls sideways.
 
 Every tab bar uses `Tabs`, which also gives screen readers the tab roles and lets arrow keys, Home and End move between tabs. A count that is a warning (Retention remedials and midterm risk) keeps its amber or rose badge with `countTone` (Owner decisions of 2026-11-06, [Tab Bar Standard demo](https://claude.ai/artifact/EBfuzdD5bdrWAdxVw3S1fL)).
 

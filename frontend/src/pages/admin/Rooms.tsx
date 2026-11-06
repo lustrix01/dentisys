@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Archive, DoorOpen, MapPin, Navigation, Plus } from 'lucide-react';
 import Tabs from '../../components/Tabs';
+import { ListToolbar } from '../../components/FilterBars';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { LocationPicker } from '../../components/LocationPicker';
@@ -250,25 +251,6 @@ export const Rooms: React.FC = () => {
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
-            <button
-              type="button"
-              disabled={loading || busy}
-              className={outlineButtonClass}
-              onClick={() => { setError(''); setCatDraft({ name: '' }); }}
-            >
-              Add category
-            </button>
-            <button
-              type="button"
-              disabled={loading || busy}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold bg-accent-600 hover:bg-accent-700 active:scale-95 text-white shadow-xs hover:shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              onClick={() => openDraft()}
-            >
-              <Plus className="w-4 h-4" />
-              Add room
-            </button>
-          </div>
         </div>
       </div>
 
@@ -276,16 +258,41 @@ export const Rooms: React.FC = () => {
         <b className="text-slate-800 dark:text-slate-100">{activeCount}</b> active · {retiredRooms} retired · {plural(categories.length, 'category', 'categories')}
       </p>
 
-      <Tabs
-        variant="switch"
-        color="accent"
-        label="Room views"
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          { id: 'rooms', label: 'Rooms', icon: <DoorOpen className="w-4 h-4" />, count: activeCount },
-          { id: 'retired', label: 'Retired', icon: <Archive className="w-4 h-4" />, count: retiredRooms + retiredCategories },
-        ]}
+      <ListToolbar
+        left={(
+        <Tabs
+          variant="switch"
+          color="accent"
+          label="Room views"
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { id: 'rooms', label: 'Rooms', icon: <DoorOpen className="w-4 h-4" />, count: activeCount },
+            { id: 'retired', label: 'Retired', icon: <Archive className="w-4 h-4" />, count: retiredRooms + retiredCategories },
+          ]}
+        />
+        )}
+        right={(
+        <>
+          <button
+            type="button"
+            disabled={loading || busy}
+            className={outlineButtonClass}
+            onClick={() => { setError(''); setCatDraft({ name: '' }); }}
+          >
+            Add category
+          </button>
+          <button
+            type="button"
+            disabled={loading || busy}
+            className="px-4 py-2.5 rounded-xl text-xs font-bold bg-accent-600 hover:bg-accent-700 active:scale-95 text-white shadow-xs hover:shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={() => openDraft()}
+          >
+            <Plus className="w-4 h-4" />
+            Add room
+          </button>
+        </>
+        )}
       />
 
       {loading ? (

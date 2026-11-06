@@ -3740,9 +3740,9 @@ export const GradeComputation: React.FC = () => {
             </div>
           </div>
 
-          {/* ASSESSMENTS FILTERS TOOLBAR (SINGLE ROW) */}
-          <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between gap-3 overflow-x-auto">
-            <div className="flex items-center gap-2.5 flex-nowrap shrink-0">
+          {/* ASSESSMENTS FILTERS TOOLBAR (one row on desktop; wraps on phones instead of scrolling sideways) */}
+          <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
               {/* Search Box */}
               <div className="relative w-48 sm:w-56">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />

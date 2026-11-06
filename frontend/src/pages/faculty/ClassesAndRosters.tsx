@@ -36,6 +36,7 @@ import { Student } from '../../types';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import Tabs from '../../components/Tabs';
+import { ListToolbar, SearchField } from '../../components/FilterBars';
 import { showFeedback, requestConfirmation } from '../../components/FeedbackCenter';
 import {
   getFacultyClassesApi,
@@ -1663,28 +1664,24 @@ const handleSendAllStudentInvites = async () => {
         </div>
       )}
 
-      {/* Unified Toolbar: Tabs (Left) & Search / Actions (Right) */}
+      {/* Unified Toolbar: list switch, search, filter / actions */}
       {activeTab !== 'roster' && (
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
-          {/* Tab Buttons */}
-          <Tabs
-            variant="switch"
-            color="emerald"
-            label="Class views"
-            value={activeTab}
-            onChange={setActiveTab}
-            tabs={[
-              { id: 'classes', label: 'Assigned Classes', icon: <BookMarked className="w-4 h-4" />, count: filteredClasses.length },
-              { id: 'archived', label: 'Archived Classes', icon: <Archive className="w-4 h-4" />, count: archivedGroups.total },
-            ]}
-          />
-
-          {/* Right Controls: Filter (if archived), Search & Actions */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-wrap">
-            {/* School Year Selector Filter Pill (Archived Classes tab only) */}
-            {activeTab === 'archived' && (
-              <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
+        <ListToolbar
+          left={
+            <>
+              <Tabs
+                variant="switch"
+                color="emerald"
+                label="Class views"
+                value={activeTab}
+                onChange={setActiveTab}
+                tabs={[
+                  { id: 'classes', label: 'Assigned Classes', icon: <BookMarked className="w-4 h-4" />, count: filteredClasses.length },
+                  { id: 'archived', label: 'Archived Classes', icon: <Archive className="w-4 h-4" />, count: archivedGroups.total },
+                ]}
+              />
+              {activeTab === 'archived' && (
+                <div className="flex items-center gap-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 hover:border-emerald-500 transition-colors sm:shrink-0">
                   <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <select
                     value={archivedSchoolYear}
@@ -1698,43 +1695,36 @@ const handleSendAllStudentInvites = async () => {
                     ))}
                   </select>
                 </div>
-              </div>
-            )}
-
-            {/* Search Input Pill */}
-            <div className="relative w-full sm:w-60">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
+              )}
+              <SearchField
+                compact={activeTab === 'archived'}
+                color="emerald"
                 placeholder={activeTab === 'classes' ? "Search code, title, block..." : "Search archived classes..."}
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-8 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-xs"
+                onChange={setSearchQuery}
               />
-            </div>
-
-            {/* Action Buttons */}
-            {/* 320px phones: one button per row so "Import Class and Roster" is not cut off. */}
-            <div className="grid w-full grid-cols-1 min-[360px]:grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-shrink-0 sm:items-center">
-              <button
-                onClick={handleOpenCreateClassModal}
-                disabled={!newSchoolYear}
-                className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-2.5 py-2 text-[11px] font-bold text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-700 active:scale-[0.99] cursor-pointer whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:w-auto sm:px-3.5 sm:text-xs"
-              >
-                <Plus className="w-4 h-4 shrink-0" />
-                <span>Create class</span>
-              </button>
-
+            </>
+          }
+          right={
+            <>
               <button
                 onClick={() => setIsClassRosterImportOpen(true)}
-                className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-700 px-2.5 py-2 text-[11px] font-bold text-white shadow-md shadow-emerald-700/20 transition-all hover:bg-emerald-800 active:scale-[0.99] cursor-pointer whitespace-nowrap sm:min-h-0 sm:w-auto sm:px-3.5 sm:text-xs"
+                className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-3.5 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 transition-all hover:bg-emerald-100 dark:hover:bg-emerald-900/40 active:scale-[0.99] cursor-pointer whitespace-nowrap sm:min-h-0"
               >
                 <Upload className="w-4 h-4 shrink-0" />
                 <span>Import class and roster</span>
               </button>
-            </div>
-          </div>
-        </div>
+              <button
+                onClick={handleOpenCreateClassModal}
+                disabled={!newSchoolYear}
+                className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-700 active:scale-[0.99] cursor-pointer whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0"
+              >
+                <Plus className="w-4 h-4 shrink-0" />
+                <span>Create class</span>
+              </button>
+            </>
+          }
+        />
       )}
 
       {/* TAB 1: ASSIGNED CLASSES */}
@@ -1911,38 +1901,41 @@ const handleSendAllStudentInvites = async () => {
                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                   {selectedClass?.courseName ? `${selectedClass.courseName} • ` : ''}Room: {(selectedClass && (venueSummary(selectedClass, 'Lecture', selectedClass.lecRoom) || venueSummary(selectedClass, 'Laboratory', selectedClass.labRoom))) || 'N/A'}
                 </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={() => handleOpenAddStudent()}
-                    className="inline-flex items-center gap-1.5 px-3.5 max-[374px]:px-2.5 py-2 whitespace-nowrap rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>Add Student</span>
-                  </button>
-
-                  <button
-                    onClick={() => setIsStudentsImportOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3.5 max-[374px]:px-2.5 py-2 whitespace-nowrap rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-xs font-bold transition-all cursor-pointer shadow-xs"
-                    title="Import student roster from registrar CSV or PDF file"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>Import Students</span>
-                  </button>
-
-                  <button
-                    onClick={handleSendAllStudentInvites}
-                    disabled={isSendingInvitations || filteredStudents.length === 0}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 whitespace-nowrap rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Mail className="w-3.5 h-3.5" />
-                    <span>Send invites to all</span>
-                  </button>
-                </div>
               </div>
             </div>
 
-            <div className="flex w-full max-sm:flex-wrap items-center justify-between gap-3 sm:flex-1">
-              <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          </div>
+            {/* Roster toolbar: list actions on the left (same order as before), export on the right. */}
+            <ListToolbar
+              className="mb-4"
+              left={
+                <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => handleOpenAddStudent()}
+                  className="inline-flex items-center gap-1.5 px-3.5 max-[374px]:px-2.5 py-2 whitespace-nowrap rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Add Student</span>
+                </button>
+                <button
+                  onClick={() => setIsStudentsImportOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 max-[374px]:px-2.5 py-2 whitespace-nowrap rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                  title="Import student roster from registrar CSV or PDF file"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Import Students</span>
+                </button>
+                <button
+                  onClick={handleSendAllStudentInvites}
+                  disabled={isSendingInvitations || filteredStudents.length === 0}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 whitespace-nowrap rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>Send invites to all</span>
+                </button>
+                </div>
+              }
+              right={
                 <div className="flex items-center bg-white p-0.5 rounded-xl border border-slate-200/90 shadow-2xs dark:bg-slate-900 dark:border-slate-800">
                   <button
                     type="button"
@@ -1968,9 +1961,8 @@ const handleSendAllStudentInvites = async () => {
                     <span>Export PDF</span>
                   </button>
                 </div>
-              </div>
-            </div>
-          </div>
+              }
+            />
 
           {/* Phones (<768px): each table row is shown as a stacked block (name first, then ID, year, email, section, actions). */}
           <div className="overflow-x-auto min-h-[220px]">
