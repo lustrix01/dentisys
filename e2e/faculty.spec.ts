@@ -176,7 +176,7 @@ test.describe('Faculty Module E2E Tests', () => {
 
       await expect(appPage.getByRole('main').getByText('Student invitations: 1 issued, 1 email deliveries failed, 1 failed or skipped.')).toBeVisible();
       await expect(appPage.getByText('Invitation issued · Delivery failed')).toBeVisible();
-      await appPage.getByRole('button', { name: /Email History Log \(1\)/i }).click();
+      await appPage.getByRole('tab', { name: /Email History Log \(1\)/i }).click();
       const historyTable = appPage.getByRole('table').filter({ hasText: 'Date Sent' });
       await expect(historyTable.getByText('Student Invitation', { exact: true })).toBeVisible();
       await expect(historyTable.getByText('1 failed', { exact: true })).toBeVisible();
@@ -463,7 +463,7 @@ test.describe('Faculty Module E2E Tests', () => {
       await appPage.getByRole('button', { name: /Send Invitations \(1\)/i }).click();
       await expect(appPage.getByRole('main').getByText('Student invitations: 1 issued, 0 failed or skipped.')).toBeVisible();
       await expect(appPage.getByText('Invitation sent')).toBeVisible();
-      await appPage.getByRole('button', { name: /Email History Log \(1\)/i }).click();
+      await appPage.getByRole('tab', { name: /Email History Log \(1\)/i }).click();
       await expect(appPage.getByRole('table').getByText('Student Invitation', { exact: true })).toBeVisible();
       await expect(appPage.getByText('1 sent', { exact: true })).toBeVisible();
     } finally {
@@ -501,7 +501,7 @@ test.describe('Faculty Module E2E Tests', () => {
       await appPage.click('button[type="submit"]');
       await expect(appPage).toHaveURL('/');
       await appPage.evaluate(() => { window.history.pushState({}, '', '/email-management'); window.dispatchEvent(new PopStateEvent('popstate')); });
-      await appPage.getByRole('button', { name: /Email History Log \(1\)/i }).click();
+      await appPage.getByRole('tab', { name: /Email History Log \(1\)/i }).click();
       const historyTable = appPage.getByRole('table').filter({ hasText: 'Date Sent' });
       await expect(historyTable.getByText('3 recipients', { exact: true })).toBeVisible();
       await expect(historyTable.getByText('2 sent', { exact: true })).toBeVisible();
@@ -1353,7 +1353,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.route('**/api/faculty/excused-requests', route => route.fulfill({ json: { status: 'ok', requests: [pending] } }));
     await page.goto('/attendance');
     const panel = page.getByRole('region', { name: 'Secretary requests' });
-    await expect(page.getByRole('button', { name: /^Secretary Requests/ })).toContainText('1'); // page and requests loaded
+    await expect(page.getByRole('tab', { name: /^Secretary Requests/ })).toContainText('1'); // page and requests loaded
     await expect(panel).toBeHidden();
     await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-secretary-request', { detail: { id: '31' } })));
     await expect(panel).toBeVisible();
@@ -1649,10 +1649,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
     await page.getByRole('button', { name: 'Save override', exact: true }).click();
     await expect.poll(() => writing).toBe(true);
-    await page.getByRole('button', { name: /^Secretary Requests/ }).dispatchEvent('click');
+    await page.getByRole('tab', { name: /^Secretary Requests/ }).dispatchEvent('click');
     await page.getByRole('region', { name: 'Secretary requests' }).getByRole('button', { name: 'Approve', exact: true }).dispatchEvent('click'); // the Save override modal overlay now really covers the page (styles on)
     await expect(page.getByText('Bob approval saved.', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: /^Assigned Classes/ }).dispatchEvent('click'); // back to the roll call
+    await page.getByRole('tab', { name: /^Assigned Classes\s+\d+$/ }).dispatchEvent('click'); // back to the roll call
     expect(reads).toBe(1);
     releaseWrite();
     await expect(alice.getByTestId('attendance-status')).toHaveText(/Present$/);
@@ -3660,7 +3660,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.locator('input[placeholder*="Category name"]').first()).toHaveValue('Quiz');
       // The active editor draft now conflicts with the saved picker configuration.
       await page.locator('input[placeholder="0"]').first().fill('25');
-      await page.getByRole('button', { name: 'Assessments Manager' }).click();
+      await page.getByRole('tab', { name: 'Assessments Manager' }).click();
       await page.getByRole('button', { name: 'Add assessment' }).click();
       const modalForm = page.locator('form').last();
       const categorySelect = modalForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) });

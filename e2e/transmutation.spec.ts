@@ -321,7 +321,7 @@ test.describe('Assessment transmutation UI coverage', () => {
 
     await page.click('a[href="/grades"]');
     await expect(page).toHaveURL('/grades');
-    await page.getByRole('button', { name: 'Assessments Manager' }).click();
+    await page.getByRole('tab', { name: 'Assessments Manager' }).click();
     await expect(page.locator('select').nth(1)).toHaveValue('7');
     await page.getByRole('button', { name: 'Add assessment' }).click();
     await page.getByPlaceholder('e.g. Molar Crown Prep quiz').fill('Unlinked assessment survives refresh');
@@ -361,7 +361,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     await page.reload();
     await login(page, 'faculty');
     await page.getByRole('link', { name: 'Grade Computation' }).click();
-    await page.getByRole('button', { name: 'Assessments Manager' }).click();
+    await page.getByRole('tab', { name: 'Assessments Manager' }).click();
     await expect(page.locator('select').nth(1)).toHaveValue('7');
     const persistedRow = page.getByRole('row').filter({ hasText: 'Unlinked assessment survives refresh' });
     await expect(persistedRow).toBeVisible();
@@ -375,12 +375,12 @@ test.describe('Assessment transmutation UI coverage', () => {
     await expect(assessmentForm.locator('select', { has: page.locator('option[value="Final"]') })).toHaveValue('Midterm');
     await expect(assessmentForm.getByRole('checkbox', { name: /Enable attendance-linked transmutation/i })).toBeChecked();
     await page.getByRole('button', { name: 'Cancel' }).click();
-    await page.getByRole('button', { name: 'Student Scores Entry' }).click();
+    await page.getByRole('tab', { name: 'Student Scores Entry' }).click();
     await expect(page.locator('select').last().locator('option[value="ui-assessment-7"]')).toHaveText(/Unlinked assessment survives refresh/);
 
     await page.getByLabel(/^Class:/).selectOption('8');
     await expect(page.getByLabel(/^Class:/)).toHaveValue('8');
-    await page.getByRole('button', { name: 'Assessments Manager' }).click();
+    await page.getByRole('tab', { name: 'Assessments Manager' }).click();
     await page.getByRole('button', { name: 'Add assessment' }).click();
     await expect(page.locator('form').last().getByText('CLINIC-4B', { exact: true })).toBeVisible();
     await expect(page.locator('form').last().getByText('CLINIC-4A', { exact: true })).toHaveCount(0);

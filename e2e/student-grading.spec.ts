@@ -136,7 +136,7 @@ test('Student class ledger reads saved grouped components and labels old combine
   await expect(main.getByLabel('Lecture and Laboratory grade components')).toHaveCount(3);
   await expect(main.getByLabel('Lecture and Laboratory grade components').filter({ hasText: 'Midterm Lecture: 77.00%' })).toHaveCount(1);
 
-  await main.getByRole('button', { name: /Archived Classes/ }).click();
+  await main.getByRole('tab', { name: /Archived Classes/ }).click();
   await expect(main).toContainText('Midterm Lecture: 70.00%');
   await expect(main).toContainText('Midterm Laboratory: 60.00%');
   await expect(main).toContainText('Finals Lecture: 80.00%');

@@ -51,6 +51,7 @@ import {
   type FacultyAttendanceWorksheetRosterItem,
 } from '../../services/apiClient';
 import GradeValue from '../../components/GradeValue';
+import Tabs from '../../components/Tabs';
 import { downloadXlsx, type Cell as XlsxCell, type CellObject, type XlsxSheet } from '../../utils/xlsxDownload';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { buildReportSheet, dayToDate, termLine } from '../../utils/reportWorkbook';
@@ -1016,52 +1017,20 @@ export const Reports: React.FC = () => {
       </Card>
 
       {/* Navigation Sub-Tabs Bar - Consistent with other faculty portals */}
-      <div className="flex flex-wrap xl:flex-nowrap bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm no-print">
-        <button
-          onClick={() => setReportTab('academic')}
-          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            reportTab === 'academic' 
-              ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
-              : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-          }`}
-        >
-          <GraduationCap className="w-4 h-4" />
-          Grades & Assessments
-</button>
-        <button
-          onClick={() => setReportTab('retention')}
-          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            reportTab === 'retention' 
-              ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
-              : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-          }`}
-        >
-          <AlertTriangle className="w-4 h-4" />
-          Retention Watch Lists
-        </button>
-        <button
-          onClick={() => setReportTab('attendance')}
-          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            reportTab === 'attendance' 
-              ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
-              : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-          }`}
-        >
-          <CalendarDays className="w-4 h-4" />
-          Attendance Registers
-        </button>
-        <button
-          onClick={() => setReportTab('analytics')}
-          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            reportTab === 'analytics' 
-              ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
-              : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-          }`}
-        >
-          <TrendingUp className="w-4 h-4" />
-          Interactive Analytics
-        </button>
-      </div>
+      <Tabs
+        variant="section"
+        color="clinical"
+        label="Report sections"
+        value={reportTab}
+        onChange={setReportTab}
+        className="no-print"
+        tabs={[
+          { id: 'academic', label: 'Grades & Assessments', shortLabel: 'Grades', icon: <GraduationCap className="w-4 h-4" /> },
+          { id: 'retention', label: 'Retention Watch Lists', shortLabel: 'Retention', icon: <AlertTriangle className="w-4 h-4" /> },
+          { id: 'attendance', label: 'Attendance Registers', shortLabel: 'Attendance', icon: <CalendarDays className="w-4 h-4" /> },
+          { id: 'analytics', label: 'Interactive Analytics', shortLabel: 'Analytics', icon: <TrendingUp className="w-4 h-4" /> },
+        ]}
+      />
 
       {/* ----------------------------------------------------
           TAB 1: ACADEMIC REPORTS LEDGER

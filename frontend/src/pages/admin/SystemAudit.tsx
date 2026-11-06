@@ -23,6 +23,7 @@ type ReportTab = 'students' | 'retention' | 'attendance';
 
 import { getAdminReportsSummaryApi, getAdminSettingsApi, revokeStudentBiometricApi } from '../../services/apiClient';
 import { Modal } from '../../components/Modal';
+import Tabs from '../../components/Tabs';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import GradeValue from '../../components/GradeValue';
@@ -378,23 +379,15 @@ export const DeanReports: React.FC = () => {
   return (
     <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto px-1 sm:px-2 animate-fade-in">
       {/* Tab Navigation */}
-      <div className="flex bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm no-print overflow-x-auto gap-1">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 min-w-0 sm:min-w-[140px] py-2 px-1.5 sm:px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
-              activeTab === tab.id
-                ? 'bg-accent-600 text-white shadow-md'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-            }`}
-          >
-            {tab.icon}
-            <span className="sm:hidden">{tab.short}</span>
-            <span className="hidden sm:inline">{tab.label}</span>
-          </button>
-        ))}
-      </div>
+      <Tabs
+        variant="section"
+        color="accent"
+        label="Report sections"
+        value={activeTab}
+        onChange={setActiveTab}
+        className="no-print"
+        tabs={tabs.map(t => ({ id: t.id, label: t.label, shortLabel: t.short, icon: t.icon }))}
+      />
 
       {revokeNotice && (
         <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300 no-print">{revokeNotice}</div>
@@ -447,42 +440,22 @@ export const DeanReports: React.FC = () => {
         {activeTab === 'students' && selectedClassId === null && (
           <div className="space-y-4">
             {/* Class Section Filter Bar */}
-            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
-              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto sm:shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setClassSectionTab('active')}
-                  className={`flex-1 sm:flex-initial whitespace-nowrap flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    classSectionTab === 'active'
-                      ? 'bg-white dark:bg-slate-900 text-accent-600 dark:text-accent-400 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                  }`}
-                >
-                  <GraduationCap className="w-3.5 h-3.5" />
-                  <span><span className="sm:hidden">Active</span><span className="hidden sm:inline">Active Classes</span></span>
-                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-accent-100 dark:bg-accent-950/50 text-accent-700 dark:text-accent-300">
-                    {activeClasses.length}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setClassSectionTab('archived')}
-                  className={`flex-1 sm:flex-initial whitespace-nowrap flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    classSectionTab === 'archived'
-                      ? 'bg-white dark:bg-slate-900 text-accent-600 dark:text-accent-400 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                  }`}
-                >
-                  <Archive className="w-3.5 h-3.5" />
-                  <span><span className="sm:hidden">Archived</span><span className="hidden sm:inline">Archived Classes</span></span>
-                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                    {archivedClasses.length}
-                  </span>
-                </button>
-              </div>
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
+              <Tabs
+                variant="switch"
+                color="accent"
+                label="Class sections"
+                value={classSectionTab}
+                onChange={setClassSectionTab}
+                className="sm:shrink-0"
+                tabs={[
+                  { id: 'active', label: 'Active Classes', shortLabel: 'Active', icon: <GraduationCap className="w-3.5 h-3.5" />, count: activeClasses.length },
+                  { id: 'archived', label: 'Archived Classes', shortLabel: 'Archived', icon: <Archive className="w-3.5 h-3.5" />, count: archivedClasses.length },
+                ]}
+              />
 
-              <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5 w-full sm:w-auto">
-                <div className="relative w-full sm:w-auto">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full sm:w-auto sm:flex-1">
+                <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-[12rem]">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
@@ -490,7 +463,7 @@ export const DeanReports: React.FC = () => {
                     aria-label="Search classes"
                     value={classSearch}
                     onChange={e => setClassSearch(e.target.value)}
-                    className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full sm:w-56"
+                    className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full"
                   />
                 </div>
                 <div className="w-full sm:w-auto">
@@ -800,41 +773,21 @@ export const DeanReports: React.FC = () => {
           <div className="space-y-4">
             {/* Class Section Filter Bar */}
             <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
-              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto sm:shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setClassSectionTab('active')}
-                  className={`flex-1 sm:flex-initial whitespace-nowrap flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    classSectionTab === 'active'
-                      ? 'bg-white dark:bg-slate-900 text-accent-600 dark:text-accent-400 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                  }`}
-                >
-                  <GraduationCap className="w-3.5 h-3.5" />
-                  <span><span className="sm:hidden">Active</span><span className="hidden sm:inline">Active Classes</span></span>
-                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-accent-100 dark:bg-accent-950/50 text-accent-700 dark:text-accent-300">
-                    {activeClasses.length}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setClassSectionTab('archived')}
-                  className={`flex-1 sm:flex-initial whitespace-nowrap flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    classSectionTab === 'archived'
-                      ? 'bg-white dark:bg-slate-900 text-accent-600 dark:text-accent-400 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                  }`}
-                >
-                  <Archive className="w-3.5 h-3.5" />
-                  <span><span className="sm:hidden">Archived</span><span className="hidden sm:inline">Archived Classes</span></span>
-                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                    {archivedClasses.length}
-                  </span>
-                </button>
-              </div>
+              <Tabs
+                variant="switch"
+                color="accent"
+                label="Class sections"
+                value={classSectionTab}
+                onChange={setClassSectionTab}
+                className="sm:shrink-0"
+                tabs={[
+                  { id: 'active', label: 'Active Classes', shortLabel: 'Active', icon: <GraduationCap className="w-3.5 h-3.5" />, count: activeClasses.length },
+                  { id: 'archived', label: 'Archived Classes', shortLabel: 'Archived', icon: <Archive className="w-3.5 h-3.5" />, count: archivedClasses.length },
+                ]}
+              />
 
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full sm:w-auto">
-                <div className="relative w-full sm:w-auto">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full sm:w-auto sm:flex-1">
+                <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-[12rem]">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
@@ -842,7 +795,7 @@ export const DeanReports: React.FC = () => {
                     aria-label="Search classes"
                     value={classSearch}
                     onChange={e => setClassSearch(e.target.value)}
-                    className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full sm:w-56"
+                    className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full"
                   />
                 </div>
                 <div className="w-full sm:w-auto">
@@ -1150,41 +1103,21 @@ export const DeanReports: React.FC = () => {
           <div className="space-y-4">
             {/* Class Section Filter Bar */}
             <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm">
-              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl w-full sm:w-auto sm:shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setClassSectionTab('active')}
-                  className={`flex-1 sm:flex-initial whitespace-nowrap flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    classSectionTab === 'active'
-                      ? 'bg-white dark:bg-slate-900 text-accent-600 dark:text-accent-400 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                  }`}
-                >
-                  <GraduationCap className="w-3.5 h-3.5" />
-                  <span><span className="sm:hidden">Active</span><span className="hidden sm:inline">Active Classes</span></span>
-                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-accent-100 dark:bg-accent-950/50 text-accent-700 dark:text-accent-300">
-                    {activeClasses.length}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setClassSectionTab('archived')}
-                  className={`flex-1 sm:flex-initial whitespace-nowrap flex items-center justify-center gap-1.5 px-3.5 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    classSectionTab === 'archived'
-                      ? 'bg-white dark:bg-slate-900 text-accent-600 dark:text-accent-400 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                  }`}
-                >
-                  <Archive className="w-3.5 h-3.5" />
-                  <span><span className="sm:hidden">Archived</span><span className="hidden sm:inline">Archived Classes</span></span>
-                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                    {archivedClasses.length}
-                  </span>
-                </button>
-              </div>
+              <Tabs
+                variant="switch"
+                color="accent"
+                label="Class sections"
+                value={classSectionTab}
+                onChange={setClassSectionTab}
+                className="sm:shrink-0"
+                tabs={[
+                  { id: 'active', label: 'Active Classes', shortLabel: 'Active', icon: <GraduationCap className="w-3.5 h-3.5" />, count: activeClasses.length },
+                  { id: 'archived', label: 'Archived Classes', shortLabel: 'Archived', icon: <Archive className="w-3.5 h-3.5" />, count: archivedClasses.length },
+                ]}
+              />
 
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full sm:w-auto">
-                <div className="relative w-full sm:w-auto">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full sm:w-auto sm:flex-1">
+                <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-[12rem]">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
@@ -1192,7 +1125,7 @@ export const DeanReports: React.FC = () => {
                     aria-label="Search classes"
                     value={classSearch}
                     onChange={e => setClassSearch(e.target.value)}
-                    className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full sm:w-56"
+                    className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full"
                   />
                 </div>
                 <div className="w-full sm:w-auto">

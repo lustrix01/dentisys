@@ -86,7 +86,7 @@ test('Midterm Watchlist uses the server rule and shows At Risk with no levels', 
   assert.match(retentionPage, /&& readRemedialProgression\(record\)\.stage === 'none'/);
   assert.match(retentionPage, /isMidtermAtRisk\(record\) && \(/);
   // Names and wording.
-  assert.match(retentionPage, /<span>Midterm Watchlist<\/span>/);
+  assert.match(retentionPage, /label: 'Midterm Watchlist'/);
   assert.match(retentionPage, /Students whose midterm is fully graded and whose weighted midterm grade is 2\.5 or worse \(84% or below on the BUCDM table\)\. Students with a final course grade move to Retention Status\./);
   assert.doesNotMatch(retentionPage, /Midterm Risk|Midterm Standing & Risk Evaluation/);
   // No levels, no projection badge, no Risk column on the Retention Watchlist.
@@ -103,7 +103,7 @@ test('Midterm Watchlist uses the server rule and shows At Risk with no levels', 
 test('Student Midterm Advisory reads the server flag and waits for ungraded midterms', () => {
   const studentPage = fs.readFileSync(path.join(currentDirectory, '../pages/student/RetentionMonitoring.tsx'), 'utf8');
   const types = fs.readFileSync(path.join(currentDirectory, '../types/index.ts'), 'utf8');
-  assert.match(studentPage, /<span>Midterm Advisory<\/span>/);
+  assert.match(studentPage, /label: 'Midterm Advisory'/);
   assert.match(studentPage, /Boolean\(r\.midtermEvaluation\?\.isAtRisk\)/);
   assert.match(studentPage, /Waiting for all midterm scores in \{record\.courseCode\} \(\{record\.midtermEvaluation\?\.gradedCount \?\? 0\} of \{record\.midtermEvaluation\?\.totalCount \?\? 0\} graded\)\./);
   assert.match(studentPage, /At risk · Midterm/);

@@ -263,7 +263,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(studentTable.getByRole('row').filter({ hasText: '2023-0109' })).toContainText('No Class Student');
     await page.getByRole('button', { name: /Back/ }).click();
 
-    await page.getByRole('button', { name: 'Retention Reports' }).click();
+    await page.getByRole('tab', { name: 'Retention Reports' }).click();
     await openClassCard(page, 'CLINIC');
     const retentionTable = page.locator('table:not(.print-only table)');
     const alexRetentionRow = retentionTable.getByRole('row').filter({ hasText: 'Alex Example' });
@@ -279,7 +279,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(missingNameRetentionRow.getByRole('cell').nth(2)).toHaveText('—');
     await expect(missingNameRetentionRow.getByRole('cell').nth(3)).toContainText('No grade yet');
 
-    await page.getByRole('button', { name: 'Attendance Reports' }).click();
+    await page.getByRole('tab', { name: 'Attendance Reports' }).click();
     await openClassCard(page, 'CLINIC');
     const attendanceTable = page.locator('table:not(.print-only table)');
     const historicalAttendanceRow = attendanceTable.getByRole('row').filter({ hasText: 'CLIN401-HISTORY' });
@@ -312,7 +312,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     expect(summary).not.toContain("'=1+1");
     expect(summary).not.toContain('<f>');
 
-    await page.getByRole('button', { name: 'Retention Reports' }).click();
+    await page.getByRole('tab', { name: 'Retention Reports' }).click();
     downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export Excel' }).click();
     download = await downloadPromise;
@@ -396,7 +396,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.getByRole('button', { name: /Back/ }).click();
 
     // The former Academic Reports tab no longer exists; Retention lists every student on the sheet.
-    await page.getByRole('button', { name: 'Retention Reports' }).click();
+    await page.getByRole('tab', { name: 'Retention Reports' }).click();
     const row = sheet.locator('tbody tr').first();
     await expect(sheet.locator('tbody tr')).toHaveCount(16);
     await expect(row.locator('td').nth(2)).toHaveText('CLINIC-4A');
@@ -404,11 +404,11 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(screenTable.getByRole('row').nth(1).getByRole('cell').nth(1)).toHaveText('CLINIC-4A');
     await page.getByRole('button', { name: /Back/ }).click();
 
-    await page.getByRole('button', { name: 'Attendance Reports' }).click();
+    await page.getByRole('tab', { name: 'Attendance Reports' }).click();
     await expect(sheet).toContainText('Attendance by Class');
     await expect(sheet.locator('tbody tr').last()).toContainText('2023-0102');
 
-    await page.getByRole('button', { name: 'Student Summaries' }).click();
+    await page.getByRole('tab', { name: 'Student Summaries' }).click();
     await openClassCard(page, 'CLINIC-4A');
     // In print only the sheet shows: the on-screen report tables must be hidden.
     await page.emulateMedia({ media: 'print' });
@@ -532,7 +532,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(page.getByTestId('group-Empty Wing').getByRole('button', { name: 'Delete' })).toBeVisible();
     await expect(page.getByTestId('group-Old Wing')).toHaveCount(0);
 
-    await page.getByRole('button', { name: /^Retired/ }).click();
+    await page.getByRole('tab', { name: /^Retired/ }).click();
     await expect(page.getByTestId('group-Laboratories')).toContainText('Category is active');
     await expect(page.getByTestId('group-Old Wing')).toContainText('Retired category');
     const blocked = page.getByTestId('room-Simulation Lab');

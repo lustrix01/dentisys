@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Archive, DoorOpen, MapPin, Navigation, Plus } from 'lucide-react';
+import Tabs from '../../components/Tabs';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { LocationPicker } from '../../components/LocationPicker';
@@ -275,26 +276,17 @@ export const Rooms: React.FC = () => {
         <b className="text-slate-800 dark:text-slate-100">{activeCount}</b> active · {retiredRooms} retired · {plural(categories.length, 'category', 'categories')}
       </p>
 
-      <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-fit">
-        {(['rooms', 'retired'] as const).map(id => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              tab === id
-                ? 'bg-white dark:bg-slate-800 text-accent-600 dark:text-accent-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            {id === 'rooms' ? <DoorOpen className="w-4 h-4 text-accent-600" /> : <Archive className="w-4 h-4 text-accent-600" />}
-            {id === 'rooms' ? 'Rooms' : 'Retired'}
-            <span className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${id === 'rooms' ? 'bg-accent-100 dark:bg-accent-950/60 text-accent-700 dark:text-accent-300' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}>
-              {id === 'rooms' ? activeCount : retiredRooms + retiredCategories}
-            </span>
-          </button>
-        ))}
-      </div>
+      <Tabs
+        variant="switch"
+        color="accent"
+        label="Room views"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'rooms', label: 'Rooms', icon: <DoorOpen className="w-4 h-4" />, count: activeCount },
+          { id: 'retired', label: 'Retired', icon: <Archive className="w-4 h-4" />, count: retiredRooms + retiredCategories },
+        ]}
+      />
 
       {loading ? (
         <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800">Loading rooms…</div>

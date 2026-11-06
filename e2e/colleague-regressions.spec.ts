@@ -27,13 +27,13 @@ test('Student pending standing stays unresolved and past-only courses never beco
   await page.goto('/student/retention');
   await expect(page.getByText('No grade yet', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Active standing · Cleared')).toHaveCount(0);
-  await page.getByRole('button', { name: /Remedial Exams/ }).click();
+  await page.getByRole('tab', { name: /Remedial Exams/ }).click();
   await expect(page.getByText('Remedial Requirements Pending', { exact: true })).toBeVisible();
   await expect(page.getByText('No remedial exams required', { exact: true })).toHaveCount(0);
   records = [{ ...course, schoolYear: '2025-2026', isCurrent: false, isPast: true }];
   await page.reload();
   await expect(page.getByText('No courses enrolled for the active term.')).toBeVisible();
-  await page.getByRole('button', { name: /Past Courses/ }).click();
+  await page.getByRole('tab', { name: /Past Courses/ }).click();
   await expect(page.getByText('DENT401', { exact: true })).toBeVisible();
 });
 
@@ -55,7 +55,7 @@ test('Student Classes reads canonical meetings including Sunday and avoids fabri
     meetings: [{ component: 'Lecture', day: 'Sun', room: 'New clinic', startTime: '13:00', endTime: '14:00' }, { component: 'Lecture', day: 'Tue', room: 'Clinic 2', startTime: '09:00', endTime: '10:00' }],
   }] } }));
   await page.goto('/student/classes');
-  await expect(page.getByRole('button', { name: /Current Classes \(2027-2028\)/ })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Current Classes \(2027-2028\)/ })).toBeVisible();
   await expect(page.getByText(/Sun 01:00 PM - 02:00 PM · New clinic; Tue 09:00 AM - 10:00 AM · Clinic 2/)).toBeVisible();
   await expect(page.getByRole('main')).not.toContainText('Mon 08:00 AM');
   await expect(page.getByRole('main')).not.toContainText('2023-2689-70869');
@@ -188,7 +188,7 @@ test('future and unclassified enrollments remain visible outside current and pas
   await expect(page.getByRole('row').filter({ hasText: 'FUTURE' })).toContainText('2027-2028');
   await expect(page.getByRole('row').filter({ hasText: 'UNKNOWN' })).toContainText('Unavailable');
   await expect(page.getByRole('main')).toContainText('No active classes for S.Y. 2026-2027');
-  await page.getByRole('button', { name: /Archived Classes/ }).click();
+  await page.getByRole('tab', { name: /Archived Classes/ }).click();
   await expect(page.getByText('No archived classes found', { exact: true })).toBeVisible();
 });
 
@@ -198,7 +198,7 @@ test('completed cost recovery is labelled passed rather than required', async ({
     currentSchoolYear: '2026-2027', records: [{ ...course, grade: 2.8, remedialProgression: { stage: 'cost_recovery_passed', attempts: [], passedAttempt: null } }], atRiskCount: 0, hasPendingGrades: false,
   } } }));
   await page.goto('/student/retention');
-  await page.getByRole('button', { name: /Remedial Exams/ }).click();
+  await page.getByRole('tab', { name: /Remedial Exams/ }).click();
   await expect(page.getByText('Cost recovery passed · Course cleared.')).toBeVisible();
   await expect(page.getByText(/Cost recovery required \(Both/)).toHaveCount(0);
 });
@@ -305,7 +305,7 @@ test('Student Midterm Advisory flags only fully graded 2.5-or-worse midterms and
     ], atRiskCount: 0, midtermAtRiskCount: 1, hasPendingGrades: true,
   } } }));
   await page.goto('/student/retention');
-  await page.getByRole('button', { name: /Midterm Advisory/ }).click();
+  await page.getByRole('tab', { name: /Midterm Advisory/ }).click();
   const row = page.getByRole('row').filter({ hasText: 'DENT401' });
   await expect(row).toContainText('At risk · Midterm');
   await expect(row).not.toContainText('projection');
@@ -441,7 +441,7 @@ test('Remedial work is separated from completed and historical courses', async (
   await expect(assignedRow.getByRole('cell').nth(2)).toContainText('2.8');
   await expect(assignedRow.getByRole('cell').nth(3)).toContainText('Deficient');
   await expect(assignedRow.getByRole('button', { name: 'View exam', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: /Remedial Exams/ }).click();
+  await page.getByRole('tab', { name: /Remedial Exams/ }).click();
   await expect(page.getByRole('heading', { name: 'Active Remediation', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Completed / Historical Remediation', exact: true })).toBeVisible();
   const codes = await page.getByRole('main').locator('span.font-mono').allTextContents();
@@ -460,7 +460,7 @@ test('Faculty Midterm Watchlist uses the server flag and drops courses once a fi
       remedialProgression: { stage: 'attempt_1_pending', attempts: [], passedAttempt: null } },
   ] } }));
   await page.goto('/retention');
-  await page.getByRole('button', { name: /Midterm Watchlist/ }).click();
+  await page.getByRole('tab', { name: /Midterm Watchlist/ }).click();
   await expect(page.getByRole('heading', { name: 'Midterm Watchlist', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /Show at-risk only/ })).toHaveAttribute('aria-pressed', 'true');
   const failing = page.getByRole('row').filter({ hasText: 'Failing Midterm' });
@@ -475,7 +475,7 @@ test('Faculty Midterm Watchlist uses the server flag and drops courses once a fi
   await expect(strong).not.toContainText('At risk');
   await expect(page.getByRole('row').filter({ hasText: 'Final graded' })).toHaveCount(0);
   await expect(page.getByRole('row').filter({ hasText: 'Remedial Started' })).toHaveCount(0);
-  await page.getByRole('button', { name: /^Retention Status\s*\d*$/ }).click();
+  await page.getByRole('tab', { name: /^Retention Status\s*\d*$/ }).click();
   await expect(page.getByRole('columnheader', { name: 'Risk', exact: true })).toHaveCount(0);
 });
 

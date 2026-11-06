@@ -16,6 +16,7 @@ import {
   Filter
 } from 'lucide-react';
 import { Card } from '../../components/Card';
+import Tabs from '../../components/Tabs';
 import { showFeedback, requestConfirmation } from '../../components/FeedbackCenter';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -406,41 +407,19 @@ export const EmailManagement: React.FC = () => {
       {/* 2. Control Bar: Tabs & Pill Filter Dropdowns Below */}
       <div className="flex flex-col gap-4">
         {/* Tabs Navigation */}
-        <div className="order-2 flex flex-wrap min-w-0 max-w-full items-stretch gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm w-full no-print">
-          <button
-            onClick={() => { setTab('student_invites'); setSelected([]); }}
-            className={`flex-auto min-w-max text-center px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              tab === 'student_invites'
-                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-            }`}
-          >
-            Student Class Invitations
-          </button>
-
-          <button
-            onClick={() => { setTab('secretary'); setSelected([]); }}
-            className={`flex-auto min-w-max text-center px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              tab === 'secretary'
-                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-            }`}
-          >
-            Class Secretary Invitations
-          </button>
-
-
-          <button
-            onClick={() => { setTab('history'); setSelected([]); }}
-            className={`flex-auto min-w-max text-center px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              tab === 'history'
-                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-            }`}
-          >
-            Email History Log ({logs.length})
-          </button>
-        </div>
+        <Tabs
+          variant="section"
+          color="clinical"
+          label="Email sections"
+          value={tab}
+          onChange={id => { setTab(id); setSelected([]); }}
+          className="order-2 min-w-0 max-w-full w-full no-print"
+          tabs={[
+            { id: 'student_invites', label: 'Student Class Invitations', shortLabel: 'Students' },
+            { id: 'secretary', label: 'Class Secretary Invitations', shortLabel: 'Secretary' },
+            { id: 'history', label: `Email History Log (${logs.length})`, shortLabel: 'History' },
+          ]}
+        />
 
         {/* Filters & Search Bar Positioned Below */}
         <Card className="order-1 no-print p-4 flex flex-col xl:flex-row gap-4 xl:items-center">

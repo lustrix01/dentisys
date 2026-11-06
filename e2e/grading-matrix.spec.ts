@@ -78,8 +78,8 @@ test('grading matrix groups assessments by period and category and shows server 
   await page.click('button[type="submit"]');
   await expect(page).toHaveURL('/');
   await page.goto('/grades');
-  await page.getByRole('button', { name: 'Student Scores Entry' }).click();
-  await page.getByRole('button', { name: 'Full Matrix View' }).click();
+  await page.getByRole('tab', { name: 'Student Scores Entry' }).click();
+  await page.getByRole('tab', { name: 'Full Matrix View' }).click();
 
   const table = page.locator('table').filter({ hasText: 'Student Info' });
   await expect(table.getByRole('columnheader', { name: 'Student Info' })).toBeVisible();
@@ -147,7 +147,7 @@ async function mockMatrixClass(page: import('@playwright/test').Page, scores: Re
   await page.click('button[type="submit"]');
   await expect(page).toHaveURL('/');
   await page.goto('/grades');
-  await page.getByRole('button', { name: 'Student Scores Entry' }).click();
+  await page.getByRole('tab', { name: 'Student Scores Entry' }).click();
 }
 
 test('single activity auto-save toggle is remembered across reloads', async ({ page }) => {
@@ -156,11 +156,11 @@ test('single activity auto-save toggle is remembered across reloads', async ({ p
   await expect(toggle).toBeChecked();
   await toggle.uncheck();
   await page.reload();
-  await page.getByRole('button', { name: 'Student Scores Entry' }).click();
+  await page.getByRole('tab', { name: 'Student Scores Entry' }).click();
   await expect(page.getByLabel('Enable Auto-Save')).not.toBeChecked();
   await page.getByLabel('Enable Auto-Save').check();
   await page.reload();
-  await page.getByRole('button', { name: 'Student Scores Entry' }).click();
+  await page.getByRole('tab', { name: 'Student Scores Entry' }).click();
   await expect(page.getByLabel('Enable Auto-Save')).toBeChecked();
 });
 
@@ -168,18 +168,18 @@ test('matrix keeps an invalid typed cell while other cells refresh from the serv
   test.setTimeout(60000);
   const scores: Record<string, number> = {};
   await mockMatrixClass(page, scores);
-  await page.getByRole('button', { name: 'Full Matrix View' }).click();
+  await page.getByRole('tab', { name: 'Full Matrix View' }).click();
   const lo1 = page.getByLabel('LO 1 score for Owhie Santillan Lumbang');
   const lo2 = page.getByLabel('LO 2 score for Owhie Santillan Lumbang');
   await lo2.fill('99');
   await expect(lo2).toHaveValue('99');
   // A server score change from the Single Activity View (auto-saved) must reach the grid while LO 2 stays red.
-  await page.getByRole('button', { name: 'Single Activity View' }).click();
+  await page.getByRole('tab', { name: 'Single Activity View' }).click();
   const single = page.getByRole('spinbutton').nth(0);
   await single.fill('30');
   // Auto-save fires 10 seconds after typing stops.
   await expect.poll(() => scores['lo-1'], { timeout: 20000 }).toBe(30);
-  await page.getByRole('button', { name: 'Full Matrix View' }).click();
+  await page.getByRole('tab', { name: 'Full Matrix View' }).click();
   await expect(lo1).toHaveValue('30');
   await expect(lo2).toHaveValue('99');
 });
@@ -239,7 +239,7 @@ test('single activity keeps and saves a score typed while another save is in fli
 test('matrix keeps and saves a cell typed while another save is in flight', async ({ page }) => {
   test.setTimeout(90000);
   const { server, posts } = await mockTwoStudentsSlowSave(page);
-  await page.getByRole('button', { name: 'Full Matrix View' }).click();
+  await page.getByRole('tab', { name: 'Full Matrix View' }).click();
   const bea = page.getByLabel('LO 1 score for Bea Alvarez');
   const carlo = page.getByLabel('LO 1 score for Carlo Bautista');
   await bea.fill('30');
@@ -259,7 +259,7 @@ test('matrix keeps and saves a cell typed while another save is in flight', asyn
 test('Keep-visible toggle switches which student columns are pinned from sm to below xl and is hidden on desktop', async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 1024 });
   await mockMatrixClass(page, {}, { wide: true });
-  await page.getByRole('button', { name: 'Full Matrix View' }).click();
+  await page.getByRole('tab', { name: 'Full Matrix View' }).click();
   const pin = page.getByRole('group', { name: 'Keep visible while scrolling' });
   await expect(pin).toBeVisible();
   await expect(pin.locator('..')).toHaveClass(/(^|\s)xl:hidden(\s|$)/);
@@ -288,7 +288,7 @@ test('Keep-visible toggle switches which student columns are pinned from sm to b
 
 test('single-list config shows an Assessments group, no Lecture weight and no Component filter', async ({ page }) => {
   await mockMatrixClass(page, {});
-  await page.getByRole('button', { name: 'Full Matrix View' }).click();
+  await page.getByRole('tab', { name: 'Full Matrix View' }).click();
   const table = page.locator('table').filter({ hasText: 'Student Info' });
   await expect(table.getByRole('columnheader', { name: 'Assessments' })).toBeVisible();
   await expect(table.getByRole('columnheader', { name: /Lecture/i })).toHaveCount(0);
@@ -308,7 +308,7 @@ test('lecture/laboratory config still shows weighted component headers and the C
       finalCategories: [],
     } }) }));
   } });
-  await page.getByRole('button', { name: 'Full Matrix View' }).click();
+  await page.getByRole('tab', { name: 'Full Matrix View' }).click();
   const table = page.locator('table').filter({ hasText: 'Student Info' });
   await expect(table.getByRole('columnheader', { name: 'Lecture (60%)' })).toBeVisible();
   await expect(table.getByRole('columnheader', { name: 'Laboratory (40%)' })).toBeVisible();

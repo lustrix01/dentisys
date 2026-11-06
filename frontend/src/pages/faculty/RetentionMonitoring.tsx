@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarDays, CheckCircle2, ChevronRight, Plus, Search, Calculator, Filter } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import Tabs from '../../components/Tabs';
 import { showFeedback } from '../../components/FeedbackCenter';
 import {
   getFacultyRetentionApi,
@@ -807,60 +808,19 @@ export const RetentionMonitoring: React.FC = () => {
       )}
 
       <div className="flex flex-col gap-4">
-        <div className="order-2 flex flex-wrap max-w-full items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm no-print">
-          <button
-            type="button"
-            onClick={() => { setActiveTab('watchlist'); setSearchQuery(''); }}
-            className={`flex flex-1 min-w-max justify-center items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'watchlist'
-                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-            }`}
-          >
-            <span>Retention Status</span>
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-              activeTab === 'watchlist' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-            }`}>
-              {watchlistRecords.length}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => { setActiveTab('remedials'); setSearchQuery(''); }}
-            className={`flex flex-1 min-w-max justify-center items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'remedials'
-                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-            }`}
-          >
-            <span>Remedials</span>
-            {pendingExams > 0 && (
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === 'remedials' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
-              }`}>
-                {pendingExams}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => { setActiveTab('midterm'); setSearchQuery(''); }}
-            className={`flex flex-1 min-w-max justify-center items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'midterm'
-                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-            }`}
-          >
-            <span>Midterm Watchlist</span>
-            {atRiskMidtermCount > 0 && (
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === 'midterm' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
-              }`}>
-                {atRiskMidtermCount}
-              </span>
-            )}
-          </button>
-        </div>
+        <Tabs
+          variant="section"
+          color="clinical"
+          label="Retention views"
+          value={activeTab}
+          onChange={id => { setActiveTab(id); setSearchQuery(''); }}
+          className="order-2 max-w-full no-print"
+          tabs={[
+            { id: 'watchlist', label: 'Retention Status', shortLabel: 'Status', count: watchlistRecords.length },
+            { id: 'remedials', label: 'Remedials', count: pendingExams > 0 ? pendingExams : undefined, countTone: 'amber' },
+            { id: 'midterm', label: 'Midterm Watchlist', shortLabel: 'Watchlist', count: atRiskMidtermCount > 0 ? atRiskMidtermCount : undefined, countTone: 'amber' },
+          ]}
+        />
 
         <Card className="order-1 no-print p-4 flex flex-col xl:flex-row gap-4 xl:items-center">
           {/* School Year Selector Filter Pill (Defaults to Current School Year) */}

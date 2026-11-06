@@ -29,14 +29,15 @@ The standard look for each part of a signed-in page ([AGENTS.md](../AGENTS.md) "
 | Part | Standard | Copy from |
 |---|---|---|
 | Page wrapper | `space-y-6 animate-fade-in max-w-7xl mx-auto` around the whole page | `pages/faculty/RetentionMonitoring.tsx:789` |
-| Page section tabs (switch between the main sections of a page, such as Grades / Retention / Attendance) | White card bar: bordered white card, the selected tab filled with the role colour | `pages/faculty/Reports.tsx:1019` |
-| List switch (two or three views of one list, such as Assigned / Archived) | Grey segmented bar: grey track, the selected tab a white pill with role-colour text, count badge when the list has a count | `pages/admin/Rooms.tsx:278` |
+| Page section tabs (switch between the main sections of a page, such as Grades / Retention / Attendance) | White card bar: bordered white card, the selected tab filled with the role colour | `<Tabs variant="section">` in `components/Tabs.tsx`; never hand-build a tab bar |
+| List switch (two or three views of one list, such as Assigned / Archived) | Grey segmented bar: grey track, the selected tab a white pill with role-colour text and a role-colour outline, count badge tinted in the role colour | `<Tabs variant="switch">` in `components/Tabs.tsx` |
+| Tab names on phones | When the full names would wrap to extra rows below `sm`, give each tab a `shortLabel` (for example "Scores" for "Student Scores Entry") | `pages/faculty/Reports.tsx` |
 | Selected colour | The role's colour, as in the sidebar (`getRoleColors` in `components/Layout.tsx`): Dean purple (`accent`), Faculty green (`clinical`; Classes and Attendance use `emerald`), Student and Secretary blue | `components/Layout.tsx` |
 | Dialogs, panels, school-year filter | The shared components above | `Modal.tsx`, `Card.tsx`, `SchoolYearFilter.tsx` |
 
 Not settled yet: the page header, notice banners (three looks today), filter bars, tables and empty states. Until each has a standard here, copy the nearest page that does the same job.
 
-Known differences, kept for now: Student My Classes (separate buttons) and Student Retention (underlined row) use tab looks found nowhere else, and Faculty Attendance Monitoring uses the grey bar for its two sections. See backlog 9.8.
+Every tab bar uses `Tabs`, which also gives screen readers the tab roles and lets arrow keys, Home and End move between tabs. A count that is a warning (Retention remedials and midterm risk) keeps its amber or rose badge with `countTone` (Owner decisions of 2026-11-06, [Tab Bar Standard demo](https://claude.ai/artifact/EBfuzdD5bdrWAdxVw3S1fL)).
 
 ## Phone blocks
 

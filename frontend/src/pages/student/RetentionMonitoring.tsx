@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { AlertCircle, AlertTriangle, Calendar, Clock, RefreshCw, CheckCircle2, ChevronDown, ChevronUp, BookOpen, History } from 'lucide-react';
 import { Card } from '../../components/Card';
+import Tabs from '../../components/Tabs';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { canAccessAuthoritativeStudentBiometrics, isStudentPrototypeAllowed } from './studentGates';
@@ -369,85 +370,19 @@ export const RetentionMonitoring: React.FC = () => {
       </div>
 
       {/* 2. Simple Tabs */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab('current')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'current'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <BookOpen className="w-3.5 h-3.5" />
-          <span>Active Courses</span>
-          <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-            activeTab === 'current' ? 'bg-blue-500 text-white' : 'bg-slate-200 dark:bg-slate-700'
-          }`}>
-            {currentRecords.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('remedials')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'remedials'
-              ? 'bg-rose-600 text-white shadow-xs'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Calendar className="w-3.5 h-3.5" />
-          <span>Remedial Exams</span>
-          {remedialRecordCount > 0 && (
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-              activeTab === 'remedials' ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200'
-            }`}>
-              {remedialRecordCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('midterm')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'midterm'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <AlertTriangle className="w-3.5 h-3.5" />
-          <span>Midterm Advisory</span>
-          {midtermAtRiskCount > 0 && (
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-              activeTab === 'midterm' ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-200'
-            }`}>
-              {midtermAtRiskCount}
-            </span>
-          )}
-        </button>
-
-        {pastRecords.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('past')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'past'
-                ? 'bg-slate-700 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <History className="w-3.5 h-3.5" />
-            <span>Past Courses</span>
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-              activeTab === 'past' ? 'bg-slate-600 text-white' : 'bg-slate-200 dark:bg-slate-700'
-            }`}>
-              {pastRecords.length}
-            </span>
-          </button>
-        )}
-      </div>
+      <Tabs
+        variant="section"
+        color="blue"
+        label="Retention views"
+        value={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          { id: 'current', label: 'Active Courses', icon: <BookOpen className="w-3.5 h-3.5" />, count: currentRecords.length },
+          { id: 'remedials', label: 'Remedial Exams', icon: <Calendar className="w-3.5 h-3.5" />, count: remedialRecordCount > 0 ? remedialRecordCount : undefined, countTone: 'rose' },
+          { id: 'midterm', label: 'Midterm Advisory', icon: <AlertTriangle className="w-3.5 h-3.5" />, count: midtermAtRiskCount > 0 ? midtermAtRiskCount : undefined, countTone: 'amber' },
+          ...(pastRecords.length > 0 ? [{ id: 'past' as const, label: 'Past Courses', icon: <History className="w-3.5 h-3.5" />, count: pastRecords.length }] : []),
+        ]}
+      />
 
       {/* 3. Content Views */}
 

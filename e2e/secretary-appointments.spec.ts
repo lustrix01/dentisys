@@ -39,7 +39,7 @@ test('Secretary tab shows one row per section and appoints / removes by section'
     await appPage.click('button[type="submit"]');
     await expect(appPage).toHaveURL('/');
     await appPage.evaluate(() => { window.history.pushState({}, '', '/email-management'); window.dispatchEvent(new PopStateEvent('popstate')); });
-    await appPage.getByRole('button', { name: /Class Secretary invitations/i }).click();
+    await appPage.getByRole('tab', { name: /Class Secretary invitations/i }).click();
 
     const rows = appPage.locator('tbody tr');
     await expect(rows).toHaveCount(2);

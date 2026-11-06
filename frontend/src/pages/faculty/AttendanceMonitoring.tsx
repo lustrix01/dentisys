@@ -27,6 +27,7 @@ import { OverlapConfirmModal, overlapsFrom, type BookingOverlap } from '../../co
 import { useSearchParams } from 'react-router-dom';
 import { FacultyExcusedRequestsPanel, PendingRequestsBadge, openSecretaryRequest, openRequestsForClass } from '../../components/FacultyExcusedRequestsPanel';
 import { Modal } from '../../components/Modal';
+import Tabs from '../../components/Tabs';
 import { StartSessionModal, type StartSessionValues } from '../../components/StartSessionModal';
 import { RevokedSessionsSwitch } from '../../components/RevokedSessionsSwitch';
 import {
@@ -1007,38 +1008,17 @@ export const AttendanceMonitoring: React.FC = () => {
   return (
     <div className="space-y-6">
 
-      <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-fit">
-        <button
-          type="button"
-          onClick={() => setTab('classes')}
-          className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-            tab === 'classes'
-              ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-          }`}
-        >
-          <BookOpen className="w-4 h-4 text-emerald-600" />
-          Assigned Classes
-          <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold">
-            {scopedClasses.length}
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('requests')}
-          className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-            tab === 'requests'
-              ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-          }`}
-        >
-          <UserCheck className="w-4 h-4 text-emerald-600" />
-          Secretary Requests
-          <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
-            {pendingRows.length}
-          </span>
-        </button>
-      </div>
+      <Tabs
+        variant="section"
+        color="emerald"
+        label="Attendance sections"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'classes', label: 'Assigned Classes', icon: <BookOpen className="w-4 h-4" />, count: scopedClasses.length },
+          { id: 'requests', label: 'Secretary Requests', icon: <UserCheck className="w-4 h-4" />, count: pendingRows.length },
+        ]}
+      />
 
       <FacultyExcusedRequestsPanel
         active={tab === 'requests'}

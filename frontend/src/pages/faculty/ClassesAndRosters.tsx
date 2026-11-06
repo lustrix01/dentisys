@@ -35,6 +35,7 @@ import { isViewOnlyClass, archiveGroup, type ArchiveReason } from '../../utils/c
 import { Student } from '../../types';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import Tabs from '../../components/Tabs';
 import { showFeedback, requestConfirmation } from '../../components/FeedbackCenter';
 import {
   getFacultyClassesApi,
@@ -1666,37 +1667,17 @@ const handleSendAllStudentInvites = async () => {
       {activeTab !== 'roster' && (
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
           {/* Tab Buttons */}
-          <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-fit">
-            <button
-              onClick={() => setActiveTab('classes')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'classes'
-                  ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <BookMarked className="w-4 h-4 text-emerald-600" />
-              Assigned Classes
-              <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold">
-                {filteredClasses.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('archived')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'archived'
-                  ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <Archive className="w-4 h-4 text-emerald-600" />
-              Archived Classes
-              <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
-                {archivedGroups.total}
-              </span>
-            </button>
-          </div>
+          <Tabs
+            variant="switch"
+            color="emerald"
+            label="Class views"
+            value={activeTab}
+            onChange={setActiveTab}
+            tabs={[
+              { id: 'classes', label: 'Assigned Classes', icon: <BookMarked className="w-4 h-4" />, count: filteredClasses.length },
+              { id: 'archived', label: 'Archived Classes', icon: <Archive className="w-4 h-4" />, count: archivedGroups.total },
+            ]}
+          />
 
           {/* Right Controls: Filter (if archived), Search & Actions */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-wrap">

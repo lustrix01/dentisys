@@ -40,6 +40,7 @@ import { Student, EnrolledSubject, GradeComponents, Assessment, AssessmentScore 
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { GradebookMatrix } from '../../components/GradebookMatrix';
 import { Modal } from '../../components/Modal';
+import Tabs from '../../components/Tabs';
 import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
 import { recordAudit } from '../../services/auditService';
 
@@ -3265,48 +3266,25 @@ export const GradeComputation: React.FC = () => {
       )}
 
       {/* Navigation Sub-Tabs */}
-      <div className="no-print flex flex-wrap xl:flex-nowrap bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
-        {!selectedClassIsHistorical && <button
-          onClick={() => setActiveSubTab('scores')}
-          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'scores' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-            }`}
-        >
-          <ClipboardCheck className="w-4 h-4" />
-          Student Scores Entry
-        </button>}
-        {!selectedClassIsHistorical && <button
-          onClick={() => setActiveSubTab('assessments')}
-          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'assessments' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-            }`}
-        >
-          <FileText className="w-4 h-4" />
-          Assessments Manager
-        </button>}
-        {!selectedClassIsHistorical && <button
-          onClick={() => setActiveSubTab('components')}
-          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'components' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-            }`}
-        >
-          <Settings className="w-4 h-4" />
-          Grade Weights Editor
-        </button>}
-        <button
-          onClick={() => setActiveSubTab('summaries')}
-          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'summaries' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-            }`}
-        >
-          <Printer className="w-4 h-4" />
-          Summaries & Export
-        </button>
-        {!selectedClassIsHistorical && <button
-          onClick={() => setActiveSubTab('import')}
-          className={`flex-1 min-w-fit xl:min-w-[auto] whitespace-nowrap py-2 px-3 max-sm:px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'import' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-            }`}
-        >
-          <Upload className="w-4 h-4" />
-          Import Grade Sheets
-        </button>}
-      </div>
+      <Tabs
+        variant="section"
+        color="clinical"
+        label="Grade sections"
+        value={activeSubTab}
+        onChange={setActiveSubTab}
+        className="no-print"
+        tabs={[
+          ...(selectedClassIsHistorical ? [] : [
+            { id: 'scores' as const, label: 'Student Scores Entry', shortLabel: 'Scores', icon: <ClipboardCheck className="w-4 h-4" /> },
+            { id: 'assessments' as const, label: 'Assessments Manager', shortLabel: 'Assessments', icon: <FileText className="w-4 h-4" /> },
+            { id: 'components' as const, label: 'Grade Weights Editor', shortLabel: 'Weights', icon: <Settings className="w-4 h-4" /> },
+          ]),
+          { id: 'summaries' as const, label: 'Summaries & Export', shortLabel: 'Summaries', icon: <Printer className="w-4 h-4" /> },
+          ...(selectedClassIsHistorical ? [] : [
+            { id: 'import' as const, label: 'Import Grade Sheets', shortLabel: 'Import', icon: <Upload className="w-4 h-4" /> },
+          ]),
+        ]}
+      />
 
       {/* ----------------------------------------------------
           TAB 1: STUDENT SCORES ENTRY
@@ -3315,28 +3293,17 @@ export const GradeComputation: React.FC = () => {
         <div className="space-y-4">
           {/* View Mode Switcher Header */}
           <div className="flex justify-end items-center bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-              <button
-                onClick={() => setScoreEntryMode('single')}
-                className={`flex items-center gap-1.5 min-[375px]:whitespace-nowrap px-3.5 min-[375px]:max-sm:px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${scoreEntryMode === 'single'
-                  ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                  }`}
-              >
-                <List className="w-3.5 h-3.5" />
-                Single Activity View
-              </button>
-              <button
-                onClick={() => setScoreEntryMode('matrix')}
-                className={`flex items-center gap-1.5 min-[375px]:whitespace-nowrap px-3.5 min-[375px]:max-sm:px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${scoreEntryMode === 'matrix'
-                  ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                  }`}
-              >
-                <Grid className="w-3.5 h-3.5" />
-                Full Matrix View
-              </button>
-            </div>
+            <Tabs
+              variant="switch"
+              color="clinical"
+              label="Score entry views"
+              value={scoreEntryMode}
+              onChange={setScoreEntryMode}
+              tabs={[
+                { id: 'single', label: 'Single Activity View', icon: <List className="w-3.5 h-3.5" /> },
+                { id: 'matrix', label: 'Full Matrix View', icon: <Grid className="w-3.5 h-3.5" /> },
+              ]}
+            />
           </div>
 
           {scoreEntryMode === 'matrix' ? (
