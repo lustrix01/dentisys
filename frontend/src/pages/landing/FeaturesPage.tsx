@@ -52,8 +52,8 @@ export function FeaturesPage() {
   };
 
   return (
-    <main className="flex flex-1 items-center justify-center px-4 sm:px-6 lg:px-12">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 sm:gap-8">
+    <main className="flex w-full min-w-0 flex-1 items-center justify-center px-4 sm:px-6 lg:px-12">
+      <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-6 sm:gap-8">
 
         {/* HEADER */}
         <header className="flex flex-col gap-1 text-left">
@@ -66,10 +66,10 @@ export function FeaturesPage() {
         </header>
 
         {/* SHOWCASE SECTION */}
-        <div className="grid items-stretch gap-6 lg:grid-cols-12 lg:gap-8">
+        <div className="grid min-w-0 items-stretch gap-6 lg:grid-cols-12 lg:gap-8">
 
           {/* LEFT: VERTICAL STACK SELECTORS (1-COLUMN) */}
-          <div className="flex flex-col justify-between gap-2.5 lg:col-span-4">
+          <div className="flex min-w-0 flex-col justify-between gap-2.5 lg:col-span-4">
             {modules.map((item, idx) => {
               const isSelected = activeIndex === idx;
               const Icon = item.icon;
@@ -78,7 +78,7 @@ export function FeaturesPage() {
                   key={item.id}
                   type="button"
                   onClick={() => setActiveIndex(idx)}
-                  className={`flex flex-1 items-start gap-3.5 rounded-xl border p-4 text-left transition-all ${
+                  className={`flex min-w-0 w-full flex-1 items-start gap-3.5 rounded-xl border p-4 text-left transition-all ${
                     isSelected
                       ? 'border-purple-600 bg-purple-50/70 shadow-2xs'
                       : 'border-slate-200 bg-white hover:border-purple-200 hover:bg-slate-50/70'
@@ -94,9 +94,9 @@ export function FeaturesPage() {
                     {item.id}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex min-w-0 items-start gap-1.5">
                       <Icon className={`h-4 w-4 ${isSelected ? 'text-purple-600' : 'text-slate-400'}`} />
-                      <h2 className={`text-sm font-bold font-heading ${isSelected ? 'text-purple-900' : 'text-slate-900'}`}>
+                      <h2 className={`min-w-0 break-words text-sm font-bold font-heading ${isSelected ? 'text-purple-900' : 'text-slate-900'}`}>
                         {item.title}
                       </h2>
                     </div>
@@ -110,22 +110,22 @@ export function FeaturesPage() {
           </div>
 
           {/* RIGHT: REAL DENTISYS WORKSPACE VIEW (ONE CONSISTENT FIXED SIZE FOR ALL 4 SHOWCASES) */}
-          <div className="flex h-[520px] sm:h-[500px] flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6 lg:col-span-8">
+          <div className="flex min-h-[520px] h-auto min-w-0 w-full flex-col justify-between gap-3 overflow-visible rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6 lg:h-[500px] lg:gap-0 lg:overflow-hidden lg:col-span-8">
 
             {/* TOP BAR WITH TITLE & CONTROLS (UNIFIED ACROSS ALL SHOWCASES) */}
             <div>
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
                 <div className="min-w-0 flex-1">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-purple-600">
-                    Module Preview 0{activeIndex + 1}
+                  <span className="text-[11px] font-bold tracking-wide text-purple-600">
+                    Module {activeIndex + 1}
                   </span>
-                  <h3 className="truncate text-base font-bold text-slate-900 sm:text-lg font-heading">
+                  <h3 className="break-words text-base font-bold text-slate-900 lg:truncate sm:text-lg font-heading">
                     {activeIndex === 0 && 'DENT 211 - Oral Histology & Embryology (Lecture)'}
                     {activeIndex === 1 && 'Session #12 • Clinic Roll Call (Biometric Scanner)'}
                     {activeIndex === 2 && 'Course Gradebook • 50% Midterm / 50% Finals Split'}
                     {activeIndex === 3 && 'Academic Retention & Clinical Milestone Analytics'}
                   </h3>
-                  <p className="mt-0.5 truncate text-xs text-slate-500">
+                  <p className="mt-0.5 break-words text-xs text-slate-500 lg:truncate">
                     {activeIndex === 0 && 'S.Y. 2026-2027 • 1st Semester • Block A • 38 Enrolled Students'}
                     {activeIndex === 1 && 'Room 204 Clinic Hall • Geofence Radius: 150m • Start: 8:00 AM'}
                     {activeIndex === 2 && '100% Validated Matrix: Major Exam (40%), Quizzes (30%), Practical (20%), Attendance (10%)'}
@@ -169,13 +169,13 @@ export function FeaturesPage() {
             </div>
 
             {/* DYNAMIC CONTENT AREA BASED ON ACTIVE SHOWCASE */}
-            <div className="flex-1 overflow-hidden py-3">
+            <div className="min-w-0 py-3 lg:flex-1 lg:overflow-hidden">
 
               {/* ─────────────────────────────────────────────────────────────
                   SHOWCASE 1: OFFICIAL CLASS ROSTER TABLE
               ───────────────────────────────────────────────────────────── */}
               {activeIndex === 0 && (
-                <div className="flex h-full flex-col justify-between animate-fade-in">
+                <div className="flex flex-col gap-4 animate-fade-in lg:h-full lg:justify-between lg:gap-0">
                   <div>
                     {/* Action badges */}
                     <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -194,8 +194,8 @@ export function FeaturesPage() {
                     </div>
 
                     {/* Table */}
-                    <div className="overflow-hidden rounded-xl border border-slate-200">
-                      <table className="w-full text-left text-xs">
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="w-full min-w-[520px] text-left text-xs lg:min-w-0">
                         <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
                           <tr>
                             <th className="px-3.5 py-2.5">Student No.</th>
@@ -260,17 +260,17 @@ export function FeaturesPage() {
                   SHOWCASE 2: LIVE FACE SCANNING & BIOMETRIC VERIFICATION
               ───────────────────────────────────────────────────────────── */}
               {activeIndex === 1 && (
-                <div className="flex h-full flex-col justify-between animate-fade-in">
-                  <div className="grid h-full items-center gap-4 sm:grid-cols-12">
+                <div className="flex flex-col gap-4 animate-fade-in lg:h-full lg:justify-between lg:gap-0">
+                  <div className="grid min-h-[320px] items-stretch gap-4 lg:h-full lg:grid-cols-12">
                     
                     {/* CAMERA VIEWFINDER WITH RETICLE & FACE SCAN TARGET */}
-                    <div className="relative flex h-full min-h-[220px] flex-col justify-between overflow-hidden rounded-xl border border-slate-800 bg-slate-950 p-4 text-white sm:col-span-7">
+                    <div className="relative flex min-h-[220px] flex-col justify-between overflow-hidden rounded-xl border border-slate-800 bg-slate-950 p-4 text-white lg:h-full lg:col-span-7">
                       
                       {/* SCANNER OVERLAY HEADER */}
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="flex items-center gap-1.5 font-mono text-emerald-400">
                           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                          LIVE BIOMETRIC SCAN
+                          Live biometric scan
                         </span>
                         <span className="font-mono text-slate-400">YuNet + SFace Engine</span>
                       </div>
@@ -296,16 +296,16 @@ export function FeaturesPage() {
 
                       {/* SCANNER TELEMETRY FOOTER */}
                       <div className="flex items-center justify-between font-mono text-[10px] text-slate-400 border-t border-slate-800 pt-2">
-                        <span>Liveness: <strong className="text-emerald-400">VERIFIED</strong></span>
+                        <span>Liveness: <strong className="text-emerald-400">Verified</strong></span>
                         <span>Confidence: <strong className="text-emerald-400">98.4%</strong></span>
-                        <span>Geofence: <strong className="text-emerald-400">IN BOUNDS</strong></span>
+                        <span>Geofence: <strong className="text-emerald-400">In bounds</strong></span>
                       </div>
                     </div>
 
                     {/* RIGHT: ATTENDANCE VERIFICATION CARD */}
-                    <div className="flex h-full flex-col justify-between rounded-xl border border-slate-200 bg-slate-50/80 p-4 sm:col-span-5">
+                    <div className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4 lg:h-full lg:gap-0 lg:col-span-5">
                       <div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700">
+                        <span className="text-[10px] font-bold tracking-wider text-purple-700">
                           Attendance Record
                         </span>
 
@@ -325,7 +325,7 @@ export function FeaturesPage() {
                           <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5">
                             <span className="text-slate-500">Status</span>
                             <span className="rounded bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700 border border-emerald-200 text-[10px]">
-                              PRESENT
+                              Present
                             </span>
                           </div>
                           <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5">
@@ -360,7 +360,7 @@ export function FeaturesPage() {
                   SHOWCASE 3: AUTHENTIC 100% GRADING WEIGHT MATRIX
               ───────────────────────────────────────────────────────────── */}
               {activeIndex === 2 && (
-                <div className="flex h-full flex-col justify-between animate-fade-in">
+                <div className="flex flex-col gap-4 animate-fade-in lg:h-full lg:justify-between lg:gap-0">
                   <div>
                     {/* MATRIX WEIGHT FORMULA BAR */}
                     <div className="mb-3 rounded-xl border border-purple-200 bg-purple-50/60 p-3">
@@ -368,12 +368,12 @@ export function FeaturesPage() {
                         <span className="font-bold text-purple-900 font-heading">
                           Approved 100% Period Weight Matrix:
                         </span>
-                        <span className="rounded bg-purple-600 px-2 py-0.5 text-[10px] font-bold text-white uppercase">
-                          Formula Validated
+                        <span className="rounded bg-purple-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                          Formula validated
                         </span>
                       </div>
                       
-                      <div className="mt-2 grid grid-cols-4 gap-2 text-center text-[11px]">
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-center text-[11px] sm:grid-cols-4">
                         <div className="rounded-lg bg-white border border-purple-200 p-1.5">
                           <span className="text-slate-500 block">Major Exam</span>
                           <strong className="text-purple-700 font-bold">40%</strong>
@@ -394,8 +394,8 @@ export function FeaturesPage() {
                     </div>
 
                     {/* MATRIX COMPUTATION TABLE */}
-                    <div className="overflow-hidden rounded-xl border border-slate-200">
-                      <table className="w-full text-left text-xs">
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="w-full min-w-[680px] text-left text-xs lg:min-w-0">
                         <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
                           <tr>
                             <th className="px-3 py-2">Student Name</th>
@@ -462,24 +462,24 @@ export function FeaturesPage() {
                   SHOWCASE 4: RETENTION MONITORING & ANALYTICS DASHBOARD
               ───────────────────────────────────────────────────────────── */}
               {activeIndex === 3 && (
-                <div className="flex h-full flex-col justify-between animate-fade-in">
+                <div className="flex flex-col gap-4 animate-fade-in lg:h-full lg:justify-between lg:gap-0">
                   <div>
                     {/* KEY KPI METRIC CARDS */}
-                    <div className="grid grid-cols-4 gap-2.5 mb-3">
+                    <div className="mb-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                       <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-center">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Enrolled</span>
+                        <span className="text-[10px] font-bold tracking-wider text-slate-500">Enrolled</span>
                         <p className="mt-0.5 text-lg font-black text-slate-900 font-heading">38</p>
                       </div>
                       <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-2.5 text-center">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Good Standing</span>
+                        <span className="text-[10px] font-bold tracking-wider text-emerald-700">Good standing</span>
                         <p className="mt-0.5 text-lg font-black text-emerald-700 font-heading">35 (92%)</p>
                       </div>
                       <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-2.5 text-center">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Monitored</span>
+                        <span className="text-[10px] font-bold tracking-wider text-amber-700">Monitored</span>
                         <p className="mt-0.5 text-lg font-black text-amber-700 font-heading">2 (5%)</p>
                       </div>
                       <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-2.5 text-center">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700">Remedial</span>
+                        <span className="text-[10px] font-bold tracking-wider text-rose-700">Remedial</span>
                         <p className="mt-0.5 text-lg font-black text-rose-700 font-heading">1 (3%)</p>
                       </div>
                     </div>

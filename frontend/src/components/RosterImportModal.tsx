@@ -10,7 +10,6 @@ import {
   X,
   Plus,
   RefreshCw,
-  Download,
   Trash2,
   Users,
   Search,
@@ -24,7 +23,6 @@ import {
   ParsedRosterStudent,
   parseCSVText,
   validateRosterStudents,
-  getSampleRegistrarCSV,
   compareRosterHeader,
   findClassMatchingHeader,
   termForHeader,
@@ -234,19 +232,6 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
     } finally {
       if (sequence === parseSequence.current) setIsParsing(false);
     }
-  };
-
-  const handleDownloadSample = () => {
-    const csvContent = getSampleRegistrarCSV();
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'dentisys_provisional_roster_template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   };
 
   const handleRemoveStudent = (tempKey: string) => {
@@ -470,8 +455,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
         <fieldset disabled={isImporting} className="space-y-4 min-w-0 text-left">
         {file && (
           <div role="note" className="space-y-0.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left text-xs leading-5 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-            <p>{pdfInfo?.official && <strong className="mr-1">Official class list.</strong>}{studentsOnly ? `Review the student rows before adding them to ${targetClass ? `${targetClass.courseCode} (${targetClass.block})` : 'this class'}.` : 'Review the class details and student rows before saving.'} The original file stays in this browser; only selected student fields are sent to DentiSys. Invitations are sent separately.</p>
-            <p>Required for each imported row: complete student number, first name, last name and a valid institutional email. Missing emails must be corrected in preview.</p>
+            <p>{pdfInfo?.official && <strong className="mr-1">Official class list.</strong>}{studentsOnly ? `Review the student rows before adding them to ${targetClass ? `${targetClass.courseCode} (${targetClass.block})` : 'this class'}.` : 'Review the class and student details before saving.'} Only selected fields are sent; the file stays in your browser. Send invitations separately.</p>
+            <p>Each row needs a student number, first and last name, and a valid @bicol-u.edu.ph email. Correct errors in the preview.</p>
           </div>
         )}
         {parsedStudents.length > 0 && !studentsOnly && isNewClass && !chooseExistingClass && (
@@ -618,19 +603,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
 
         {(!file || (!isParsing && parsedStudents.length === 0)) && (
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-              File (.csv, .tsv, .txt, .pdf)
-            </span>
-            <button
-              type="button"
-              onClick={handleDownloadSample}
-              className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Download Sample CSV
-            </button>
-          </div>
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">File (.csv, .tsv, .txt, .pdf)</span>
 
           <div
             onClick={() => fileInputRef.current?.click()}

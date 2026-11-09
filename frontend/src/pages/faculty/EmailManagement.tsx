@@ -29,7 +29,7 @@ import {
   SecretaryInvitation,
   validateBicolUEmail,
 } from '../../services/authService';
-import { createStudentInvitation, removeSecretaryAppointmentApi, getFacultyRetentionApi, sendFacultyEmailApi, type FacultyRetentionRecord } from '../../services/apiClient';
+import { createStudentInvitation, removeSecretaryAppointmentApi, getFacultyRetentionApi, saveFacultyRemedialApi, sendFacultyEmailApi, type FacultyRetentionRecord } from '../../services/apiClient';
 import { Student } from '../../types';
 import { getFacultyStudentsApi, getFacultyClassesApi } from '../../services/apiClient';
 
@@ -45,6 +45,8 @@ const remedialDateLabel = (value?: string | null): string | undefined => {
   const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12));
   return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }).format(date);
 };
+
+const manilaToday = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
 
 export const EmailManagement: React.FC = () => {
   const { user } = useAuth();
@@ -153,6 +155,9 @@ export const EmailManagement: React.FC = () => {
   const [isSending, setIsSending] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [loadingRetention, setLoadingRetention] = useState(false);
+  const [editingRemedialId, setEditingRemedialId] = useState<string | null>(null);
+  const [remedialDateDraft, setRemedialDateDraft] = useState('');
+  const [savingRemedialId, setSavingRemedialId] = useState<string | null>(null);
 
   const safeStudents = useMemo(() => dbStudents || [], [dbStudents]);
 
@@ -237,19 +242,26 @@ export const EmailManagement: React.FC = () => {
   ), [filteredStudents, selectedClassId, selectedClass, selectedSchoolYear, classSchoolYearMap]);
 
   const noticeRows = useMemo(() => retentionRecords.flatMap(record => {
-    const student = safeStudents.find(candidate => candidate.id === record.studentId || candidate.studentId === record.studentId);
+    const student = safeStudents.find(candidate => String(candidate.id) === String(record.studentId) || String(candidate.studentId) === String(record.studentId));
     const classId = String(record.classId);
     const matchesClass = selectedClassId === 'all' || classId === selectedClassId;
     const matchesYear = selectedSchoolYear === 'all' || record.schoolYear === selectedSchoolYear;
     const query = search.trim().toLowerCase();
     const matchesSearch = !query || `${record.studentName ?? ''} ${record.studentNumber ?? ''} ${student?.email ?? ''} ${record.subjectCode ?? ''} ${record.className ?? ''}`.toLowerCase().includes(query);
-    const pendingAttempt = record.remedialProgression?.attempts.find(attempt => attempt.outcome === 'pending' && attempt.scheduledDate);
-    const eligible = tab === 'midterm_advisory' ? record.midtermAtRisk === true : record.remedialEligible === true && Boolean(pendingAttempt);
+    const pendingAttempt = tab === 'remedial'
+      ? record.remedialProgression?.attempts.find(attempt => attempt.outcome === 'pending')
+      : undefined;
+    // Keep persisted pending attempts visible, including ones that still need
+    // a date, so Faculty can see what is preventing an email from being sent.
+    const eligible = tab === 'midterm_advisory' ? record.midtermAtRisk === true : Boolean(pendingAttempt);
     if (!eligible || !matchesClass || !matchesYear || !matchesSearch) return [];
-    return [{ ...record, email: student?.email ?? '', pendingAttempt }];
+    return [{ ...record, email: record.email || student?.email || '', pendingAttempt }];
   }), [retentionRecords, safeStudents, selectedClassId, selectedSchoolYear, search, tab]);
 
-  const selectedNoticeRows = noticeRows.filter(row => selected.includes(row.enrollmentId));
+  const selectableNoticeRows = noticeRows.filter(row =>
+    isOfficialBicolEmail(row.email) && (tab !== 'remedial' || Boolean(row.pendingAttempt?.scheduledDate))
+  );
+  const selectedNoticeRows = selectableNoticeRows.filter(row => selected.includes(row.enrollmentId));
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -415,6 +427,43 @@ export const EmailManagement: React.FC = () => {
     }
   };
 
+  const handleSaveRemedialDate = async (row: FacultyRetentionRecord & { pendingAttempt?: { attemptNumber: 1 | 2; scheduledDate: string | null } }) => {
+    const scheduledDate = remedialDateDraft.trim();
+    if (!scheduledDate) {
+      notify({ type: 'error', message: 'Choose a remedial exam date before saving. The date is required to send the student email.' });
+      return;
+    }
+    if (scheduledDate < manilaToday()) {
+      notify({ type: 'error', message: 'Choose today or a future date for the remedial exam.' });
+      return;
+    }
+    if (!row.pendingAttempt) {
+      notify({ type: 'error', message: 'This attempt is no longer pending. Refresh the Remedial Notices list and try again.' });
+      return;
+    }
+
+    setSavingRemedialId(row.enrollmentId);
+    try {
+      const result = await saveFacultyRemedialApi({
+        enrollmentId: row.enrollmentId,
+        attemptNumber: row.pendingAttempt.attemptNumber,
+        scheduledDate,
+      });
+      setEditingRemedialId(null);
+      setRemedialDateDraft('');
+      await Promise.all([loadRetentionRecords(), fetchEmailLogs()]);
+      const delivery = result.emailDelivery;
+      notify({
+        type: delivery && delivery.status !== 'Sent' ? 'warning' : 'success',
+        message: delivery?.message ?? 'Remedial exam date saved successfully.',
+      });
+    } catch (error) {
+      notify({ type: 'error', message: error instanceof Error ? error.message : 'Unable to save the remedial exam date.' });
+    } finally {
+      setSavingRemedialId(null);
+    }
+  };
+
 
   const handleRemoveSecretary = async (student: Student, classId: string, className: string) => {
     if (!(await requestConfirmation(`Remove ${student.name} as Class Secretary of ${className}? Their Student access stays the same.`, 'Remove Class Secretary', 'Remove'))) return;
@@ -481,7 +530,7 @@ export const EmailManagement: React.FC = () => {
       {/* 2. Control Bar: Tabs & Pill Filter Dropdowns Below */}
       <div className="flex flex-col gap-4">
         {/* Tabs Navigation */}
-        <div className="order-2 grid min-w-0 max-w-full grid-cols-2 gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm w-full no-print sm:flex sm:flex-wrap sm:items-stretch">
+        <div className="order-2 grid min-w-0 max-w-full grid-cols-2 gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm w-full no-print sm:grid-cols-3 lg:grid-cols-5">
           <button
             onClick={() => { setTab('student_invites'); setSelected([]); }}
             className={`min-w-0 text-center px-2 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
@@ -889,19 +938,19 @@ export const EmailManagement: React.FC = () => {
               </h2>
               <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                 {tab === 'midterm_advisory'
-                  ? 'Only students currently on the server-calculated Midterm Watchlist are listed. The email is informational and does not include grades.'
-                  : 'Students with a scheduled pending attempt are listed. Preview the current attempt and date before sending.'}
-                {' '}Emails are sent only after you preview and confirm.
+                  ? 'Students currently on the Midterm Watchlist are listed with their weighted midterm grade. The email remains informational and does not include grades.'
+                  : 'Pending attempts are listed. Add or change a date to email the student automatically; use Preview & resend for a manual retry.'}
+                {tab === 'midterm_advisory' && ' Emails are sent only after you preview and confirm.'}
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:shrink-0">
               <button
                 type="button"
-                disabled={loadingRetention || noticeRows.length === 0}
-                onClick={() => setSelected(selectedNoticeRows.length === noticeRows.length ? [] : noticeRows.map(row => row.enrollmentId))}
+                disabled={loadingRetention || selectableNoticeRows.length === 0}
+                onClick={() => setSelected(selectedNoticeRows.length === selectableNoticeRows.length ? [] : selectableNoticeRows.map(row => row.enrollmentId))}
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 sm:w-auto"
               >
-                {selectedNoticeRows.length === noticeRows.length && noticeRows.length > 0 ? 'Clear selection' : 'Select all eligible'}
+                {selectedNoticeRows.length === selectableNoticeRows.length && selectableNoticeRows.length > 0 ? 'Clear selection' : 'Select all eligible'}
               </button>
               <button
                 type="button"
@@ -927,35 +976,166 @@ export const EmailManagement: React.FC = () => {
               </p>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Try another class, school year, or search term.</p>
             </div>
+          ) : tab === 'midterm_advisory' ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[850px] text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <tr>
+                    <th className="w-24 border-b border-slate-200 px-4 py-4 dark:border-slate-800">Select</th>
+                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800">Student details</th>
+                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800">Class section</th>
+                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800">Midterm grade</th>
+                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800">Midterm GWA</th>
+                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800">Advisory email</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {noticeRows.map(row => {
+                    const isChecked = selected.includes(row.enrollmentId);
+                    return (
+                      <tr key={row.enrollmentId} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+                        <td className="px-4 py-5 align-middle">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={!isOfficialBicolEmail(row.email)}
+                            onChange={() => toggleSelect(row.enrollmentId)}
+                            aria-label={`Select ${row.studentName ?? 'student'} for Midterm Advisory`}
+                            className="mt-0.5 h-4 w-4 accent-emerald-600 disabled:opacity-40"
+                          />
+                        </td>
+                        <td className="px-3 py-5">
+                          <span className="block font-bold text-slate-800 dark:text-slate-100">{row.studentName || 'Student name unavailable'}</span>
+                          <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
+                            {row.studentNumber && <>{row.studentNumber}<span className="px-1.5">•</span></>}
+                            <span className="break-all">{row.email || 'No valid institutional email on file'}</span>
+                          </span>
+                          {row.email && !isOfficialBicolEmail(row.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Update to an @bicol-u.edu.ph address before sending.</span>}
+                        </td>
+                        <td className="px-3 py-5">
+                          <span className="inline-flex rounded-lg bg-slate-100 px-3 py-1.5 font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{row.className || 'Class section'}</span>
+                        </td>
+                        <td className="px-3 py-5 font-semibold text-slate-700 dark:text-slate-300">
+                          {row.midtermPercentage == null ? 'Unavailable' : `${Number(row.midtermPercentage).toFixed(0)}%`}
+                        </td>
+                        <td className="px-3 py-5 font-semibold text-slate-700 dark:text-slate-300">
+                          {row.midtermGwa == null ? 'Unavailable' : Number(row.midtermGwa).toFixed(1)}
+                        </td>
+                        <td className="px-3 py-5">
+                          <span className={`inline-flex rounded-full px-3 py-1.5 text-[10px] font-bold ${row.midtermAdvisorySent ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                            {row.midtermAdvisorySent ? 'Sent' : 'Not sent'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              {noticeRows.map(row => {
-                const isChecked = selected.includes(row.enrollmentId);
-                const detail = tab === 'midterm_advisory'
-                  ? 'Currently on the Midterm Watchlist'
-                  : `Attempt ${row.pendingAttempt?.attemptNumber ?? '—'} · ${remedialDateLabel(row.pendingAttempt?.scheduledDate) ?? 'Date unavailable'}`;
-                return (
-                  <label key={row.enrollmentId} className={`flex min-w-0 cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-colors ${isChecked ? 'border-clinical-400 bg-clinical-50/70 dark:border-clinical-700 dark:bg-clinical-950/20' : 'border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40'}`}>
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      disabled={!isOfficialBicolEmail(row.email)}
-                      onChange={() => toggleSelect(row.enrollmentId)}
-                      aria-label={`Select ${row.studentName ?? 'student'} for ${tab === 'midterm_advisory' ? 'Midterm Advisory' : 'Remedial Notice'}`}
-                      className="mt-1 h-4 w-4 shrink-0 accent-emerald-600 disabled:opacity-40"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block break-words text-sm font-bold text-slate-800 dark:text-slate-100">{row.studentName || 'Student name unavailable'}</span>
-                      <span className="mt-0.5 block break-all text-[11px] text-slate-500 dark:text-slate-400">{row.email || 'No valid institutional email on file'}</span>
-                      {row.email && !isOfficialBicolEmail(row.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Update to an @bicol-u.edu.ph address before sending.</span>}
-                      <span className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-                        <span>{row.subjectCode || 'Course'}</span><span aria-hidden="true">·</span><span>{row.className || 'Class section'}</span>
-                      </span>
-                      <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-bold ${tab === 'midterm_advisory' ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200'}`}>{detail}</span>
-                    </span>
-                  </label>
-                );
-              })}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[920px] text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <tr>
+                    <th className="w-24 border-b border-slate-200 px-4 py-4 dark:border-slate-800">Select</th>
+                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800">Student details</th>
+                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800">Class section</th>
+                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800">Attempt / date</th>
+                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800">Email status</th>
+                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800">Schedule</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {noticeRows.map(row => {
+                    const isChecked = selected.includes(row.enrollmentId);
+                    const hasScheduledDate = Boolean(row.pendingAttempt?.scheduledDate);
+                    const isEditing = editingRemedialId === row.enrollmentId;
+                    const isSaving = savingRemedialId === row.enrollmentId;
+                    const statusClass = row.remedialNoticeStatus === 'Sent'
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                      : row.remedialNoticeStatus === 'Failed'
+                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+                        : row.remedialNoticeStatus === 'Suppressed'
+                          ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
+                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
+                    const statusLabel = !hasScheduledDate
+                      ? 'Waiting for date'
+                      : row.remedialNoticeStatus === 'Sent'
+                        ? 'Email sent'
+                        : row.remedialNoticeStatus === 'Failed'
+                          ? 'Email failed · retry available'
+                          : row.remedialNoticeStatus === 'Suppressed'
+                            ? 'Mailpit only'
+                            : row.remedialNoticeStatus === 'Pending'
+                              ? 'Email pending'
+                              : 'Email not sent';
+                    return (
+                      <tr key={row.enrollmentId} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+                        <td className="px-4 py-5 align-middle">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={!isOfficialBicolEmail(row.email) || !hasScheduledDate}
+                            onChange={() => toggleSelect(row.enrollmentId)}
+                            aria-label={`Select ${row.studentName ?? 'student'} for Remedial Notice`}
+                            className="h-4 w-4 accent-emerald-600 disabled:opacity-40"
+                          />
+                        </td>
+                        <td className="px-3 py-5">
+                          <span className="block font-bold text-slate-800 dark:text-slate-100">{row.studentName || 'Student name unavailable'}</span>
+                          <span className="mt-0.5 block break-all text-[11px] text-slate-500 dark:text-slate-400">{row.email || 'No valid institutional email on file'}</span>
+                          {row.email && !isOfficialBicolEmail(row.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Update to an @bicol-u.edu.ph address before sending.</span>}
+                        </td>
+                        <td className="px-3 py-5">
+                          <span className="inline-flex rounded-lg bg-slate-100 px-3 py-1.5 font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{row.className || 'Class section'}</span>
+                        </td>
+                        <td className="px-3 py-5 font-semibold text-slate-700 dark:text-slate-300">
+                          <span className="block">Attempt {row.pendingAttempt?.attemptNumber ?? '—'}</span>
+                          <span className="mt-0.5 block text-[11px] font-normal text-slate-500 dark:text-slate-400">{remedialDateLabel(row.pendingAttempt?.scheduledDate) ?? 'Date not set'}</span>
+                        </td>
+                        <td className="px-3 py-5">
+                          <span className={`inline-flex rounded-full px-3 py-1.5 text-[10px] font-bold ${statusClass}`}>{statusLabel}</span>
+                        </td>
+                        <td className="px-3 py-5">
+                          {isEditing ? (
+                            <div className="flex min-w-[300px] flex-wrap items-center gap-2">
+                              <input
+                                type="date"
+                                aria-label={`Remedial exam date for ${row.studentName ?? 'student'}`}
+                                min={manilaToday()}
+                                value={remedialDateDraft}
+                                onChange={(event) => setRemedialDateDraft(event.target.value)}
+                                className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-clinical-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              />
+                              <button
+                                type="button"
+                                disabled={isSaving || !remedialDateDraft}
+                                onClick={() => void handleSaveRemedialDate(row)}
+                                className="rounded-lg bg-clinical-600 px-3 py-2 text-xs font-bold text-white hover:bg-clinical-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >{isSaving ? 'Saving…' : 'Save date'}</button>
+                              <button
+                                type="button"
+                                disabled={isSaving}
+                                onClick={() => { setEditingRemedialId(null); setRemedialDateDraft(''); }}
+                                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                              >Cancel</button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingRemedialId(row.enrollmentId);
+                                setRemedialDateDraft(row.pendingAttempt?.scheduledDate ?? '');
+                              }}
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                            >{hasScheduledDate ? 'Edit date' : 'Add date'}</button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </Card>
@@ -986,6 +1166,12 @@ export const EmailManagement: React.FC = () => {
         const targetClass = noticePreviewRow
           ? `${noticePreviewRow.subjectCode || 'Course'} · ${noticePreviewRow.className || 'Class Section'}`
           : previewStudent?.classSections?.[0]?.className || previewStudent?.className || (selectedClassId !== 'all' ? selectedClassId : 'Class Section');
+        const classSection = noticePreviewRow?.className || 'Class Section';
+        const courseCode = noticePreviewRow?.subjectCode || '';
+        const sectionRepeatsCourse = Boolean(courseCode) && classSection.toLowerCase().startsWith(courseCode.toLowerCase());
+        const emailClassName = noticePreviewRow && (previewType === 'midterm_advisory' || sectionRepeatsCourse)
+          ? classSection
+          : targetClass;
         const tokenSnippet = (previewStudent?.studentId || 'sample').toLowerCase().replace(/[^a-z0-9]/g, '');
         return (
           <EmailPreviewModal
@@ -995,7 +1181,7 @@ export const EmailManagement: React.FC = () => {
             recipientName={noticePreviewRow?.studentName || previewStudent?.name || 'Dental Student'}
             recipientEmail={noticePreviewRow?.email || previewStudent?.email}
             facultyName={user?.display_name || 'Dr. Roberto Santos, DMD'}
-            className={targetClass}
+            className={emailClassName}
             schoolYear={noticePreviewRow?.schoolYear || (selectedSchoolYear !== 'all' ? selectedSchoolYear : currentSchoolYear || '2026-2027')}
             invitationLink={`https://dentisys.bicol-u.edu.ph/activate-student?token=inv_${tokenSnippet}_act`}
             recipientCount={isNoticePreview ? selectedNoticeRows.length : 1}

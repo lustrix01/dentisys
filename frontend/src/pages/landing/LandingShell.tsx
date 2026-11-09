@@ -82,7 +82,7 @@ export function LandingShell({ children }: { children?: React.ReactNode }) {
             className="flex min-w-0 flex-col"
             aria-label="DentiSys home"
           >
-            <span className="flex items-center gap-1.5 text-base font-extrabold tracking-tight sm:text-lg md:text-xl">
+              <span className="flex items-center gap-1.5 text-sm font-extrabold tracking-tight sm:text-lg md:text-xl">
               <span className="text-slate-900">BUCDM</span><span className="text-purple-600">DentiSYS</span>
             </span>
             <span className="hidden truncate text-[10px] font-medium text-slate-500 sm:block sm:text-[11px]">Bicol University College of Dental Medicine</span>
@@ -103,9 +103,9 @@ export function LandingShell({ children }: { children?: React.ReactNode }) {
             ))}
           </nav>
 
-          <div className="ml-6 flex flex-shrink-0 items-center gap-2.5 sm:gap-4 md:gap-7">
+          <div className="ml-auto flex flex-shrink-0 items-center gap-1.5 sm:gap-3 md:gap-7 lg:ml-6">
             <span className="hidden h-5 w-px bg-slate-300 lg:block" aria-hidden="true" />
-            <Link to="/login" className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-purple-600 px-3.5 py-2 text-xs font-semibold text-white shadow-md shadow-purple-600/20 transition-colors hover:bg-purple-700 sm:gap-2 sm:px-5 sm:py-2.5 sm:text-sm">
+            <Link to="/login" className="inline-flex items-center gap-1 whitespace-nowrap rounded-xl bg-purple-600 px-2 py-2 text-[10px] font-semibold text-white shadow-md shadow-purple-600/20 transition-colors hover:bg-purple-700 sm:gap-2 sm:px-5 sm:py-2.5 sm:text-sm">
               <LogIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> <span>Portal Login</span>
             </Link>
             <button type="button" onClick={() => setMenuOpen((open) => !open)} className="rounded-xl p-1.5 text-slate-600 transition-colors hover:bg-slate-100 sm:p-2 lg:hidden" aria-expanded={menuOpen} aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}>
@@ -131,7 +131,7 @@ export function LandingShell({ children }: { children?: React.ReactNode }) {
         )}
       </header>
 
-      <div className="relative z-10 flex flex-1 flex-col">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         {children ?? <Outlet />}
       </div>
 

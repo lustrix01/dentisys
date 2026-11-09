@@ -241,7 +241,7 @@ export function SsoLogin() {
     <div className="h-screen h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-slate-100 flex items-center justify-center px-0 sm:px-4 font-sans text-slate-800">
       <div className="flex h-full w-full max-w-4xl max-h-full overflow-hidden rounded-none border-0 bg-white shadow-lg sm:rounded-2xl sm:border border-slate-200 md:h-[min(580px,calc(100dvh-3rem))]">
 
-      <main className={`h-full w-full md:order-2 md:w-1/2 min-h-0 bg-white flex flex-col justify-between overflow-hidden ${error ? 'p-3' : 'p-4 sm:p-7 lg:p-8'}`}>
+      <main className="h-full w-full md:order-2 md:w-1/2 min-h-0 bg-white flex flex-col justify-between overflow-hidden p-4 sm:p-7 lg:p-8">
         
         <div className="flex justify-start">
           <button
@@ -256,6 +256,23 @@ export function SsoLogin() {
 
         {/* Center: Main Form Block */}
         <div className={`w-full max-w-sm mx-auto my-auto ${error ? 'py-0 space-y-2' : 'py-2 sm:py-5 space-y-3 sm:space-y-5'}`}>
+
+          {/* Compact mobile branding; the desktop brand remains in the left panel. */}
+          <div className="md:hidden flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-white via-purple-50/80 to-white py-2">
+            <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-purple-100">
+              <span className="absolute inset-1 rounded-full bg-purple-100/70 blur-md" aria-hidden="true" />
+              <img
+                src="/bu-cdm-logo.png"
+                alt=""
+                aria-hidden="true"
+                className="relative h-10 w-10 object-contain"
+              />
+            </span>
+            <span className="text-left">
+              <span className="block text-base font-bold tracking-tight text-slate-900">DentiSYS</span>
+              <span className="block text-[10px] font-medium text-slate-500">BU College of Dental Medicine</span>
+            </span>
+          </div>
 
           {/* Login heading */}
           <div className="space-y-1">

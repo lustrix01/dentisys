@@ -398,7 +398,3 @@ export function parsePDFRoster(pages: RosterPDFPage[]): RosterPDFResult {
   const header = parsePDFHeader(headerText, headerLines);
   return { students, total, header, official: hasProgram || Boolean(header.courseCode) };
 }
-
-export function getSampleRegistrarCSV(): string {
-  return 'Student ID,Last Name,First Name,Middle Name,Email,Year Level,Sex,Contact #\n2099-1234-56789,Dela Cruz,Ana,Reyes,ana.fixture@bicol-u.edu.ph,4,Female,\n2099-01-12345,Peña,José,,jose.fixture@bicol-u.edu.ph,3,Male,';
-}

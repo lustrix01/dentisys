@@ -643,7 +643,7 @@ export const RetentionMonitoring: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      await saveFacultyRemedialApi({
+      const saved = await saveFacultyRemedialApi({
         enrollmentId: selectedScheduleRecord.enrollmentId,
         studentId: selectedScheduleRecord.studentId,
         classId: selectedScheduleRecord.classId,
@@ -653,11 +653,12 @@ export const RetentionMonitoring: React.FC = () => {
       });
       const refreshed = await refreshRetention();
       resetScheduleForm();
+      const emailMessage = saved.emailDelivery ? ` ${saved.emailDelivery.message}` : '';
       setNotification({
-        type: refreshed ? 'success' : 'info',
+        type: refreshed && (!saved.emailDelivery || saved.emailDelivery.status === 'Sent') ? 'success' : 'info',
         message: refreshed
-          ? 'Remedial exam persisted successfully.'
-          : 'Remedial exam persisted, but the authoritative list could not be refreshed.',
+          ? `Remedial exam persisted successfully.${emailMessage}`
+          : `Remedial exam persisted, but the authoritative list could not be refreshed.${emailMessage}`,
       });
     } catch (requestError) {
       showFeedback(requestError instanceof Error ? requestError.message : 'Unable to persist the remedial exam.', 'error');

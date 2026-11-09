@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, LogIn, GraduationCap, Scale, MapPin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LogIn } from 'lucide-react';
 
 export function AboutPage() {
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -41,17 +41,24 @@ export function AboutPage() {
         <div
           onMouseEnter={() => setIsPaused(true)}
           onMouseLeave={() => setIsPaused(false)}
-          className="flex h-[480px] sm:h-[460px] flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-xs sm:p-10 transition-all"
+          className="relative flex min-h-[480px] h-auto flex-col justify-between gap-5 overflow-visible rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:p-6 md:p-8 lg:h-[460px] lg:gap-0 lg:overflow-hidden lg:p-10 transition-all"
         >
+          <img
+            src="/bu-torch.png"
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute top-1/2 z-0 h-56 w-auto -translate-y-1/2 object-contain opacity-[0.08] select-none sm:h-64 lg:h-[88%]"
+            style={{ left: 'auto', right: '10%' }}
+          />
           {/* SLIDE CONTENT AREA (FILLS VERTICAL SPACE EQUALLY) */}
-          <div className="flex flex-1 flex-col justify-center">
+          <div className="relative z-10 flex flex-1 flex-col justify-center">
 
             {/* SLIDE 1: TEXT ON LEFT, BUCDM SEAL ON RIGHT (NO BACKGROUND CARD, NO GAP) */}
             {currentSlide === 0 && (
-              <div className="mx-auto flex w-full max-w-5xl flex-col-reverse items-center justify-center gap-8 md:flex-row md:gap-24 lg:gap-32 animate-fade-in">
+              <div className="mx-auto flex w-full max-w-6xl flex-col-reverse items-center justify-center gap-6 md:flex-row-reverse md:gap-12 lg:gap-20 animate-fade-in">
                 
                 {/* LEFT: TEXT & INFORMATION */}
-                <div className="flex-1 flex flex-col items-start text-left max-w-xl">
+                <div className="flex w-full min-w-0 flex-1 flex-col items-center text-center max-w-xl md:items-start md:text-left">
                   <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl md:text-4xl lg:text-[2.6rem] font-heading leading-tight">
                     <span className="text-purple-600">DentiSYS</span> Academic Portal
                     <span className="mt-1.5 block text-base font-semibold text-slate-700 sm:text-xl md:text-2xl font-heading">
@@ -65,20 +72,6 @@ export function AboutPage() {
                     attendance, and compute midterm and final grades according to university conversion tables.
                   </p>
 
-                  <div className="mt-5 flex items-center gap-2 overflow-x-auto text-[11px] sm:text-xs text-slate-600">
-                    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 font-medium whitespace-nowrap">
-                      <GraduationCap className="h-3.5 w-3.5 text-purple-600" />
-                      <span>Doctor of Dental Medicine (DMD)</span>
-                    </span>
-                    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 font-medium whitespace-nowrap">
-                      <Scale className="h-3.5 w-3.5 text-purple-600" />
-                      <span>Official Transmuted Rating Scale</span>
-                    </span>
-                    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 font-medium whitespace-nowrap">
-                      <MapPin className="h-3.5 w-3.5 text-purple-600" />
-                      <span>Legazpi City Campus</span>
-                    </span>
-                  </div>
                 </div>
 
                 {/* RIGHT: BARE BUCDM SEAL (NO BACKGROUND CARD, BALANCED DIRECT PROXIMITY) */}

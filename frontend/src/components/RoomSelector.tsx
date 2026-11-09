@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ROOM_CATEGORIES, ROOM_OPTIONS } from '../utils/scheduleHelper';
+import React from 'react';
+import { ROOM_OPTIONS } from '../utils/scheduleHelper';
 
 interface RoomSelectorProps {
   label?: string;
@@ -17,29 +17,7 @@ export const RoomSelector: React.FC<RoomSelectorProps> = ({
   placeholder = 'Select Room Venue',
   id,
 }) => {
-  const isKnownRoom = ROOM_OPTIONS.includes(value);
-  const [isCustom, setIsCustom] = useState(!isKnownRoom && value.trim() !== '');
-
-  useEffect(() => {
-    if (!isKnownRoom && value.trim() !== '') {
-      setIsCustom(true);
-    } else if (isKnownRoom) {
-      setIsCustom(false);
-    }
-  }, [value, isKnownRoom]);
-
-  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    if (val === 'CUSTOM') {
-      setIsCustom(true);
-      if (isKnownRoom) {
-        onChange('');
-      }
-    } else {
-      setIsCustom(false);
-      onChange(val);
-    }
-  };
+  const isAllowedRoom = (ROOM_OPTIONS as readonly string[]).includes(value);
 
   return (
     <div className="space-y-1.5">
@@ -50,29 +28,19 @@ export const RoomSelector: React.FC<RoomSelectorProps> = ({
       )}
       <select
         id={id}
-        value={isCustom ? 'CUSTOM' : (isKnownRoom ? value : (value ? 'CUSTOM' : ''))}
-        onChange={handleSelectChange}
+        value={isAllowedRoom ? value : ''}
+        onChange={(e) => onChange(e.target.value)}
         className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium text-xs cursor-pointer focus:ring-2 focus:ring-accent-500 focus:outline-none"
       >
-        <option value="" disabled>-- {placeholder} --</option>
-        {ROOM_CATEGORIES.map(cat => (
-          <optgroup key={cat.category} label={cat.category}>
-            {cat.rooms.map(room => (
-              <option key={room} value={room}>{room}</option>
-            ))}
-          </optgroup>
-        ))}
-        <option value="CUSTOM">Other / Custom Room...</option>
+        <option value="">-- {placeholder} --</option>
+        <option value="DM1">DM1</option>
+        <option value="DM2">DM2</option>
+        <option value="TBA">TBA (To be announced)</option>
       </select>
-
-      {(isCustom || (!isKnownRoom && value.trim() !== '')) && (
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Type custom room name (e.g. Room 405)"
-          className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs focus:ring-2 focus:ring-accent-500 focus:outline-none animate-fade-in"
-        />
+      {!isAllowedRoom && value.trim() !== '' && (
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          Saved room: {value}. It will stay unchanged unless you choose DM1, DM2, or TBA.
+        </p>
       )}
     </div>
   );

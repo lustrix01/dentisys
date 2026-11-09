@@ -10,7 +10,7 @@ Evidence: the only official workbook we have (`SAMPLE.xlsx`, Operative Dentistry
 
 - Classes & Rosters already records a course as Lecture, Laboratory, or both, from its units (`courses.lecture_units`, `courses.lab_units`), and shows "Lecture" / "Lecture & Laboratory" on the class card. Lecture-only classes can be created now.
 - Course units are shared by every Faculty and school year. They can be changed only while unrecorded, or by the Faculty who created the course.
-- Grade Weights, the server save and the database constraint (migration 045) only accept Lecture + Laboratory for new period configurations, with both shares above 0.
+- Grade Weights, the server save and database constraints support Lecture-only and Lecture + Laboratory period configurations; units select the structure. Older combined period configurations may still exist.
 - Grade sheet import already reads a workbook with only a `(LEC)` sheet.
 - The demo seed courses have no units recorded.
 
@@ -33,6 +33,7 @@ Evidence: the only official workbook we have (`SAMPLE.xlsx`, Operative Dentistry
 | L9 | **Locking in the provisional formula.** When `OA LEC.xlsx` arrives, Claude compares its course-grade formula with L4. Match: remove "provisional" from spec and this contract. Different: change the one formula, add its test, then recalculate current-term lecture-only course grades with the existing one-time script (preview list to the Owner, then one audited batch, actor "System", no notifications, overrides kept). |
 | L10 | **Release:** no recalculation; no lecture-only configurations exist yet. (Q6) |
 | L11 | **Unchanged:** Lecture + Laboratory courses (formula, defaults, conversion rules); blanks stay incomplete and never become 0; remediation at 2.50 or worse; Midterm Watchlist and Advisory use these grades; closed school years stay as recorded; no "provisional" label on any screen. (Q12) |
+| L12 | **Existing combined period setup.** When a course is lecture-only and has a saved combined period configuration, Grade Weights opens an editable Lecture-only draft without a conversion step. The draft uses the Lecture defaults: Term Exam 50%, Quiz 20%, Outputs 20%, Participation 10%, Midterm 50%, Finals 50%. Do not include an Attendance grading category; attendance remains tracked in Attendance Monitoring and contributes no grade. The saved combined calculation remains active until Faculty saves. Recorded assessment scores and attendance records are preserved; current-term grades follow the existing save-triggered recomputation behavior. Lecture/Laboratory course behavior is unchanged. (Owner-approved 2026-11-10) |
 
 ## Worked example (sample student 1, Lecture sheet)
 
@@ -71,6 +72,7 @@ GRD-003: the opening sentence excepts lecture-only courses, and the amendment "O
 
 - Grade Weights GET (saved config and unsaved default) adds `courseStructure: 'lecture' | 'lecture_laboratory' | 'unrecorded'` (from course units; Laboratory-only courses report `lecture_laboratory`) and `courseUnits: { lecture: number | null, laboratory: number | null }`.
 - `componentMode` gains `'lecture'`. A `'lecture'` config has no `componentWeights`; every period category has `component: 'Lecture'`. The unsaved default for a `'lecture'` course is the four Lecture categories for each period, Midterm 50 / Final 50.
+- A saved combined period config on a lecture-only course is loaded as an editable Lecture-only draft. Saving as `'lecture'` does not require `convertToLectureLaboratory`; this exception applies only when course units indicate lecture-only. Existing category IDs and assessment links are retained.
 - Grade Weights save: a `'lecture'` course must save `componentMode: 'lecture'` with only Lecture categories; any other course must save `'lecture_laboratory'` as today. Mismatch → 422 `GRADING_STRUCTURE_MISMATCH` ("This course is Lecture only. Save it without a Laboratory part." / "This course has Laboratory units. Add the Laboratory part before saving."). Saving `'lecture'` over a config whose Laboratory categories still have assessments → 422 `GRADING_LABORATORY_ASSESSMENTS_EXIST`.
 - Class edit (`labUnits` from above 0 to 0) while any current-term offering of the course has an assessment in a Laboratory category → 409 `COURSE_LABORATORY_ASSESSMENTS_EXIST`, message "DMD-3B (Dr. Santos) has Laboratory assessments. Delete them in Grade Computation before removing Laboratory units." (first offering found: section name and Faculty name). Nothing is saved.
 - Computation for `'lecture'`: period grade = Lecture period grade (whole percent); course grade = `round(Midterm × share + Final × share)`, rounded once. Breakdown keeps the existing shape without Laboratory values.

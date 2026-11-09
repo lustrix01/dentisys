@@ -49,6 +49,12 @@ $loWithLab = $loPayload;
 $loWithLab['midtermCategories'][] = ['name' => 'Practical', 'weight' => 100, 'sortOrder' => 5, 'sourceKind' => 'assessment', 'component' => 'Laboratory'];
 [$loWithLabStatus] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $loWithLab);
 expect_same(422, $loWithLabStatus, 'A lecture-only save refuses a Laboratory category');
+$loWithAttendance = $loPayload;
+$loWithAttendance['midtermCategories'][3]['name'] = 'Attendance';
+$loWithAttendance['midtermCategories'][3]['sourceKind'] = 'attendance';
+[$loAttendanceStatus, $loAttendanceBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $loWithAttendance);
+expect_same(422, $loAttendanceStatus, 'A lecture-only save refuses Attendance as a grading category');
+expect_same('GRADING_ATTENDANCE_CATEGORY_NOT_GRADED', $loAttendanceBody['code'] ?? null, 'Lecture-only Attendance category rejection has a stable code');
 [$loCreateStatus, $loCreateBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $loPayload);
 expect_same(201, $loCreateStatus, 'A lecture-only course saves its Lecture categories');
 $loConfig = $loCreateBody['configuration'] ?? [];
@@ -95,6 +101,40 @@ expect_same(90.0, (float) ($loResult['percentage'] ?? -1), 'The course grade rou
 expect_same(1.9, (float) ($loResult['gwa'] ?? -1), 'The lecture-only course grade converts to 1.9');
 expect_true(!str_contains(json_encode($loResult['breakdown'] ?? []), 'Laboratory'), 'The stored breakdown has no Laboratory values');
 expect_same('90.00', (string) ($groupedReadGrade($loStudent['enrollmentId'])['final_percentage'] ?? ''), 'The recomputed course percentage is stored');
+
+// 4a. A legacy combined period config on a lecture-only course can be saved as
+// Lecture-only without a conversion flag, preserving its categories and terms.
+$pdo->prepare("UPDATE grading_configs SET component_mode = 'combined', component_lecture_weight = NULL, component_laboratory_weight = NULL WHERE config_id = ?")
+    ->execute([$loConfigId]);
+$pdo->prepare("UPDATE grading_category_period_memberships SET component = 'Combined' WHERE category_id IN (SELECT category_id FROM grading_categories WHERE config_id = ?)")
+    ->execute([$loConfigId]);
+[$loLegacyGetStatus, $loLegacyGet] = integration_http_get_json($loConfigPath($loOnly), $facultyAccessToken);
+expect_same(200, $loLegacyGetStatus, 'Grade Weights reads a saved combined period config for a lecture-only course');
+expect_true(!array_key_exists('componentMode', $loLegacyGet['configuration'] ?? []), 'The legacy combined configuration keeps its existing API representation until saved');
+$loLegacyConfig = $loLegacyGet['configuration'];
+$loLegacyPayload = [
+    'courseId' => $loOnly['courseId'], 'semester' => '1st', 'schoolYear' => $loOnly['schoolYear'],
+    'schemaMode' => 'periods', 'componentMode' => 'lecture', 'version' => $loLegacyConfig['version'],
+    'termRatio' => ['midterm' => 50, 'final' => 50],
+    'midtermCategories' => array_map(static fn(array $c): array => [
+        'id' => $c['id'], 'name' => $c['name'], 'weight' => $c['weight'], 'sortOrder' => $c['sortOrder'], 'component' => 'Lecture',
+    ], $loLegacyConfig['midtermCategories']),
+    'finalCategories' => array_map(static fn(array $c): array => [
+        'id' => $c['id'], 'name' => $c['name'], 'weight' => $c['weight'], 'sortOrder' => $c['sortOrder'], 'component' => 'Lecture',
+    ], $loLegacyConfig['finalCategories']),
+    'attendanceDateRanges' => $loLegacyConfig['attendanceDateRanges'],
+];
+[$loLegacySaveStatus, $loLegacySave] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $loLegacyPayload);
+expect_same(200, $loLegacySaveStatus, 'Lecture-only legacy combined config saves without a conversion flag');
+expect_same('lecture', $loLegacySave['configuration']['componentMode'] ?? null, 'The saved legacy config is now Lecture-only');
+expect_same(50.0, (float) ($loLegacySave['configuration']['termRatio']['midterm'] ?? -1), 'The lecture-only default restores Midterm to 50%');
+expect_same(50.0, (float) ($loLegacySave['configuration']['termRatio']['final'] ?? -1), 'The lecture-only default restores Finals to 50%');
+expect_same(
+    array_column($loLegacyConfig['midtermCategories'], 'id'),
+    array_column($loLegacySave['configuration']['midtermCategories'], 'id'),
+    'Existing Midterm category IDs are preserved'
+);
+expect_same('88.00', (string) ($groupedReadGrade($loStudent['enrollmentId'])['final_percentage'] ?? ''), 'Saving applies the Lecture-only formula to the preserved scores');
 
 // 5. The Laboratory removal flow on a Lecture + Laboratory course.
 $loBoth = $loCreate('BOTH', 2.0, 1.0);

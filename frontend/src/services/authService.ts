@@ -82,7 +82,7 @@ export const validateBicolUEmail = (
       const display = normalizedAllowed.map(d => `@${d}`).join(', ');
       return {
         isValid: false,
-        message: `Only official institutional email addresses (${display}) are allowed.`,
+        message: `Use your ${display} email.`,
       };
     }
   }

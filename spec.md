@@ -464,6 +464,12 @@ must each total exactly 100%, using the existing supported decimal precision.
 
 Preset values become authoritative only after a successful server save. Existing saved configurations must never be replaced automatically by preset values.
 
+Owner-approved amendment (2026-11-10): A saved combined period configuration
+for a lecture-only course opens as an editable Lecture-only draft with the
+Lecture defaults and a 50% Midterm / 50% Finals split. This draft requires no
+conversion action; defaults take effect only when Faculty saves. This exception
+does not change Lecture/Laboratory course behavior.
+
 Assessments must reference valid categories for their offering and grading period. Existing assessment identifiers, category references, raw scores, and assessment maximum scores must be preserved.
 
 Existing single-list configurations continue using their current calculation until explicitly converted through a validated operation. Migration must not silently change recorded grades.
@@ -547,13 +553,19 @@ Existing overall and ungrouped period configurations, assessment and category
 identifiers, raw scores, history and saved grades remain preserved. Existing
 configurations continue their saved calculation until explicitly converted;
 historical offerings remain view-only. Updating an existing ungrouped period
-configuration requires explicit validated conversion to Lecture/Laboratory
-grading. Faculty must assign existing categories and resolve ambiguous assessment
-mappings before conversion can be saved; the system must not guess mappings,
-replace existing categories with defaults, or rescale saved weights automatically.
-Saving or converting a configuration must not rewrite recorded grades; explicit
-authorized recomputation applies the saved configuration. Conversion from grouped
-grading back to combined period lists is no longer supported.
+configuration for a Lecture/Laboratory course requires explicit validated
+conversion to Lecture/Laboratory grading. Faculty must assign existing
+categories and resolve ambiguous assessment mappings before conversion can be
+saved; the system must not guess mappings, replace existing categories with
+defaults, or rescale saved weights automatically. For a lecture-only course,
+Grade Weights opens an existing combined period configuration as an editable
+Lecture-only draft: it preserves the existing categories, IDs, weights, term
+shares, assessment links and scores. Defaults are used only when no saved
+configuration exists. The saved combined calculation remains active until
+Faculty saves the Lecture-only draft. The save must not rewrite recorded scores;
+current-term grades follow the existing save-triggered recomputation behavior.
+Conversion from grouped grading back to combined period lists is no longer
+supported.
 
 Grade Weights, assessment selection, server computations, Faculty/Student
 ledgers and applicable grade exports must identify Lecture and Laboratory
@@ -589,6 +601,16 @@ Past school years are not affected. Saved scores are never deleted or
 rescaled, and grades change only through authorized recomputation. Detailed
 rules: docs/contracts/lecture-only-grading.md.
 
+Owner-approved amendment (2026-11-10): Attendance is not a grading category for
+lecture-only courses. The Lecture defaults are Term Exam 50%, Quiz 20%, Outputs
+20%, and Participation 10%; Midterm and Finals are each 50%. Attendance records
+remain in Attendance Monitoring and do not contribute to the course grade. When
+a saved combined setup is opened as a Lecture-only draft, the Attendance grade
+category is removed from the draft and the default Lecture categories are used.
+The existing calculation remains active until Faculty saves; recorded
+assessment scores and attendance records are preserved. Lecture/Laboratory
+course behavior remains unchanged.
+
 Owner-approved amendment (2026-10-27): The Dean confirmed the default
 Midterm/Finals split is 50% / 50% (previously 30% / 70%) for both
 Lecture/Laboratory and lecture-only courses. It is only the unsaved default;
@@ -605,7 +627,7 @@ Faculty may send At-Risk and Privacy Consent notices to their students using the
 
 Owner-approved amendment (2026-10-12): Email Management has three tabs: Student invitations, Secretary, and History. Faculty At-Risk and Privacy Consent notices are not offered. The delivery modes (`custom`, `mailpit`, `smtp`) are unchanged for all other email.
 
-Owner-approved amendment (2026-11-09): Email Management also provides Midterm Advisory and Remedial notice tabs. These notices are Faculty-initiated: Faculty select eligible enrolled Students, preview the personalized message and recipient list, then explicitly send. No email is sent automatically when eligibility or remedial progression changes. A Midterm Advisory may be sent only to a current-school-year enrollment that is presently on the server-calculated Midterm Watchlist under UI-003; it is informational, contains no numeric grade, and advises the Student to contact the Faculty member. A Remedial notice may be sent only for a current, pending remedial attempt that has a scheduled date; it includes the course, attempt number and current scheduled date, and may be sent after Faculty schedules or updates that attempt. Recording an attempt outcome alone does not trigger an email. The server revalidates eligibility and uses the canonical Student institutional email at send time. Existing email delivery modes, allowlist behavior, and Email History logging apply to both notice types. On mobile, the new recipient lists use stacked blocks and tabs wrap without horizontal page scrolling.
+Owner-approved amendment (2026-11-10): Email Management provides Midterm Advisory and Remedial notice tabs. A Midterm Advisory remains Faculty-initiated: Faculty select eligible enrolled Students, preview the personalized message and recipient list, then explicitly send. No Midterm Advisory is sent automatically when eligibility changes. It may be sent only to a current-school-year enrollment presently on the server-calculated Midterm Watchlist under UI-003; it is informational, contains no numeric grade, and advises the Student to contact the Faculty member. A Remedial notice is sent automatically after an authorized Faculty save creates a current-school-year pending remedial attempt with a scheduled date, or changes that attempt's scheduled date to a different non-null date. It includes the course, attempt number and current scheduled date. Saving an unchanged date, removing a date, or recording an attempt outcome alone does not trigger an email. The schedule save remains committed if delivery fails; the delivery result is recorded in Email History and shown in Email Management for the matching attempt and date. Faculty may still preview and explicitly send a Remedial notice from Email Management as a retry. The server revalidates eligibility and uses the canonical Student institutional email at send time. Existing email delivery modes and allowlist behavior apply to both notice types. On mobile, the recipient lists use stacked blocks and tabs wrap without horizontal page scrolling.
 
 ---
 

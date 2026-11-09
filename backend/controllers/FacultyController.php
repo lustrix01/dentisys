@@ -1405,13 +1405,22 @@ function faculty_grading_normalize_categories(mixed $value, string $componentMod
         }
         $sortOrders[$sortScope] = true;
 
+        $sourceKind = faculty_grading_source_kind($rawCategory['sourceKind'] ?? null, $name);
+        if ($lectureOnly && ($sourceKind === 'attendance' || $nameKey === 'attendance')) {
+            throw new FacultyGradingConfigurationException(
+                'Attendance cannot be a grading category for a Lecture-only course. Use assessment categories for grades; attendance stays in Attendance Monitoring.',
+                422,
+                'GRADING_ATTENDANCE_CATEGORY_NOT_GRADED'
+            );
+        }
+
         $categories[] = [
             'id' => $categoryId,
             'name' => $name,
             'weight' => number_format($weightBasisPoints / 10000, 4, '.', ''),
             'weightBasisPoints' => $weightBasisPoints,
             'sortOrder' => $sortOrder,
-            'sourceKind' => faculty_grading_source_kind($rawCategory['sourceKind'] ?? null, $name),
+            'sourceKind' => $sourceKind,
             'sourceKindExplicit' => array_key_exists('sourceKind', $rawCategory)
                 && $rawCategory['sourceKind'] !== null
                 && $rawCategory['sourceKind'] !== '',
@@ -2251,7 +2260,8 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                 }
             } elseif ($existingComponentMode !== $componentMode) {
                 if ($existingComponentMode === 'combined' && $componentMode !== 'combined') {
-                    if (($data['convertToLectureLaboratory'] ?? false) !== true) {
+                    $legacyCombinedLectureOnly = $isLectureCourse && $componentMode === 'lecture';
+                    if (!$legacyCombinedLectureOnly && ($data['convertToLectureLaboratory'] ?? false) !== true) {
                         throw new FacultyGradingConfigurationException(
                             'Converting combined period categories to Lecture/Laboratory grading requires explicit confirmation.',
                             409,
@@ -6708,6 +6718,83 @@ function faculty_midterm_at_risk_ids(PDO $pdo, array $rows): array
     return $ids;
 }
 
+function faculty_remedial_email_class_label(string $courseCode, string $className): string
+{
+    $courseCode = trim($courseCode);
+    $className = trim($className);
+    if ($courseCode === '' || strncasecmp($className, $courseCode, strlen($courseCode)) === 0) {
+        return $className !== '' ? $className : ($courseCode !== '' ? $courseCode : 'your course');
+    }
+    return $className === '' ? $courseCode : $courseCode . ' · ' . $className;
+}
+
+function faculty_remedial_email_subject(string $courseCode, string $className, int $attemptNumber, string $scheduledDate): string
+{
+    $dateLabel = (new DateTimeImmutable($scheduledDate, new DateTimeZone('Asia/Manila')))->format('F j, Y');
+    return 'Remedial Exam Schedule: ' . faculty_remedial_email_class_label($courseCode, $className)
+        . ' | Attempt ' . $attemptNumber . ' | ' . $dateLabel;
+}
+
+/** Send and record the schedule email after the remedial schedule transaction commits. */
+function faculty_send_remedial_schedule_email(
+    PDO $pdo,
+    array $config,
+    array $authCtx,
+    array $target,
+    int $attemptNumber,
+    string $scheduledDate
+): array {
+    $recipientEmail = mb_strtolower(trim((string) ($target['bu_email'] ?? '')));
+    $recipientName = trim((string) ($target['student_name'] ?? ''));
+    $courseCode = (string) ($target['course_code'] ?? '');
+    $className = (string) ($target['cs_name'] ?? '');
+    $classLabel = faculty_remedial_email_class_label($courseCode, $className);
+    $dateLabel = (new DateTimeImmutable($scheduledDate, new DateTimeZone('Asia/Manila')))->format('F j, Y');
+    $subject = faculty_remedial_email_subject($courseCode, $className, $attemptNumber, $scheduledDate);
+    $facultyName = (string) ($authCtx['display_name'] ?? 'your Faculty instructor');
+    $message = "A remedial exam for {$classLabel} has been scheduled. Attempt {$attemptNumber} is scheduled for {$dateLabel}. Please contact {$facultyName} if you have questions about this schedule.";
+    $messageBody = email_faculty_message_html($recipientName, $facultyName, $message);
+    $officialEmail = filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)
+        && strtolower((string) substr(strrchr($recipientEmail, '@') ?: '', 1)) === 'bicol-u.edu.ph';
+    $initialStatus = $officialEmail ? 'Pending' : 'Failed';
+    $failureReason = $officialEmail ? null : 'Only official @bicol-u.edu.ph addresses can receive DentiSys email.';
+    $operationUuid = uuid_v4_string();
+    $actionUuid = email_action_uuid([]);
+
+    try {
+        $insert = $pdo->prepare(
+            "INSERT INTO email_outbox
+                (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, failure_reason, operation_uuid, action_uuid)
+             VALUES (?, ?, ?, ?, 'Remedial Notice', ?, ?, ?, ?, ?) RETURNING email_id"
+        );
+        $insert->execute([
+            (int) $authCtx['user_id'], $recipientEmail, $recipientName, $subject, $messageBody,
+            $initialStatus, $failureReason, $operationUuid, $actionUuid,
+        ]);
+        $emailId = (int) $insert->fetchColumn();
+        if ($emailId <= 0) {
+            throw new RuntimeException('Remedial notice outbox insert did not return a valid identifier.');
+        }
+        if (!$officialEmail) {
+            return ['status' => 'Failed', 'message' => (string) $failureReason];
+        }
+
+        $sent = send_email($recipientEmail, $subject, $messageBody, $config);
+        $suppressed = $sent && !email_reaches_recipient($recipientEmail, $config);
+        $status = $suppressed ? 'Suppressed' : ($sent ? 'Sent' : 'Failed');
+        $sentAt = $sent ? (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u') : null;
+        $failureReason = $suppressed
+            ? 'Custom e-mail mode: the recipient is not on the allowlist; delivered to Mailpit only.'
+            : ($sent ? null : 'SMTP delivery failed or is not configured.');
+        $finish = $pdo->prepare('UPDATE email_outbox SET status = ?, sent_at = ?, failure_reason = ? WHERE email_id = ?');
+        $finish->execute([$status, $sentAt, $failureReason, $emailId]);
+        return ['status' => $status, 'message' => $failureReason ?? 'Remedial notice sent.'];
+    } catch (Throwable $e) {
+        error_log('Automatic remedial email failed: ' . sanitize_for_log($e));
+        return ['status' => 'Failed', 'message' => 'The schedule was saved, but the remedial email could not be delivered. Retry it from Email Management.'];
+    }
+}
+
 function handle_faculty_retention_get(): void
 {
     try {
@@ -6716,7 +6803,7 @@ function handle_faculty_retention_get(): void
         $authCtx = faculty_verify_auth($pdo, $config);
 
         $stmt = $pdo->prepare(
-            "SELECT e.enrollment_id, e.student_id,
+            "SELECT e.enrollment_id, e.student_id, s.bu_email,
                     COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
                     COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
                     COALESCE(egb.retention_state, e.retention_state) AS retention_state,
@@ -6743,6 +6830,28 @@ function handle_faculty_retention_get(): void
         );
         $stmt->execute([$authCtx['user_id']]);
         $dbRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $sentAdvisories = $pdo->prepare(
+            "SELECT lower(recipient_email) AS recipient_email, subject
+               FROM email_outbox
+              WHERE sender_user_id = ? AND email_type = 'Midterm Advisory' AND status = 'Sent'"
+        );
+        $sentAdvisories->execute([$authCtx['user_id']]);
+        $sentAdvisoryKeys = [];
+        foreach ($sentAdvisories->fetchAll(PDO::FETCH_ASSOC) as $sentAdvisory) {
+            $sentAdvisoryKeys[mb_strtolower(trim((string) $sentAdvisory['recipient_email'])) . "\0" . mb_strtolower(trim((string) $sentAdvisory['subject']))] = true;
+        }
+        $remedialEmailHistory = $pdo->prepare(
+            "SELECT lower(recipient_email) AS recipient_email, subject, status
+               FROM email_outbox
+              WHERE sender_user_id = ? AND email_type = 'Remedial Notice'
+              ORDER BY created_at DESC, email_id DESC"
+        );
+        $remedialEmailHistory->execute([$authCtx['user_id']]);
+        $remedialEmailStatusByKey = [];
+        foreach ($remedialEmailHistory->fetchAll(PDO::FETCH_ASSOC) as $emailRecord) {
+            $key = mb_strtolower(trim((string) $emailRecord['recipient_email'])) . "\0" . mb_strtolower(trim((string) $emailRecord['subject']));
+            $remedialEmailStatusByKey[$key] ??= (string) $emailRecord['status'];
+        }
         $enrollmentIds = array_map(static fn(array $row): int => (int) $row['enrollment_id'], $dbRows);
         $legacyByEnrollment = [];
         foreach ($dbRows as $row) {
@@ -6756,7 +6865,7 @@ function handle_faculty_retention_get(): void
         // newly saved scores, weights and attendance, including incomplete work.
         $readCache = [];
         faculty_retention_preload($pdo, $dbRows, $readCache);
-        $retention = array_map(static function (array $row) use ($pdo, $progressions, $legacyByEnrollment, $currentSchoolYear, $retentionThreshold, &$readCache): array {
+        $retention = array_map(static function (array $row) use ($pdo, $progressions, $legacyByEnrollment, $currentSchoolYear, $retentionThreshold, $remedialEmailStatusByKey, &$readCache): array {
             $enrollmentId = (int) $row['enrollment_id'];
             $midterm = faculty_watchlist_midterm($pdo, $row, $readCache);
             $gwa = $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null;
@@ -6769,11 +6878,28 @@ function handle_faculty_retention_get(): void
                 && $isCurrentYear
                 && !($legacyByEnrollment[$enrollmentId] ?? false)
                 && in_array($stage, ['none', 'attempt_1_pending', 'attempt_2_available', 'attempt_2_pending'], true);
+            $scheduledPendingAttempt = null;
+            foreach (($progressions[$enrollmentId]['attempts'] ?? []) as $attempt) {
+                if (($attempt['outcome'] ?? '') === 'pending' && !empty($attempt['scheduledDate'])) {
+                    $scheduledPendingAttempt = $attempt;
+                    break;
+                }
+            }
+            $remedialNoticeStatus = null;
+            if ($scheduledPendingAttempt !== null) {
+                $subject = faculty_remedial_email_subject(
+                    (string) $row['course_code'], (string) $row['cs_name'],
+                    (int) $scheduledPendingAttempt['attemptNumber'], (string) $scheduledPendingAttempt['scheduledDate']
+                );
+                $statusKey = mb_strtolower(trim((string) $row['bu_email'])) . "\0" . mb_strtolower($subject);
+                $remedialNoticeStatus = $remedialEmailStatusByKey[$statusKey] ?? null;
+            }
             $retentionRow = [
                 'enrollmentId' => (string) $enrollmentId,
                 'studentId' => (string) $row['student_id'],
                 'studentNumber' => $row['student_number'],
                 'studentName' => trim($row['first_name'] . ' ' . ($row['middle_name'] ? $row['middle_name'] . ' ' : '') . $row['last_name']),
+                'email' => (string) $row['bu_email'],
                 'classId' => (string) $row['cs_id'],
                 'className' => $row['cs_name'],
                 'subjectCode' => $row['course_code'],
@@ -6783,12 +6909,23 @@ function handle_faculty_retention_get(): void
                 'storedState' => $row['retention_state'],
                 'remedial' => remedial_state_json_legacy_payload($row['remedial_state_json']),
                 'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
+                'remedialNoticeStatus' => $remedialNoticeStatus,
                 'watchlistUnlocked' => $row['unlocked_at'] !== null,
                 'unlockedAt' => $row['unlocked_at'],
                 'schoolYear' => $row['school_year'],
                 'midtermComplete' => $midterm['complete'],
                 'midtermPercentage' => $midterm['percentage'],
                 'midtermRawPercentage' => $midterm['rawPercentage'] ?? null,
+                'midtermGwa' => $midterm['percentage'] !== null
+                    ? faculty_percentage_to_gwa_exact((float) $midterm['percentage'], 'Midterm')
+                    : null,
+                'midtermAdvisorySent' => isset($sentAdvisoryKeys[
+                    mb_strtolower(trim((string) $row['bu_email'])) . "\0" . mb_strtolower('Midterm Academic Advisory: ' . (string) $row['cs_name'])
+                ]) || isset($sentAdvisoryKeys[
+                    mb_strtolower(trim((string) $row['bu_email'])) . "\0" . mb_strtolower(
+                        'Midterm Academic Advisory: ' . (string) $row['course_code'] . ' · ' . (string) $row['cs_name']
+                    )
+                ]),
                 'midtermAtRisk' => $isCurrentYear && faculty_midterm_at_risk($midterm, $gwa, $progressions[$enrollmentId] ?? []),
                 'remedialEligible' => $remedialEligible,
             ];
@@ -7106,12 +7243,14 @@ function handle_faculty_retention_remedial_save(): void
                     e.remedial_state_json,
                     COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
                     cs.instructor_user_id, cs.status AS class_status, cs.school_year, cs.archive_reason,
-                    s.status AS student_status, s.student_account_user_id,
-                    c.course_code
+                    s.status AS student_status, s.student_account_user_id, s.bu_email,
+                    TRIM(CONCAT(COALESCE(pi.first_name, s.first_name), ' ', COALESCE(pi.middle_name, s.middle_name, ''), ' ', COALESCE(pi.last_name, s.last_name))) AS student_name,
+                    cs.cs_name, c.course_code
                FROM enrollments e
                JOIN class_sections cs ON cs.cs_id = e.cs_id
                JOIN students s ON s.student_id = e.student_id
                JOIN courses c ON c.course_id = cs.course_id
+               LEFT JOIN person_identities pi ON pi.person_id = s.person_id
                LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
               WHERE e.enrollment_id = ?
               FOR UPDATE OF e"
@@ -7243,6 +7382,12 @@ function handle_faculty_retention_remedial_save(): void
         $outcome = $request['hasPercentage']
             ? ((float) $request['percentage'] >= 50.0 ? 'passed' : 'failed')
             : 'pending';
+        $effectiveScheduledDate = $existing === null
+            ? $request['scheduledDate']
+            : ($hasScheduledDate ? $request['scheduledDate'] : ($existing['scheduled_date'] !== null ? (string) $existing['scheduled_date'] : null));
+        $shouldAutoSendRemedialNotice = $outcome === 'pending'
+            && $effectiveScheduledDate !== null
+            && ($existing === null || (string) ($existing['scheduled_date'] ?? '') !== $effectiveScheduledDate);
         if ($existing === null) {
             $insert = $pdo->prepare(
                 'INSERT INTO enrollment_remedial_attempts
@@ -7309,6 +7454,9 @@ function handle_faculty_retention_remedial_save(): void
             ['scope_cs_id' => (int) $target['cs_id'], 'after' => ['attemptNumber' => $attemptNumber, 'outcome' => $outcome, 'notes' => $request['notes']]]
         );
         $pdo->commit();
+        $emailDelivery = $shouldAutoSendRemedialNotice
+            ? faculty_send_remedial_schedule_email($pdo, $config, $authCtx, $target, $attemptNumber, (string) $effectiveScheduledDate)
+            : null;
         json_response([
             'status' => 'ok',
             'message' => $outcome === 'pending'
@@ -7317,6 +7465,7 @@ function handle_faculty_retention_remedial_save(): void
             'enrollmentId' => (string) $enrollmentId,
             'progression' => $updatedProgression,
             'notification' => $notification !== null ? ['created' => $notification['created']] : null,
+            'emailDelivery' => $emailDelivery,
         ], 200);
     } catch (RemedialAttemptException $e) {
         if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
@@ -7551,8 +7700,8 @@ function handle_faculty_email_send(): void
                         return;
                     }
                     $noticeDetailsByEnrollment[$enrollmentId] = [
-                        'subject' => 'Midterm Academic Advisory: ' . (string) $recipient['course_code'] . ' · ' . (string) $recipient['cs_name'],
-                        'message' => 'Your completed Midterm results in ' . (string) $recipient['course_code'] . ' · ' . (string) $recipient['cs_name']
+                        'subject' => 'Midterm Academic Advisory: ' . (string) $recipient['cs_name'],
+                        'message' => 'Your completed Midterm results in ' . (string) $recipient['cs_name']
                             . ' meet the criteria for a Midterm Advisory. This is an informational notice, not a final course grade or a remedial assignment. Please contact '
                             . (string) ($authCtx['display_name'] ?? 'your Faculty instructor') . ' to discuss your progress and available support.',
                     ];
@@ -7571,12 +7720,21 @@ function handle_faculty_email_send(): void
                         return;
                     }
                     $scheduledDate = new DateTimeImmutable((string) $pending['scheduledDate'], new DateTimeZone('Asia/Manila'));
+                    $newNoticeSubject = faculty_remedial_email_subject(
+                        (string) $recipient['course_code'], (string) $recipient['cs_name'],
+                        (int) $pending['attemptNumber'], (string) $pending['scheduledDate']
+                    );
+                    $newNoticeClassLabel = faculty_remedial_email_class_label((string) $recipient['course_code'], (string) $recipient['cs_name']);
                     $noticeDetailsByEnrollment[$enrollmentId] = [
                         'subject' => 'Remedial Exam Schedule: ' . (string) $recipient['course_code'] . ' · ' . (string) $recipient['cs_name'],
                         'message' => 'A remedial exam for ' . (string) $recipient['course_code'] . ' · ' . (string) $recipient['cs_name']
                             . ' has been scheduled or updated. Attempt ' . (int) $pending['attemptNumber'] . ' is scheduled for ' . $scheduledDate->format('F j, Y')
                             . '. Please contact ' . (string) ($authCtx['display_name'] ?? 'your Faculty instructor') . ' if you have questions about this schedule.',
                     ];
+                    $noticeDetailsByEnrollment[$enrollmentId]['subject'] = $newNoticeSubject;
+                    $noticeDetailsByEnrollment[$enrollmentId]['message'] = 'A remedial exam for ' . $newNoticeClassLabel
+                        . ' has been scheduled or updated. Attempt ' . (int) $pending['attemptNumber'] . ' is scheduled for ' . $scheduledDate->format('F j, Y')
+                        . '. Please contact ' . (string) ($authCtx['display_name'] ?? 'your Faculty instructor') . ' if you have questions about this schedule.';
                 }
             }
         } else {

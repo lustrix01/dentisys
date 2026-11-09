@@ -59,7 +59,6 @@ import {
 
 import {
   ClassSessionSlot,
-  ROOM_OPTIONS,
   SCHEDULE_DAYS,
   SCHEDULE_PRESETS,
   checkScheduleConflicts,
@@ -1005,14 +1004,15 @@ export const ClassesAndRosters: React.FC = () => {
     if (newComponents !== 'lab' && parseUnitsInput(newLectureUnits) === null) add('lecUnits', 'Lecture Units', unitsMsg);
     if (newComponents !== 'lecture' && parseUnitsInput(newLabUnits) === null) add('labUnits', 'Laboratory Units', unitsMsg);
     if (!newBlock.trim()) add('block', 'Section / Block', 'Enter the section or block.');
-    if (!newTermId || !academicTerms.some(term => String(term.id) === newTermId)) add('term', 'Academic term', 'Choose an academic term.');
+    if (academicTerms.length === 0) add('term', 'Academic term', `No open term is available for ${newSchoolYear}. Ask the Dean to add the term, then try again.`);
+    else if (!newTermId || !academicTerms.some(term => String(term.id) === newTermId)) add('term', 'Academic term', 'Choose an academic term.');
     sessionSlots.forEach(slot => {
       const kind = slot.type.toLowerCase();
       if (!slot.room.trim()) add(`room-${slot.id}`, `${slot.type} room`, `Choose a ${kind} room.`);
       if (slot.days.length === 0) add(`days-${slot.id}`, `${slot.type} days`, `Pick at least one ${kind} day.`);
     });
     return out;
-  }, [newCourseCode, newCourseName, newComponents, newLectureUnits, newLabUnits, newBlock, newTermId, academicTerms, sessionSlots]);
+  }, [newCourseCode, newCourseName, newComponents, newLectureUnits, newLabUnits, newBlock, newTermId, newSchoolYear, academicTerms, sessionSlots]);
   const shownProblems = createAttempted ? createClassProblems : [];
   const problemMsg = (key: string) => shownProblems.find(p => p.key === key)?.message;
   const invalidCls = 'border-rose-300 dark:border-rose-700 bg-rose-50/60 dark:bg-rose-950/30';
@@ -2588,7 +2588,7 @@ const handleSendAllStudentInvites = async () => {
                   onChange={(e) => setNewTermId(e.target.value)}
                   className={`w-full px-3.5 py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 font-medium cursor-pointer ${fieldCls('term', 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800')}`}
                 >
-                  <option value="">Choose a term</option>
+                  <option value="">{academicTerms.length === 0 ? 'No open term available' : 'Choose a term'}</option>
                   {academicTerms.map(term => <option key={term.id} value={String(term.id)}>{semesterLabel(term.semester)} {term.schoolYear} ({termDate(term.startDate)} – {termDate(term.endDate, true)})</option>)}
                 </select>
                 {fieldErr('term')}

@@ -899,6 +899,9 @@ export interface FacultyRemedialProgression {
 export interface FacultyRetentionRecord {
   midtermComplete?: boolean;
   midtermPercentage?: number | null;
+  midtermGwa?: number | null;
+  midtermAdvisorySent?: boolean;
+  remedialNoticeStatus?: 'Sent' | 'Failed' | 'Pending' | 'Suppressed' | null;
   /** Midterm value before the whole-percent rounding, for the grade hover steps. */
   midtermRawPercentage?: number | null;
   /** Server rule: complete Midterm, no final grade or remedial record, Midterm grade 2.5 or worse. */
@@ -910,6 +913,7 @@ export interface FacultyRetentionRecord {
   studentId: string;
   studentNumber: string | null;
   studentName: string | null;
+  email?: string;
   classId: string;
   className: string | null;
   subjectCode: string | null;
@@ -1251,6 +1255,7 @@ export function saveFacultyRemedialApi(data: {
   enrollmentId: string | null;
   progression?: FacultyRemedialProgression;
   notification?: { created: boolean } | null;
+  emailDelivery?: { status: 'Sent' | 'Failed' | 'Pending' | 'Suppressed'; message: string } | null;
 }> {
   return request('POST', '/faculty/retention/remedial', data);
 }

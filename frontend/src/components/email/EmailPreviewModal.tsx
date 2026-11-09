@@ -72,7 +72,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
         return {
           title: 'Class Invitation & Student Account Activation',
           subject: 'DentiSys Student Invitation',
-          sender: `${facultyName} via DentiSys Portal`,
+          sender: `${facultyName} via DentiSYS Portal`,
           senderEmail: 'notifications@dentisys.bicol-u.edu.ph',
           icon: GraduationCap,
           badgeColor: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20',
@@ -81,7 +81,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
         return {
           title: 'Class Secretary Appointment Invitation',
           subject: `Invitation: Class Secretary Appointment for ${className || 'Section'}`,
-          sender: `${facultyName} via DentiSys Portal`,
+          sender: `${facultyName} via DentiSYS Portal`,
           senderEmail: 'secretary-admin@dentisys.bicol-u.edu.ph',
           icon: Briefcase,
           badgeColor: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20',
@@ -108,7 +108,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
         return {
           title: 'Midterm Advisory Preview',
           subject: `Midterm Academic Advisory: ${className || 'Dental Course'}`,
-          sender: `${facultyName} via DentiSys Portal`,
+          sender: `${facultyName} via DentiSYS Portal`,
           senderEmail: 'notifications@dentisys.bicol-u.edu.ph',
           icon: BookOpen,
           badgeColor: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20',
@@ -116,8 +116,8 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
       case 'remedial_notice':
         return {
           title: 'Remedial Schedule Preview',
-          subject: `Remedial Exam Schedule: ${className || 'Dental Course'}`,
-          sender: `${facultyName} via DentiSys Portal`,
+          subject: `Remedial Exam Schedule: ${className || 'Dental Course'} | Attempt ${remedialAttempt ?? 1} | ${scheduledDate || 'Date unavailable'}`,
+          sender: `${facultyName} via DentiSYS Portal`,
           senderEmail: 'notifications@dentisys.bicol-u.edu.ph',
           icon: Calendar,
           badgeColor: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20',
@@ -179,7 +179,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
         <article className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden">
           <div className="border-b-[3px] border-emerald-800 p-5 text-left">
             <p className="text-xs text-slate-600 dark:text-slate-400">Bicol University - College of Dental Medicine</p>
-            <h2 className="mt-1 text-base font-bold text-slate-900 dark:text-white">DentiSys Academic Portal</h2>
+            <h2 className="mt-1 text-base font-bold text-slate-900 dark:text-white">DentiSYS Academic Portal</h2>
           </div>
           {/* Email Body Content */}
           <div className="p-6 sm:p-7 space-y-5 text-slate-700 dark:text-slate-300 text-sm font-sans">

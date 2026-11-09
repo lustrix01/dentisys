@@ -12,7 +12,7 @@ export function ContactPage() {
       <div className="mx-auto grid w-full max-w-7xl items-start gap-10 lg:grid-cols-12 lg:gap-14">
 
         {/* LEFT COLUMN: UNIQUE BUCDM CONTACT INTRO */}
-        <div className="flex flex-col items-start text-left lg:col-span-5">
+        <div className="flex min-w-0 flex-col items-start text-left lg:col-span-5">
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl md:text-4xl font-heading leading-tight">
             Connect with the{' '}
             <span className="text-purple-600">College of Dental Medicine</span>
@@ -41,8 +41,8 @@ export function ContactPage() {
           <div>
             <div className="flex flex-col gap-3">
               {/* College Secretary */}
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-colors hover:border-purple-200">
-                <div>
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-colors hover:border-purple-200">
+                <div className="min-w-0">
                   <h2 className="text-sm font-bold text-slate-900 font-heading">
                     Office of the College Secretary
                   </h2>
@@ -54,14 +54,14 @@ export function ContactPage() {
               </div>
 
               {/* DentiSYS Support */}
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-colors hover:border-purple-200">
-                <div>
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition-colors hover:border-purple-200">
+                <div className="min-w-0">
                   <h2 className="text-sm font-bold text-slate-900 font-heading">
                     DentiSYS Academic Helpdesk
                   </h2>
                   <a
                     href="mailto:bu-cdm@bicol-u.edu.ph"
-                    className="mt-0.5 inline-block text-xs font-medium text-purple-600 hover:underline"
+                    className="mt-0.5 inline-block break-all text-xs font-medium text-purple-600 hover:underline"
                   >
                     bu-cdm@bicol-u.edu.ph
                   </a>
