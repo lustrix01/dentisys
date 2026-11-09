@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 class RateLimitException extends \RuntimeException
 {
-    public function __construct(string $message = 'Too many requests.', int $code = 429, ?\Throwable $previous = null)
+    public int $retryAfterSeconds;
+
+    public function __construct(string $message = 'Too many requests.', int $code = 429, ?\Throwable $previous = null, int $retryAfterSeconds = 0)
     {
+        $this->retryAfterSeconds = max(0, $retryAfterSeconds);
         parent::__construct($message, $code, $previous);
     }
 }
@@ -144,10 +147,11 @@ function rate_limit_check(array $storage, string $scopeHex, string $endpointCode
         }
 
         if (isset($data['blocked_until']) && $data['blocked_until'] !== null && $now < $data['blocked_until']) {
+            $retryAfter = max(1, (int) $data['blocked_until'] - $now);
             rate_limit_write_state($fp, $data);
             rate_limit_close_state($fp);
             $fp = false;
-            throw new RateLimitException();
+            throw new RateLimitException('Too many requests.', 429, null, $retryAfter);
         }
 
         if ($data['count'] >= $maxRequests) {
@@ -155,7 +159,7 @@ function rate_limit_check(array $storage, string $scopeHex, string $endpointCode
             rate_limit_write_state($fp, $data);
             rate_limit_close_state($fp);
             $fp = false;
-            throw new RateLimitException();
+            throw new RateLimitException('Too many requests.', 429, null, $windowSeconds);
         }
 
         $data['count']++;
@@ -166,6 +170,98 @@ function rate_limit_check(array $storage, string $scopeHex, string $endpointCode
         if ($fp !== false) {
             rate_limit_close_state($fp);
         }
+    }
+}
+
+function rate_limit_login_message(int $retryAfterSeconds): string
+{
+    $minutes = max(1, (int) ceil($retryAfterSeconds / 60));
+    $unit = $minutes === 1 ? 'minute' : 'minutes';
+    return "Too many sign-in attempts. Please try again in {$minutes} {$unit}.";
+}
+
+function rate_limit_assert_not_blocked(array $storage, string $scopeHex, string $endpointCode, int $windowSeconds, int $maxAttempts): void
+{
+    $now = time();
+    rate_limit_ensure_dir($storage['dir']);
+    $path = rate_limit_storage_path($storage, $scopeHex, $endpointCode);
+    if (!is_file($path)) {
+        return;
+    }
+
+    $handle = rate_limit_read_state($path);
+    $fp = $handle['fp'];
+    try {
+        rewind($fp);
+        $raw = stream_get_contents($fp);
+        $data = rate_limit_parse_or_repair($raw !== false ? $raw : '', $maxAttempts, $windowSeconds, $now);
+        if ($now - ($data['window_start'] ?? 0) > $windowSeconds) {
+            $data = ['window_start' => $now, 'count' => 0, 'blocked_until' => null];
+            rate_limit_write_state($fp, $data);
+            return;
+        }
+        $blockedUntil = (int) ($data['blocked_until'] ?? 0);
+        if ($blockedUntil > $now) {
+            throw new RateLimitException(rate_limit_login_message($blockedUntil - $now), 429, null, $blockedUntil - $now);
+        }
+    } finally {
+        rate_limit_close_state($fp);
+    }
+}
+
+function rate_limit_record_login_failure(array $storage, string $scopeHex, string $endpointCode, int $windowSeconds, int $maxAttempts, int $blockSeconds): void
+{
+    $now = time();
+    rate_limit_ensure_dir($storage['dir']);
+    $path = rate_limit_storage_path($storage, $scopeHex, $endpointCode);
+    $handle = rate_limit_read_state($path);
+    $fp = $handle['fp'];
+    $rateLimit = null;
+
+    try {
+        rewind($fp);
+        $raw = stream_get_contents($fp);
+        $data = rate_limit_parse_or_repair($raw !== false ? $raw : '', $maxAttempts, $windowSeconds, $now);
+        if ($now - ($data['window_start'] ?? 0) > $windowSeconds) {
+            $data = ['window_start' => $now, 'count' => 0, 'blocked_until' => null];
+        }
+
+        $blockedUntil = (int) ($data['blocked_until'] ?? 0);
+        if ($blockedUntil > $now) {
+            $retryAfter = $blockedUntil - $now;
+            $rateLimit = new RateLimitException(rate_limit_login_message($retryAfter), 429, null, $retryAfter);
+        } else {
+            $data['count'] = (int) ($data['count'] ?? 0) + 1;
+            if ($data['count'] >= $maxAttempts) {
+                $data['window_start'] = $now;
+                $data['blocked_until'] = $now + $blockSeconds;
+                $rateLimit = new RateLimitException(rate_limit_login_message($blockSeconds), 429, null, $blockSeconds);
+            }
+        }
+        rate_limit_write_state($fp, $data);
+    } finally {
+        rate_limit_close_state($fp);
+    }
+
+    if ($rateLimit instanceof RateLimitException) {
+        throw $rateLimit;
+    }
+}
+
+function rate_limit_clear(array $storage, string $scopeHex, string $endpointCode): void
+{
+    rate_limit_ensure_dir($storage['dir']);
+    $path = rate_limit_storage_path($storage, $scopeHex, $endpointCode);
+    if (!is_file($path)) {
+        return;
+    }
+
+    $handle = rate_limit_read_state($path);
+    $fp = $handle['fp'];
+    try {
+        rate_limit_write_state($fp, ['window_start' => time(), 'count' => 0, 'blocked_until' => null]);
+    } finally {
+        rate_limit_close_state($fp);
     }
 }
 

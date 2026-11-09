@@ -118,7 +118,7 @@ const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
     'Challenge invalid.': 'Liveness challenge is invalid. Please try again.',
   },
   401: {
-    'Invalid credentials.': 'Invalid email or password.',
+    'Invalid credentials.': 'The university email or password is incorrect.',
     'Incorrect ownership password.': 'Incorrect account password.',
     'Invalid Google identity.': 'Google identity could not be verified.',
     'Invalid enrollment stage.': 'Enrollment session expired. Please log in again.',
@@ -147,7 +147,7 @@ const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
 function mapError(status: number, backendMessage: string, responseData?: unknown): string {
   // Login failures reuse the generic 401 code; the message is the precise signal.
   if (status === 401 && backendMessage === 'Invalid credentials.') {
-    return 'Invalid email or password.';
+    return 'The university email or password is incorrect.';
   }
   if (responseData && typeof responseData === 'object') {
     const dataObj = responseData as Record<string, unknown>;
@@ -233,7 +233,8 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
   if (status === 409) return backendMessage || 'This request conflicts with the current account state.';
   if (status === 401) return 'Authentication failed. Please log in again.';
   if (status === 403) return 'Access denied. Contact the administrator.';
-  if (status === 429) return 'Too many attempts. Please wait and try again.';
+  if (status === 429 && backendMessage) return backendMessage;
+  if (status === 429) return 'Too many sign-in attempts. Please wait before trying again.';
   if (status === 503) return 'Service is temporarily unavailable. Please try again later.';
   if (status >= 500) return 'A server error occurred. Please try again later.';
   return 'An unexpected error occurred. Please try again.';

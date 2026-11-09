@@ -75,9 +75,22 @@ function handle_login(): void
         error_log('Login error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));
         auth_controller_emit(auth_build_no_store_message_response('Internal server error.', 500));
     } catch (ValidationException $e) {
-        auth_controller_emit(auth_build_no_store_message_response('Validation failed.', 400));
+        $response = build_json_response([
+            'status' => 'error',
+            'code' => 'BAD_REQUEST',
+            'message' => 'Please correct the highlighted field and try again.',
+            'errors' => $e->getErrors(),
+            'requestId' => request_id(),
+        ], 400);
+        $response['headers'] = array_merge($response['headers'], build_no_store_headers());
+        auth_controller_emit($response);
     } catch (RateLimitException $e) {
-        auth_controller_emit(auth_build_no_store_message_response('Too many requests.', 429));
+        $message = $e->getMessage() !== 'Too many requests.' ? $e->getMessage() : 'Too many sign-in attempts. Please wait before trying again.';
+        $response = auth_build_no_store_message_response($message, 429);
+        if ($e->retryAfterSeconds > 0) {
+            $response['headers'][] = 'Retry-After: ' . $e->retryAfterSeconds;
+        }
+        auth_controller_emit($response);
     } catch (\Throwable $e) {
         error_log('Login error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));
         auth_controller_emit(auth_build_no_store_message_response('Internal server error.', 500));

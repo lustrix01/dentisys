@@ -52,6 +52,7 @@ export function SsoLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showResetHelp, setShowResetHelp] = useState(false);
   const [linkChallengeToken, setLinkChallengeToken] = useState<string | null>(null);
   const [linkPassword, setLinkPassword] = useState('');
   const [googleLoadState, setGoogleLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -72,6 +73,7 @@ export function SsoLogin() {
     beginLogin();
     setIsLoading(true);
     setError('');
+    setShowResetHelp(false);
     try {
       const result = await loginWithGoogle(credential);
       if (result.type === 'direct_login' && result.access_token) {
@@ -156,6 +158,7 @@ export function SsoLogin() {
     if (!linkChallengeToken || !linkPassword) return;
     setIsLoading(true);
     setError('');
+    setShowResetHelp(false);
     try {
       const result = await linkGoogleAccount(linkChallengeToken, linkPassword);
       if (result.type === 'direct_login' && result.access_token) {
@@ -184,6 +187,7 @@ export function SsoLogin() {
     beginLogin();
     setIsLoading(true);
     setError('');
+    setShowResetHelp(false);
     try {
       const result = await createDevelopmentMockStudentSession();
       if (result.type !== 'direct_login' || !result.access_token) {
@@ -201,13 +205,15 @@ export function SsoLogin() {
     e.preventDefault();
     const loginEmail = completeInstitutionalEmail(email);
     if (!loginEmail || !password) {
-      setError('Please fill in all fields.');
+      setError('Enter your university email and password to continue.');
+      setShowResetHelp(false);
       return;
     }
 
     beginLogin();
     setIsLoading(true);
     setError('');
+    setShowResetHelp(false);
 
     try {
       const result = await apiLogin(loginEmail, password);
@@ -223,16 +229,17 @@ export function SsoLogin() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
       setError(message);
+      setShowResetHelp(err instanceof ApiError && err.status === 401);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen min-h-[100dvh] w-full bg-slate-100 flex items-center justify-center px-4 py-8 font-sans text-slate-800">
-      <div className="w-full max-w-4xl min-h-[500px] md:h-[min(580px,calc(100dvh-3rem))] md:min-h-0 md:flex overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+    <div className="h-screen h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-slate-100 flex items-center justify-center px-0 sm:px-4 font-sans text-slate-800">
+      <div className="flex h-full w-full max-w-4xl max-h-full overflow-hidden rounded-none border-0 bg-white shadow-lg sm:rounded-2xl sm:border border-slate-200 md:h-[min(580px,calc(100dvh-3rem))]">
 
-      <main className="w-full md:order-2 md:w-1/2 min-h-0 bg-white p-5 sm:p-7 lg:p-8 flex flex-col justify-between overflow-y-auto">
+      <main className="h-full w-full md:order-2 md:w-1/2 min-h-0 bg-white p-4 sm:p-7 lg:p-8 flex flex-col justify-between overflow-hidden">
         
         <div className="flex justify-start">
           <button
@@ -246,7 +253,7 @@ export function SsoLogin() {
         </div>
 
         {/* Center: Main Form Block */}
-        <div className="w-full max-w-sm mx-auto my-auto py-5 space-y-5">
+        <div className="w-full max-w-sm mx-auto my-auto py-2 sm:py-5 space-y-3 sm:space-y-5">
 
           {/* Login heading */}
           <div className="space-y-1">
@@ -305,15 +312,17 @@ export function SsoLogin() {
           )}
 
           {/* Error Message */}
-          {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-medium text-rose-700 flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
+          <div className="min-h-10">
+            {error && (
+              <div role="alert" aria-live="polite" className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-medium text-rose-700 flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 flex-shrink-0" />
+                <span>{error}{showResetHelp && <> <Link to="/forgot-password" className="font-bold underline hover:text-rose-900">Reset your password.</Link></>}</span>
+              </div>
+            )}
+          </div>
 
           {/* 1. TOP: Credentials Form */}
-          <form className="space-y-4" onSubmit={handleLogin}>
+          <form className="space-y-3 sm:space-y-4" onSubmit={handleLogin}>
             {/* University email */}
             <div>
               <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700 mb-1.5">
