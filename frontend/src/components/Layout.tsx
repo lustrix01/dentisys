@@ -464,8 +464,10 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                     {new Date(item.createdAt).toLocaleString(undefined, {
                       month: 'short',
                       day: 'numeric',
-                      hour: '2-digit',
+                      hour: 'numeric',
                       minute: '2-digit',
+                      timeZone: 'Asia/Manila',
+                      hourCycle: 'h12',
                     })}
                   </p>
                 </div>

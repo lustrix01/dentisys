@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card } from './Card';
 import { formatManilaWhen } from '../services/auditService';
 import { AttendanceExcusedRequest, decideFacultyExcusedRequestApi, getFacultyExcusedRequestsApi } from '../services/apiClient';
+import { formatVisibleTime } from '../utils/timeDisplay';
 
 type Filter = 'pending' | 'approved' | 'rejected';
 const word = (status?: string | null) => status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Not recorded';
@@ -125,7 +126,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
             </div>
             <p className="text-slate-700 dark:text-slate-200">
               Requested: <strong>{word(request.requestedStatus ?? 'excused')}</strong> · Now: {request.currentStatus ? word(request.currentStatus) : 'Not recorded'}{request.currentMethod === 'biometric' ? ' (face check-in)' : ''}
-              {(request.presentCutoff || request.lateCutoff) && <span className="text-slate-500"> · Present until {request.presentCutoff || '—'} · Late until {request.lateCutoff || '—'}</span>}
+              {(request.presentCutoff || request.lateCutoff) && <span className="text-slate-500"> · Present until {formatVisibleTime(request.presentCutoff)} · Late until {formatVisibleTime(request.lateCutoff)}</span>}
             </p>
             <p className="text-slate-600 dark:text-slate-300">Reason: {request.reason || 'None given'}</p>
             {request.status !== 'pending' && (

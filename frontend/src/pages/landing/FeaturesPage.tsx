@@ -127,7 +127,7 @@ export function FeaturesPage() {
                   </h3>
                   <p className="mt-0.5 truncate text-xs text-slate-500">
                     {activeIndex === 0 && 'S.Y. 2026-2027 • 1st Semester • Block A • 38 Enrolled Students'}
-                    {activeIndex === 1 && 'Room 204 Clinic Hall • Geofence Radius: 150m • Start: 08:00 AM'}
+                    {activeIndex === 1 && 'Room 204 Clinic Hall • Geofence Radius: 150m • Start: 8:00 AM'}
                     {activeIndex === 2 && '100% Validated Matrix: Major Exam (40%), Quizzes (30%), Practical (20%), Attendance (10%)'}
                     {activeIndex === 3 && 'Evaluated Status: 92% Good Standing • 5% Academic Warning • 3% Remedial Priority'}
                   </p>
@@ -330,7 +330,7 @@ export function FeaturesPage() {
                           </div>
                           <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5">
                             <span className="text-slate-500">Check-in Time</span>
-                            <span className="font-mono font-semibold text-slate-800">08:02 AM</span>
+                            <span className="font-mono font-semibold text-slate-800">8:02 AM</span>
                           </div>
                           <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5">
                             <span className="text-slate-500">Method</span>

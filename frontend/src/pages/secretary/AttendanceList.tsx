@@ -30,6 +30,7 @@ import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { DEVELOPMENT_LOCATION_FIXTURES } from '../../services/developmentProviders';
 import { RevokedSessionsSwitch } from '../../components/RevokedSessionsSwitch';
 import { meetingVenueLines } from '../../utils/scheduleHelper';
+import { formatVisibleTime } from '../../utils/timeDisplay';
 import {
   REVOKED_SESSION_VIEW_ONLY_NOTE, countRevokedSessions, matchesRollCallFilters, revokedHiddenText, visibleSessions,
   type OverriddenFilter, type RecordedByFilter,
@@ -79,37 +80,11 @@ const sessionStatusClass: Record<string, string> = {
 };
 
 const formatSessionTime = (value?: string | null) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    const match = value.match(/(\d{1,2}):(\d{2})/);
-    if (match) {
-      const h = parseInt(match[1], 10);
-      const m = match[2];
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const h12 = h % 12 || 12;
-      return `${String(h12).padStart(2, '0')}:${m} ${ampm}`;
-    }
-    return value;
-  }
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return formatVisibleTime(value);
 };
 
 const formatCheckInTime = (value?: string | null) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    const match = value.match(/(\d{1,2}):(\d{2})/);
-    if (match) {
-      const h = parseInt(match[1], 10);
-      const m = match[2];
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const h12 = h % 12 || 12;
-      return `${String(h12).padStart(2, '0')}:${m} ${ampm}`;
-    }
-    return value;
-  }
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return formatVisibleTime(value);
 };
 
 const attendanceMethodLabel = (method?: string | null, overrideReason?: string | null): string => {
@@ -309,7 +284,7 @@ export const AttendanceList: React.FC = () => {
     setFeedback({
       type: 'success',
       text: res.session.status === 'scheduled'
-        ? `Session scheduled for ${values.sessionDate} at ${values.openingTime} (Asia/Manila). Session code: ${res.session.sessionCode}`
+        ? `Session scheduled for ${values.sessionDate} at ${formatVisibleTime(values.openingTime)} (Asia/Manila). Session code: ${res.session.sessionCode}`
         : `Attendance session started. The class roll call is now live. Session code: ${res.session.sessionCode}`,
     });
     setRefreshVersion(version => version + 1);

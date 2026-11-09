@@ -6,6 +6,7 @@ import { Modal } from './Modal';
 import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../utils/geofenceRadius';
 import type { ClassMeeting } from '../services/apiClient';
 import { FIXED_TIMES, manilaNow, meetingTimes, pickMeeting, sortMeetings } from '../utils/sessionDefaults';
+import { formatVisibleTime } from '../utils/timeDisplay';
 const RADIUS_HINT = 'Indoors, use 150 m or more; phone GPS is often off by 50–100 m inside buildings.';
 
 const manilaToday = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
@@ -291,14 +292,14 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
                   onClick={() => { applyMeeting(index); setError(null); }}
                   className={`rounded-xl border px-3 py-2 text-left font-bold ${chosen === index ? a.outline : 'border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-200'}`}
                 >
-                  {meeting.day} · {meeting.component} · {meeting.startTime}–{meeting.endTime} · {meeting.room}
+                  {meeting.day} · {meeting.component} · {formatVisibleTime(meeting.startTime)}–{formatVisibleTime(meeting.endTime)} · {meeting.room}
                 </button>
               ))}
             </div>
             <p className="mt-1 text-slate-500 dark:text-slate-400">
               {chosen === null
                 ? 'No class meeting today. Pick a meeting or edit the times.'
-                : `Times from ${sortedMeetings[chosen].day} · ${sortedMeetings[chosen].component} · ${sortedMeetings[chosen].startTime}–${sortedMeetings[chosen].endTime}. Pick another meeting or edit the times.`}
+                : `Times from ${sortedMeetings[chosen].day} · ${sortedMeetings[chosen].component} · ${formatVisibleTime(sortedMeetings[chosen].startTime)}–${formatVisibleTime(sortedMeetings[chosen].endTime)}. Pick another meeting or edit the times.`}
             </p>
           </div>
         )}

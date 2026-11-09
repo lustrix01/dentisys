@@ -1,4 +1,5 @@
 import type { ClassMeeting, FacultyClassItem } from '../services/apiClient';
+import { formatVisibleTime } from './timeDisplay';
 
 export interface ClassSessionSlot {
   id: string;
@@ -167,7 +168,7 @@ export const checkScheduleConflicts = (
     for (const meeting of cls.meetings ?? []) {
       const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
       existingSessions.push({ room: meeting.room.toLowerCase(), days: [meeting.day], start: minutes(meeting.startTime), end: minutes(meeting.endTime),
-        raw: `${meeting.day} ${displayMeetingTime(meeting.startTime).replace(/^0/, '')} – ${displayMeetingTime(meeting.endTime).replace(/^0/, '')}` });
+        raw: `${meeting.day} ${displayMeetingTime(meeting.startTime)} – ${displayMeetingTime(meeting.endTime)}` });
     }
     const parsedLec = cls.meetings?.length ? null : extractSessionFromText(cls.lecRoom || '', cls.lecRoom || '');
     if (parsedLec) {
@@ -221,8 +222,7 @@ export const meetingDayKey = (days: string[], index: number): string => {
 };
 
 export const displayMeetingTime = (time: string): string => {
-  const [hours, minutes] = time.split(':').map(Number);
-  return `${String(hours % 12 || 12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${hours < 12 ? 'AM' : 'PM'}`;
+  return formatVisibleTime(time);
 };
 
 /** Lecture/lab rooms with their meeting times for a class card; falls back to the single room name, or nothing when unknown. */

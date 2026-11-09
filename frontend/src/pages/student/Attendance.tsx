@@ -53,6 +53,7 @@ import {
 } from '../../utils/guidedCapture';
 import { GuidedCaptureStatus } from '../../components/GuidedCaptureStatus';
 import { playGuidanceSuccessTone, primeGuidanceAudio } from '../../utils/guidanceAudio';
+import { formatVisibleTime } from '../../utils/timeDisplay';
 
 // Mock Geofence center for simulation only
 const BU_DENTAL_CLINIC_COORDS = {
@@ -76,7 +77,7 @@ const MOCK_CLASS_SESSIONS: Record<string, ClassSessionInfo> = {
     code: 'CLIN401',
     name: 'Restorative Dentistry Lab',
     room: 'BU Dental Clinic — Room 101',
-    schedule: '08:00 AM - 12:00 PM (Today)',
+    schedule: '8:00 AM - 12:00 PM (Today)',
     instructor: 'Dr. Roberto Santos, DMD',
     status: 'active',
     statusMessage: 'Session is currently ACTIVE and open for attendance check-in.',
@@ -85,19 +86,19 @@ const MOCK_CLASS_SESSIONS: Record<string, ClassSessionInfo> = {
     code: 'PROS402',
     name: 'Prosthodontics Clinical Practicum',
     room: 'BU Dental Clinic — Lab Room 204',
-    schedule: '01:00 PM - 05:00 PM (Today)',
+    schedule: '1:00 PM - 5:00 PM (Today)',
     instructor: 'Dr. Fernando Cruz, DMD',
     status: 'no_session',
-    statusMessage: 'No active session right now. Scheduled for 01:00 PM today.',
+    statusMessage: 'No active session right now. Scheduled for 1:00 PM today.',
   },
   ORAL301: {
     code: 'ORAL301',
     name: 'Oral Surgery Clinic',
     room: 'BU Dental Clinic — Operating Room B',
-    schedule: '07:00 AM - 09:00 AM (Today)',
+    schedule: '7:00 AM - 9:00 AM (Today)',
     instructor: 'Dr. Angela Reyes, DMD',
     status: 'ended',
-    statusMessage: 'Session ENDED at 09:00 AM. Check-in window is now closed.',
+    statusMessage: 'Session ENDED at 9:00 AM. Check-in window is now closed.',
   },
 };
 
@@ -137,8 +138,8 @@ function formatUpcomingDate(isoDate: string): string {
 function upcomingPill(session: StudentUpcomingSession, nowMinutes: number): { label: string; tone: 'open' | 'late' | 'soon' | 'done' | 'idle' } {
   if (session.alreadyRecordedStatus) return { label: `Recorded: ${session.alreadyRecordedStatus}`, tone: 'done' };
   if (session.isOpen) {
-    if (session.captureStatus === 'late') return { label: `Open · Late until ${session.lateCutoff ?? '--:--'}`, tone: 'late' };
-    return { label: `Open · Present until ${session.presentCutoff ?? '--:--'}`, tone: 'open' };
+    if (session.captureStatus === 'late') return { label: `Open · Late until ${formatVisibleTime(session.lateCutoff)}`, tone: 'late' };
+    return { label: `Open · Present until ${formatVisibleTime(session.presentCutoff)}`, tone: 'open' };
   }
   const opening = timeToMinutes(session.openingTime);
   if (opening !== null && opening > nowMinutes) {
@@ -885,7 +886,7 @@ export const Attendance: React.FC = () => {
     code: selectedMockCourseCode,
     name: 'Clinical Dentistry',
     room: 'BU Dental Clinic',
-    schedule: '08:00 AM - 12:00 PM',
+    schedule: '8:00 AM - 12:00 PM',
     instructor: 'Clinical Faculty',
     status: 'active',
     statusMessage: 'Session open for attendance.',
@@ -944,7 +945,7 @@ export const Attendance: React.FC = () => {
       }
 
       const now = new Date();
-      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const timeStr = formatVisibleTime(now.toISOString());
       const isLate = now.getHours() > 8 || (now.getHours() === 8 && now.getMinutes() > 30);
       const statusVal = isLate ? 'late' : 'present';
 
@@ -1216,7 +1217,7 @@ export const Attendance: React.FC = () => {
                               {sess.courseName}
                             </p>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {sess.openingTime ?? '--:--'}–{sess.classEndTime ?? '--:--'}
+                              {formatVisibleTime(sess.openingTime)}–{formatVisibleTime(sess.classEndTime)}
                             </p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
@@ -1273,7 +1274,7 @@ export const Attendance: React.FC = () => {
                           {sess.courseName}
                         </p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {formatUpcomingDate(sess.sessionDate)} · {sess.openingTime ?? '--:--'}–{sess.classEndTime ?? '--:--'}
+                          {formatUpcomingDate(sess.sessionDate)} · {formatVisibleTime(sess.openingTime)}–{formatVisibleTime(sess.classEndTime)}
                         </p>
                       </div>
                     ))}

@@ -117,7 +117,7 @@ const venueSummary = (cls: FacultyClassItem, component: 'Lecture' | 'Laboratory'
   const rows = (cls.meetings ?? []).filter(meeting => meeting.component === component);
   if (rows.length === 0) return fallback || null;
   if (fallback && fallback.split(';').length !== rows.length) return fallback; // keep legacy text that has no meeting
-  const clock = (time: string) => displayMeetingTime(time).replace(/^0/, '');
+  const clock = (time: string) => displayMeetingTime(time);
   const groups = new Map<string, { room: string; days: string[]; start: string; end: string }>();
   for (const m of rows) {
     const key = `${m.room}|${m.startTime}|${m.endTime}`;
@@ -1875,7 +1875,7 @@ const handleSendAllStudentInvites = async () => {
       {activeTab === 'roster' && (
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex flex-col items-start gap-1.5 min-w-0">
               <button
                 type="button"
                 onClick={() => {
@@ -1883,7 +1883,7 @@ const handleSendAllStudentInvites = async () => {
                   setActiveTab('classes');
                   setSearchQuery('');
                 }}
-                className="inline-flex items-center gap-1.5 whitespace-nowrap px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer group flex-shrink-0 shadow-xs"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-1.5 py-1 text-xs font-semibold text-slate-500 transition-colors hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-slate-400 dark:hover:text-slate-100 cursor-pointer group flex-shrink-0"
               >
                 <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
                 <span>Back to Classes</span>
@@ -2654,7 +2654,7 @@ const handleSendAllStudentInvites = async () => {
                     {slot.type}
                   </span>
                   <span>
-                    {slot.room || 'Venue TBA'} &bull; {slot.days.length > 0 ? slot.days.map(day => `${day} ${slot.dayTimes?.[day]?.startTime ?? slot.startTime} - ${slot.dayTimes?.[day]?.endTime ?? slot.endTime}`).join('; ') : 'No days selected'}
+                    {slot.room || 'Venue TBA'} &bull; {slot.days.length > 0 ? slot.days.map(day => `${day} ${displayMeetingTime(slot.dayTimes?.[day]?.startTime ?? slot.startTime)} - ${displayMeetingTime(slot.dayTimes?.[day]?.endTime ?? slot.endTime)}`).join('; ') : 'No days selected'}
                   </span>
                 </div>
               ))}
