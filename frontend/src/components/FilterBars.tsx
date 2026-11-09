@@ -33,10 +33,9 @@ export const SearchField: React.FC<{
   ariaLabel?: string;
   color?: TabsColor;
   className?: string;
-  maxLength?: number;
   /** Lets the box shrink further when a row is crowded. */
   compact?: boolean;
-}> = ({ value, onChange, placeholder, ariaLabel, color = 'clinical', className = '', maxLength, compact }) => (
+}> = ({ value, onChange, placeholder, ariaLabel, color = 'clinical', className = '', compact }) => (
   <div className={`relative w-full sm:flex-1 ${compact ? 'sm:min-w-[8rem]' : 'sm:min-w-[12rem]'} ${className}`.trim()}>
     <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
     <input
@@ -44,7 +43,6 @@ export const SearchField: React.FC<{
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
-      maxLength={maxLength}
       aria-label={ariaLabel ?? placeholder.replace(/…|\.\.\.$/, '')}
       className={`w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 outline-none focus:ring-2 [&::-webkit-search-cancel-button]:hidden ${FOCUS[color]}`}
     />

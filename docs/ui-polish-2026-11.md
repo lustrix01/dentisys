@@ -29,3 +29,31 @@ A polish pass over the screens built in `0c69670` (room categories, the session 
 - Stashing and restoring for Before shots can leave line-ending-only changes in unrelated files. Restore those before staging.
 
 Left for the backlog: see [PRODUCT_BACKLOG.md](PRODUCT_BACKLOG.md) section 9.6.
+
+## Follow-up, 2026-11-10: phone tab names, counts and warning tone
+
+Draft branch `lighthal9-responsive-tab-followup`, based on `7e91805`. Pushed for local checking; not merged or deployed.
+
+| Commit | What the user sees now |
+|---|---|
+| `227b0ed` | On phones, tab short names are visual only: screen readers keep the full label and count (for example "Email History Log 2" instead of "History"). The Email History count is visible as a badge at every width. Retention's Remedial and Midterm counts keep their amber or rose tone when the tab is selected. |
+| `3a9a7c9` | No user-visible change. The device audit opens the new tab-role controls again, so the screens behind those tabs stay covered. |
+
+### Owner rulings
+
+- Keep Import → Create on the Classes toolbar: the main action goes last and filled (rule 6); R4 now says so.
+- Warning counts keep their tone when selected.
+- The roster toolbar stays Option A unless the Owner chooses Option B from the local Before/After demo.
+
+### How it was checked
+
+- Local Before/After demo from real screenshots (not published): phone Email History, phone and desktop Retention selected warning tab, roster A/B, and an unchanged My Classes phone tab.
+- New 390px e2e test for the full Email History name and visible count; 281 mocked UI tests pass.
+- `./scripts/check.ps1` passed.
+- Device audit rerun on iPhone SE, Galaxy S24, iPhone SE (3rd gen), iPhone 13, Desktop 1440 and Desktop 1920, light and dark, for Faculty and Student Email, Retention and Classes. The tab-role fix restored tab traversal; no new findings appeared. The known under-bar, small-target and existing text-overlap findings remain for the backlog.
+
+### Lessons
+
+- Moving a control from `button` to `tab` also breaks selectors outside the e2e suite; the device audit needed the same role update.
+- A short visible label must not replace the accessible name; set `aria-label` from the full label and count.
+- The selected warning badge is part of "keep warning badges"; a neutral selected badge silently removes the warning cue.
