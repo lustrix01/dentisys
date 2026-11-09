@@ -826,6 +826,7 @@ export const AttendanceMonitoring: React.FC = () => {
       const response = await createFacultyAttendanceSessionApi({
         csId,
         sessionDate,
+        meetingDay: values.meetingDay,
         room: values.room || undefined,
         openingTime,
         presentCutoff: values.presentCutoff,

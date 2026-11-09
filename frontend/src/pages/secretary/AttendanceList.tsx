@@ -291,6 +291,7 @@ export const AttendanceList: React.FC = () => {
     const res = await startSecretaryAttendanceSessionApi({
       csId,
       sessionDate: values.sessionDate,
+      meetingDay: values.meetingDay,
       room: values.room || undefined,
       biometricRequired: values.biometricRequired,
       geofenceEnabled: values.geofenceEnabled,

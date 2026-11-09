@@ -1171,6 +1171,7 @@ export function createFacultyAttendanceSessionApi(data: {
   subjectCode?: string;
   date?: string;
   sessionDate?: string;
+  meetingDay?: string | null;
   topic?: string;
   room?: string;
   openingTime?: string;
@@ -1188,7 +1189,7 @@ export function createFacultyAttendanceSessionApi(data: {
 
 export function updateFacultyAttendanceSessionApi(
   // An edit sends only the fields the user changed; the server keeps every field it is not sent.
-  data: Partial<Omit<Parameters<typeof createFacultyAttendanceSessionApi>[0], 'csId' | 'classSectionId' | 'subjectCode' | 'topic'>> & { sessionId: string | number }
+  data: Partial<Omit<Parameters<typeof createFacultyAttendanceSessionApi>[0], 'csId' | 'classSectionId' | 'subjectCode' | 'topic' | 'meetingDay'>> & { sessionId: string | number }
 ): Promise<{ status: string; session: NonNullable<FacultyAttendanceWorksheet['attendanceSession']> }> {
   return request('POST', '/faculty/attendance/session/update', data);
 }
@@ -1492,6 +1493,7 @@ export interface SecretaryAttendanceSession {
 export interface StartSecretaryAttendanceSessionPayload {
   csId: number;
   sessionDate?: string;
+  meetingDay?: string | null;
   sessionCode?: string;
   room?: string;
   biometricRequired?: boolean;
@@ -1514,7 +1516,7 @@ export function startSecretaryAttendanceSessionApi(
 }
 
 export function updateSecretaryAttendanceSessionApi(
-  data: Omit<StartSecretaryAttendanceSessionPayload, 'csId' | 'sessionCode' | 'latitude' | 'longitude'> & { sessionId: string | number }
+  data: Omit<StartSecretaryAttendanceSessionPayload, 'csId' | 'sessionCode' | 'latitude' | 'longitude' | 'meetingDay'> & { sessionId: string | number }
 ): Promise<{ status: string; session: SecretaryAttendanceSession }> {
   return request('POST', '/secretary/attendance/session/update', data);
 }

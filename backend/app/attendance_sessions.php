@@ -38,6 +38,35 @@ function attendance_session_creation_date(mixed $value, array $config, ?DateTime
     return $raw;
 }
 
+function attendance_session_validate_selected_meeting_day(PDO $pdo, array $class, string $sessionDate, mixed $meetingDay): void
+{
+    if ($meetingDay === null || $meetingDay === '') {
+        return;
+    }
+
+    $validDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    if (!is_string($meetingDay) || !in_array($meetingDay, $validDays, true)) {
+        throw new ValidationException([['field' => 'meetingDay', 'message' => 'Choose a valid class meeting.']]);
+    }
+
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d', $sessionDate, new DateTimeZone('UTC'));
+    if (!$date || $date->format('D') !== $meetingDay) {
+        throw new ValidationException([['field' => 'sessionDate', 'message' => "Choose a {$meetingDay} date for the selected class meeting."]]);
+    }
+
+    $meetings = class_meetings_read($pdo, $class);
+    $classHasMeeting = false;
+    foreach ($meetings as $meeting) {
+        if (($meeting['day'] ?? null) === $meetingDay) {
+            $classHasMeeting = true;
+            break;
+        }
+    }
+    if (!$classHasMeeting) {
+        throw new ValidationException([['field' => 'meetingDay', 'message' => 'The selected meeting is no longer part of this class schedule. Choose another meeting.']]);
+    }
+}
+
 function attendance_session_creation_status(string $date, ?string $opening, array $config): string
 {
     $now = attendance_session_now_utc()->setTimezone(new DateTimeZone($config['app']['operational_timezone']));

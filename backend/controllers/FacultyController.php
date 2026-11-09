@@ -5573,7 +5573,7 @@ function handle_faculty_attendance_session_create(): void
 
         $pdo->beginTransaction();
         try {
-            $lock = $pdo->prepare("SELECT cs_id, secretary_user_id FROM class_sections WHERE cs_id = ? AND instructor_user_id = ? AND LOWER(status) = 'active' FOR UPDATE");
+            $lock = $pdo->prepare("SELECT cs_id, secretary_user_id, meetings_recorded, lec_room, lab_room FROM class_sections WHERE cs_id = ? AND instructor_user_id = ? AND LOWER(status) = 'active' FOR UPDATE");
             $lock->execute([$csId, $authCtx['user_id']]);
             $lockedClass = $lock->fetch(PDO::FETCH_ASSOC);
             if (!is_array($lockedClass)) {
@@ -5581,6 +5581,7 @@ function handle_faculty_attendance_session_create(): void
                 safe_error_response('Class section is not assigned to this Faculty member.', 403);
                 return;
             }
+            attendance_session_validate_selected_meeting_day($pdo, $lockedClass, $sessionDate, $data['meetingDay'] ?? null);
             $conflict = attendance_session_booking_conflict($pdo, $csId, $sessionDate, $openingTime, $classEndTime);
             if ($conflict !== null) {
                 $pdo->rollBack();

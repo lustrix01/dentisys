@@ -9,6 +9,29 @@ import { FIXED_TIMES, manilaNow, meetingTimes, pickMeeting, sortMeetings } from 
 const RADIUS_HINT = 'Indoors, use 150 m or more; phone GPS is often off by 50–100 m inside buildings.';
 
 const manilaToday = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
+function weekdayForSessionDate(value: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  if (date.getUTCFullYear() !== Number(year) || date.getUTCMonth() !== Number(month) - 1 || date.getUTCDate() !== Number(day)) return null;
+  return WEEKDAYS[date.getUTCDay()];
+}
+
+function nearestSessionDateForMeeting(value: string, meetingDay: string): string {
+  const currentWeekday = weekdayForSessionDate(value);
+  const currentDay = WEEKDAYS.indexOf(currentWeekday as (typeof WEEKDAYS)[number]);
+  const targetDay = WEEKDAYS.indexOf(meetingDay as (typeof WEEKDAYS)[number]);
+  if (currentDay < 0 || targetDay < 0) return value;
+
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const daysUntilMeeting = (targetDay - currentDay + WEEKDAYS.length) % WEEKDAYS.length;
+  date.setUTCDate(date.getUTCDate() + daysUntilMeeting);
+  return date.toISOString().slice(0, 10);
+}
 
 // Tailwind needs literal class names, so each accent lists its full strings.
 const ACCENTS = {
@@ -37,6 +60,7 @@ export interface StartSessionValues {
   presentCutoff: string;
   lateCutoff: string;
   classEndTime: string;
+  meetingDay: string | null;
   biometricRequired: boolean;
   geofenceEnabled: boolean;
   geofenceRadiusMeters: number;
@@ -101,6 +125,9 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   const [chosen, setChosen] = useState<number | null>(null);
   const applyMeeting = (index: number | null) => {
     setChosen(index);
+    if (index !== null) {
+      setSessionDate(current => nearestSessionDateForMeeting(current, sortedMeetings[index].day));
+    }
     const times = index === null ? { ...FIXED_TIMES, room: null } : meetingTimes(sortedMeetings[index]);
     setOpeningTime(times.openingTime); setPresentCutoff(times.presentCutoff); setLateCutoff(times.lateCutoff); setClassEndTime(times.classEndTime);
     if (times.room !== null) setRoom(times.room);
@@ -113,6 +140,11 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
     applyMeeting(picked ? sortedMeetings.indexOf(picked) : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, meetingsKey]);
+
+  const selectedMeeting = chosen === null ? null : sortedMeetings[chosen] ?? null;
+  const meetingDateError = selectedMeeting && weekdayForSessionDate(sessionDate) !== selectedMeeting.day
+    ? `Choose a ${selectedMeeting.day} date for the selected class meeting.`
+    : null;
 
   const handleAcquireLocation = () => {
     if (fixtureLat !== undefined && fixtureLng !== undefined) {
@@ -147,6 +179,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
     event.preventDefault();
     const blocked = precheck?.();
     if (blocked) { setError(blocked); return; }
+    if (meetingDateError) return;
     if (!sessionDate || sessionDate < manilaToday()) { setError('Choose today or a future date (Asia/Manila).'); return; }
     if (openingTime >= presentCutoff || presentCutoff >= lateCutoff) {
       setError('Set the times in order: opening, Present cutoff, then Late cutoff.');
@@ -168,7 +201,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
     setError(null);
     try {
       await onSubmit({
-        sessionDate, room: room.trim(), openingTime, presentCutoff, lateCutoff, classEndTime,
+        sessionDate, room: room.trim(), openingTime, presentCutoff, lateCutoff, classEndTime, meetingDay: selectedMeeting?.day ?? null,
         biometricRequired, geofenceEnabled, geofenceRadiusMeters: parseRadius(geofenceRadius) ?? 100, location,
       });
     } catch (err) {
@@ -238,7 +271,8 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
         {note}
 
         <label className="block font-bold text-slate-700 dark:text-slate-300">Session date (Asia/Manila)
-          <input type="date" required min={manilaToday()} value={sessionDate} onChange={event => setSessionDate(event.target.value)} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900" />
+          <input type="date" required min={manilaToday()} value={sessionDate} aria-invalid={Boolean(meetingDateError)} aria-describedby={meetingDateError ? 'session-meeting-date-error' : undefined} onChange={event => { setSessionDate(event.target.value); setError(null); }} className={`mt-1 block w-full rounded-xl border bg-white px-3 py-2.5 dark:bg-slate-900 ${meetingDateError ? 'border-rose-400 dark:border-rose-700' : 'border-slate-200 dark:border-slate-700'}`} />
+          {meetingDateError && <span id="session-meeting-date-error" role="alert" className="mt-1 block font-medium text-rose-600 dark:text-rose-300">{meetingDateError}</span>}
         </label>
         <label className="block">
           <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Room or session location</span>
@@ -254,7 +288,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
                   key={`${meeting.day}-${meeting.component}-${meeting.startTime}-${index}`}
                   type="button"
                   aria-pressed={chosen === index}
-                  onClick={() => applyMeeting(index)}
+                  onClick={() => { applyMeeting(index); setError(null); }}
                   className={`rounded-xl border px-3 py-2 text-left font-bold ${chosen === index ? a.outline : 'border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-200'}`}
                 >
                   {meeting.day} · {meeting.component} · {meeting.startTime}–{meeting.endTime} · {meeting.room}
