@@ -417,7 +417,7 @@ export const EmailManagement: React.FC = () => {
           tabs={[
             { id: 'student_invites', label: 'Student Class Invitations', shortLabel: 'Students' },
             { id: 'secretary', label: 'Class Secretary Invitations', shortLabel: 'Secretary' },
-            { id: 'history', label: `Email History Log (${logs.length})`, shortLabel: 'History' },
+            { id: 'history', label: 'Email History Log', shortLabel: 'History', count: logs.length },
           ]}
         />
 

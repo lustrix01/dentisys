@@ -72,7 +72,6 @@ export default function Tabs<T extends string>({ variant, color, label, value, o
     ? 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
     : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40';
   const badge = isSwitch ? 'ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold' : 'px-1.5 py-0.5 rounded-full text-[10px] font-bold';
-  const badgeSelected = isSwitch ? SWITCH_BADGE[color] : 'bg-white/25 text-white';
   const badgeIdle = isSwitch
     ? 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
     : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300';
@@ -81,6 +80,15 @@ export default function Tabs<T extends string>({ variant, color, label, value, o
     <div role="tablist" aria-label={label} className={`${container} ${className}`.trim()}>
       {tabs.map((tab, i) => {
         const active = tab.id === value;
+        // The full label and count stay the accessible name on every width, including
+        // when a short visible label replaces it below sm.
+        const ariaLabel = typeof tab.label === 'string'
+          ? `${tab.label}${tab.count !== undefined ? ` ${tab.count}` : ''}`
+          : undefined;
+        // A warning count keeps its amber or rose tone when the tab is selected.
+        const selectedBadge = tab.countTone
+          ? (isSwitch ? COUNT_TONE[tab.countTone] : tab.countTone === 'rose' ? 'bg-white text-rose-700' : 'bg-white text-amber-800')
+          : (isSwitch ? SWITCH_BADGE[color] : 'bg-white/25 text-white');
         return (
           <button
             key={tab.id}
@@ -88,6 +96,7 @@ export default function Tabs<T extends string>({ variant, color, label, value, o
             type="button"
             role="tab"
             aria-selected={active}
+            aria-label={ariaLabel}
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(tab.id)}
             onKeyDown={e => onKeyDown(e, i)}
@@ -101,7 +110,7 @@ export default function Tabs<T extends string>({ variant, color, label, value, o
               </>
             ) : tab.label}
             {tab.count !== undefined && (
-              <span className={`${badge} ${active ? badgeSelected : tab.countTone ? COUNT_TONE[tab.countTone] : badgeIdle}`}>{tab.count}</span>
+              <span className={`${badge} ${active ? selectedBadge : tab.countTone ? COUNT_TONE[tab.countTone] : badgeIdle}`}>{tab.count}</span>
             )}
           </button>
         );

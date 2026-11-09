@@ -176,7 +176,7 @@ test.describe('Faculty Module E2E Tests', () => {
 
       await expect(appPage.getByRole('main').getByText('Student invitations: 1 issued, 1 email deliveries failed, 1 failed or skipped.')).toBeVisible();
       await expect(appPage.getByText('Invitation issued · Delivery failed')).toBeVisible();
-      await appPage.getByRole('tab', { name: /Email History Log \(1\)/i }).click();
+      await appPage.getByRole('tab', { name: /Email History Log/ }).click();
       const historyTable = appPage.getByRole('table').filter({ hasText: 'Date Sent' });
       await expect(historyTable.getByText('Student Invitation', { exact: true })).toBeVisible();
       await expect(historyTable.getByText('1 failed', { exact: true })).toBeVisible();
@@ -191,6 +191,19 @@ test.describe('Faculty Module E2E Tests', () => {
     } finally {
       await appPage.close();
     }
+  });
+
+  test('Email History tab keeps its full name and count on phones', async ({ page }) => {
+    const actions = [
+      { id: 'mail-1', type: 'Student Invitation', sentAt: '2026-11-01T08:00:00Z', recipients: [{ name: 'Ana Reyes', email: 'ana.reyes@bicol-u.edu.ph', status: 'Sent' }] },
+      { id: 'mail-2', type: 'Secretary Invitation', sentAt: '2026-11-02T08:00:00Z', recipients: [{ name: 'Cara Lim', email: 'cara.lim@bicol-u.edu.ph', status: 'Failed' }] },
+    ];
+    await page.route('**/api/faculty/email-logs', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', actions }) }));
+    await page.click('a[href="/email-management"]');
+    await page.setViewportSize({ width: 390, height: 844 });
+    const historyTab = page.getByRole('tab', { name: /Email History Log/ });
+    await expect(historyTab).toHaveAccessibleName(/Email History Log 2$/);
+    await expect(historyTab.getByText('2', { exact: true })).toBeVisible();
   });
 
   test('Attendance Monitoring cards show Live for a class with a running session, Idle for others and Past term for old years', async ({ page }) => {
@@ -463,7 +476,7 @@ test.describe('Faculty Module E2E Tests', () => {
       await appPage.getByRole('button', { name: /Send Invitations \(1\)/i }).click();
       await expect(appPage.getByRole('main').getByText('Student invitations: 1 issued, 0 failed or skipped.')).toBeVisible();
       await expect(appPage.getByText('Invitation sent')).toBeVisible();
-      await appPage.getByRole('tab', { name: /Email History Log \(1\)/i }).click();
+      await appPage.getByRole('tab', { name: /Email History Log/ }).click();
       await expect(appPage.getByRole('table').getByText('Student Invitation', { exact: true })).toBeVisible();
       await expect(appPage.getByText('1 sent', { exact: true })).toBeVisible();
     } finally {
@@ -501,7 +514,7 @@ test.describe('Faculty Module E2E Tests', () => {
       await appPage.click('button[type="submit"]');
       await expect(appPage).toHaveURL('/');
       await appPage.evaluate(() => { window.history.pushState({}, '', '/email-management'); window.dispatchEvent(new PopStateEvent('popstate')); });
-      await appPage.getByRole('tab', { name: /Email History Log \(1\)/i }).click();
+      await appPage.getByRole('tab', { name: /Email History Log/ }).click();
       const historyTable = appPage.getByRole('table').filter({ hasText: 'Date Sent' });
       await expect(historyTable.getByText('3 recipients', { exact: true })).toBeVisible();
       await expect(historyTable.getByText('2 sent', { exact: true })).toBeVisible();

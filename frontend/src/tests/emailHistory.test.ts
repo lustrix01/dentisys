@@ -56,6 +56,7 @@ test('Email History table has no Subject column, an accessible toggle and a Dean
   assert.match(dean, /Invitation emails you sent\. View-only\./);
   assert.match(dean, /<EmailHistoryTable actions=\{emailActions\} search=\{emailSearch\} onSearch=\{setEmailSearch\} \/>/);
   const faculty = read('../pages/faculty/EmailManagement.tsx');
-  assert.match(faculty, /Email History Log \(\$\{logs\.length\}\)/);
+  assert.match(faculty, /label: 'Email History Log'/);
+  assert.match(faculty, /count: logs\.length/);
   assert.match(faculty, /Email Dispatch History \(\{logs\.length\}\)/);
 });
