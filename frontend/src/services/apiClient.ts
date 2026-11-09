@@ -144,6 +144,56 @@ const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
   },
 };
 
+function validationFieldLabel(field: string): string {
+  const known: Record<string, string> = {
+    firstName: 'First name', middleName: 'Middle name', lastName: 'Last name',
+    studentId: 'Student ID', studentNumber: 'Student number', yearLevel: 'Year level',
+    email: 'University email', classId: 'Class section', csId: 'Class section',
+    sessionDate: 'Session date', meetingDay: 'Class meeting', classEndTime: 'Class end time',
+    openingTime: 'Opening time', presentCutoff: 'Present cutoff', lateCutoff: 'Late cutoff',
+    geofenceRadius: 'Allowed radius', academicTermId: 'Academic term', general: 'Input',
+  };
+  if (known[field]) return known[field];
+  return field.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, value => value.toUpperCase());
+}
+
+function formatValidationErrors(rawErrors: unknown): string | null {
+  const entries: Array<{ field: string; message: string }> = [];
+  const add = (field: string, value: unknown) => {
+    if (typeof value === 'string' && value.trim()) {
+      entries.push({ field, message: value.trim() });
+    } else if (Array.isArray(value)) {
+      for (const item of value) add(field, item);
+    } else if (value && typeof value === 'object') {
+      const item = value as Record<string, unknown>;
+      if (typeof item.message === 'string' && item.message.trim()) {
+        entries.push({ field: typeof item.field === 'string' ? item.field : field, message: item.message.trim() });
+      }
+    }
+  };
+
+  if (Array.isArray(rawErrors)) {
+    for (const item of rawErrors) {
+      if (typeof item === 'string') add('general', item);
+      else if (item && typeof item === 'object') {
+        const entry = item as Record<string, unknown>;
+        add(typeof entry.field === 'string' ? entry.field : 'general', entry.message);
+      }
+    }
+  } else if (rawErrors && typeof rawErrors === 'object') {
+    for (const [field, value] of Object.entries(rawErrors as Record<string, unknown>)) add(field, value);
+  } else if (typeof rawErrors === 'string') {
+    add('general', rawErrors);
+  }
+
+  const unique = entries.filter((entry, index) => entries.findIndex(candidate => candidate.field === entry.field && candidate.message === entry.message) === index);
+  if (unique.length === 0) return null;
+  const visible = unique.slice(0, 5).map(({ field, message }) => `${validationFieldLabel(field)}: ${message}`);
+  const remaining = unique.length - visible.length;
+  const more = remaining > 0 ? ` ${remaining} more field${remaining === 1 ? ' needs' : 's need'} attention.` : '';
+  return `Please correct these fields, then submit again: ${visible.join(' ')}${more}`;
+}
+
 function mapError(status: number, backendMessage: string, responseData?: unknown): string {
   // Login failures reuse the generic 401 code; the message is the precise signal.
   if (status === 401 && backendMessage === 'Invalid credentials.') {
@@ -186,34 +236,8 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
   if ((status === 400 || status === 422) && responseData && typeof responseData === 'object') {
     const dataObj = responseData as Record<string, unknown>;
     if (dataObj.errors) {
-      if (typeof dataObj.errors === 'string' && dataObj.errors.trim()) {
-        return dataObj.errors;
-      }
-      if (Array.isArray(dataObj.errors)) {
-        for (const validationError of dataObj.errors) {
-          if (typeof validationError === 'string' && validationError.trim()) {
-            return validationError;
-          }
-          if (validationError && typeof validationError === 'object') {
-            const message = (validationError as Record<string, unknown>).message;
-            if (typeof message === 'string' && message.trim()) {
-              return message;
-            }
-          }
-        }
-      }
-      if (typeof dataObj.errors === 'object' && dataObj.errors !== null) {
-        const errMap = dataObj.errors as Record<string, unknown>;
-        if (errMap.email) {
-          const emailErr = Array.isArray(errMap.email) ? errMap.email[0] : errMap.email;
-          if (emailErr) return String(emailErr);
-        }
-        const values = Object.values(errMap);
-        for (const val of values) {
-          if (typeof val === 'string' && val.trim()) return val;
-          if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'string') return String(val[0]);
-        }
-      }
+      const summary = formatValidationErrors(dataObj.errors);
+      if (summary) return summary;
     }
   }
 
@@ -228,7 +252,9 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
     return backendMessage;
   }
   if (status === 400) return 'Please check your input and try again.';
-  if (status === 422) return backendMessage || 'Please correct the highlighted fields.';
+  if (status === 422) return backendMessage && backendMessage !== 'Validation failed.'
+    ? `${backendMessage} Review the information and try again.`
+    : 'Some information needs correction. Review the fields and try again.';
   if (status === 404) return backendMessage || 'The requested record was not found.';
   if (status === 409) return backendMessage || 'This request conflicts with the current account state.';
   if (status === 401) return 'Authentication failed. Please log in again.';

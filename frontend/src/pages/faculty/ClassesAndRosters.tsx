@@ -1,4 +1,4 @@
-import { filterPersonNameInput, preventInvalidPersonNameKey } from '../../utils/personNameValidation';
+import { filterPersonNameInput, personNameFieldError, preventInvalidPersonNameKey, type PersonNamePartKey } from '../../utils/personNameValidation';
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import {
@@ -78,6 +78,7 @@ import { buildClassList, termLine } from '../../utils/reportWorkbook';
 
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
 const isOfficialBicolEmail = (email: string): boolean => validateBicolUEmail(email, [DEFAULT_EMAIL_DOMAIN]).isValid;
+const nameFieldError = (key: PersonNamePartKey, value: string): string | null => value.trim() ? personNameFieldError(key, value) : null;
 
 type CourseComponents = 'both' | 'lecture' | 'lab';
 
@@ -2264,7 +2265,9 @@ const handleSendAllStudentInvites = async () => {
                   {loadingAvailable
                     ? <span className="text-slate-500 dark:text-slate-400">Checking existing students…</span>
                     : existingStudentMatch
-                      ? <span className="text-emerald-600 dark:text-emerald-400">Existing student found: {existingStudentMatch.name}. Their details are filled in and they will be enrolled in this class.</span>
+                      ? isOfficialBicolEmail(existingStudentMatch.email)
+                        ? <span className="text-emerald-600 dark:text-emerald-400">Existing student found: {existingStudentMatch.name}. Their details are filled in and they will be enrolled in this class.</span>
+                        : <span className="text-rose-600 dark:text-rose-300">Existing student found, but their email is not @bicol-u.edu.ph. Correct the roster email before enrolling them.</span>
                       : studentAlreadyInTargetClass
                         ? <span className="text-amber-600 dark:text-amber-400">This student is already enrolled in the selected class.</span>
                         : <span className="text-slate-500 dark:text-slate-400">Enter an existing student's ID number to fill in their details automatically.</span>}
@@ -2289,6 +2292,7 @@ const handleSendAllStudentInvites = async () => {
                     placeholder="e.g. Juan"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
                   />
+                  {nameFieldError('firstName', studentFirstName) && <span role="alert" className="mt-1 block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('firstName', studentFirstName)}</span>}
                 </div>
                 <div>
                   <label htmlFor="add-student-middle" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Middle Name</label>
@@ -2301,6 +2305,7 @@ const handleSendAllStudentInvites = async () => {
                     placeholder="e.g. Santos"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
                   />
+                  {nameFieldError('middleName', studentMiddleName) && <span role="alert" className="mt-1 block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('middleName', studentMiddleName)}</span>}
                 </div>
                 <div>
                   <label htmlFor="add-student-last" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Last Name *</label>
@@ -2314,6 +2319,7 @@ const handleSendAllStudentInvites = async () => {
                     placeholder="e.g. Dela Cruz"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
                   />
+                  {nameFieldError('lastName', studentLastName) && <span role="alert" className="mt-1 block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('lastName', studentLastName)}</span>}
                 </div>
               </div>
 
@@ -2774,6 +2780,7 @@ const handleSendAllStudentInvites = async () => {
                   onChange={event => setEditStudentFirstName(filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditStudentFirstName(filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
+                {nameFieldError('firstName', editStudentFirstName) && <span role="alert" className="block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('firstName', editStudentFirstName)}</span>}
               </label>
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
                 Last name *
@@ -2783,6 +2790,7 @@ const handleSendAllStudentInvites = async () => {
                   onChange={event => setEditStudentLastName(filterPersonNameInput('lastName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditStudentLastName(filterPersonNameInput('lastName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('lastName', event)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
+                {nameFieldError('lastName', editStudentLastName) && <span role="alert" className="block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('lastName', editStudentLastName)}</span>}
               </label>
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">
                 Middle name
@@ -2791,6 +2799,7 @@ const handleSendAllStudentInvites = async () => {
                   onChange={event => setEditStudentMiddleName(filterPersonNameInput('middleName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditStudentMiddleName(filterPersonNameInput('middleName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('middleName', event)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
+                {nameFieldError('middleName', editStudentMiddleName) && <span role="alert" className="block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('middleName', editStudentMiddleName)}</span>}
               </label>
               </fieldset>
               {editingStudent.accountActivated && (

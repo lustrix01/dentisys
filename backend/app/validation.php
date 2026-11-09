@@ -8,10 +8,35 @@ class ValidationException extends \RuntimeException
 
     public function __construct(array $errors, int $code = 0, ?\Throwable $previous = null)
     {
-        $this->errors = $errors;
+        $normalized = [];
+        foreach ($errors as $key => $error) {
+            $fallbackField = is_string($key) ? $key : 'general';
+            if (is_array($error) && isset($error['message'])) {
+                $normalized[] = [
+                    'field' => (string) ($error['field'] ?? $fallbackField),
+                    'message' => (string) $error['message'],
+                ];
+                continue;
+            }
+            if (is_string($error) && trim($error) !== '') {
+                $normalized[] = ['field' => $fallbackField, 'message' => trim($error)];
+                continue;
+            }
+            if (is_array($error) && is_string($key)) {
+                foreach ($error as $message) {
+                    if (is_string($message) && trim($message) !== '') {
+                        $normalized[] = ['field' => $key, 'message' => trim($message)];
+                    }
+                }
+            }
+        }
+        if ($normalized === []) {
+            $normalized[] = ['field' => 'general', 'message' => 'Review the entered information and try again.'];
+        }
+        $this->errors = $normalized;
         $message = 'Validation failed.';
-        foreach ($errors as $e) {
-            $message .= ' ' . ($e['field'] ?? '?') . ': ' . ($e['message'] ?? '?');
+        foreach ($normalized as $error) {
+            $message .= ' ' . $error['field'] . ': ' . $error['message'];
         }
         parent::__construct($message, $code, $previous);
     }
@@ -20,6 +45,21 @@ class ValidationException extends \RuntimeException
     {
         return $this->errors;
     }
+}
+
+function validation_field_label(string $field): string
+{
+    $known = [
+        'firstName' => 'First name', 'middleName' => 'Middle name', 'lastName' => 'Last name',
+        'studentId' => 'Student ID', 'studentNumber' => 'Student number', 'yearLevel' => 'Year level',
+        'email' => 'University email', 'classId' => 'Class section', 'csId' => 'Class section',
+        'sessionDate' => 'Session date', 'meetingDay' => 'Class meeting', 'classEndTime' => 'Class end time',
+        'openingTime' => 'Opening time', 'presentCutoff' => 'Present cutoff', 'lateCutoff' => 'Late cutoff',
+        'academicTermId' => 'Academic term', 'general' => 'Input',
+    ];
+    if (isset($known[$field])) return $known[$field];
+    $label = preg_replace('/([a-z0-9])([A-Z])/', '$1 $2', $field) ?? $field;
+    return ucfirst(str_replace('_', ' ', $label));
 }
 
 function validate_email(string $value): string
@@ -33,11 +73,11 @@ function validate_email(string $value): string
     $lower = mb_strtolower($trimmed);
 
     if (strlen($lower) > 254) {
-        throw new ValidationException([['field' => 'email', 'message' => 'Email exceeds maximum length.']]);
+        throw new ValidationException([['field' => 'email', 'message' => 'Email must be 254 characters or fewer. Shorten the address and try again.']]);
     }
 
     if (!filter_var($lower, FILTER_VALIDATE_EMAIL)) {
-        throw new ValidationException([['field' => 'email', 'message' => 'Email is not valid.']]);
+        throw new ValidationException([['field' => 'email', 'message' => 'Enter a complete email address such as name@bicol-u.edu.ph, then check for spelling errors.']]);
     }
 
     return $lower;
@@ -55,7 +95,7 @@ function validate_institutional_email(string $value): string
 
     if (!in_array($domain, $allowedDomains, true)) {
         $displayDomains = implode(', ', array_map(static fn(string $item): string => '@' . $item, $allowedDomains));
-        throw new ValidationException([['field' => 'email', 'message' => "Only official email addresses ({$displayDomains}) are allowed."]]);
+        throw new ValidationException([['field' => 'email', 'message' => "Only official email addresses ({$displayDomains}) are allowed. Replace the address with your official University email and try again."]]);
     }
 
     return $email;
@@ -69,16 +109,16 @@ function validate_person_name(array $data, string $field, int $minBytes = 2, int
     if ($name === '') {
         $labels = ['firstName' => 'First name', 'lastName' => 'Last name', 'middleName' => 'Middle name'];
         $label = $labels[$field] ?? 'Name';
-        throw new ValidationException([['field' => $field, 'message' => "{$label} is required."]]);
+        throw new ValidationException([['field' => $field, 'message' => "{$label} is required. Enter at least two letters, then try again."]]);
     }
 
     if (!preg_match('/^(?=.*\p{L})[\p{L}\s\'’\-\.]+$/u', $name)) {
-        throw new ValidationException([['field' => $field, 'message' => 'Name can only contain letters, spaces, hyphens, apostrophes, and periods.']]);
+        throw new ValidationException([['field' => $field, 'message' => 'Use letters, spaces, hyphens, apostrophes, or periods only; remove other characters and try again.']]);
     }
 
     $length = strlen($name);
     if ($length < $minBytes || $length > $maxBytes) {
-        throw new ValidationException([['field' => $field, 'message' => "Name must be between {$minBytes} and {$maxBytes} bytes."]]);
+        throw new ValidationException([['field' => $field, 'message' => "Use a name between {$minBytes} and {$maxBytes} bytes; shorten or complete the name, then try again."]]);
     }
 
     return $name;
@@ -158,7 +198,7 @@ function validate_optional_sex(array $data, string $field): ?string
     if ($value === 'f' || $value === 'female') {
         return 'F';
     }
-    throw new ValidationException([['field' => $field, 'message' => 'Sex must be Male or Female.']]);
+    throw new ValidationException([['field' => $field, 'message' => 'Choose Male or Female from the list, then try again.']]);
 }
 
 /** Optional Philippine mobile number, stored as 09XXXXXXXXX. */
@@ -169,7 +209,7 @@ function validate_optional_ph_mobile(array $data, string $field): ?string
         return null;
     }
     if (!preg_match('/^(09|\+639|639)\d{9}$/', $value)) {
-        throw new ValidationException([['field' => $field, 'message' => 'Enter a Philippine mobile number, e.g. 0917 123 4567.']]);
+        throw new ValidationException([['field' => $field, 'message' => 'Enter a Philippine mobile number such as 0917 123 4567. Check the digits and try again.']]);
     }
     return '09' . substr($value, -9);
 }
@@ -229,7 +269,7 @@ function validate_phone_number(array $data, string $field): string
 {
     $val = validate_required_string($data, $field, 7, 20);
     if (!preg_match('/^[0-9\+\-\s\(\)]+$/', $val) || preg_match('/[a-zA-Z]/', $val)) {
-        throw new ValidationException([['field' => $field, 'message' => 'Phone number can only contain digits and valid phone symbols.']]);
+        throw new ValidationException([['field' => $field, 'message' => 'Use digits with an optional +, hyphen, space, or parentheses. Remove letters and try again.']]);
     }
     return $val;
 }
@@ -241,7 +281,7 @@ function validate_optional_phone_number(array $data, string $field): ?string
         return null;
     }
     if (!preg_match('/^[0-9\+\-\s\(\)]+$/', $val) || preg_match('/[a-zA-Z]/', $val)) {
-        throw new ValidationException([['field' => $field, 'message' => 'Phone number can only contain digits and valid phone symbols.']]);
+        throw new ValidationException([['field' => $field, 'message' => 'Use digits with an optional +, hyphen, space, or parentheses. Remove letters and try again.']]);
     }
     return $val;
 }
@@ -250,7 +290,7 @@ function validate_numeric_string(array $data, string $field, int $minLen = 1, in
 {
     $val = validate_required_string($data, $field, $minLen, $maxLen);
     if (!preg_match('/^[0-9]+$/', $val)) {
-        throw new ValidationException([['field' => $field, 'message' => 'Field must contain only digits.']]);
+        throw new ValidationException([['field' => $field, 'message' => validation_field_label($field) . ' must contain digits only. Remove spaces or symbols and try again.']]);
     }
     return $val;
 }
@@ -262,7 +302,7 @@ function validate_optional_numeric_string(array $data, string $field, int $minLe
         return null;
     }
     if (!preg_match('/^[0-9]+$/', $val)) {
-        throw new ValidationException([['field' => $field, 'message' => 'Field must contain only digits.']]);
+        throw new ValidationException([['field' => $field, 'message' => validation_field_label($field) . ' must contain digits only. Remove spaces or symbols and try again.']]);
     }
     return $val;
 }
@@ -271,17 +311,17 @@ function validate_optional_numeric_string(array $data, string $field, int $minLe
 function validate_required_string(array $data, string $field, int $minBytes, int $maxBytes): string
 {
     if (!array_key_exists($field, $data)) {
-        throw new ValidationException([['field' => $field, 'message' => 'Field is required.']]);
+        throw new ValidationException([['field' => $field, 'message' => validation_field_label($field) . ' is required. Enter a value and try again.']]);
     }
 
     if (!is_string($data[$field])) {
-        throw new ValidationException([['field' => $field, 'message' => 'Field must be a string.']]);
+        throw new ValidationException([['field' => $field, 'message' => validation_field_label($field) . ' has an invalid value. Re-enter it and try again.']]);
     }
 
     $value = $data[$field];
 
     if (!mb_check_encoding($value, 'UTF-8')) {
-        throw new ValidationException([['field' => $field, 'message' => 'Field contains invalid UTF-8.']]);
+        throw new ValidationException([['field' => $field, 'message' => 'This value contains unsupported characters. Re-enter it using standard text characters.']]);
     }
 
     reject_control_chars($value, $field);
@@ -291,11 +331,11 @@ function validate_required_string(array $data, string $field, int $minBytes, int
     $len = strlen($cleaned);
 
     if ($len < $minBytes) {
-        throw new ValidationException([['field' => $field, 'message' => "Must be at least $minBytes characters."]]);
+        throw new ValidationException([['field' => $field, 'message' => validation_field_label($field) . " must be at least $minBytes characters. Add more characters and try again."]]);
     }
 
     if ($len > $maxBytes) {
-        throw new ValidationException([['field' => $field, 'message' => "Must not exceed $maxBytes characters."]]);
+        throw new ValidationException([['field' => $field, 'message' => validation_field_label($field) . " must be no more than $maxBytes characters. Shorten it and try again."]]);
     }
 
     return $cleaned;
@@ -308,7 +348,7 @@ function validate_optional_string(array $data, string $field, int $minBytes, int
     }
 
     if (!is_string($data[$field])) {
-        throw new ValidationException([['field' => $field, 'message' => 'Field must be a string.']]);
+        throw new ValidationException([['field' => $field, 'message' => validation_field_label($field) . ' has an invalid value. Re-enter it and try again.']]);
     }
 
     $value = $data[$field];
@@ -318,7 +358,7 @@ function validate_optional_string(array $data, string $field, int $minBytes, int
     }
 
     if (!mb_check_encoding($value, 'UTF-8')) {
-        throw new ValidationException([['field' => $field, 'message' => 'Field contains invalid UTF-8.']]);
+        throw new ValidationException([['field' => $field, 'message' => 'This value contains unsupported characters. Re-enter it using standard text characters.']]);
     }
 
     reject_control_chars($value, $field);
@@ -328,11 +368,11 @@ function validate_optional_string(array $data, string $field, int $minBytes, int
     $len = strlen($cleaned);
 
     if ($len < $minBytes) {
-        throw new ValidationException([['field' => $field, 'message' => "Must be at least $minBytes characters."]]);
+        throw new ValidationException([['field' => $field, 'message' => validation_field_label($field) . " must be at least $minBytes characters. Add more characters and try again."]]);
     }
 
     if ($len > $maxBytes) {
-        throw new ValidationException([['field' => $field, 'message' => "Must not exceed $maxBytes characters."]]);
+        throw new ValidationException([['field' => $field, 'message' => validation_field_label($field) . " must be no more than $maxBytes characters. Shorten it and try again."]]);
     }
 
     return $cleaned;
@@ -343,7 +383,7 @@ function validate_enum(array $data, string $field, array $allowedValues): string
     $value = validate_required_string($data, $field, 1, 255);
 
     if (!in_array($value, $allowedValues, true)) {
-        throw new ValidationException([['field' => $field, 'message' => 'Value is not in the allowed set.']]);
+        throw new ValidationException([['field' => $field, 'message' => 'Choose one of the available options, then try again.']]);
     }
 
     return $value;
@@ -352,15 +392,15 @@ function validate_enum(array $data, string $field, array $allowedValues): string
 function validate_int(array $data, string $field, int $min, int $max): int
 {
     if (!array_key_exists($field, $data)) {
-        throw new ValidationException([['field' => $field, 'message' => 'Field is required.']]);
+        throw new ValidationException([['field' => $field, 'message' => validation_field_label($field) . ' is required. Enter a value and try again.']]);
     }
 
     if (!is_int($data[$field])) {
-        throw new ValidationException([['field' => $field, 'message' => 'Field must be an integer.']]);
+        throw new ValidationException([['field' => $field, 'message' => validation_field_label($field) . ' must be a whole number. Enter a whole number and try again.']]);
     }
 
     if ($data[$field] < $min || $data[$field] > $max) {
-        throw new ValidationException([['field' => $field, 'message' => "Must be between $min and $max."]]);
+        throw new ValidationException([['field' => $field, 'message' => validation_field_label($field) . " must be between $min and $max. Adjust the value and try again."]]);
     }
 
     return $data[$field];

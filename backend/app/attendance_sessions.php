@@ -32,9 +32,9 @@ function attendance_session_creation_date(mixed $value, array $config, ?DateTime
     $date = DateTimeImmutable::createFromFormat('!Y-m-d', $raw);
     $errors = DateTimeImmutable::getLastErrors();
     if (!$date || ($errors !== false && ($errors['warning_count'] || $errors['error_count'])) || $date->format('Y-m-d') !== $raw) {
-        throw new ValidationException(['sessionDate' => 'Session date must be a valid YYYY-MM-DD date.']);
+        throw new ValidationException(['sessionDate' => 'Choose a valid session date using the date picker, then try again.']);
     }
-    if ($raw < $today) throw new ValidationException(['sessionDate' => 'Past attendance session dates are not allowed.']);
+    if ($raw < $today) throw new ValidationException(['sessionDate' => 'Choose today or a future date for this session, then try again.']);
     return $raw;
 }
 
@@ -71,7 +71,7 @@ function attendance_session_creation_status(string $date, ?string $opening, arra
 {
     $now = attendance_session_now_utc()->setTimezone(new DateTimeZone($config['app']['operational_timezone']));
     if ($date > $now->format('Y-m-d') && $opening === null) {
-        throw new ValidationException(['openingTime' => 'A scheduled session requires opening time, Present cutoff and Late cutoff.']);
+        throw new ValidationException(['openingTime' => 'A scheduled session needs an opening time, Present cutoff, and Late cutoff. Enter all three times, then try again.']);
     }
     return $date . ' ' . ($opening ?? '00:00:00') > $now->format('Y-m-d H:i:s') ? 'scheduled' : 'active';
 }

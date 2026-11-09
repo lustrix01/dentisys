@@ -29,13 +29,13 @@ export function personNameFieldError(key: PersonNamePartKey, rawValue: string): 
     if (value === '') return null;
     return AFFIX_PATTERN.test(value)
       ? null
-      : `${key === 'prefix' ? 'Prefix' : 'Suffix'} can only contain letters, periods, commas, apostrophes, and hyphens.`;
+      : `${key === 'prefix' ? 'Prefix' : 'Suffix'} can only contain letters, periods, commas, apostrophes, and hyphens. Remove other characters, then try again.`;
   }
   const label = key === 'firstName' ? 'First name' : key === 'lastName' ? 'Last name' : 'Middle name';
-  if (value === '') return key === 'middleName' ? null : `${label} is required.`;
-  if (!NAME_PATTERN.test(value)) return `${label} can only contain letters, spaces, hyphens, apostrophes, and periods.`;
+  if (value === '') return key === 'middleName' ? null : `${label} is required. Enter at least two letters.`;
+  if (!NAME_PATTERN.test(value)) return `${label} can only contain letters, spaces, hyphens, apostrophes, and periods. Remove other characters, then try again.`;
   // A middle name may be a single initial ("M" or "M.").
-  if (key !== 'middleName' && value.length < 2) return `${label} must be at least 2 characters.`;
+  if (key !== 'middleName' && value.length < 2) return `${label} must be at least 2 characters. Add another letter, then try again.`;
   return null;
 }
 

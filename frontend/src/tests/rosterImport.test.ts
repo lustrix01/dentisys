@@ -59,7 +59,7 @@ test('missing optional values stay absent; malformed and duplicate rows are bloc
   assert.equal(withEmail.contact, undefined);
   const duplicate = validateRosterStudents(parseCSVText('Student ID,First Name,Last Name,Email,Year Level\nABC-123,Ana,Reyes,wrong@outside.edu,4foo\nabc-123,Bea,Santos,,4'), domains);
   assert.ok(duplicate.every(row => row.status === 'error'));
-  assert.match(duplicate[0].validationMessage!, /Duplicate.*domain.*Year/);
+  assert.match(duplicate[0].validationMessage!, /Duplicate.*official.*Year/);
 });
 
 test('institutional email headers are parsed and blank or invalid email blocks import', () => {
