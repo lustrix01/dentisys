@@ -406,7 +406,7 @@ for (const device of wantedDevices()) for (const role of wantedRoles()) {
       }
       // In-page tabs: state switches only, never saves.
       if (role !== 'public' && !process.env.AUDIT_NO_TABS) {
-        const tabs = page.getByRole('button', { name: TAB_LABEL });
+        const tabs = page.getByRole('button', { name: TAB_LABEL }).or(page.getByRole('tab', { name: TAB_LABEL }));
         const n = await tabs.count().catch(() => 0);
         for (let i = 0; i < n; i++) {
           const t = tabs.nth(i);
