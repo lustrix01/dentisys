@@ -38,12 +38,13 @@ Draft branch `lighthal9-responsive-tab-followup`, based on `7e91805`. Pushed for
 |---|---|
 | `227b0ed` | On phones, tab short names are visual only: screen readers keep the full label and count (for example "Email History Log 2" instead of "History"). The Email History count is visible as a badge at every width. Retention's Remedial and Midterm counts keep their amber or rose tone when the tab is selected. |
 | `3a9a7c9` | No user-visible change. The device audit opens the new tab-role controls again, so the screens behind those tabs stay covered. |
+| `d9a65f5` | The class roster toolbar is a flat row inside the roster card, so the page no longer shows a card within a card. Rooms and the Classes list keep their toolbar cards because those toolbars are their own page sections. |
 
 ### Owner rulings
 
 - Keep Import → Create on the Classes toolbar: the main action goes last and filled (rule 6); R4 now says so.
 - Warning counts keep their tone when selected.
-- The roster toolbar stays Option A unless the Owner chooses Option B from the local Before/After demo.
+- The roster toolbar uses the flat row inside the roster card (Option B); Rooms and the Classes list keep their toolbar cards.
 
 ### How it was checked
 
