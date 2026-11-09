@@ -158,6 +158,8 @@ Google authentication MUST use a stable provider identity when persistently link
 
 Google verification proves identity only; DentiSys remains responsible for authorization and account eligibility.
 
+Owner-approved amendment (2026-11-09): DentiSys accepts only official `@bicol-u.edu.ph` addresses for account identity, Student records, invitations, sign-in, password recovery and outgoing application email. This supersedes the configurable multi-domain behavior above and the earlier AUTH-004 and UI-004 multi-domain decisions. Existing database records are not rewritten; a non-BU address cannot be used for a new or updated identity, activation, invitation, sign-in, recovery or outgoing email until corrected to an official address.
+
 ## AUTH-004 — Institutional domains
 
 **Status: APPROVED**
@@ -635,7 +637,8 @@ The following capabilities are currently part of DentiSys and MUST NOT be remove
 | Email history and notification delivery | CURRENT  |
 | Google Sign-In                          | APPROVED |
 | Google linking after activation (REG-003) | APPROVED |
-| Multi-domain institutional allowlist    | APPROVED |
+| Multi-domain institutional allowlist    | RETIRED  |
+| Bicol University email restriction      | CURRENT  |
 
 Detailed implementation status belongs in `docs/features.md`, not here.
 
@@ -1168,6 +1171,8 @@ Owner decision (2026-10-12): In Single Activity View and Full Matrix View, auto-
 ## UI-004 - Email and invitations (PDF pages 5, 7-8)
 
 All email-entry controls default to `@bicol-u.edu.ph`, allowing local-part-only entry. Complete existing addresses and other server-allowed domains remain supported under AUTH-004. Preserve addresses and prevent duplicated suffixes; this default does not impose a single-domain restriction.
+
+Owner-approved amendment (2026-11-09): Only `@bicol-u.edu.ph` is accepted. A complete address from any other domain, including `gmail.com`, is rejected; email fields may still accept a local part and append the official domain. This supersedes the multi-domain sentence above.
 
 Faculty invitations follow the PDF's structured name fields, institutional email, clear send action, searchable status, and supported lifecycle actions. The Owner's five-part name requirement below supplements the screenshot's subset. Invitation authority, activation, password, and MFA rules remain unchanged.
 

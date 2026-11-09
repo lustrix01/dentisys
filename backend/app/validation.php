@@ -50,7 +50,7 @@ function validate_institutional_email(string $value): string
     $domain = substr(strrchr($email, '@'), 1);
     $configured = function_exists('app_config')
         ? (app_config()['app']['allowed_email_domains'] ?? [])
-        : [strtolower((string) (getenv('ALLOWED_EMAIL_DOMAIN') ?: 'bicol-u.edu.ph'))];
+        : ['bicol-u.edu.ph'];
     $allowedDomains = array_values(array_filter(array_map('strtolower', $configured)));
 
     if (!in_array($domain, $allowedDomains, true)) {

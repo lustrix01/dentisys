@@ -7645,6 +7645,16 @@ function handle_faculty_email_send(): void
                 ];
                 continue;
             }
+            if (strtolower((string) substr(strrchr($recipientEmail, '@') ?: '', 1)) !== 'bicol-u.edu.ph') {
+                $results[] = [
+                    'id' => null,
+                    'studentId' => (string) $recipient['student_id'],
+                    'recipient' => $recipientEmail,
+                    'status' => 'Failed',
+                    'failureReason' => 'Only official @bicol-u.edu.ph addresses can receive DentiSys email.',
+                ];
+                continue;
+            }
             $operationUuid = uuid_v4_string();
             $messageBody = email_faculty_message_html($recipientName, $facultySignature, $recipientMessage);
             $insert->execute([

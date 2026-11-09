@@ -164,7 +164,11 @@ function config_allowed_email_domains(array $overrides): array
         }
     }
 
-    return $domains;
+    if ($domains !== ['bicol-u.edu.ph']) {
+        throw new RuntimeException('DentiSys accepts only official @bicol-u.edu.ph email addresses.');
+    }
+
+    return ['bicol-u.edu.ph'];
 }
 
 function config_app_base_url(string $value, bool $required): string

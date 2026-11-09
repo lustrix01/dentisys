@@ -71,12 +71,13 @@ import { MeetingTimes, type DayTimes } from '../../components/MeetingTimes';
 import { RoomSelector } from '../../components/RoomSelector';
 import { RosterImportModal } from '../../components/RosterImportModal';
 import { recordAudit } from '../../services/auditService';
-import { createSecretaryInvitation, fetchSecretaryInvitations, type SecretaryInvitation } from '../../services/authService';
+import { createSecretaryInvitation, fetchSecretaryInvitations, validateBicolUEmail, type SecretaryInvitation } from '../../services/authService';
 import { useAuth } from '../../context/AuthContext';
 import { downloadXlsx } from '../../utils/xlsxDownload';
 import { buildClassList, termLine } from '../../utils/reportWorkbook';
 
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
+const isOfficialBicolEmail = (email: string): boolean => validateBicolUEmail(email, [DEFAULT_EMAIL_DOMAIN]).isValid;
 
 type CourseComponents = 'both' | 'lecture' | 'lab';
 
@@ -765,6 +766,10 @@ export const ClassesAndRosters: React.FC = () => {
       setEditStudentError('Institutional email is required for roster edits.');
       return;
     }
+    if (!isOfficialBicolEmail(email)) {
+      setEditStudentError('Use an official @bicol-u.edu.ph email address.');
+      return;
+    }
     if (!Number.isInteger(editStudentYearLevel) || editStudentYearLevel < 1 || editStudentYearLevel > 6) {
       setEditStudentError('Year level must be between 1 and 6.');
       return;
@@ -1151,6 +1156,11 @@ export const ClassesAndRosters: React.FC = () => {
       showFeedback('Please fill in Student ID, First Name, Last Name, and Email.', 'error');
       return;
     }
+    const normalizedEmail = (studentEmailInput.includes('@') ? studentEmailInput.trim() : `${studentEmailInput.trim()}@${DEFAULT_EMAIL_DOMAIN}`).toLowerCase();
+    if (!isOfficialBicolEmail(normalizedEmail)) {
+      showFeedback('Use an official @bicol-u.edu.ph email address.', 'error');
+      return;
+    }
     if (!targetEnrollCsId || targetEnrollCsId <= 0) {
       showFeedback('Please select a target class section.', 'error');
       return;
@@ -1165,7 +1175,7 @@ export const ClassesAndRosters: React.FC = () => {
         firstName: studentFirstName.trim(),
         middleName: studentMiddleName.trim() || undefined,
         lastName: studentLastName.trim(),
-        email: (studentEmailInput.includes('@') ? studentEmailInput.trim() : `${studentEmailInput.trim()}@bicol-u.edu.ph`).toLowerCase(),
+        email: normalizedEmail,
         yearLevel: studentYearInput,
         classId: String(targetEnrollCsId),
       });
@@ -1254,6 +1264,10 @@ export const ClassesAndRosters: React.FC = () => {
     || pendingSecretaryInvs.some(inv => inv.className === className);
 
   const handleMakeSecretary = async (student: Student, classId: string, className: string) => {
+    if (!isOfficialBicolEmail(student.email)) {
+      showFeedback('Only official @bicol-u.edu.ph addresses can receive invitations.', 'error');
+      return;
+    }
     const res = await createSecretaryInvitation({
       studentId: student.studentId,
       studentName: student.name,
@@ -1283,6 +1297,10 @@ export const ClassesAndRosters: React.FC = () => {
   };
 
   const handleSendStudentEmailInvite = async (student: Student) => {
+    if (!isOfficialBicolEmail(student.email)) {
+      setNotification({ type: 'info', message: `Cannot invite ${student.name}: use an official @bicol-u.edu.ph address.` });
+      return;
+    }
     const classId = invitationClassId(student);
     if (!classId) {
       setNotification({ type: 'info', message: `${student.name} has no server-authoritative class enrollment to invite from.` });
@@ -1345,11 +1363,13 @@ export const ClassesAndRosters: React.FC = () => {
 
 const handleSendAllStudentInvites = async () => {
     setIsSendingInvitations(true);
-    const invitable = filteredStudents.filter(student => {
+    const needsInvitation = filteredStudents.filter(student => {
       const accountStatus = student.accountStatus ?? 'none';
       return accountStatus === 'none' || accountStatus === 'pending';
     });
-    const alreadyRegistered = filteredStudents.length - invitable.length;
+    const invitable = needsInvitation.filter(student => isOfficialBicolEmail(student.email));
+    const unsupportedEmailCount = needsInvitation.length - invitable.length;
+    const alreadyRegistered = filteredStudents.length - needsInvitation.length;
     const emailActionId = crypto.randomUUID(); // one id for the whole bulk click
     const results = await Promise.all(invitable.map(async student => {
       const classId = invitationClassId(student);
@@ -1363,13 +1383,16 @@ const handleSendAllStudentInvites = async () => {
     }));
     const invited = results.filter(result => result.issued).length;
     const deliveryFailed = results.filter(result => result.deliveryFailed).length;
-    const skippedNote = alreadyRegistered > 0 ? ` ${alreadyRegistered} already registered (skipped).` : '';
+    const skippedNote = `${alreadyRegistered > 0 ? ` ${alreadyRegistered} already registered (skipped).` : ''}${unsupportedEmailCount > 0 ? ` ${unsupportedEmailCount} skipped: only @bicol-u.edu.ph addresses can receive invitations.` : ''}`;
+    const resultMessage = invitable.length === 0
+      ? 'No Student invitations were issued.'
+      : deliveryFailed > 0
+        ? `Issued ${invited} of ${results.length} Student invitations; ${deliveryFailed} email deliveries failed. Review the roster and retry any that failed.`
+        : `Issued ${invited} of ${results.length} Student invitations. Review the roster and retry any that failed.`;
     setIsSendingInvitations(false);
     setNotification({
-      type: invited === results.length && deliveryFailed === 0 ? 'success' : 'info',
-      message: deliveryFailed > 0
-        ? `Issued ${invited} of ${results.length} Student invitations; ${deliveryFailed} email deliveries failed. Review the roster and retry any that failed.${skippedNote}`
-        : `Issued ${invited} of ${results.length} Student invitations. Review the roster and retry any that failed.${skippedNote}`,
+      type: invited === results.length && deliveryFailed === 0 && unsupportedEmailCount === 0 ? 'success' : 'info',
+      message: `${resultMessage}${skippedNote}`,
     });
     await fetchData();
   };
@@ -2018,6 +2041,7 @@ const handleSendAllStudentInvites = async () => {
                         </td>
                         <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 max-md:order-4 max-md:w-full max-md:p-0 max-md:break-all">
                           <span className="sr-only md:hidden">BU email address: </span>{st.email}
+                          {!isOfficialBicolEmail(st.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Only @bicol-u.edu.ph addresses can receive invitations.</span>}
                         </td>
                         <td className="py-3.5 px-4 max-md:order-5 max-md:p-0">
                           <span className="sr-only md:hidden">Enrolled class section: </span>
@@ -2035,6 +2059,9 @@ const handleSendAllStudentInvites = async () => {
                             )}
                             {(() => {
                               const accountStatus = st.accountStatus ?? 'none';
+                              if (!isOfficialBicolEmail(st.email)) {
+                                return <span className="whitespace-nowrap rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">Unsupported email domain</span>;
+                              }
                               if (accountStatus === 'active' || accountStatus === 'secretary') {
                                 return (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
@@ -2105,9 +2132,9 @@ const handleSendAllStudentInvites = async () => {
                                         setOpenStudentMenuId(null);
                                         handleSendStudentEmailInvite(st);
                                       }}
-                                      disabled={isSendingInvitations || isRegistered}
+                                      disabled={isSendingInvitations || isRegistered || !isOfficialBicolEmail(st.email)}
                                       className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                                      title={isRegistered ? 'Student already has an active account' : undefined}
+                                      title={!isOfficialBicolEmail(st.email) ? 'Only @bicol-u.edu.ph addresses are supported' : isRegistered ? 'Student already has an active account' : undefined}
                                     >
                                       <Send className="w-3.5 h-3.5 text-emerald-500" />
                                       <span>{isRegistered ? 'Already Registered' : isReissue ? 'Reissue Invite' : 'Send Invite'}</span>

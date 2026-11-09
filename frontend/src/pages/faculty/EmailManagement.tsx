@@ -27,6 +27,7 @@ import {
   fetchSecretaryInvitations,
   revokeSecretaryInvitation,
   SecretaryInvitation,
+  validateBicolUEmail,
 } from '../../services/authService';
 import { createStudentInvitation, removeSecretaryAppointmentApi, getFacultyRetentionApi, sendFacultyEmailApi, type FacultyRetentionRecord } from '../../services/apiClient';
 import { Student } from '../../types';
@@ -35,6 +36,7 @@ import { getFacultyStudentsApi, getFacultyClassesApi } from '../../services/apiC
 type Tab = 'student_invites' | 'secretary' | 'midterm_advisory' | 'remedial' | 'history';
 
 const initialLogs: EmailAction[] = [];
+const isOfficialBicolEmail = (email: string): boolean => validateBicolUEmail(email, ['bicol-u.edu.ph']).isValid;
 
 const remedialDateLabel = (value?: string | null): string | undefined => {
   if (!value) return undefined;
@@ -220,6 +222,10 @@ export const EmailManagement: React.FC = () => {
       return matchesSchoolYear && matchesClass && matchesSearch;
     });
   }, [safeStudents, selectedClassId, selectedClass, selectedSchoolYear, search, classSchoolYearMap]);
+  const invitationEligibleStudents = useMemo(
+    () => filteredStudents.filter(student => isOfficialBicolEmail(student.email)),
+    [filteredStudents],
+  );
 
   // REG-006: Secretary tab lists one row per (student, section) so a Student can hold several appointments.
   const secretaryRows = useMemo(() => filteredStudents.flatMap((student) =>
@@ -261,10 +267,10 @@ export const EmailManagement: React.FC = () => {
     || secretaryInvs.some((inv) => inv.status === 'Pending' && inv.className === className);
 
   const toggleSelectAll = () => {
-    if (selected.length === filteredStudents.length) {
+    if (invitationEligibleStudents.length > 0 && selected.length === invitationEligibleStudents.length) {
       setSelected([]);
     } else {
-      setSelected(filteredStudents.map(s => s.id));
+      setSelected(invitationEligibleStudents.map(s => s.id));
     }
   };
 
@@ -296,6 +302,10 @@ export const EmailManagement: React.FC = () => {
         const [studentId, rowClassId] = key.split('|');
         const student = safeStudents.find((s) => s.id === studentId || s.studentId === studentId);
         if (!student) continue;
+        if (!isOfficialBicolEmail(student.email)) {
+          refusals.push(`${student.name}: only @bicol-u.edu.ph addresses can receive invitations.`);
+          continue;
+        }
         const classId = /^\d+$/.test(student.id) && /^\d+$/.test(rowClassId ?? '') ? rowClassId : null;
         if (!classId) {
           notify({ type: 'error', message: `No class section found for ${student.name}.` });
@@ -344,8 +354,13 @@ export const EmailManagement: React.FC = () => {
       let failedCount = 0;
       let deliveryFailedCount = 0;
       let registeredCount = 0;
+      let unsupportedEmailCount = 0;
       for (const studentId of selected) {
         const student = safeStudents.find((candidate) => candidate.id === studentId);
+        if (student && !isOfficialBicolEmail(student.email)) {
+          unsupportedEmailCount++;
+          continue;
+        }
         const accountStatus = student?.accountStatus ?? 'none';
         if (student && accountStatus !== 'none' && accountStatus !== 'pending') {
           registeredCount++;
@@ -373,7 +388,8 @@ export const EmailManagement: React.FC = () => {
         message: (deliveryFailedCount > 0
           ? `Student invitations: ${successCount} issued, ${deliveryFailedCount} email deliveries failed, ${failedCount} failed or skipped.`
           : `Student invitations: ${successCount} issued, ${failedCount} failed or skipped.`)
-          + (registeredCount > 0 ? ` ${registeredCount} already registered (not re-invited).` : ''),
+          + (registeredCount > 0 ? ` ${registeredCount} already registered (not re-invited).` : '')
+          + (unsupportedEmailCount > 0 ? ` ${unsupportedEmailCount} skipped: only @bicol-u.edu.ph addresses can receive invitations.` : ''),
       });
     }
   };
@@ -627,7 +643,7 @@ export const EmailManagement: React.FC = () => {
                     <label className="inline-flex items-center gap-3 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={selected.length > 0 && selected.length === filteredStudents.length}
+                        checked={invitationEligibleStudents.length > 0 && selected.length === invitationEligibleStudents.length}
                         onChange={toggleSelectAll}
                         aria-label="Select all students"
                         className="w-4 h-4 accent-emerald-600 cursor-pointer"
@@ -657,6 +673,7 @@ export const EmailManagement: React.FC = () => {
                           <input
                             type="checkbox"
                             checked={isChecked}
+                            disabled={!isOfficialBicolEmail(student.email)}
                             onChange={() => toggleSelect(student.id)}
                             aria-label={`Select ${student.name}`}
                             className="w-4 h-4 accent-emerald-600 cursor-pointer"
@@ -667,6 +684,7 @@ export const EmailManagement: React.FC = () => {
                           <span className="sr-only md:hidden">Student details: </span>
                           <span className="font-bold text-slate-800 dark:text-slate-100 block">{student.name}</span>
                           <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId}<span className="max-md:hidden"> • </span><span className="max-md:block max-md:break-words">{student.email}</span></span>
+                          {!isOfficialBicolEmail(student.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Only @bicol-u.edu.ph addresses can receive invitations.</span>}
                         </td>
 
                         <td className="py-3.5 px-4 max-md:p-0">
@@ -685,12 +703,14 @@ export const EmailManagement: React.FC = () => {
                               const registeredLabel = accountStatus === 'active' ? 'Registered' : accountStatus === 'secretary' ? 'Secretary Account' : 'Account Disabled';
                               return <span className="whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60">{registeredLabel}</span>;
                             }
-                            const label = invitation
+                            const label = !isOfficialBicolEmail(student.email) ? 'Unsupported email domain' : invitation
                               ? invitation.status === 'Sent' ? 'Invitation Sent'
                                 : invitation.status === 'Failed' ? 'Invitation Issued · Delivery Failed'
                                   : 'Invitation Pending'
                               : accountStatus === 'pending' ? 'Invitation Pending' : 'Enrolled & Ready';
-                            const tone = invitation?.status === 'Failed'
+                            const tone = !isOfficialBicolEmail(student.email)
+                              ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200/60'
+                              : invitation?.status === 'Failed'
                               ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/60'
                               : invitation
                                 ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200/60'
@@ -769,10 +789,10 @@ export const EmailManagement: React.FC = () => {
                         <input
                           type="checkbox"
                           checked={isChecked}
-                          disabled={sectionTaken}
+                          disabled={sectionTaken || !isOfficialBicolEmail(student.email)}
                           onChange={() => toggleSecretarySelect(key)}
                           aria-label={`Select ${student.name} for ${section.className || 'this section'}`}
-                          className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                          className="w-4 h-4 accent-emerald-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                         />
                       </td>
 
@@ -801,6 +821,7 @@ export const EmailManagement: React.FC = () => {
                             {student.accountStatus === 'active' || student.accountStatus === 'secretary' ? 'Student (has account)' : 'Student (no account yet)'}
                           </span>
                         )}
+                        {!isOfficialBicolEmail(student.email) && <span className="block mt-1 text-[10px] font-semibold text-rose-600 dark:text-rose-300">Only @bicol-u.edu.ph addresses can receive invitations.</span>}
                         {sectionTaken && !section.isSecretary && (
                           <span className="block mt-1 text-[10px] text-slate-500 dark:text-slate-400">Section already has a Class Secretary</span>
                         )}
@@ -918,7 +939,7 @@ export const EmailManagement: React.FC = () => {
                     <input
                       type="checkbox"
                       checked={isChecked}
-                      disabled={!row.email}
+                      disabled={!isOfficialBicolEmail(row.email)}
                       onChange={() => toggleSelect(row.enrollmentId)}
                       aria-label={`Select ${row.studentName ?? 'student'} for ${tab === 'midterm_advisory' ? 'Midterm Advisory' : 'Remedial Notice'}`}
                       className="mt-1 h-4 w-4 shrink-0 accent-emerald-600 disabled:opacity-40"
@@ -926,6 +947,7 @@ export const EmailManagement: React.FC = () => {
                     <span className="min-w-0 flex-1">
                       <span className="block break-words text-sm font-bold text-slate-800 dark:text-slate-100">{row.studentName || 'Student name unavailable'}</span>
                       <span className="mt-0.5 block break-all text-[11px] text-slate-500 dark:text-slate-400">{row.email || 'No valid institutional email on file'}</span>
+                      {row.email && !isOfficialBicolEmail(row.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Update to an @bicol-u.edu.ph address before sending.</span>}
                       <span className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
                         <span>{row.subjectCode || 'Course'}</span><span aria-hidden="true">·</span><span>{row.className || 'Class section'}</span>
                       </span>
