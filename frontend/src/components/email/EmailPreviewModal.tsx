@@ -7,6 +7,8 @@ export type EmailPreviewType =
   | 'student_invitation'
   | 'consent'
   | 'risk'
+  | 'midterm_advisory'
+  | 'remedial_notice'
   | 'secretary'
   | 'faculty_approval'
   | 'faculty_rejection';
@@ -24,6 +26,12 @@ interface EmailPreviewModalProps {
   schoolYear?: string;
   invitationLink?: string;
   onConsentAction?: (action: 'approved' | 'declined') => void;
+  onSend?: () => void;
+  isSending?: boolean;
+  recipientCount?: number;
+  recipientList?: string[];
+  remedialAttempt?: number;
+  scheduledDate?: string;
 }
 
 export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
@@ -38,6 +46,12 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
   className = 'Clinical Dentistry IV',
   schoolYear = '2026-2027',
   invitationLink,
+  onSend,
+  isSending = false,
+  recipientCount = 1,
+  recipientList = [],
+  remedialAttempt,
+  scheduledDate,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -90,6 +104,24 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
           icon: XCircle,
           badgeColor: 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20',
         };
+      case 'midterm_advisory':
+        return {
+          title: 'Midterm Advisory Preview',
+          subject: `Midterm Academic Advisory: ${className || 'Dental Course'}`,
+          sender: `${facultyName} via DentiSys Portal`,
+          senderEmail: 'notifications@dentisys.bicol-u.edu.ph',
+          icon: BookOpen,
+          badgeColor: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20',
+        };
+      case 'remedial_notice':
+        return {
+          title: 'Remedial Schedule Preview',
+          subject: `Remedial Exam Schedule: ${className || 'Dental Course'}`,
+          sender: `${facultyName} via DentiSys Portal`,
+          senderEmail: 'notifications@dentisys.bicol-u.edu.ph',
+          icon: Calendar,
+          badgeColor: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20',
+        };
       case 'risk':
       default:
         return {
@@ -123,11 +155,19 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
               <span className="font-semibold text-slate-800 dark:text-slate-100">{meta.sender}</span>
               <span className="text-slate-500 dark:text-slate-400 font-mono text-[10px]">&lt;{meta.senderEmail}&gt;</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               <span className="text-slate-500 dark:text-slate-400 w-14 font-mono uppercase text-[10px]">To:</span>
-              <span className="font-semibold text-slate-800 dark:text-slate-100">{recipientName}</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-100">{recipientCount > 1 ? `${recipientCount} selected students · preview for ${recipientName}` : recipientName}</span>
               {recipientEmail && <span className="text-slate-500 dark:text-slate-400 font-mono text-[10px]">&lt;{recipientEmail}&gt;</span>}
             </div>
+            {recipientList.length > 0 && (
+              <div className="flex min-w-0 items-start gap-2">
+                <span className="w-14 shrink-0 font-mono text-[10px] uppercase text-slate-500 dark:text-slate-400">Recipients:</span>
+                <ul className="max-h-24 min-w-0 flex-1 space-y-1 overflow-y-auto pr-1 text-[10px] font-medium text-slate-600 dark:text-slate-300">
+                  {recipientList.map((recipient, index) => <li key={`${index}-${recipient}`} className="break-all">{recipient}</li>)}
+                </ul>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <span className="text-slate-500 dark:text-slate-400 w-14 font-mono uppercase text-[10px]">Subject:</span>
               <span className="font-bold text-slate-900 dark:text-slate-100">{meta.subject}</span>
@@ -244,6 +284,27 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
               </>
             )}
 
+            {type === 'midterm_advisory' && (
+              <>
+                <p>Dear {recipientName},</p>
+                <p>
+                  Your completed Midterm results in <strong>{className || 'your course'}</strong> meet the criteria for a Midterm Advisory.
+                </p>
+                <p>This is an informational notice, not a final course grade or a remedial assignment. Please contact {facultyName} to discuss your progress and available support.</p>
+              </>
+            )}
+
+            {type === 'remedial_notice' && (
+              <>
+                <p>Dear {recipientName},</p>
+                <p>
+                  A remedial exam for <strong>{className || 'your course'}</strong> has been scheduled or updated.
+                </p>
+                <p><strong>Attempt:</strong> {remedialAttempt ?? '—'}<br /><strong>Scheduled date:</strong> {scheduledDate || '—'}</p>
+                <p>Please contact {facultyName} if you have questions about this schedule.</p>
+              </>
+            )}
+
             {type === 'risk' && (
               <>
                 <p>Dear {recipientName},</p>
@@ -314,6 +375,14 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
           </div>
         </article>
       </div>
+      {onSend && (
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 dark:border-slate-800 sm:flex-row sm:justify-end">
+          <button type="button" disabled={isSending} onClick={onClose} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 sm:w-auto">Cancel</button>
+          <button type="button" disabled={isSending} onClick={onSend} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-clinical-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-clinical-700 disabled:opacity-50 sm:w-auto">
+            <Mail className="h-4 w-4" />{isSending ? 'Sending…' : `Send to ${recipientCount} student${recipientCount === 1 ? '' : 's'}`}
+          </button>
+        </div>
+      )}
     </Modal>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import {
   CheckCircle2,
   Clock3,
@@ -28,19 +28,28 @@ import {
   revokeSecretaryInvitation,
   SecretaryInvitation,
 } from '../../services/authService';
-import { createStudentInvitation, removeSecretaryAppointmentApi } from '../../services/apiClient';
+import { createStudentInvitation, removeSecretaryAppointmentApi, getFacultyRetentionApi, sendFacultyEmailApi, type FacultyRetentionRecord } from '../../services/apiClient';
 import { Student } from '../../types';
 import { getFacultyStudentsApi, getFacultyClassesApi } from '../../services/apiClient';
 
-type Tab = 'student_invites' | 'secretary' | 'history';
+type Tab = 'student_invites' | 'secretary' | 'midterm_advisory' | 'remedial' | 'history';
 
 const initialLogs: EmailAction[] = [];
+
+const remedialDateLabel = (value?: string | null): string | undefined => {
+  if (!value) return undefined;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12));
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }).format(date);
+};
 
 export const EmailManagement: React.FC = () => {
   const { user } = useAuth();
 
   const [dbStudents, setDbStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
+  const [retentionRecords, setRetentionRecords] = useState<FacultyRetentionRecord[]>([]);
   const [currentSchoolYear, setCurrentSchoolYear] = useState<string>('');
   const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('all');
   const syInitializedRef = useRef(false);
@@ -135,24 +144,25 @@ export const EmailManagement: React.FC = () => {
   
   const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
   // Also raise the corner notice: the banner is off-screen when the page is scrolled.
-  const notify = (n: { type: 'success' | 'error' | 'warning'; message: string }) => {
+  const notify = useCallback((n: { type: 'success' | 'error' | 'warning'; message: string }) => {
     setNotice(n);
     showFeedback(n.message, n.type === 'warning' ? 'info' : n.type);
-  };
+  }, []);
   const [isSending, setIsSending] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [loadingRetention, setLoadingRetention] = useState(false);
 
   const safeStudents = useMemo(() => dbStudents || [], [dbStudents]);
 
-  const loadSecretaryInvitations = async () => {
+  const loadSecretaryInvitations = useCallback(async () => {
     try {
       setSecretaryInvs(await fetchSecretaryInvitations());
     } catch (err) {
       setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Unable to load invitations.' });
     }
-  };
+  }, []);
 
-  const fetchEmailLogs = async () => {
+  const fetchEmailLogs = useCallback(async () => {
     setLoadingLogs(true);
     try {
       const res = await import('../../services/apiClient').then(m => m.getFacultyEmailLogsApi());
@@ -173,12 +183,25 @@ export const EmailManagement: React.FC = () => {
     } finally {
       setLoadingLogs(false);
     }
-  };
+  }, []);
+
+  const loadRetentionRecords = useCallback(async () => {
+    setLoadingRetention(true);
+    try {
+      const response = await getFacultyRetentionApi();
+      setRetentionRecords(Array.isArray(response.retention) ? response.retention : []);
+    } catch (error) {
+      notify({ type: 'error', message: error instanceof Error ? error.message : 'Unable to load the current Midterm and Remedial eligibility list.' });
+    } finally {
+      setLoadingRetention(false);
+    }
+  }, [notify]);
 
   useEffect(() => {
     void loadSecretaryInvitations();
     void fetchEmailLogs();
-  }, [dbStudents]);
+    void loadRetentionRecords();
+  }, [dbStudents, loadSecretaryInvitations, fetchEmailLogs, loadRetentionRecords]);
 
   // Filter students based on selected School Year, Class Section filter & search
   const filteredStudents = useMemo(() => {
@@ -206,6 +229,21 @@ export const EmailManagement: React.FC = () => {
         (selectedSchoolYear === 'all' || classSchoolYearMap.get(String(sec.classId)) === selectedSchoolYear || classSchoolYearMap.get(sec.className || '') === selectedSchoolYear))
       .map((section) => ({ key: `${student.id}|${section.classId}`, student, section }))
   ), [filteredStudents, selectedClassId, selectedClass, selectedSchoolYear, classSchoolYearMap]);
+
+  const noticeRows = useMemo(() => retentionRecords.flatMap(record => {
+    const student = safeStudents.find(candidate => candidate.id === record.studentId || candidate.studentId === record.studentId);
+    const classId = String(record.classId);
+    const matchesClass = selectedClassId === 'all' || classId === selectedClassId;
+    const matchesYear = selectedSchoolYear === 'all' || record.schoolYear === selectedSchoolYear;
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || `${record.studentName ?? ''} ${record.studentNumber ?? ''} ${student?.email ?? ''} ${record.subjectCode ?? ''} ${record.className ?? ''}`.toLowerCase().includes(query);
+    const pendingAttempt = record.remedialProgression?.attempts.find(attempt => attempt.outcome === 'pending' && attempt.scheduledDate);
+    const eligible = tab === 'midterm_advisory' ? record.midtermAtRisk === true : record.remedialEligible === true && Boolean(pendingAttempt);
+    if (!eligible || !matchesClass || !matchesYear || !matchesSearch) return [];
+    return [{ ...record, email: student?.email ?? '', pendingAttempt }];
+  }), [retentionRecords, safeStudents, selectedClassId, selectedSchoolYear, search, tab]);
+
+  const selectedNoticeRows = noticeRows.filter(row => selected.includes(row.enrollmentId));
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -340,6 +378,27 @@ export const EmailManagement: React.FC = () => {
     }
   };
 
+  const handleSendNotices = async () => {
+    if (!selectedNoticeRows.length || (previewType !== 'midterm_advisory' && previewType !== 'remedial_notice')) return;
+    setIsSending(true);
+    setNotice(null);
+    try {
+      const result = await sendFacultyEmailApi({
+        enrollmentIds: selectedNoticeRows.map(row => row.enrollmentId),
+        emailType: previewType === 'midterm_advisory' ? 'Midterm Advisory' : 'Remedial Notice',
+      });
+      setPreview(false);
+      setSelected([]);
+      await Promise.all([fetchEmailLogs(), loadRetentionRecords()]);
+      notify({ type: result.failedCount ? 'warning' : 'success', message: result.message });
+    } catch (error) {
+      notify({ type: 'error', message: error instanceof Error ? error.message : 'Unable to send the selected student notices.' });
+      await loadRetentionRecords();
+    } finally {
+      setIsSending(false);
+    }
+  };
+
 
   const handleRemoveSecretary = async (student: Student, classId: string, className: string) => {
     if (!(await requestConfirmation(`Remove ${student.name} as Class Secretary of ${className}? Their Student access stays the same.`, 'Remove Class Secretary', 'Remove'))) return;
@@ -406,10 +465,10 @@ export const EmailManagement: React.FC = () => {
       {/* 2. Control Bar: Tabs & Pill Filter Dropdowns Below */}
       <div className="flex flex-col gap-4">
         {/* Tabs Navigation */}
-        <div className="order-2 flex flex-wrap min-w-0 max-w-full items-stretch gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm w-full no-print">
+        <div className="order-2 grid min-w-0 max-w-full grid-cols-2 gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm w-full no-print sm:flex sm:flex-wrap sm:items-stretch">
           <button
             onClick={() => { setTab('student_invites'); setSelected([]); }}
-            className={`flex-auto min-w-max text-center px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`min-w-0 text-center px-2 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
               tab === 'student_invites'
                 ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
                 : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
@@ -420,7 +479,7 @@ export const EmailManagement: React.FC = () => {
 
           <button
             onClick={() => { setTab('secretary'); setSelected([]); }}
-            className={`flex-auto min-w-max text-center px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`min-w-0 text-center px-2 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
               tab === 'secretary'
                 ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
                 : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
@@ -429,10 +488,32 @@ export const EmailManagement: React.FC = () => {
             Class Secretary Invitations
           </button>
 
+          <button
+            onClick={() => { setTab('midterm_advisory'); setSelected([]); void loadRetentionRecords(); }}
+            className={`min-w-0 text-center px-2 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+              tab === 'midterm_advisory'
+                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+            }`}
+          >
+            Midterm Advisory
+          </button>
+
+          <button
+            onClick={() => { setTab('remedial'); setSelected([]); void loadRetentionRecords(); }}
+            className={`min-w-0 text-center px-2 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+              tab === 'remedial'
+                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+            }`}
+          >
+            Remedial Notices
+          </button>
+
 
           <button
             onClick={() => { setTab('history'); setSelected([]); }}
-            className={`flex-auto min-w-max text-center px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`col-span-2 min-w-0 text-center px-2 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer sm:col-span-1 ${
               tab === 'history'
                 ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
                 : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
@@ -778,6 +859,86 @@ export const EmailManagement: React.FC = () => {
         </Card>
       )}
 
+      {(tab === 'midterm_advisory' || tab === 'remedial') && (
+        <Card className="p-4 sm:p-6">
+          <div className="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
+                {tab === 'midterm_advisory' ? `Midterm Advisory (${noticeRows.length})` : `Scheduled Remedial Notices (${noticeRows.length})`}
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                {tab === 'midterm_advisory'
+                  ? 'Only students currently on the server-calculated Midterm Watchlist are listed. The email is informational and does not include grades.'
+                  : 'Students with a scheduled pending attempt are listed. Preview the current attempt and date before sending.'}
+                {' '}Emails are sent only after you preview and confirm.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:shrink-0">
+              <button
+                type="button"
+                disabled={loadingRetention || noticeRows.length === 0}
+                onClick={() => setSelected(selectedNoticeRows.length === noticeRows.length ? [] : noticeRows.map(row => row.enrollmentId))}
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 sm:w-auto"
+              >
+                {selectedNoticeRows.length === noticeRows.length && noticeRows.length > 0 ? 'Clear selection' : 'Select all eligible'}
+              </button>
+              <button
+                type="button"
+                disabled={isSending || selectedNoticeRows.length === 0}
+                onClick={() => {
+                  setPreviewType(tab === 'midterm_advisory' ? 'midterm_advisory' : 'remedial_notice');
+                  setPreviewStudentId(selectedNoticeRows[0]?.enrollmentId ?? '');
+                  setPreview(true);
+                }}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-clinical-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-clinical-700 disabled:opacity-50 sm:w-auto"
+              >
+                <Send className="h-3.5 w-3.5" /> Preview &amp; send ({selectedNoticeRows.length})
+              </button>
+            </div>
+          </div>
+
+          {loadingRetention ? (
+            <p role="status" className="py-8 text-center text-sm text-slate-500">Loading current eligibility…</p>
+          ) : noticeRows.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center dark:border-slate-700">
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                {tab === 'midterm_advisory' ? 'No students currently qualify for a Midterm Advisory.' : 'No scheduled pending remedial attempts match these filters.'}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Try another class, school year, or search term.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {noticeRows.map(row => {
+                const isChecked = selected.includes(row.enrollmentId);
+                const detail = tab === 'midterm_advisory'
+                  ? 'Currently on the Midterm Watchlist'
+                  : `Attempt ${row.pendingAttempt?.attemptNumber ?? '—'} · ${remedialDateLabel(row.pendingAttempt?.scheduledDate) ?? 'Date unavailable'}`;
+                return (
+                  <label key={row.enrollmentId} className={`flex min-w-0 cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-colors ${isChecked ? 'border-clinical-400 bg-clinical-50/70 dark:border-clinical-700 dark:bg-clinical-950/20' : 'border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40'}`}>
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      disabled={!row.email}
+                      onChange={() => toggleSelect(row.enrollmentId)}
+                      aria-label={`Select ${row.studentName ?? 'student'} for ${tab === 'midterm_advisory' ? 'Midterm Advisory' : 'Remedial Notice'}`}
+                      className="mt-1 h-4 w-4 shrink-0 accent-emerald-600 disabled:opacity-40"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block break-words text-sm font-bold text-slate-800 dark:text-slate-100">{row.studentName || 'Student name unavailable'}</span>
+                      <span className="mt-0.5 block break-all text-[11px] text-slate-500 dark:text-slate-400">{row.email || 'No valid institutional email on file'}</span>
+                      <span className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                        <span>{row.subjectCode || 'Course'}</span><span aria-hidden="true">·</span><span>{row.className || 'Class section'}</span>
+                      </span>
+                      <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-bold ${tab === 'midterm_advisory' ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200'}`}>{detail}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      )}
+
 
       {/* ----------------------------------------------------
           TAB 3: EMAIL HISTORY LOG
@@ -797,20 +958,30 @@ export const EmailManagement: React.FC = () => {
 
       {/* Email Preview Modal */}
       {preview && (() => {
+        const isNoticePreview = previewType === 'midterm_advisory' || previewType === 'remedial_notice';
+        const noticePreviewRow = isNoticePreview ? selectedNoticeRows.find(row => row.enrollmentId === previewStudentId) ?? selectedNoticeRows[0] : null;
         const previewStudent = safeStudents.find(s => s.id === previewStudentId) || filteredStudents[0] || null;
-        const targetClass = previewStudent?.classSections?.[0]?.className || previewStudent?.className || (selectedClassId !== 'all' ? selectedClassId : 'Class Section');
+        const targetClass = noticePreviewRow
+          ? `${noticePreviewRow.subjectCode || 'Course'} · ${noticePreviewRow.className || 'Class Section'}`
+          : previewStudent?.classSections?.[0]?.className || previewStudent?.className || (selectedClassId !== 'all' ? selectedClassId : 'Class Section');
         const tokenSnippet = (previewStudent?.studentId || 'sample').toLowerCase().replace(/[^a-z0-9]/g, '');
         return (
           <EmailPreviewModal
             isOpen={preview}
             onClose={() => setPreview(false)}
             type={previewType}
-            recipientName={previewStudent?.name || 'Dental Student'}
-            recipientEmail={previewStudent?.email}
+            recipientName={noticePreviewRow?.studentName || previewStudent?.name || 'Dental Student'}
+            recipientEmail={noticePreviewRow?.email || previewStudent?.email}
             facultyName={user?.display_name || 'Dr. Roberto Santos, DMD'}
             className={targetClass}
-            schoolYear={selectedSchoolYear !== 'all' ? selectedSchoolYear : currentSchoolYear || '2026-2027'}
+            schoolYear={noticePreviewRow?.schoolYear || (selectedSchoolYear !== 'all' ? selectedSchoolYear : currentSchoolYear || '2026-2027')}
             invitationLink={`https://dentisys.bicol-u.edu.ph/activate-student?token=inv_${tokenSnippet}_act`}
+            recipientCount={isNoticePreview ? selectedNoticeRows.length : 1}
+            recipientList={isNoticePreview ? selectedNoticeRows.map(row => `${row.studentName || 'Student'} <${row.email}>`) : []}
+            remedialAttempt={noticePreviewRow?.pendingAttempt?.attemptNumber}
+            scheduledDate={remedialDateLabel(noticePreviewRow?.pendingAttempt?.scheduledDate)}
+            onSend={isNoticePreview ? () => void handleSendNotices() : undefined}
+            isSending={isSending}
           />
         );
       })()}

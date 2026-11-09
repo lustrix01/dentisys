@@ -1605,7 +1605,8 @@ export function revokeFacultyAttendanceSessionApi(data: {
 }
 
 export function sendFacultyEmailApi(data: {
-  studentIds: string[];
+  studentIds?: string[];
+  enrollmentIds?: string[];
   emailType: string;
   subject?: string;
   message?: string;

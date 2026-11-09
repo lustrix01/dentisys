@@ -603,6 +603,8 @@ Faculty may send At-Risk and Privacy Consent notices to their students using the
 
 Owner-approved amendment (2026-10-12): Email Management has three tabs: Student invitations, Secretary, and History. Faculty At-Risk and Privacy Consent notices are not offered. The delivery modes (`custom`, `mailpit`, `smtp`) are unchanged for all other email.
 
+Owner-approved amendment (2026-11-09): Email Management also provides Midterm Advisory and Remedial notice tabs. These notices are Faculty-initiated: Faculty select eligible enrolled Students, preview the personalized message and recipient list, then explicitly send. No email is sent automatically when eligibility or remedial progression changes. A Midterm Advisory may be sent only to a current-school-year enrollment that is presently on the server-calculated Midterm Watchlist under UI-003; it is informational, contains no numeric grade, and advises the Student to contact the Faculty member. A Remedial notice may be sent only for a current, pending remedial attempt that has a scheduled date; it includes the course, attempt number and current scheduled date, and may be sent after Faculty schedules or updates that attempt. Recording an attempt outcome alone does not trigger an email. The server revalidates eligibility and uses the canonical Student institutional email at send time. Existing email delivery modes, allowlist behavior, and Email History logging apply to both notice types. On mobile, the new recipient lists use stacked blocks and tabs wrap without horizontal page scrolling.
+
 ---
 
 ## NTF-001 - Class enrollment notifications

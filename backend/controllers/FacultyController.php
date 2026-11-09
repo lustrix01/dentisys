@@ -7478,44 +7478,139 @@ function handle_faculty_email_send(): void
         }
 
         $data = $body['data'];
-        $studentIds = $data['studentIds'] ?? [];
         $type = validate_required_string($data, 'emailType', 2, 100);
         $subject = validate_optional_string($data, 'subject', 1, 255) ?? "DentiSys Notification: {$type}";
-
-        if (!is_array($studentIds) || count($studentIds) === 0) {
-            safe_error_response('At least one studentId is required.', 400);
-            return;
-        }
-
         $messageText = validate_optional_string($data, 'message', 1, 10000)
             ?? "This is an official DentiSys {$type} notice.";
-        $allowedTypes = ['Privacy Consent', 'At-Risk Notification', 'Other'];
+        $allowedTypes = ['Privacy Consent', 'At-Risk Notification', 'Midterm Advisory', 'Remedial Notice', 'Other'];
         $emailType = in_array($type, $allowedTypes, true) ? $type : 'Other';
-        $studentIds = array_values(array_unique(array_filter(
-            array_map(static fn(mixed $id): int => (int) $id, $studentIds),
-            static fn(int $id): bool => $id > 0
-        )));
-        if (count($studentIds) === 0) {
-            safe_error_response('At least one valid studentId is required.', 422);
-            return;
-        }
-        $placeholders = implode(',', array_fill(0, count($studentIds), '?'));
-        $recipientStmt = $pdo->prepare(
-            "SELECT DISTINCT s.student_id, s.bu_email,
-                    TRIM(CONCAT(s.first_name, ' ', COALESCE(s.middle_name, ''), ' ', s.last_name)) AS student_name
-               FROM students s
-               JOIN enrollments e ON e.student_id = s.student_id
-               JOIN class_sections cs ON cs.cs_id = e.cs_id
-             WHERE cs.instructor_user_id = ?
-               AND LOWER(e.status) = 'active'
-               AND s.student_id IN ({$placeholders})"
-        );
-        $recipientStmt->execute(array_merge([(int) $authCtx['user_id']], $studentIds));
-        $validatedRecipients = $recipientStmt->fetchAll(PDO::FETCH_ASSOC);
-        $ownedIds = array_map(static fn(array $row): int => (int) $row['student_id'], $validatedRecipients);
-        if (count(array_diff($studentIds, $ownedIds)) > 0) {
-            safe_error_response('One or more students are not enrolled in your classes.', 403);
-            return;
+        $noticeType = in_array($emailType, ['Midterm Advisory', 'Remedial Notice'], true);
+        $noticeDetailsByEnrollment = [];
+        if ($noticeType) {
+            $enrollmentIds = $data['enrollmentIds'] ?? [];
+            if (!is_array($enrollmentIds) || $enrollmentIds === []) {
+                safe_error_response('Select at least one eligible enrollment.', 400);
+                return;
+            }
+            $enrollmentIds = array_values(array_unique(array_filter(
+                array_map(static fn(mixed $id): int => (int) $id, $enrollmentIds),
+                static fn(int $id): bool => $id > 0
+            )));
+            if ($enrollmentIds === []) {
+                safe_error_response('Select at least one valid enrollment.', 422);
+                return;
+            }
+            $placeholders = implode(',', array_fill(0, count($enrollmentIds), '?'));
+            $recipientStmt = $pdo->prepare(
+                "SELECT e.enrollment_id, e.student_id, e.remedial_state_json, e.grade_components_json,
+                        COALESCE(egb.final_gwa, e.final_gwa) AS effective_final_gwa,
+                        s.bu_email,
+                        TRIM(CONCAT(COALESCE(pi.first_name, s.first_name), ' ', COALESCE(pi.middle_name, s.middle_name, ''), ' ', COALESCE(pi.last_name, s.last_name))) AS student_name,
+                        cs.cs_id, cs.cs_name, cs.school_year, cs.archive_reason, c.course_code
+                   FROM enrollments e
+                   JOIN students s ON s.student_id = e.student_id
+                   JOIN class_sections cs ON cs.cs_id = e.cs_id
+                   JOIN courses c ON c.course_id = cs.course_id
+                   LEFT JOIN person_identities pi ON pi.person_id = s.person_id
+                   LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+                  WHERE cs.instructor_user_id = ?
+                    AND LOWER(e.status) = 'active'
+                    AND e.enrollment_id IN ({$placeholders})"
+            );
+            $recipientStmt->execute(array_merge([(int) $authCtx['user_id']], $enrollmentIds));
+            $validatedRecipients = $recipientStmt->fetchAll(PDO::FETCH_ASSOC);
+            $foundIds = array_map(static fn(array $row): int => (int) $row['enrollment_id'], $validatedRecipients);
+            if (count(array_diff($enrollmentIds, $foundIds)) > 0) {
+                safe_error_response('One or more selected enrollments are no longer active in your assigned classes.', 403);
+                return;
+            }
+
+            $currentSchoolYear = academic_current_school_year($pdo);
+            $legacyByEnrollment = [];
+            foreach ($validatedRecipients as $row) {
+                $legacyByEnrollment[(int) $row['enrollment_id']] = remedial_state_json_is_legacy($row['remedial_state_json']);
+            }
+            $progressions = remedial_attempts_load($pdo, $enrollmentIds, $legacyByEnrollment);
+            $readCache = [];
+            if ($emailType === 'Midterm Advisory') {
+                faculty_retention_preload($pdo, $validatedRecipients, $readCache);
+            }
+            foreach ($validatedRecipients as $recipient) {
+                $enrollmentId = (int) $recipient['enrollment_id'];
+                $progression = $progressions[$enrollmentId] ?? remedial_attempts_empty_progression();
+                $isCurrent = strtoupper(trim((string) $recipient['school_year'])) === strtoupper(trim((string) $currentSchoolYear));
+                if (!$isCurrent || $recipient['archive_reason'] !== null) {
+                    safe_error_response('A selected enrollment is no longer eligible for this notice.', 409);
+                    return;
+                }
+                if ($emailType === 'Midterm Advisory') {
+                    $midterm = faculty_watchlist_midterm($pdo, $recipient, $readCache);
+                    $finalGwa = $recipient['effective_final_gwa'] !== null ? (float) $recipient['effective_final_gwa'] : null;
+                    if (!faculty_midterm_at_risk($midterm, $finalGwa, $progression)) {
+                        safe_error_response('A selected Student is no longer on the current Midterm Watchlist. Refresh the list before sending.', 409);
+                        return;
+                    }
+                    $noticeDetailsByEnrollment[$enrollmentId] = [
+                        'subject' => 'Midterm Academic Advisory: ' . (string) $recipient['course_code'] . ' · ' . (string) $recipient['cs_name'],
+                        'message' => 'Your completed Midterm results in ' . (string) $recipient['course_code'] . ' · ' . (string) $recipient['cs_name']
+                            . ' meet the criteria for a Midterm Advisory. This is an informational notice, not a final course grade or a remedial assignment. Please contact '
+                            . (string) ($authCtx['display_name'] ?? 'your Faculty instructor') . ' to discuss your progress and available support.',
+                    ];
+                } else {
+                    $threshold = remedial_attempts_course_grade_threshold($pdo);
+                    $finalGwa = $recipient['effective_final_gwa'] !== null ? (float) $recipient['effective_final_gwa'] : null;
+                    $pending = null;
+                    foreach ($progression['attempts'] ?? [] as $attempt) {
+                        if (($attempt['outcome'] ?? '') === 'pending' && !empty($attempt['scheduledDate'])) {
+                            $pending = $attempt;
+                            break;
+                        }
+                    }
+                    if ($finalGwa === null || $finalGwa < $threshold || $pending === null || ($legacyByEnrollment[$enrollmentId] ?? false)) {
+                        safe_error_response('A selected enrollment has no currently scheduled pending remedial attempt. Refresh the list before sending.', 409);
+                        return;
+                    }
+                    $scheduledDate = new DateTimeImmutable((string) $pending['scheduledDate'], new DateTimeZone('Asia/Manila'));
+                    $noticeDetailsByEnrollment[$enrollmentId] = [
+                        'subject' => 'Remedial Exam Schedule: ' . (string) $recipient['course_code'] . ' · ' . (string) $recipient['cs_name'],
+                        'message' => 'A remedial exam for ' . (string) $recipient['course_code'] . ' · ' . (string) $recipient['cs_name']
+                            . ' has been scheduled or updated. Attempt ' . (int) $pending['attemptNumber'] . ' is scheduled for ' . $scheduledDate->format('F j, Y')
+                            . '. Please contact ' . (string) ($authCtx['display_name'] ?? 'your Faculty instructor') . ' if you have questions about this schedule.',
+                    ];
+                }
+            }
+        } else {
+            $studentIds = $data['studentIds'] ?? [];
+            if (!is_array($studentIds) || count($studentIds) === 0) {
+                safe_error_response('At least one studentId is required.', 400);
+                return;
+            }
+            $studentIds = array_values(array_unique(array_filter(
+                array_map(static fn(mixed $id): int => (int) $id, $studentIds),
+                static fn(int $id): bool => $id > 0
+            )));
+            if (count($studentIds) === 0) {
+                safe_error_response('At least one valid studentId is required.', 422);
+                return;
+            }
+            $placeholders = implode(',', array_fill(0, count($studentIds), '?'));
+            $recipientStmt = $pdo->prepare(
+                "SELECT DISTINCT s.student_id, s.bu_email,
+                        TRIM(CONCAT(s.first_name, ' ', COALESCE(s.middle_name, ''), ' ', s.last_name)) AS student_name
+                   FROM students s
+                   JOIN enrollments e ON e.student_id = s.student_id
+                   JOIN class_sections cs ON cs.cs_id = e.cs_id
+                 WHERE cs.instructor_user_id = ?
+                   AND LOWER(e.status) = 'active'
+                   AND s.student_id IN ({$placeholders})"
+            );
+            $recipientStmt->execute(array_merge([(int) $authCtx['user_id']], $studentIds));
+            $validatedRecipients = $recipientStmt->fetchAll(PDO::FETCH_ASSOC);
+            $ownedIds = array_map(static fn(array $row): int => (int) $row['student_id'], $validatedRecipients);
+            if (count(array_diff($studentIds, $ownedIds)) > 0) {
+                safe_error_response('One or more students are not enrolled in your classes.', 403);
+                return;
+            }
         }
         $facultySignature = (string) ($authCtx['display_name'] ?? '');
         $insert = $pdo->prepare(
@@ -7533,6 +7628,13 @@ function handle_faculty_email_send(): void
         foreach ($validatedRecipients as $recipient) {
             $recipientName = trim((string) $recipient['student_name']);
             $recipientEmail = mb_strtolower(trim((string) ($recipient['bu_email'] ?? '')));
+            $recipientSubject = $subject;
+            $recipientMessage = $messageText;
+            if ($noticeType) {
+                $noticeDetails = $noticeDetailsByEnrollment[(int) $recipient['enrollment_id']];
+                $recipientSubject = $noticeDetails['subject'];
+                $recipientMessage = $noticeDetails['message'];
+            }
             if ($recipientEmail === '' || !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
                 $results[] = [
                     'id' => null,
@@ -7544,16 +7646,16 @@ function handle_faculty_email_send(): void
                 continue;
             }
             $operationUuid = uuid_v4_string();
-            $messageBody = email_faculty_message_html($recipientName, $facultySignature, $messageText);
+            $messageBody = email_faculty_message_html($recipientName, $facultySignature, $recipientMessage);
             $insert->execute([
                 $authCtx['user_id'], $recipientEmail, $recipientName,
-                $subject, $emailType, $messageBody, $operationUuid, $actionUuid,
+                $recipientSubject, $emailType, $messageBody, $operationUuid, $actionUuid,
             ]);
             $emailId = (int) $insert->fetchColumn();
             if ($emailId <= 0) {
                 throw new RuntimeException('Email outbox insert did not return a valid identifier.');
             }
-            $sent = send_email($recipientEmail, $subject, $messageBody, $config);
+            $sent = send_email($recipientEmail, $recipientSubject, $messageBody, $config);
             if ($sent && !email_reaches_recipient($recipientEmail, $config)) {
                 // EML-001: CUSTOM mode delivered it to Mailpit only.
                 $finish->execute(['Suppressed', null, 'Custom e-mail mode: the recipient is not on the allowlist; delivered to Mailpit only.', $emailId]);
