@@ -398,6 +398,8 @@ Existing authentication rate limiting MUST be preserved when additional authenti
 
 New authentication paths SHOULD use the same security boundaries where applicable rather than creating parallel security systems.
 
+Password sign-in MUST retain its limit of 100 requests per IP address per 60 seconds. It MUST also allow no more than five failed password attempts for the same normalized institutional email within a 15-minute window; once the fifth failure is reached, further password sign-in attempts for that email MUST be blocked for 15 minutes. Attempts for unknown email addresses count under the same rule, using a one-way hash of the normalized email as the rate-limit key. Successful password verification clears the failure counter. Wrong-password and unknown-account responses MUST remain indistinguishable. A rate-limited sign-in response MUST include a human-readable retry time and a `Retry-After` header.
+
 ## SEC-005 — Audit logging
 
 **Status: CURRENT**
