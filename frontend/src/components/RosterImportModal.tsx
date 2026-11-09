@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Modal } from './Modal';
 import { showFeedback } from './FeedbackCenter';
+import { validateBicolUEmail } from '../services/authService';
 import {
   ParsedRosterStudent,
   parseCSVText,
@@ -746,7 +747,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                     </div>
                     <label role="cell" className="col-span-2 block min-w-0 sm:col-span-4 lg:col-span-6">
                       <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Institutional email *</span>
-                      <input type="text" value={st.email} aria-label={`Email for ${st.studentId}`} required onChange={event => handleUpdateStudentField(st.tempKey, 'email', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                      <input type="text" value={st.email} aria-label={`Email for ${st.studentId}`} aria-invalid={Boolean(st.email && !validateBicolUEmail(st.email, ['bicol-u.edu.ph']).isValid)} required onChange={event => handleUpdateStudentField(st.tempKey, 'email', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                      {st.email && !validateBicolUEmail(st.email, ['bicol-u.edu.ph']).isValid && <span role="alert" className="mt-1 block text-[11px] font-medium text-rose-600 dark:text-rose-300">Use a valid @bicol-u.edu.ph email address.</span>}
                     </label>
                     <label role="cell" className="col-span-1 block min-w-0 sm:col-span-1 lg:col-span-2">
                       <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Year level</span>

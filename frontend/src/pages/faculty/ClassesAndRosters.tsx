@@ -2342,6 +2342,7 @@ const handleSendAllStudentInvites = async () => {
                 {!studentEmailInput.includes('@') && <span className="text-xs font-bold text-accent-600 whitespace-nowrap">@bicol-u.edu.ph</span>}
                 </div>
               </div>
+              {studentEmailInput.includes('@') && !isOfficialBicolEmail(studentEmailInput) && <p role="alert" className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300">Use an official @bicol-u.edu.ph email address.</p>}
 
               <div>
                 <label htmlFor="add-student-year" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Year Level</label>
@@ -2824,6 +2825,7 @@ const handleSendAllStudentInvites = async () => {
               </label>
             </div>
 
+            {editStudentEmail.includes('@') && !isOfficialBicolEmail(editStudentEmail) && <p role="alert" className="text-xs font-medium text-rose-600 dark:text-rose-300">Use an official @bicol-u.edu.ph email address.</p>}
             {editStudentError && (
               <div role="alert" className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl text-red-700 dark:text-red-300 text-xs font-semibold flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />

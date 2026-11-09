@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Mail, CheckCircle2, RefreshCw } from 'lucide-react';
-import { requestPasswordReset } from '../../services/authService';
+import { requestPasswordReset, validateBicolUEmail } from '../../services/authService';
 
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
+const emailDomainError = (value: string): string => value.includes('@')
+  ? validateBicolUEmail(value, [DEFAULT_EMAIL_DOMAIN]).message
+  : '';
 
 function completeInstitutionalEmail(value: string): string {
   const trimmed = value.trim();
@@ -33,6 +36,12 @@ export function ForgotPassword() {
     setLoading(true);
     setError('');
     const completedEmail = completeInstitutionalEmail(email);
+    const emailValidation = validateBicolUEmail(completedEmail, [DEFAULT_EMAIL_DOMAIN]);
+    if (!emailValidation.isValid) {
+      setLoading(false);
+      setError(emailValidation.message);
+      return;
+    }
     const res = await requestPasswordReset(completedEmail);
     setLoading(false);
     if (res.success) {
@@ -144,6 +153,7 @@ export function ForgotPassword() {
                         </span>
                       )}
                     </div>
+                    {emailDomainError(email) && <p role="alert" className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300">{emailDomainError(email)}</p>}
                   </div>
                 </div>
 
