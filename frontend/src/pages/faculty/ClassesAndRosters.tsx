@@ -1127,6 +1127,10 @@ export const ClassesAndRosters: React.FC = () => {
   const handleRegisterNewStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (existingStudentMatch) {
+      if (!isOfficialBicolEmail(existingStudentMatch.email)) {
+        showFeedback(`Cannot add ${existingStudentMatch.name}: correct the Student's email to an official @bicol-u.edu.ph address in the roster, then try again.`, 'error');
+        return;
+      }
       if (!targetEnrollCsId || targetEnrollCsId <= 0) {
         showFeedback('Please select a target class section.', 'error');
         return;
@@ -2342,7 +2346,7 @@ const handleSendAllStudentInvites = async () => {
                 {!studentEmailInput.includes('@') && <span className="text-xs font-bold text-accent-600 whitespace-nowrap">@bicol-u.edu.ph</span>}
                 </div>
               </div>
-              {studentEmailInput.includes('@') && !isOfficialBicolEmail(studentEmailInput) && <p role="alert" className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300">Use an official @bicol-u.edu.ph email address.</p>}
+              {studentEmailInput.includes('@') && !isOfficialBicolEmail(studentEmailInput) && <p role="alert" className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300">This Student cannot be added until the roster email is corrected to @bicol-u.edu.ph.</p>}
 
               <div>
                 <label htmlFor="add-student-year" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Year Level</label>

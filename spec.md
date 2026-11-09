@@ -158,7 +158,7 @@ Google authentication MUST use a stable provider identity when persistently link
 
 Google verification proves identity only; DentiSys remains responsible for authorization and account eligibility.
 
-Owner-approved amendment (2026-11-09): DentiSys accepts only official `@bicol-u.edu.ph` addresses for account identity, Student records, invitations, sign-in, password recovery and outgoing application email. This supersedes the configurable multi-domain behavior above and the earlier AUTH-004 and UI-004 multi-domain decisions. Existing database records are not rewritten; a non-BU address cannot be used for a new or updated identity, activation, invitation, sign-in, recovery or outgoing email until corrected to an official address.
+Owner-approved amendment (2026-11-09): DentiSys accepts only official `@bicol-u.edu.ph` addresses for account identity, Student records, invitations, sign-in, password recovery and outgoing application email. This supersedes the configurable multi-domain behavior above and the earlier AUTH-004 and UI-004 multi-domain decisions. Existing database records and active enrollments are not rewritten; a non-BU address cannot be used for a new or updated identity, class enrollment, activation, invitation, sign-in, recovery or outgoing email until corrected to an official address.
 
 ## AUTH-004 — Institutional domains
 

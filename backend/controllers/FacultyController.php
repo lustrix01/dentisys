@@ -8720,7 +8720,7 @@ function handle_faculty_class_enroll_students(): void
 
             $enrolledCount = 0;
             $revived = false;
-            $studentExists = $pdo->prepare("SELECT 1 FROM students WHERE student_id = ? AND LOWER(status) = 'active'");
+            $studentExists = $pdo->prepare("SELECT bu_email FROM students WHERE student_id = ? AND LOWER(status) = 'active'");
             $classDetailsStmt = $pdo->prepare('
                 SELECT cs.cs_id, cs.cs_name, c.course_code, c.name AS course_name
                   FROM class_sections cs
@@ -8746,13 +8746,21 @@ function handle_faculty_class_enroll_students(): void
                 $stId = (int) $sId;
                 if ($stId > 0) {
                     $studentExists->execute([$stId]);
-                    if ($studentExists->fetchColumn() === false) {
+                    $studentEmail = $studentExists->fetchColumn();
+                    if ($studentEmail === false) {
                         $pdo->rollBack();
                         safe_error_response('One or more selected Students are not active.', 422);
                         return;
                     }
                     $existingStmt->execute([$stId, $csId]);
                     $existing = $existingStmt->fetch(PDO::FETCH_ASSOC);
+                    $alreadyActive = is_array($existing) && strtolower((string) $existing['status']) === 'active';
+                    $emailDomain = strtolower((string) substr(strrchr(trim((string) $studentEmail), '@') ?: '', 1));
+                    if ($emailDomain !== 'bicol-u.edu.ph' && !$alreadyActive) {
+                        $pdo->rollBack();
+                        safe_error_response('This Student cannot be added to the class because their email is not an official @bicol-u.edu.ph address. Correct the Student email in the roster, then try again.', 422);
+                        return;
+                    }
                     $didEnroll = false;
                     if (is_array($existing)) {
                         $reviveStmt->execute([(int) $existing['enrollment_id']]);
