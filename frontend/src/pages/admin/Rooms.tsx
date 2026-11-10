@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Archive, DoorOpen, MapPin, Navigation, Plus } from 'lucide-react';
+import { Archive, DoorOpen, MapPin, Navigation, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import Tabs from '../../components/Tabs';
-import { ListToolbar } from '../../components/FilterBars';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { LocationPicker } from '../../components/LocationPicker';
@@ -238,46 +237,15 @@ export const Rooms: React.FC = () => {
 
   return (
     <section id="rooms" className="space-y-6 animate-fade-in max-w-7xl mx-auto">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
-          <div className="flex items-start sm:items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-accent-500/10 to-accent-600/20 text-accent-600 dark:text-accent-400 border border-accent-200/60 dark:border-accent-900/60 flex items-center justify-center shrink-0 shadow-sm">
-              <DoorOpen className="w-6 h-6" />
-            </div>
-            <div>
-              <h2 className="text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight">Rooms</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
-                The rooms Faculty and Secretaries pick for classes and sessions. A retired room leaves the lists, and the Faculty using it are told to pick another room. Once nothing uses it, it can be deleted.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <p className="px-1.5 text-xs text-slate-500 dark:text-slate-400">
-        <b className="text-slate-800 dark:text-slate-100">{activeCount}</b> active · {retiredRooms} retired · {plural(categories.length, 'category', 'categories')}
-      </p>
-
-      <ListToolbar
-        left={(
-        <Tabs
-          variant="switch"
-          color="accent"
-          label="Room views"
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            { id: 'rooms', label: 'Rooms', icon: <DoorOpen className="w-4 h-4" />, count: activeCount },
-            { id: 'retired', label: 'Retired', icon: <Archive className="w-4 h-4" />, count: retiredRooms + retiredCategories },
-          ]}
-        />
-        )}
-        right={(
-        <>
+      <div className="flex flex-col gap-3 px-1.5 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          <b className="text-slate-800 dark:text-slate-100">{activeCount}</b> active · {retiredRooms} retired · {plural(categories.length, 'category', 'categories')}
+        </p>
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           <button
             type="button"
             disabled={loading || busy}
-            className={outlineButtonClass}
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             onClick={() => { setError(''); setCatDraft({ name: '' }); }}
           >
             Add category
@@ -291,8 +259,20 @@ export const Rooms: React.FC = () => {
             <Plus className="w-4 h-4" />
             Add room
           </button>
-        </>
-        )}
+        </div>
+      </div>
+
+      <Tabs
+        variant="section"
+        color="accent"
+        className="w-full"
+        label="Room views"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'rooms', label: 'Rooms', icon: <DoorOpen className="w-4 h-4" />, count: activeCount },
+          { id: 'retired', label: 'Retired', icon: <Archive className="w-4 h-4" />, count: retiredRooms + retiredCategories },
+        ]}
       />
 
       {loading ? (
@@ -313,24 +293,23 @@ export const Rooms: React.FC = () => {
               : catRetired ? `Retired category · ${plural(all.length, 'room')}` : 'Category is active';
             return (
               <div key={cat.categoryId} data-testid={`group-${cat.name}`} className="min-w-0 overflow-hidden rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
-                <div className="px-4 py-3.5 sm:px-5 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <span className="block text-base font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">{cat.name}</span>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400">{subtitle}</span>
-                    {tab === 'rooms' && !catRetired && activeInCat > 0 && <span className="block text-[11px] text-slate-500 dark:text-slate-400">{hint}</span>}
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50/70 px-4 py-3.5 dark:bg-slate-950/30 sm:px-5">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="text-sm font-extrabold tracking-tight text-slate-800 dark:text-slate-100">{cat.name}</span>
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-700">{subtitle}</span>
                   </div>
                   {(tab === 'rooms' || catRetired) && (
-                    <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex shrink-0 items-center gap-2">
                       {catRetired ? (
-                        <button type="button" className={outlineButtonClass} disabled={busy} onClick={() => run(() => restoreRoomCategoryApi(cat.categoryId), `${cat.name} restored.`, { close: () => undefined, toRooms: true })}>Restore</button>
+                        <button type="button" aria-label={`Restore category ${cat.name}`} title={`Restore category ${cat.name}`} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800" disabled={busy} onClick={() => run(() => restoreRoomCategoryApi(cat.categoryId), `${cat.name} restored.`, { close: () => undefined, toRooms: true })}><RotateCcw className="h-4 w-4" /></button>
                       ) : (
                         <>
-                          <button type="button" className={outlineButtonClass} disabled={busy} onClick={() => { setError(''); setCatDraft({ categoryId: cat.categoryId, name: cat.name }); }}>Rename</button>
-                          <button type="button" className={outlineButtonClass} disabled={busy || activeInCat > 0} title={activeInCat > 0 ? hint : undefined} onClick={() => setConfirm({ kind: 'retireCategory', category: cat })}>Retire</button>
+                          <button type="button" aria-label={`Rename category ${cat.name}`} title={`Rename category ${cat.name}`} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800" disabled={busy} onClick={() => { setError(''); setCatDraft({ categoryId: cat.categoryId, name: cat.name }); }}><Pencil className="h-4 w-4" /></button>
+                          <button type="button" aria-label={`Retire category ${cat.name}`} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800" disabled={busy || activeInCat > 0} title={activeInCat > 0 ? hint : `Retire category ${cat.name}`} onClick={() => setConfirm({ kind: 'retireCategory', category: cat })}><Archive className="h-4 w-4" /></button>
                         </>
                       )}
                       {all.length === 0 && (
-                        <button type="button" className={outlineButtonClass} disabled={busy} onClick={() => setConfirm({ kind: 'deleteCategory', category: cat })}>Delete</button>
+                        <button type="button" aria-label={`Delete category ${cat.name}`} title={`Delete category ${cat.name}`} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-40 dark:border-rose-900 dark:text-rose-400 dark:hover:bg-rose-950/40" disabled={busy} onClick={() => setConfirm({ kind: 'deleteCategory', category: cat })}><Trash2 className="h-4 w-4" /></button>
                       )}
                     </div>
                   )}
@@ -345,7 +324,7 @@ export const Rooms: React.FC = () => {
                       <div
                         key={room.roomId}
                         data-testid={`room-${room.name}`}
-                        className="grid grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[12rem_6rem_9rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-b-0"
+                        className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-slate-100 py-3 last:border-b-0 dark:border-slate-800 lg:grid-cols-[minmax(9rem,1.1fr)_auto_minmax(8rem,1fr)_minmax(9rem,1.2fr)_auto] lg:gap-x-5"
                       >
                         <span className={`text-sm font-bold ${retired ? 'text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100'}`}>{room.name}</span>
                         <span className="row-start-1 col-start-2 lg:row-start-auto lg:col-start-auto justify-self-end lg:justify-self-start">
@@ -354,39 +333,43 @@ export const Rooms: React.FC = () => {
                             {retired ? 'Retired' : 'Active'}
                           </span>
                         </span>
-                        <span className="col-span-2 lg:col-span-1 text-xs text-slate-500 dark:text-slate-400 inline-flex items-center gap-1">
+                        <span className="col-span-2 inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 lg:col-span-1">
                           <MapPin className="w-3 h-3" aria-hidden="true" />
                           {hasLocation ? `Location set${room.radiusMeters ? ` · ${room.radiusMeters} m` : ''}` : 'No location'}
                         </span>
-                        <span className="col-span-2 lg:col-span-1 text-xs text-slate-500 dark:text-slate-400">{usedBy(room.usage)}</span>
-                        <span className="col-span-2 lg:col-span-1 flex flex-wrap items-center justify-end gap-1.5">
+                        <span className="col-span-2 text-xs text-slate-500 dark:text-slate-400 lg:col-span-1">{usedBy(room.usage)}</span>
+                        <span className="col-span-2 flex items-center justify-end gap-2 lg:col-span-1">
                           {retired ? (
                             <>
                               <button
                                 type="button"
-                                className={outlineButtonClass}
+                                aria-label={`Restore room ${room.name}`}
+                                title={`Restore room ${room.name}`}
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                                 disabled={busy}
                                 onClick={() => run(() => restoreRoomApi(room.roomId), `${room.name} restored.`, { close: () => undefined, toRooms: true })}
                               >
-                                Restore
+                                <RotateCcw className="h-4 w-4" />
                               </button>
                               {room.deletable ? (
                                 <button
                                   type="button"
-                                  className="rounded-xl border border-rose-200 dark:border-rose-900 px-3.5 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 cursor-pointer"
+                                  aria-label={`Delete room ${room.name}`}
+                                  title={`Delete room ${room.name}`}
+                                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-40 dark:border-rose-900 dark:text-rose-400 dark:hover:bg-rose-950/40"
                                   disabled={busy}
                                   onClick={() => setConfirm({ kind: 'delete', room })}
                                 >
-                                  Delete
+                                  <Trash2 className="h-4 w-4" />
                                 </button>
                               ) : (
-                                <button type="button" disabled title="In use, so it cannot be deleted yet." className="rounded-xl border border-slate-200 dark:border-slate-700 px-3.5 py-1.5 text-xs font-bold text-slate-400 dark:text-slate-500 cursor-not-allowed">Delete</button>
+                                <button type="button" disabled aria-label={`Delete room ${room.name} unavailable`} title="In use, so it cannot be deleted yet." className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500 cursor-not-allowed"><Trash2 className="h-4 w-4" /></button>
                               )}
                             </>
                           ) : (
                             <>
-                              <button type="button" className={outlineButtonClass} disabled={busy} onClick={() => openDraft(room)}>Edit</button>
-                              <button type="button" className={outlineButtonClass} disabled={busy} onClick={() => setConfirm({ kind: 'retire', room })}>Retire</button>
+                              <button type="button" aria-label={`Edit room ${room.name}`} title={`Edit room ${room.name}`} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800" disabled={busy} onClick={() => openDraft(room)}><Pencil className="h-4 w-4" /></button>
+                              <button type="button" aria-label={`Retire room ${room.name}`} title={`Retire room ${room.name}`} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800" disabled={busy} onClick={() => setConfirm({ kind: 'retire', room })}><Archive className="h-4 w-4" /></button>
                             </>
                           )}
                         </span>

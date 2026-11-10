@@ -264,6 +264,9 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     if (currentUser.role === 'admin') {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+        { name: 'People & Accounts', path: '/admin/people', icon: Users, short: 'People' },
+        { name: 'Classes', path: '/admin/classes', icon: BookOpen },
+        { name: 'Course Catalog', path: '/admin/course-catalog', icon: BookOpen, short: 'Courses' },
         { name: 'Academic Terms', path: '/admin/terms', icon: CalendarDays, short: 'Terms' },
         { name: 'Rooms', path: '/admin/rooms', icon: DoorOpen },
         { name: 'Faculty Invitations', path: '/admin/faculty-invite', icon: UserPlus, short: 'Invites' },
@@ -513,6 +516,12 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'Dean Profile', path: '/admin/profile' });
     } else if (path === '/admin/settings') {
       crumbs.push({ name: 'Dean Settings', path: '/admin/settings' });
+    } else if (path === '/admin/people') {
+      crumbs.push({ name: 'People & Accounts', path: '/admin/people' });
+    } else if (path === '/admin/classes') {
+      crumbs.push({ name: 'Classes', path: '/admin/classes' });
+    } else if (path === '/admin/course-catalog') {
+      crumbs.push({ name: 'Course Catalog', path: '/admin/course-catalog' });
     } else if (path === '/secretary/profile') {
       crumbs.push({ name: 'My Profile', path: '/secretary/profile' });
     } else if (path === '/secretary/settings') {

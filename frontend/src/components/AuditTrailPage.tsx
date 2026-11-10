@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Download, FileText, Filter, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldOff, SlidersHorizontal, UserX } from 'lucide-react';
+import { AlertCircle, Download, Eye, FileText, Filter, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldOff, SlidersHorizontal, UserX } from 'lucide-react';
 import type { AuditEntry, AuditListResponse, AuditQuery, AuditStatus, DatePreset } from '../services/auditService';
 import {
   AUDIT_EXPORT_HEADER, auditCsvRows, auditDateRange, auditWho, currentTerm, formatManilaWhen, groupByDay,
@@ -432,8 +432,8 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
                         </td>
                         <td className="px-5 py-3 text-right whitespace-nowrap">
                           <StatusBadge status={entry.status} />
-                          <button type="button" onClick={() => setSelected(entry)} className={`ml-2 min-h-[44px] min-w-[44px] xl:min-h-0 xl:min-w-0 text-[10px] font-bold ${theme.icon}`}>
-                            Details
+                          <button type="button" onClick={() => setSelected(entry)} aria-label="View audit log details" title="View audit log details" className={`ml-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg ${theme.icon}`}>
+                            <Eye className="h-4 w-4" />
                           </button>
                         </td>
                       </tr>
@@ -500,8 +500,8 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
                           <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 self-center">Status</dt>
                           <dd className="flex items-center justify-between gap-2">
                             <StatusBadge status={entry.status} />
-                            <button type="button" onClick={() => setSelected(entry)} className={`min-h-[44px] min-w-[44px] px-2 text-[10px] font-bold ${theme.icon}`}>
-                              Details
+                            <button type="button" onClick={() => setSelected(entry)} aria-label="View audit log details" title="View audit log details" className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg ${theme.icon}`}>
+                              <Eye className="h-4 w-4" />
                             </button>
                           </dd>
                         </dl>

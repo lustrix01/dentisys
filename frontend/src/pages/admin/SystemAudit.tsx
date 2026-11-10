@@ -8,6 +8,7 @@ import {
   Filter,
   Search,
   ArrowLeft,
+  Ban,
   GraduationCap,
   ChevronRight,
   Archive,
@@ -719,10 +720,12 @@ export const DeanReports: React.FC = () => {
                             {s.faceEnrolled && (
                               <button
                                 type="button"
+                                aria-label={`Revoke biometric enrollment for ${s.name}`}
+                                title={`Revoke biometric enrollment for ${s.name}`}
                                 onClick={() => { setRevokeTarget({ id: String(s.id), name: s.name }); setRevokeReason(''); setRevokeError(''); }}
-                                className="ml-2 text-[9px] font-bold text-rose-600 hover:underline no-print"
+                                className="ml-2 inline-flex h-10 w-10 items-center justify-center rounded-lg text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 no-print"
                               >
-                                Revoke
+                                <Ban className="h-4 w-4" />
                               </button>
                             )}
                           </td>

@@ -22,6 +22,9 @@ import { AuditTrail as DeanAuditTrail } from './pages/admin/AuditTrail';
 import { FacultyInvitation } from './pages/admin/FacultyInvitation';
 import { AcademicTerms } from './pages/admin/AcademicTerms';
 import { Rooms } from './pages/admin/Rooms';
+import { PeopleAndAccounts } from './pages/admin/PeopleAndAccounts';
+import { Classes } from './pages/admin/Classes';
+import { CourseCatalog } from './pages/admin/CourseCatalog';
 
 // Class Secretary Page Imports
 import { Dashboard as SecretaryDashboard } from './pages/secretary/Dashboard';
@@ -254,13 +257,16 @@ function App() {
                 <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
                   <Route path="/admin/terms" element={<AcademicTerms />} />
                   <Route path="/admin/rooms" element={<Rooms />} />
+                  <Route path="/admin/people" element={<PeopleAndAccounts />} />
+                  <Route path="/admin/classes" element={<Classes />} />
+                  <Route path="/admin/course-catalog" element={<CourseCatalog />} />
                   <Route path="/admin/academic-terms" element={<Navigate to="/admin/terms" replace />} />
                   <Route path="/admin/faculty-invite" element={<FacultyInvitation />} />
                   <Route path="/admin/faculty-approval" element={<Navigate to="/admin/faculty-invite" replace />} />
                   <Route path="/admin/retention-criteria" element={<Navigate to="/admin/reports" replace />} />
                   <Route path="/admin/reports" element={<DeanReports />} />
                   <Route path="/admin/audit-trail" element={<DeanAuditTrail />} />
-                  <Route path="/admin/users" element={<Navigate to="/" replace />} />
+                  <Route path="/admin/users" element={<Navigate to="/admin/people" replace />} />
                   <Route path="/admin/audit" element={<Navigate to="/admin/audit-trail" replace />} />
                   <Route path="/admin/profile" element={<DeanProfile />} />
                   <Route path="/admin/settings" element={<DeanSettings />} />

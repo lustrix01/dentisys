@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
-  CalendarDays,
   CheckCircle2,
+  CalendarPlus,
   Copy,
+  Pencil,
   Plus,
   Trash2,
   ChevronRight,
@@ -25,8 +26,6 @@ const termInputClass =
 const termButtonClass =
   'rounded-xl px-4 py-2 text-xs font-bold bg-accent-600 hover:bg-accent-700 text-white shadow-xs hover:shadow-md transition-all disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed';
 const SEMESTER_ORDER = ['1ST', '2ND', 'Summer'] as const;
-const outlineButtonClass =
-  'rounded-xl border border-slate-200 dark:border-slate-700 px-3.5 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed';
 const cancelButtonClass =
   'px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors cursor-pointer';
 
@@ -183,57 +182,38 @@ export const AcademicTermsSettings: React.FC = () => {
   const totalClassesCount = definedTerms.reduce((acc, t) => acc + (t.classCount || 0), 0);
 
   return (
-    <section id="academic-terms" className="scroll-mt-6 space-y-6">
-      {/* 1. Hero Toolbar Card */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
-          <div className="flex items-start sm:items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-accent-500/10 to-accent-600/20 text-accent-600 dark:text-accent-400 border border-accent-200/60 dark:border-accent-900/60 flex items-center justify-center shrink-0 shadow-sm">
-              <CalendarDays className="w-6 h-6" />
-            </div>
-            <div>
-              <h2 className="text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
-                Academic Terms
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
-                Set the dates Faculty use for classes and Student face enrollment. Dates use Asia/Manila; each term ends at the end of its end date.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 lg:shrink-0">
-            <button
-              type="button"
-              disabled={loading || busy || !currentYear}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold bg-accent-600 hover:bg-accent-700 active:scale-95 text-white shadow-xs hover:shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              onClick={() => open()}
-            >
-              <Plus className="w-4 h-4" />
-              Add term
-            </button>
-            <button
-              type="button"
-              disabled={loading || busy || !latestYear}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 text-slate-700 dark:text-slate-200 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-              onClick={() => {
-                setError('');
-                setCopying(true);
-              }}
-            >
-              <Copy className="w-4 h-4" />
-              Add next school year
-            </button>
-          </div>
+    <section id="academic-terms" className="mx-auto max-w-7xl scroll-mt-6 space-y-6 animate-fade-in">
+      <div className="flex flex-col gap-3 px-1.5 sm:flex-row sm:items-center sm:justify-between">
+        <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+          <span>Current School Year <b className="text-slate-800 dark:text-slate-100">{currentYear || 'Not configured'}</b></span>
+          <span>{currentTermObj ? `${semesterLabel(currentTermObj.semester)} active` : 'No active semester today'}</span>
+          <span><b className="text-slate-800 dark:text-slate-100">{years.length}</b> {years.length === 1 ? 'school year' : 'school years'} · {definedTerms.length} {definedTerms.length === 1 ? 'term' : 'terms'}</span>
+          <span><b className="text-slate-800 dark:text-slate-100">{totalClassesCount}</b> {totalClassesCount === 1 ? 'class' : 'classes'} linked</span>
+        </p>
+        <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:shrink-0">
+          <button
+            type="button"
+            disabled={loading || busy || !latestYear}
+            className="px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 text-slate-700 dark:text-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+            onClick={() => {
+              setError('');
+              setCopying(true);
+            }}
+          >
+            <Copy className="w-4 h-4" />
+            Add next school year
+          </button>
+          <button
+            type="button"
+            disabled={loading || busy || !currentYear}
+            className="px-4 py-2.5 rounded-xl text-xs font-bold bg-accent-600 hover:bg-accent-700 active:scale-95 text-white shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={() => open()}
+          >
+            <Plus className="w-4 h-4" />
+            Add term
+          </button>
         </div>
       </div>
-
-      {/* 2. One-line summary */}
-      <p className="px-1.5 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
-        <span>Current School Year <b className="text-slate-800 dark:text-slate-100">{currentYear || 'Not configured'}</b></span>
-        <span>{currentTermObj ? `${semesterLabel(currentTermObj.semester)} active` : 'No active semester today'}</span>
-        <span><b className="text-slate-800 dark:text-slate-100">{years.length}</b> {years.length === 1 ? 'school year' : 'school years'} · {definedTerms.length} {definedTerms.length === 1 ? 'term' : 'terms'}</span>
-        <span><b className="text-slate-800 dark:text-slate-100">{totalClassesCount}</b> {totalClassesCount === 1 ? 'class' : 'classes'} linked</span>
-      </p>
 
       {/* Notifications & Status Alerts */}
       {error && !draft && (
@@ -279,27 +259,25 @@ export const AcademicTermsSettings: React.FC = () => {
                   type="button"
                   aria-expanded={isOpen}
                   data-testid={`year-${year}`}
-                  className="flex w-full items-center gap-3 px-4 py-3.5 sm:px-5 text-left cursor-pointer"
+                  className="flex w-full items-center gap-3 bg-slate-50/70 px-4 py-3.5 text-left cursor-pointer dark:bg-slate-950/30 sm:px-5"
                   onClick={() => setExpanded({ ...expanded, [year]: !isOpen })}
                 >
                   <ChevronRight className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} aria-hidden="true" />
-                  <span className="min-w-0">
-                    <span className="block text-base font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">{year}</span>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400">
-                      {yearSet.length === 0 && past
-                        ? 'No dates set'
-                        : `${yearSet.length} ${yearSet.length === 1 ? 'term' : 'terms'}${past ? ' · ended' : ' set'}`}
-                    </span>
+                  <span className="text-sm font-extrabold tracking-tight text-slate-800 dark:text-slate-100">{year}</span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-700">
+                    {yearSet.length === 0 && past
+                      ? 'No dates set'
+                      : `${yearSet.length} ${yearSet.length === 1 ? 'term' : 'terms'}${past ? ' · ended' : ' set'}`}
                   </span>
                   {isCurrentYear && (
-                    <span className="ml-auto whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-extrabold bg-white text-accent-700 dark:bg-slate-900 dark:text-accent-300 border border-accent-200/60 dark:border-accent-900/60">
+                    <span className="ml-auto whitespace-nowrap rounded-full border border-accent-200/60 bg-white px-2.5 py-1 text-[10px] font-extrabold text-accent-700 dark:border-accent-900/60 dark:bg-slate-900 dark:text-accent-300">
                       Current S.Y.
                     </span>
                   )}
                 </button>
 
                 {isOpen && (
-                  <div className="border-t border-slate-100 dark:border-slate-800 px-4 sm:px-5 py-1.5">
+                  <div className="border-t border-slate-100 px-4 py-1.5 dark:border-slate-800 sm:px-5">
                     {SEMESTER_ORDER.map((semester) => {
                       const term = yearSet.find((t) => t.semester === semester);
                       const slot = !term;
@@ -310,7 +288,7 @@ export const AcademicTermsSettings: React.FC = () => {
                         <div
                           key={semester}
                           data-testid={`${year}-${semester}`}
-                          className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[9rem_minmax(0,1fr)_7rem_6rem_9rem] items-center gap-x-3 gap-y-1 py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-b-0"
+                          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-slate-100 py-3 last:border-b-0 dark:border-slate-800 sm:grid-cols-[minmax(8rem,1.1fr)_minmax(10rem,1.5fr)_auto_minmax(5rem,.6fr)_auto] sm:gap-x-5"
                         >
                           <span className={`text-sm font-bold ${slot ? 'text-slate-500 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>
                             {semesterLabel(semester)}
@@ -329,29 +307,27 @@ export const AcademicTermsSettings: React.FC = () => {
                           <span className="row-start-3 sm:row-start-auto col-start-1 sm:col-start-auto text-xs text-slate-500 dark:text-slate-400">
                             {classCount} {classCount === 1 ? 'class' : 'classes'}
                           </span>
-                          <span className="row-start-3 sm:row-start-auto col-start-2 sm:col-start-auto flex items-center justify-end gap-1.5">
+                          <span className="row-start-3 col-start-2 flex items-center justify-end gap-2 sm:row-start-auto sm:col-start-auto">
                             <button
                               type="button"
-                              className={
-                                slot
-                                  ? 'px-3.5 py-1.5 rounded-xl text-xs font-bold bg-accent-600 hover:bg-accent-700 text-white shadow-xs transition-all cursor-pointer disabled:opacity-40'
-                                  : outlineButtonClass
-                              }
+                              aria-label={`${slot ? 'Add dates for' : 'Edit'} ${semesterLabel(semester)} ${year}`}
+                              title={`${slot ? 'Add dates for' : 'Edit'} ${semesterLabel(semester)} ${year}`}
+                              className={`inline-flex h-10 w-10 items-center justify-center rounded-xl transition-all disabled:opacity-40 ${slot ? 'bg-accent-600 text-white hover:bg-accent-700' : 'border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'}`}
                               disabled={busy}
                               onClick={() => open(term ?? { id: null, schoolYear: year, semester, startDate: null, endDate: null, classCount: 0 })}
                             >
-                              {slot ? 'Add dates' : 'Edit'}
+                              {slot ? <CalendarPlus className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
                             </button>
                             {term && (
                               <button
                                 type="button"
-                                aria-label="Delete"
-                                className="flex h-8 w-8 items-center justify-center rounded-xl text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                                aria-label={`Delete ${semesterLabel(semester)} ${year} term`}
+                                className="flex h-10 w-10 items-center justify-center rounded-xl text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                                 disabled={busy || term.classCount > 0}
                                 title={
                                   term.classCount > 0
-                                    ? 'A term used by a class cannot be deleted.'
-                                    : 'Delete unused term'
+                                  ? 'A term used by a class cannot be deleted.'
+                                    : `Delete unused ${semesterLabel(semester)} ${year} term`
                                 }
                                 onClick={() => {
                                   setError('');

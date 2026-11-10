@@ -307,31 +307,33 @@ export const FacultyInvitation: React.FC = () => {
           type="button"
           onClick={() => openEditModal(invitation)}
           disabled={sending}
-          className="rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/40 flex items-center gap-1 cursor-pointer"
-          title="Edit invitation"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-40 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/40"
+          aria-label={`Edit invitation for ${invitation.name}`}
+          title={`Edit invitation for ${invitation.name}`}
         >
-          <Edit3 className="w-3 h-3" />
-          Edit
+          <Edit3 className="h-4 w-4" />
         </button>
         {invitation.status === 'Pending' && (
           <button
             type="button"
             onClick={() => setRevokingInvitation(invitation)}
             disabled={sending}
-            className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/40 flex items-center gap-1 cursor-pointer"
-            title="Revoke invitation"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-40 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/40"
+            aria-label={`Revoke invitation for ${invitation.name}`}
+            title={`Revoke invitation for ${invitation.name}`}
           >
-            <Trash2 className="w-3 h-3" />
-            Revoke
+            <Trash2 className="h-4 w-4" />
           </button>
         )}
         <button
           type="button"
           disabled={sending}
           onClick={() => void handleReissue(invitation)}
-          className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-40 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          aria-label={`Reissue invitation for ${invitation.name}`}
+          title={`Reissue invitation for ${invitation.name}`}
         >
-          Reissue
+          <Send className="h-4 w-4" />
         </button>
       </>
     )}
