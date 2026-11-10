@@ -296,8 +296,13 @@ remedial_contract_assert(
     'Backend validates finite percentage input, the 50 percent boundary, and the two-attempt limit'
 );
 remedial_contract_assert(
-    preg_match('/remedial[^\n]*(?:status|outcome)/i', substr($faculty, (int) strpos($faculty, 'function handle_faculty_retention_remedial_save'))) === 0,
-    'Backend remedial write does not trust a client-supplied status or outcome'
+    (static function () use ($faculty): bool {
+        $handler = substr($faculty, (int) strpos($faculty, 'function handle_faculty_retention_remedial_save'));
+        return preg_match('/\$request\[\s*[\'"](?:status|outcome)[\'"]\s*\]/', $handler) === 0
+            && preg_match('/\$data\[\s*[\'"](?:status|outcome)[\'"]\s*\]/', $handler) === 0
+            && str_contains($handler, '$outcome = $request[\'hasPercentage\']');
+    })(),
+    'Backend remedial write derives the outcome and does not read a client-supplied status or outcome'
 );
 remedial_contract_assert(
     str_contains($student, 'enrollment_remedial_attempts')

@@ -53,6 +53,7 @@ import { isViewOnlyClass, isArchivedCurrentYear, orderCurrentYearClasses } from 
 import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../../utils/geofenceRadius';
 import { SessionTimeFields } from '../../components/SessionTimeFields';
 import { checkTimes, isNextDay, sessionEndOffsetMs, type TimeSet } from '../../utils/sessionTimes';
+import { formatVisibleTime } from '../../utils/timeDisplay';
 const RADIUS_HINT = 'Indoors, use 150 m or more; phone GPS is often off by 50–100 m inside buildings.';
 
 type SupportedStatus = 'present' | 'absent' | 'late' | 'excused';
@@ -66,20 +67,7 @@ const STATUS_LABELS: Record<SupportedStatus, string> = {
 };
 
 const formatCheckInTime = (value?: string | null) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    const match = value.match(/(\d{1,2}):(\d{2})/);
-    if (match) {
-      const h = parseInt(match[1], 10);
-      const m = match[2];
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const h12 = h % 12 || 12;
-      return `${String(h12).padStart(2, '0')}:${m} ${ampm}`;
-    }
-    return value;
-  }
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return formatVisibleTime(value);
 };
 
 const attendanceMethodLabel = (method?: string | null, overrideReason?: string | null): string => {
@@ -864,6 +852,7 @@ export const AttendanceMonitoring: React.FC = () => {
       const response = await createFacultyAttendanceSessionApi({
         csId,
         sessionDate,
+        meetingDay: values.meetingDay,
         room: values.room || undefined,
         openingTime,
         presentCutoff: values.presentCutoff,
@@ -877,7 +866,7 @@ export const AttendanceMonitoring: React.FC = () => {
         confirmOverlap: confirmOverlap || undefined,
       });
       setIsStartSessionOpen(false);
-      setNotification({ type: 'success', message: response.session.status === 'scheduled' ? `Attendance session scheduled for ${sessionDate} at ${openingTime} (Asia/Manila).` : 'Attendance session started. The class roll call is now live.' });
+      setNotification({ type: 'success', message: response.session.status === 'scheduled' ? `Attendance session scheduled for ${sessionDate} at ${formatVisibleTime(openingTime)} (Asia/Manila).` : 'Attendance session started. The class roll call is now live.' });
       if (worksheetScope.current === writeScope) {
         setSelectedDate(sessionDate);
         setSelectedSessionId(response.session.sessionId);
@@ -1131,14 +1120,14 @@ export const AttendanceMonitoring: React.FC = () => {
                   onClick={() => handleSelectClass(c)}
                   className={`group relative rounded-2xl p-4 sm:p-5 border transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-3.5 bg-white dark:bg-slate-900 shadow-xs ${
                     isSelected
-                      ? 'border-accent-500/80 ring-2 ring-accent-500/30 shadow-lg shadow-accent-500/10'
-                      : 'border-slate-200/80 dark:border-slate-800 hover:border-accent-300 dark:hover:border-accent-800/50 hover:shadow-md'
+                      ? 'border-clinical-400 ring-1 ring-clinical-500/20 shadow-md shadow-clinical-500/5'
+                      : 'border-slate-200/80 dark:border-slate-800 hover:border-clinical-300 dark:hover:border-clinical-800/50 hover:shadow-md'
                   }`}
                 >
                   <div className="space-y-2.5">
                     {/* Top Row: Colorful Badge, Section Label & Live Dot */}
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/50 text-accent-700 dark:text-accent-300 text-[10px] font-extrabold uppercase tracking-wider">
+                      <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-extrabold uppercase tracking-wider">
                         {c.courseCode} &bull; Year {c.yearLevel || 1}
                       </span>
                       {isArchivedClass && (
@@ -1169,18 +1158,18 @@ export const AttendanceMonitoring: React.FC = () => {
                     </div>
 
                     {/* Course Title */}
-                    <h3 className="text-sm sm:text-base font-extrabold font-heading text-slate-900 dark:text-slate-100 group-hover:text-accent-700 dark:group-hover:text-accent-300 transition-colors line-clamp-2">
+                    <h3 className="text-sm sm:text-base font-extrabold font-heading text-slate-900 dark:text-slate-100 group-hover:text-clinical-700 dark:group-hover:text-clinical-300 transition-colors line-clamp-2">
                       {c.courseName}
                     </h3>
 
                     {/* Class Details: Purple Calendar & MapPin Icons */}
                     <div className="space-y-1.5 text-xs text-slate-500 dark:text-slate-400">
                       <div className="flex items-center gap-2">
-                        <Calendar className="w-3.5 h-3.5 text-accent-500 shrink-0" />
+                        <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span>{semesterLabel(c.semester)} &bull; {c.schoolYear || currentSchoolYear || '2026-2027'}</span>
                       </div>
                       <div className="flex items-start gap-2">
-                        <MapPin className="w-3.5 h-3.5 text-accent-500 shrink-0 mt-0.5" />
+                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
                         <span className="truncate">
                           {c.lecRoom ? <><strong className="text-slate-700 dark:text-slate-200">Lec:</strong> {c.lecRoom} </> : ''}
                           {c.schedule ? `(${c.schedule})` : (c.labRoom ? <><strong className="text-slate-700 dark:text-slate-200">Lab:</strong> {c.labRoom}</> : 'Venue / Schedule TBA')}
@@ -1204,10 +1193,10 @@ export const AttendanceMonitoring: React.FC = () => {
                           handleOpenClassSessionModal(c);
                         }}
                         disabled={isPastClass}
-                        className="inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 xl:max-[1439px]:px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/50 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                        className="inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 xl:max-[1439px]:px-2 py-1.5 rounded-xl bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                         title={isPastClass ? 'Past school-year classes are view-only.' : 'Sessions for this class'}
                       >
-                        <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                        <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                         <span>Sessions</span>
                       </button>}
 
@@ -1217,7 +1206,7 @@ export const AttendanceMonitoring: React.FC = () => {
                           e.stopPropagation();
                           handleSelectClass(c);
                         }}
-                        className="inline-flex items-center justify-center text-xs font-bold px-3 xl:max-[1439px]:px-2 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/70 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/50 transition-all cursor-pointer shadow-xs whitespace-nowrap"
+                        className="inline-flex items-center justify-center text-xs font-bold px-3 xl:max-[1439px]:px-2 py-1.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white border border-clinical-600 transition-colors cursor-pointer shadow-xs whitespace-nowrap"
                       >
                         <span>View attendance</span>
                       </button>
@@ -1278,9 +1267,9 @@ export const AttendanceMonitoring: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleOpenClassSessionModal(selectedClass)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 border border-purple-200/70 dark:border-purple-800/50 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-colors cursor-pointer shadow-xs"
                   >
-                    <Clock className="w-3.5 h-3.5 text-purple-600 dark:text-purple-300" />
+                    <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                     <span>Sessions</span>
                   </button>
                 )}
@@ -1316,7 +1305,7 @@ export const AttendanceMonitoring: React.FC = () => {
             {/* Class Title and Metadata Badges */}
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-extrabold bg-accent-100 dark:bg-accent-950/60 text-accent-800 dark:text-accent-300">
+                <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
                   {selectedClass?.courseCode || 'CLASS'}
                 </span>
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">&bull;</span>
@@ -1342,7 +1331,7 @@ export const AttendanceMonitoring: React.FC = () => {
 
                 {(selectedClass?.lecRoom || selectedClass?.labRoom) && (
                   <div className="flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4 text-accent-500 shrink-0" />
+                    <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
                     <span>
                       {selectedClass?.lecRoom ? <><strong>Lec:</strong> {selectedClass.lecRoom} </> : ''}
                       {selectedClass?.labRoom ? <><strong>Lab:</strong> {selectedClass.labRoom}</> : ''}
@@ -1352,7 +1341,7 @@ export const AttendanceMonitoring: React.FC = () => {
 
                 {selectedClass?.schedule && (
                   <div className="flex items-center gap-1.5">
-                    <Calendar className="w-4 h-4 text-accent-500 shrink-0" />
+                    <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
                     <span>{selectedClass.schedule}</span>
                   </div>
                 )}
@@ -1514,16 +1503,6 @@ export const AttendanceMonitoring: React.FC = () => {
         </Card>
       ) : worksheet ? (
         <Card className="p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs space-y-4">
-          {worksheetIsReadOnly && !allSessionsHidden && (
-            <p role="status" className="text-xs font-semibold text-amber-700 dark:text-amber-300">
-              {selectedClassIsPast
-                ? (isArchivedCurrentYear(selectedClass) ? 'Archived classes are view-only.' : 'Past school-year attendance is view-only.')
-                : selectedDate > manilaDateToday() || worksheet.attendanceSession?.status === 'scheduled'
-                ? 'Scheduled session: attendance opens at its chosen date/time in Asia/Manila.'
-                : 'Choose a session to manage its attendance.'}
-            </p>
-          )}
-
           {/* If there are multiple sessions recorded on the same date */}
           {(shownSessions.length > 1 || revokedSessionCount > 0) && (
             <div className="flex flex-col sm:flex-row sm:items-end gap-3">
@@ -1540,7 +1519,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 <option value="">Choose a session</option>
                 {shownSessions.map(session => (
                   <option key={String(session.sessionId)} value={String(session.sessionId)}>
-                    {String(session.openingTime ?? 'Unconfigured')}–{String(session.classEndTime ?? '')} · {String(session.sessionCode)} · {String(session.status)}
+                    {session.openingTime ? formatVisibleTime(session.openingTime) : 'Unconfigured'}–{formatVisibleTime(session.classEndTime)} · {String(session.sessionCode)} · {String(session.status)}
                   </option>
                 ))}
               </select>
@@ -1598,15 +1577,24 @@ export const AttendanceMonitoring: React.FC = () => {
                   setSelectedSessionId(session.sessionId);
                 }}
               >
-                {session.sessionDate} · {session.openingTime ?? 'Unconfigured'}–{session.classEndTime ?? ''} · {session.status === 'scheduled' ? 'Scheduled' : 'Open'} · {session.sessionCode}
+                {session.sessionDate} · {session.openingTime ? formatVisibleTime(session.openingTime) : 'Unconfigured'}–{formatVisibleTime(session.classEndTime)} · {session.status === 'scheduled' ? 'Scheduled' : 'Open'} · {session.sessionCode}
               </button>
             ))}
           </div>
 
           {!allSessionsHidden && (<>
           {/* Controls Bar: extra filters & bulk action (search and status filter live in the worksheet controls above) */}
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-end gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+          <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-center md:justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+            {worksheetIsReadOnly && !allSessionsHidden && (
+              <p role="status" className="text-xs font-semibold text-amber-700 dark:text-amber-300 md:min-w-0 md:flex-1">
+                {selectedClassIsPast
+                  ? (isArchivedCurrentYear(selectedClass) ? 'Archived classes are view-only.' : 'Past school-year attendance is view-only.')
+                  : selectedDate > manilaDateToday() || worksheet.attendanceSession?.status === 'scheduled'
+                  ? 'Scheduled session: attendance opens at its chosen date/time in Asia/Manila.'
+                  : 'Choose a session to manage its attendance.'}
+              </p>
+            )}
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 md:ml-auto md:shrink-0">
               <select
                 aria-label="Overridden"
                 value={overriddenFilter}
@@ -2191,7 +2179,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 onClick={() => setSessionModalTab('current')}
                 className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
                   sessionModalTab === 'current'
-                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-200 border border-purple-200/60 dark:border-purple-800/60 shadow-xs'
+                    ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 border border-emerald-200/70 dark:border-emerald-800/60 shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
@@ -2205,7 +2193,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 onClick={() => setSessionModalTab('upcoming')}
                 className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
                   sessionModalTab === 'upcoming'
-                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-200 border border-purple-200/60 dark:border-purple-800/60 shadow-xs'
+                    ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 border border-emerald-200/70 dark:border-emerald-800/60 shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
@@ -2213,8 +2201,8 @@ export const AttendanceMonitoring: React.FC = () => {
                 {upcomingSessions.length > 0 && (
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
                     sessionModalTab === 'upcoming'
-                      ? 'bg-purple-200/80 text-purple-900 dark:bg-purple-900 dark:text-purple-100'
-                      : 'bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300'
+                      ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/70 dark:text-emerald-100'
+                      : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
                   }`}>
                     {upcomingSessions.length}
                   </span>
@@ -2239,7 +2227,7 @@ export const AttendanceMonitoring: React.FC = () => {
                           <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
                             liveCurrentSession.status === 'active'
                               ? 'bg-emerald-500 text-white'
-                              : 'bg-indigo-600 text-white'
+                              : 'bg-slate-600 text-white'
                           }`}>
                             {liveCurrentSession.status === 'active' ? '● Live Active' : '● In Progress'}
                           </span>
@@ -2276,15 +2264,15 @@ export const AttendanceMonitoring: React.FC = () => {
                       {liveCurrentSession.openingTime && (
                         <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300">
                           <Calendar className="w-3.5 h-3.5 text-slate-400 mr-1" />
-                          <span className="font-bold text-emerald-700 dark:text-emerald-300">Open {liveCurrentSession.openingTime}</span>
+                          <span className="font-bold text-emerald-700 dark:text-emerald-300">Open {formatVisibleTime(liveCurrentSession.openingTime)}</span>
                           <span>→</span>
-                          <span className="font-bold text-purple-700 dark:text-purple-300">Cutoff {liveCurrentSession.presentCutoff || '—'}</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-200">Cutoff {formatVisibleTime(liveCurrentSession.presentCutoff)}</span>
                           <span>→</span>
-                          <span className="font-bold text-amber-700 dark:text-amber-300">Late {liveCurrentSession.lateCutoff || 'Late'}</span>
+                          <span className="font-bold text-amber-700 dark:text-amber-300">Late {liveCurrentSession.lateCutoff ? formatVisibleTime(liveCurrentSession.lateCutoff) : 'Late'}</span>
                           {liveCurrentSession.classEndTime && (
                             <>
                               <span>→</span>
-                              <span className="font-bold text-slate-700 dark:text-slate-200">End {liveCurrentSession.classEndTime}{(liveCurrentSession.classEndNextDay ?? isNextDay(liveCurrentSession.openingTime ?? '', liveCurrentSession.classEndTime)) ? ' (next day)' : ''}</span>
+                              <span className="font-bold text-slate-700 dark:text-slate-200">End {formatVisibleTime(liveCurrentSession.classEndTime)}{(liveCurrentSession.classEndNextDay ?? isNextDay(liveCurrentSession.openingTime ?? '', liveCurrentSession.classEndTime)) ? ' (next day)' : ''}</span>
                             </>
                           )}
                         </div>
@@ -2296,7 +2284,7 @@ export const AttendanceMonitoring: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleOpenEditSession(liveCurrentSession)}
-                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-2xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/70 text-xs font-bold transition-all shadow-xs cursor-pointer dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/50"
+                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold transition-colors shadow-xs cursor-pointer dark:bg-slate-900 dark:hover:bg-slate-800 dark:text-slate-200 dark:border-slate-700"
                       >
                         <Pencil className="w-3.5 h-3.5 text-purple-600 dark:text-purple-300" />
                         <span>Edit session parameters</span>
@@ -2383,22 +2371,22 @@ export const AttendanceMonitoring: React.FC = () => {
                         >
                           <div className="space-y-1.5">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="px-2.5 py-0.5 rounded-lg bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 font-extrabold text-[11px]">
+                              <span className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-extrabold text-[11px]">
                                 {session.sessionDate}
                               </span>
                               <span className="font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
                                 {session.sessionCode}
                               </span>
                               {startsInLabel && (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                                  <Clock className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                  <Clock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                                   <span>{startsInLabel}</span>
                                 </span>
                               )}
                             </div>
                             <div className="flex items-center gap-2 text-xs text-slate-500">
                               <Clock className="w-3.5 h-3.5 text-slate-400" />
-                              <span>{session.openingTime ?? '08:00'} – {session.classEndTime ?? '13:00'}{(session.classEndNextDay ?? isNextDay(session.openingTime ?? '', session.classEndTime)) ? ' (next day)' : ''}</span>
+                              <span>{formatVisibleTime(session.openingTime ?? '08:00')} – {formatVisibleTime(session.classEndTime ?? '13:00')}{(session.classEndNextDay ?? isNextDay(session.openingTime ?? '', session.classEndTime)) ? ' (next day)' : ''}</span>
                               {session.room && (
                                 <>
                                   <span>&bull;</span>
@@ -2415,9 +2403,9 @@ export const AttendanceMonitoring: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => handleOpenEditSession(session)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-2xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/70 font-bold text-xs shadow-xs cursor-pointer dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/50"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs shadow-xs cursor-pointer dark:bg-slate-900 dark:hover:bg-slate-800 dark:text-slate-200 dark:border-slate-700"
                             >
-                              <Pencil className="w-3 h-3 text-purple-600 dark:text-purple-300" />
+                              <Pencil className="w-3 h-3 text-slate-500 dark:text-slate-400" />
                               <span>Edit</span>
                             </button>
                             <button

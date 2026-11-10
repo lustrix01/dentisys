@@ -164,7 +164,10 @@ function config_allowed_email_domains(array $overrides): array
         }
     }
 
-    return $domains;
+    // Configuration values from older deployments may still list additional
+    // domains. Keep startup healthy while enforcing the Owner-approved
+    // single-domain policy throughout the application.
+    return ['bicol-u.edu.ph'];
 }
 
 function config_app_base_url(string $value, bool $required): string

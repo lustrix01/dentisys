@@ -128,7 +128,7 @@ FIRST_DEAN_FIRST_NAME=Your
 FIRST_DEAN_LAST_NAME=Name
 ```
 
-`FIRST_DEAN_PREFIX`, `FIRST_DEAN_MIDDLE_NAME`, and `FIRST_DEAN_SUFFIX` are optional. The address must use an allowed domain (`ALLOWED_EMAIL_DOMAINS`). Run `.\scripts\start-dev.ps1`; the invitation appears in Mailpit. Open its link, set a password, and sign in. Nothing happens once a Dean account is active.
+`FIRST_DEAN_PREFIX`, `FIRST_DEAN_MIDDLE_NAME`, and `FIRST_DEAN_SUFFIX` are optional. The address must be an `@bicol-u.edu.ph` address. Only `@bicol-u.edu.ph` is accepted for new or updated identity, invitations, sign-in, recovery, and outgoing email; existing non-BU records are not rewritten. Run `.\scripts\start-dev.ps1`; the invitation appears in Mailpit. Open its link, set a password, and sign in. Nothing happens once a Dean account is active.
 
 ### A7. Choose how e-mail is delivered
 
@@ -318,7 +318,7 @@ Every value that starts with `replace_with_` must be replaced; the start script 
 | `JWT_SIGNING_KEY_B64`, `MFA_ENCRYPTION_KEY_B64`, `AUDIT_MAC_KEY_B64`, `BIOMETRIC_STORAGE_KEY_B64`, `BIOMETRIC_SIDECAR_SHARED_SECRET` | A different generated value for each (see below). |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Your SMTP account. Encryption (`starttls` or `tls`) and certificate checking are required. |
 | `EMAIL_PROVIDER`, `EMAIL_TEST_ALLOWLIST` | `smtp` to e-mail everyone, or `custom` to send real e-mail only to the allowlist and keep a copy of everything in Mailpit (see [A7](#a7-choose-how-e-mail-is-delivered)). |
-| `ALLOWED_EMAIL_DOMAINS` | Institutional domains allowed to sign in (default `bicol-u.edu.ph`). |
+| `ALLOWED_EMAIL_DOMAINS` | Kept for compatibility with older deployments. Only `bicol-u.edu.ph` is accepted for new or updated identity, invitations, sign-in, recovery, and outgoing email; existing non-BU records are not rewritten. |
 | `FIRST_DEAN_EMAIL`, `FIRST_DEAN_FIRST_NAME`, `FIRST_DEAN_LAST_NAME` | The person who receives the first Dean invitation (see [B5](#b5-the-first-dean)). |
 | `MEDIAPIPE_FACE_LANDMARKER_MODEL_HOST_PATH`, `MEDIAPIPE_FACE_LANDMARKER_SHA256` | Absolute path to the downloaded model and its hash (see [A8](#a8-optional-face-recognition-attendance), step 1). |
 | `BIOMETRIC_*` calibration values | From [docs/biometric-calibration-deployment.md](docs/biometric-calibration-deployment.md). Biometric attendance still stays off in single-server mode until it is approved for deployment. |
@@ -357,7 +357,7 @@ Check it: open `APP_BASE_URL`, and `APP_BASE_URL/api/health` should report `"sta
 
 ### B5. The first Dean
 
-Single-server mode never loads demo data. The first account is a Dean invited by e-mail. Before the first start, fill in `FIRST_DEAN_EMAIL`, `FIRST_DEAN_FIRST_NAME`, and `FIRST_DEAN_LAST_NAME` in `.env.single-server`. The address must use an allowed domain. The start script sends the invitation. The Dean opens the link, sets a password, and then invites Faculty from inside DentiSys.
+Single-server mode never loads demo data. The first account is a Dean invited by e-mail. Before the first start, fill in `FIRST_DEAN_EMAIL`, `FIRST_DEAN_FIRST_NAME`, and `FIRST_DEAN_LAST_NAME` in `.env.single-server`. The address must be an `@bicol-u.edu.ph` address; existing non-BU records are not rewritten. The start script sends the invitation. The Dean opens the link, sets a password, and then invites Faculty from inside DentiSys.
 
 If the settings were empty on the first start, fill them in and run the start script again. Nothing happens once a Dean account is active.
 

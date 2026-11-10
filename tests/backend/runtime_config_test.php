@@ -61,8 +61,8 @@ if (($payload['features']['student_auth_enabled'] ?? null) !== true) {
     fwrite(STDERR, "FAIL: runtime configuration payload does not expose Student authentication state.\n");
     exit(1);
 }
-if (($payload['allowed_email_domains'] ?? null) !== ['bicol-u.edu.ph', 'example.edu']) {
-    fwrite(STDERR, "FAIL: runtime configuration payload does not expose normalized institutional domains.\n");
+if (($payload['allowed_email_domains'] ?? null) !== ['bicol-u.edu.ph']) {
+    fwrite(STDERR, "FAIL: runtime configuration payload does not expose the enforced institutional domain.\n");
     exit(1);
 }
 

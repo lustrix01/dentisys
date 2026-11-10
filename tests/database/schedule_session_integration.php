@@ -243,7 +243,8 @@ expect_same($facultyOverlapBody['message'] ?? null, $overlapEditBody['message'] 
 [$pastEditStatus, $pastEditBody] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, array_merge($queuePayload, ['sessionId' => $queuedId, 'sessionDate' => (new DateTimeImmutable('now', $sessionLocalTimezone))->modify('-1 day')->format('Y-m-d')]));
 expect_same(422, $pastEditStatus, 'A scheduled session cannot be edited to a past date');
 expect_same('VALIDATION_ERROR', $pastEditBody['code'] ?? null, 'Past-date edit reuses creation validation');
-expect_same(['sessionDate' => 'Past attendance session dates are not allowed.'], $pastEditBody['errors'] ?? null, 'Past-date edit preserves the exact validation message');
+expect_same('sessionDate', $pastEditBody['errors'][0]['field'] ?? null, 'Past-date edit identifies the session date field');
+expect_same('Choose today or a future date for this session, then try again.', $pastEditBody['errors'][0]['message'] ?? null, 'Past-date edit explains how to correct the session date');
 foreach (['faculty' => $seedFacultyAccessToken, 'secretary' => $secretaryAccessToken] as $editRole => $editToken) {
     foreach ([null, 'invalid', true, 0, 2147483648] as $invalidEditId) {
         [$invalidEditStatus, $invalidEditBody] = integration_http_json('/api/' . $editRole . '/attendance/session/update', $editToken, $queuePayload + ['sessionId' => $invalidEditId]);

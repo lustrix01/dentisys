@@ -899,7 +899,7 @@ export const GradeComputation: React.FC = () => {
     setModalCategoryWarning(false);
     setAssPeriod('Midterm');
     setAssMaxScore('');
-    setAssDueDate(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+    setAssDueDate('');
     setAssInstructions('');
     setAssRemarks('');
     setAssStatus('Active');
@@ -929,7 +929,7 @@ export const GradeComputation: React.FC = () => {
     setAssClassId(targetClassId);
     setAssPeriod(ass.gradingPeriod);
     setAssMaxScore(ass.maxScore);
-    setAssDueDate(ass.dueDate);
+    setAssDueDate(ass.dueDate ?? '');
     setAssInstructions(ass.instructions || '');
     setAssRemarks(ass.remarks || '');
     setAssStatus(ass.status === 'Archived' ? 'Active' : ass.status);
@@ -1983,7 +1983,7 @@ export const GradeComputation: React.FC = () => {
           }));
           setSavedFinalCategories(fRows);
 
-          // Units changed since the last save: open a draft in the new structure; nothing changes until Save.
+          // Open a draft for the course's structure; nothing changes until Save.
           let draftMode = loadedComponentMode;
           let mDraft = mRows;
           let fDraft = fRows;
@@ -1992,6 +1992,34 @@ export const GradeComputation: React.FC = () => {
             mDraft = mRows.filter(r => r.component === 'Lecture');
             fDraft = fRows.filter(r => r.component === 'Lecture');
             setStructureNotice('now-lecture');
+          } else if (loadedComponentMode === 'combined' && loadedStructure === 'lecture') {
+            const lectureDefaults = (period: 'Midterm' | 'Final', existingRows: PeriodCategoryDraftRow[]): PeriodCategoryDraftRow[] =>
+              buildDefaultLectureLaboratoryCategories(period)
+                .filter(row => row.component === 'Lecture')
+                .map((row, index) => {
+                  const defaultKey = row.name.toLowerCase().replace(/^(term|midterm|final)\s+/, '').trim();
+                  const existing = existingRows.find(candidate =>
+                    candidate.name.toLowerCase().replace(/^(term|midterm|final)\s+/, '').trim() === defaultKey
+                    && candidate.sourceKind !== 'attendance'
+                  );
+                  const tempId = `lecture-default-${period.toLowerCase()}-${index + 1}`;
+                  return {
+                    ...row,
+                    compositeKey: buildRowCompositeKey(period, existing?.id, tempId),
+                    tempId,
+                    id: existing?.id,
+                    gradingPeriod: period,
+                    sortOrder: index + 1,
+                    sourceKind: 'assessment' as const,
+                    inUse: existing?.inUse ?? false,
+                    component: 'Lecture' as const,
+                  };
+                });
+            draftMode = 'lecture';
+            mDraft = lectureDefaults('Midterm', mRows);
+            fDraft = lectureDefaults('Final', fRows);
+            setTermRatio({ midterm: '50', final: '50' });
+            setComponentWeights({ lecture: '60', laboratory: '40' });
           } else if (loadedComponentMode === 'lecture' && loadedStructure === 'lecture_laboratory') {
             draftMode = 'lecture_laboratory';
             const labRows = (period: 'Midterm' | 'Final') => buildDefaultLectureLaboratoryCategories(period).filter(r => r.component === 'Laboratory');
@@ -2084,6 +2112,10 @@ export const GradeComputation: React.FC = () => {
   const isLegacyCombinedPeriodConfig = loadedConfig?.schemaMode === 'periods'
     && loadedConfig.componentMode !== 'lecture_laboratory'
     && componentMode === 'combined';
+  const isCombinedLectureOnlyDraft = loadedConfig?.schemaMode === 'periods'
+    && (loadedConfig.componentMode ?? 'combined') === 'combined'
+    && courseStructure === 'lecture'
+    && componentMode === 'lecture';
   const isOverallPeriodConversionDraft = loadedConfig?.schemaMode === 'overall' && schemaMode === 'periods';
 
   const handleSelectOffering = async (newKey: string): Promise<boolean> => {
@@ -4345,7 +4377,7 @@ export const GradeComputation: React.FC = () => {
                     <div className="p-3 sm:p-3.5 rounded-2xl bg-clinical-50/70 dark:bg-clinical-950/30 border border-clinical-200/80 dark:border-clinical-800/50 flex flex-wrap items-center justify-between gap-3 text-xs">
                       <div className="flex-1 basis-48 min-w-0 flex items-center gap-2 text-clinical-800 dark:text-clinical-200 font-semibold">
                         <CheckCircle className="w-4 h-4 text-clinical-600 dark:text-clinical-400 shrink-0" />
-                        <span>BU Dental Medicine {loadedConfig ? 'Schema active' : 'Default grade weights'}: {componentMode === 'lecture' ? 'Lecture only' : `Lecture ${componentWeights.lecture}% / Lab ${componentWeights.laboratory}%`} • Midterm {termRatio.midterm}% / Final {termRatio.final}%</span>
+                        <span>BU Dental Medicine {isCombinedLectureOnlyDraft ? 'Lecture-only draft' : loadedConfig ? 'Schema active' : 'Default grade weights'}: {componentMode === 'lecture' ? 'Lecture only' : `Lecture ${componentWeights.lecture}% / Lab ${componentWeights.laboratory}%`} • Midterm {termRatio.midterm}% / Final {termRatio.final}%</span>
                       </div>
                       <span className="text-[11px] font-bold text-clinical-600 dark:text-clinical-400 shrink-0 whitespace-nowrap">
                         Directly editable
@@ -4389,6 +4421,12 @@ export const GradeComputation: React.FC = () => {
                         <span>Convert to Lecture/<wbr />Laboratory</span>
                       </button>
                     </div>
+                  )}
+
+                  {isCombinedLectureOnlyDraft && (
+                    <p role="note" className="rounded-lg border border-clinical-200 bg-clinical-50 px-3 py-2 text-xs text-clinical-800 dark:border-clinical-900 dark:bg-clinical-950/30 dark:text-clinical-200">
+                      Lecture-only defaults are ready: Term Exam 50%, Quiz 20%, Outputs 20%, Participation 10%, with Midterm and Final at 50% each. Attendance is not graded. Save to apply these defaults; reassign assessments from removed categories before saving.
+                    </p>
                   )}
 
                   {/* LEVEL 1: TOPMOST PERIOD TABS (MIDTERM & FINAL WITH INLINE RATIO EDITING) */}
@@ -5827,7 +5865,7 @@ export const GradeComputation: React.FC = () => {
               <input
                 id="assessment-due-date"
                 type="date"
-                value={assDueDate}
+                value={assDueDate ?? ''}
                 onChange={(e) => setAssDueDate(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
               />

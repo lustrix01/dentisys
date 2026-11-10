@@ -1,15 +1,15 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { Filter as FilterIcon, Search } from 'lucide-react';
 import { Card } from './Card';
 import { Modal } from './Modal';
 import { formatManilaWhen } from '../services/auditService';
 import { formatSessionDate } from '../utils/sessionDate';
-import { formatTime12 } from '../utils/sessionTimes';
+import { formatVisibleTime } from '../utils/timeDisplay.ts';
 import { AttendanceExcusedRequest, FacultyClassItem, decideFacultyExcusedRequestApi, getFacultyExcusedRequestsApi } from '../services/apiClient';
 
 type Filter = 'pending' | 'approved' | 'rejected';
 const word = (status?: string | null) => status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Not recorded';
-const time12 = (value?: string | null) => value ? formatTime12(value) : '—';
+const time12 = (value?: string | null) => value ? formatVisibleTime(value) : '—';
 const count = (n: number) => `${n} request${n === 1 ? '' : 's'}`;
 
 const OPEN_EVENT = 'open-secretary-request';

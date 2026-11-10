@@ -1410,7 +1410,7 @@ function handle_secretary_attendance_session_start(): void
         $pdo->beginTransaction();
         try {
             $scopeStmt = $pdo->prepare(
-                "SELECT cs.cs_id
+                "SELECT cs.cs_id, cs.meetings_recorded, cs.lec_room, cs.lab_room
                  FROM class_sections cs
                  WHERE cs.cs_id = ?
                    AND cs.secretary_user_id = ?
@@ -1418,11 +1418,13 @@ function handle_secretary_attendance_session_start(): void
                  FOR UPDATE"
             );
             $scopeStmt->execute([$csId, $authCtx['user_id']]);
-            if ($scopeStmt->fetchColumn() === false) {
+            $meetingClass = $scopeStmt->fetch(PDO::FETCH_ASSOC);
+            if (!is_array($meetingClass)) {
                 $pdo->rollBack();
                 safe_error_response('Class section is not assigned to this Secretary.', 403);
                 return;
             }
+            attendance_session_validate_selected_meeting_day($pdo, $meetingClass, $sessionDate, $data['meetingDay'] ?? null);
             if (academic_class_section_is_past($pdo, $csId)) {
                 $pdo->rollBack();
                 safe_error_response(academic_view_only_message($pdo, $csId), 409);

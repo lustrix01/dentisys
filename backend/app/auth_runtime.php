@@ -80,6 +80,8 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
     ];
     $ipScope = bin2hex(hash('sha256', 'ip:' . $context['ip_address'], true));
     rate_limit_check($rateStorage, $ipScope, 'post_auth_login', 60, 100);
+    $emailScope = bin2hex(hash('sha256', 'email:' . $email, true));
+    rate_limit_assert_not_blocked($rateStorage, $emailScope, 'post_auth_failed_login', 900, 5);
 
     $stmt = $pdo->prepare(
         "SELECT user_id, login_email, password_hash, role, display_name, status, token_version
@@ -91,13 +93,17 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
     if ($user === false) {
         password_verify($password, auth_get_dummy_hash());
         auth_audit_denial($pdo, $config, $context, 'login_failed', "Password sign-in failed for {$email}: no such account.");
+        rate_limit_record_login_failure($rateStorage, $emailScope, 'post_auth_failed_login', 900, 5, 900);
         throw new InvalidCredentialsException('Invalid credentials.');
     }
 
     if (!password_verify($password, $user['password_hash'])) {
         auth_audit_denial($pdo, $config, $context, 'login_failed', "Password sign-in failed for {$email}: wrong password.");
+        rate_limit_record_login_failure($rateStorage, $emailScope, 'post_auth_failed_login', 900, 5, 900);
         throw new InvalidCredentialsException('Invalid credentials.');
     }
+
+    rate_limit_clear($rateStorage, $emailScope, 'post_auth_failed_login');
 
     if ($user['status'] !== 'Active') {
         auth_audit_denial($pdo, $config, $context, 'login_failed', "Password sign-in refused for {$email}: account is {$user['status']}.");

@@ -70,7 +70,7 @@ export const validateBicolUEmail = (
 
   const trimmedEmail = email.trim().toLowerCase();
   const basicEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  
+
   if (!basicEmailRegex.test(trimmedEmail)) {
     return { isValid: false, message: 'Please enter a valid email format.' };
   }
@@ -82,7 +82,7 @@ export const validateBicolUEmail = (
       const display = normalizedAllowed.map(d => `@${d}`).join(', ');
       return {
         isValid: false,
-        message: `Only official institutional email addresses (${display}) are allowed.`,
+        message: `Use your ${display} email.`,
       };
     }
   }

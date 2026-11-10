@@ -25,7 +25,7 @@ function google_test_assert(bool $condition, string $message): void
 $config = app_config([
     'APP_ENV' => 'test',
     'GOOGLE_CLIENT_ID' => 'client.apps.googleusercontent.com',
-    'ALLOWED_EMAIL_DOMAINS' => 'bicol-u.edu.ph,example.edu,gmail.com',
+    'ALLOWED_EMAIL_DOMAINS' => 'bicol-u.edu.ph',
 ]);
 $config['rate_limit']['storage_dir'] = sys_get_temp_dir() . '/dentisys-google-auth-test-' . bin2hex(random_bytes(4));
 mkdir($config['rate_limit']['storage_dir'], 0700, true);
@@ -51,24 +51,15 @@ $consumerClaims = [
 $verified = google_verify_id_token($config, 'fixture', static fn(string $credential, string $audience): array => $validClaims);
 google_test_assert($verified['sub'] === 'google-subject-1', 'verified subject is returned');
 google_test_assert($verified['email'] === 'student@bicol-u.edu.ph', 'verified email is returned');
-$consumerVerified = google_verify_id_token(
-    $config,
-    'fixture',
-    static fn(string $credential, string $audience): array => $consumerClaims
-);
-google_test_assert($consumerVerified['email'] === 'tester@gmail.com', 'configured consumer Gmail domain is accepted without hosted-domain claim');
-google_test_assert($consumerVerified['hd'] === null, 'consumer Gmail without hosted-domain claim remains explicit');
-$restrictedConfig = $config;
-$restrictedConfig['app']['allowed_email_domains'] = ['bicol-u.edu.ph', 'example.edu'];
 try {
     google_verify_id_token(
-        $restrictedConfig,
+        $config,
         'fixture',
         static fn(string $credential, string $audience): array => $consumerClaims
     );
-    google_test_assert(false, 'consumer Gmail is rejected when its domain is absent from the configured allowlist');
+    google_test_assert(false, 'consumer Gmail is rejected under the BU-only allowlist');
 } catch (GoogleIdentityException $e) {
-    google_test_assert($e->reason() === 'domain_not_allowed', 'unconfigured consumer Gmail is classified as a domain-policy failure');
+    google_test_assert($e->reason() === 'domain_not_allowed', 'consumer Gmail is classified as a domain-policy failure');
 }
 
 foreach ([
@@ -92,9 +83,9 @@ try {
     google_verify_id_token(
         $config,
         'fixture',
-        static fn(string $credential, string $audience): array => array_merge($consumerClaims, ['hd' => 'bicol-u.edu.ph'])
+        static fn(string $credential, string $audience): array => array_merge($validClaims, ['hd' => 'other.edu'])
     );
-    google_test_assert(false, 'hosted domain that disagrees with consumer Gmail is rejected');
+    google_test_assert(false, 'hosted domain that disagrees with the BU institutional email is rejected');
 } catch (GoogleIdentityException $e) {
     google_test_assert($e->reason() === 'domain_not_allowed', 'hosted-domain mismatch is classified as a domain-policy failure');
 }
@@ -111,7 +102,7 @@ try {
 putenv('ALLOWED_EMAIL_DOMAINS');
 putenv('ALLOWED_EMAIL_DOMAIN');
 $fallbackConfig = app_config(['ALLOWED_EMAIL_DOMAIN' => 'legacy.edu']);
-google_test_assert($fallbackConfig['app']['allowed_email_domains'] === ['legacy.edu'], 'singular domain fallback is normalized');
+google_test_assert($fallbackConfig['app']['allowed_email_domains'] === ['bicol-u.edu.ph'], 'legacy singular domain configuration is enforced to the BU-only allowlist');
 google_test_assert(class_exists('Google\\Auth\\AccessToken'), 'Google AccessToken is available');
 google_test_assert(class_exists('phpseclib3\\Crypt\\RSA'), 'phpseclib RSA support is available');
 

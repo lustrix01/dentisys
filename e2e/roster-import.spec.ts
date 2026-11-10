@@ -123,14 +123,14 @@ test('retry resolves a committed student after the creation response is lost', a
 test('missing institutional email blocks saves until a valid allowed email is supplied', async ({ page }) => {
   const { creates, enrolls } = await setup(page);
   await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'fictional-missing-email.csv', mimeType: 'text/csv', buffer: Buffer.from('Student ID,First Name,Last Name,Institutional Email\n2099-2222-33333,Ana,Reyes,') });
-  await expect(page.getByText('Institutional email is required before this row can be imported.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Institutional email is required. Enter a complete @bicol-u.edu.ph address before importing this row.', { exact: true })).toBeVisible();
   await page.getByRole('checkbox', { name: /I reviewed the source course/ }).check();
   await expect(page.getByRole('button', { name: 'Confirm & import (0) Students' })).toBeDisabled();
   await expect(page.getByLabel('Include student 2099-2222-33333', { exact: true })).toBeDisabled();
   expect(creates).toHaveLength(0);
   expect(enrolls).toHaveLength(0);
   await page.getByLabel('Email for 2099-2222-33333', { exact: true }).fill('ana@outside.edu');
-  await expect(page.getByText('Email domain is not allowed by the server configuration.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Only official @bicol-u.edu.ph addresses can be imported. Replace this address, then try again.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Confirm & import (0) Students' })).toBeDisabled();
   await page.getByLabel('Email for 2099-2222-33333', { exact: true }).fill('ana.required@bicol-u.edu.ph');
   await page.getByRole('button', { name: 'Confirm & import (1) Students' }).click();

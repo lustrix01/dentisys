@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
+import { validateBicolUEmail } from '../../services/authService';
 import {
   login as apiLogin,
   getMe,
@@ -14,6 +15,9 @@ import {
 } from '../../services/apiClient';
 
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
+const emailDomainError = (value: string): string => value.includes('@')
+  ? validateBicolUEmail(value, [DEFAULT_EMAIL_DOMAIN]).message
+  : '';
 
 function completeInstitutionalEmail(value: string): string {
   const trimmed = value.trim();
@@ -201,7 +205,12 @@ export function SsoLogin() {
     e.preventDefault();
     const loginEmail = completeInstitutionalEmail(email);
     if (!loginEmail || !password) {
-      setError('Please fill in all fields.');
+      setError('Enter your university email and password to continue.');
+      return;
+    }
+    const emailValidation = validateBicolUEmail(loginEmail, [DEFAULT_EMAIL_DOMAIN]);
+    if (!emailValidation.isValid) {
+      setError(emailValidation.message);
       return;
     }
 
@@ -229,11 +238,11 @@ export function SsoLogin() {
   };
 
   return (
-    <div className="min-h-screen min-h-[100dvh] w-full bg-slate-100 flex items-center justify-center px-4 py-8 font-sans text-slate-800">
-      <div className="w-full max-w-4xl min-h-[500px] md:h-[min(580px,calc(100dvh-3rem))] md:min-h-0 md:flex overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+    <div className="h-screen h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-slate-100 flex items-center justify-center px-0 sm:px-4 font-sans text-slate-800">
+      <div className="flex h-full w-full max-w-4xl max-h-full overflow-hidden rounded-none border-0 bg-white shadow-lg sm:rounded-2xl sm:border border-slate-200 md:h-[min(580px,calc(100dvh-3rem))]">
 
-      <main className="w-full md:order-2 md:w-1/2 min-h-0 bg-white p-5 sm:p-7 lg:p-8 flex flex-col justify-between overflow-y-auto">
-        
+      <main className="h-full w-full md:order-2 md:w-1/2 min-h-0 bg-white flex flex-col justify-between overflow-hidden p-4 sm:p-7 lg:p-8">
+
         <div className="flex justify-start">
           <button
             type="button"
@@ -246,7 +255,24 @@ export function SsoLogin() {
         </div>
 
         {/* Center: Main Form Block */}
-        <div className="w-full max-w-sm mx-auto my-auto py-5 space-y-5">
+        <div className={`w-full max-w-sm mx-auto my-auto ${error ? 'py-0 space-y-2' : 'py-2 sm:py-5 space-y-3 sm:space-y-5'}`}>
+
+          {/* Compact mobile branding; the desktop brand remains in the left panel. */}
+          <div className="md:hidden flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-white via-purple-50/80 to-white py-2">
+            <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-purple-100">
+              <span className="absolute inset-1 rounded-full bg-purple-100/70 blur-md" aria-hidden="true" />
+              <img
+                src="/bu-cdm-logo.png"
+                alt=""
+                aria-hidden="true"
+                className="relative h-10 w-10 object-contain"
+              />
+            </span>
+            <span className="text-left">
+              <span className="block text-base font-bold tracking-tight text-slate-900">DentiSYS</span>
+              <span className="block text-[10px] font-medium text-slate-500">BU College of Dental Medicine</span>
+            </span>
+          </div>
 
           {/* Login heading */}
           <div className="space-y-1">
@@ -306,14 +332,13 @@ export function SsoLogin() {
 
           {/* Error Message */}
           {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-medium text-rose-700 flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 flex-shrink-0" />
+            <div role="alert" aria-live="polite" className="p-2 bg-rose-50 border border-rose-200 rounded-xl text-xs font-medium text-rose-700 sm:p-2.5">
               <span>{error}</span>
             </div>
           )}
 
           {/* 1. TOP: Credentials Form */}
-          <form className="space-y-4" onSubmit={handleLogin}>
+          <form className={error ? 'space-y-2 sm:space-y-3' : 'space-y-3 sm:space-y-4'} onSubmit={handleLogin}>
             {/* University email */}
             <div>
               <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700 mb-1.5">
@@ -338,6 +363,7 @@ export function SsoLogin() {
                     </span>
                   )}
                 </div>
+                {emailDomainError(email) && <p role="alert" className="mt-1 text-xs font-medium text-rose-600">{emailDomainError(email)}</p>}
               </div>
             </div>
 
@@ -384,7 +410,7 @@ export function SsoLogin() {
 
           {/* 2. NEXT: Google Sign In */}
           {!linkChallengeToken && (
-            <div className="space-y-3 pt-1">
+            <div className={error ? 'space-y-2' : 'space-y-3 pt-1'}>
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-px bg-slate-200" />
                 <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -435,7 +461,7 @@ export function SsoLogin() {
           )}
 
           {/* 3. NEXT: Forgot Password */}
-          <div className="pt-1 text-center">
+          <div className="text-center">
             <Link
               to="/forgot-password"
               className="whitespace-nowrap text-xs font-semibold text-purple-600 hover:text-purple-700 hover:underline transition-colors"
@@ -476,5 +502,3 @@ export function SsoLogin() {
     </div>
   );
 }
-
-

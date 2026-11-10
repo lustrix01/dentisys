@@ -120,7 +120,7 @@ function email_render(array $email): string
         . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#ffffff;border:1px solid #e5e7eb;border-collapse:separate;">'
         . '<tr><td style="padding:18px 24px;border-bottom:3px solid #176b4d;font-family:' . $font . ';">'
         . '<p style="margin:0 0 4px;font-size:12px;line-height:18px;color:#4b5563;">Bicol University &middot; College of Dental Medicine</p>'
-        . '<p style="margin:0;font-size:18px;line-height:24px;font-weight:bold;color:#1f2937;">DentiSys Academic Portal</p>'
+        . '<p style="margin:0;font-size:18px;line-height:24px;font-weight:bold;color:#1f2937;">DentiSYS Academic Portal</p>'
         . '</td></tr>'
         . '<tr><td style="padding:24px;font-family:' . $font . ';">' . $body . '</td></tr>'
         . '<tr><td style="padding:16px 24px 20px;border-top:1px solid #e5e7eb;font-family:' . $font . ';">' . $sig . '</td></tr>'

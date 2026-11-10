@@ -45,7 +45,7 @@ echo "=== Validation Unit Tests ===\n\n";
 echo "--- Email ---\n";
 
 assert_same('user@example.com', validate_email(' user@example.com '), 'Generic email valid');
-assert_throws(fn() => validate_email('not-an-email'), 'not valid', 'Invalid email rejected');
+assert_throws(fn() => validate_email('not-an-email'), 'complete email address', 'Invalid email rejected with correction guidance');
 assert_throws(fn() => validate_email(''), 'required', 'Empty email rejected');
 assert_throws(fn() => validate_email('   '), 'required', 'Whitespace-only email rejected');
 
@@ -80,7 +80,7 @@ echo "\n--- Strings ---\n";
 
 assert_same('hello', validate_required_string(['name' => ' hello '], 'name', 1, 100), 'String trimmed');
 assert_throws(fn() => validate_required_string(['name' => 'ab'], 'name', 5, 100), 'at least 5', 'Too short rejected');
-assert_throws(fn() => validate_required_string(['name' => str_repeat('x', 200)], 'name', 1, 100), 'not exceed 100', 'Too long rejected');
+assert_throws(fn() => validate_required_string(['name' => str_repeat('x', 200)], 'name', 1, 100), 'no more than 100', 'Too long rejected with correction guidance');
 assert_throws(fn() => validate_required_string(['x' => 'v'], 'missing', 1, 100), 'required', 'Missing field rejected');
 
 assert_same(null, validate_optional_string(['name' => ''], 'name', 1, 100), 'Empty optional returns null');
@@ -96,14 +96,14 @@ assert_throws(fn() => validate_required_string(["field" => "hello\x7Fworld"], 'f
 echo "\n--- Enum ---\n";
 
 assert_same('admin', validate_enum(['role' => 'admin'], 'role', ['admin', 'faculty', 'secretary']), 'Valid enum accepted');
-assert_throws(fn() => validate_enum(['role' => 'student'], 'role', ['admin', 'faculty']), 'not in the allowed set', 'Invalid enum rejected');
+assert_throws(fn() => validate_enum(['role' => 'student'], 'role', ['admin', 'faculty']), 'Choose one of the available options', 'Invalid enum rejected with correction guidance');
 
 echo "\n--- Integer ---\n";
 
 assert_same(5, validate_int(['val' => 5], 'val', 1, 10), 'Valid int accepted');
 assert_throws(fn() => validate_int(['val' => 0], 'val', 1, 10), 'between 1 and 10', 'Int below min rejected');
 assert_throws(fn() => validate_int(['val' => 20], 'val', 1, 10), 'between 1 and 10', 'Int above max rejected');
-assert_throws(fn() => validate_int(['val' => 'notint'], 'val', 1, 10), 'must be an integer', 'Non-int rejected');
+assert_throws(fn() => validate_int(['val' => 'notint'], 'val', 1, 10), 'must be a whole number', 'Non-int rejected');
 
 echo "\n--- UUID ---\n";
 
@@ -129,7 +129,7 @@ try {
 }
 
 // Field normalization
-assert_throws(fn() => validate_person_name(['firstName' => ".-'"], 'firstName'), 'Name can only contain', 'Punctuation-only name rejected');
+assert_throws(fn() => validate_person_name(['firstName' => ".-'"], 'firstName'), 'Use letters, spaces, hyphens', 'Punctuation-only name rejected with correction guidance');
 assert_same('María', validate_person_name(['firstName' => 'María'], 'firstName'), 'Accented name accepted');
 foreach ([['dr', 'prefix', 'Dr.'], ['ms', 'prefix', 'Ms.'], ['ms', 'suffix', 'MS'], ['jr', 'suffix', 'Jr.'], ['dmd, phd', 'suffix', 'DMD, PhD'],
     ['DMD, MSc', 'suffix', 'DMD, MSc'], ['DMD, MPH', 'suffix', 'DMD, MPH'], ['Esq', 'suffix', 'Esq'], ['Dr.', 'prefix', 'Dr.']] as [$in, $field, $out]) {
@@ -139,11 +139,14 @@ assert_same('DMD, MS', validate_optional_name_affix(['suffix' => 'dmd, ms'], 'su
 foreach ([['male', 'M'], [' F ', 'F'], ['FEMALE', 'F'], ['', null], [null, null]] as [$in, $out]) {
     assert_same($out, validate_optional_sex(['sex' => $in], 'sex'), 'Sex ' . var_export($in, true));
 }
-assert_throws(fn() => validate_optional_sex(['sex' => 'X'], 'sex'), 'Sex must be Male or Female.', 'Unknown sex rejected');
+assert_throws(fn() => validate_optional_sex(['sex' => 'X'], 'sex'), 'Choose Male or Female from the list', 'Unknown sex rejected with correction guidance');
 foreach ([['0917 123 4567', '09171234567'], ['+63 917-123-4567', '09171234567'], ['(0917)1234567', '09171234567'], ['639171234567', '09171234567'], ['', null]] as [$in, $out]) {
     assert_same($out, validate_optional_ph_mobile(['contact' => $in], 'contact'), "Mobile '$in'");
 }
-assert_throws(fn() => validate_optional_ph_mobile(['contact' => '001234'], 'contact'), 'Enter a Philippine mobile number, e.g. 0917 123 4567.', 'Non-mobile contact rejected');
+assert_throws(fn() => validate_optional_ph_mobile(['contact' => '001234'], 'contact'), 'Enter a Philippine mobile number such as 0917 123 4567', 'Non-mobile contact rejected with correction guidance');
+
+$mappedValidation = new ValidationException(['sessionDate' => 'Choose a future date and try again.']);
+assert_same([['field' => 'sessionDate', 'message' => 'Choose a future date and try again.']], $mappedValidation->getErrors(), 'Field-to-message validation maps normalize to the API error shape');
 assert_same('SECTION 3 A', normalize_spaces("  section   3  A ", true), 'Spaces collapsed and upper-cased');
 
 echo "\n=== ALL VALIDATION TESTS PASSED ===\n";

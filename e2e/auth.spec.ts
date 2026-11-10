@@ -46,7 +46,7 @@ test.describe('Auth Module E2E Tests', () => {
     await page.goto('/login');
     await expect(page).toHaveTitle(/DentiSys/i);
     await expect(page.locator('h1')).toHaveText('Login');
-    await expect(page.getByText('DentiSYS').first()).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'DentiSYS' })).toBeVisible();
 
     const emailInput = page.locator('input[inputmode="email"]');
     const passwordInput = page.locator('input[type="password"]');

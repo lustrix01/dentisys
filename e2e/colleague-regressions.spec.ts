@@ -56,7 +56,7 @@ test('Student Classes reads canonical meetings including Sunday and avoids fabri
   }] } }));
   await page.goto('/student/classes');
   await expect(page.getByRole('tab', { name: /Current Classes \(2027-2028\)/ })).toBeVisible();
-  await expect(page.getByText(/Sun 01:00 PM - 02:00 PM · New clinic; Tue 09:00 AM - 10:00 AM · Clinic 2/)).toBeVisible();
+  await expect(page.getByText(/Sun 1:00 PM - 2:00 PM · New clinic; Tue 9:00 AM - 10:00 AM · Clinic 2/)).toBeVisible();
   await expect(page.getByRole('main')).not.toContainText('Mon 08:00 AM');
   await expect(page.getByRole('main')).not.toContainText('2023-2689-70869');
 });

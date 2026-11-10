@@ -209,10 +209,10 @@ assert_throws(
     'non-positive biometric challenge TTL is rejected'
 );
 
-$multiDomain = app_config(['ALLOWED_EMAIL_DOMAINS' => ' BICOL-U.EDU.PH, example.edu, bicol-u.edu.ph ']);
-assert_same(['bicol-u.edu.ph', 'example.edu'], $multiDomain['app']['allowed_email_domains'], 'plural domains normalize and deduplicate');
-assert_same('example.edu', app_config(['ALLOWED_EMAIL_DOMAIN' => 'example.edu'])['app']['allowed_email_domains'][0], 'singular domain remains a fallback');
-assert_same(['bicol-u.edu.ph'], app_config(['ALLOWED_EMAIL_DOMAINS' => 'bicol-u.edu.ph', 'ALLOWED_EMAIL_DOMAIN' => 'example.edu'])['app']['allowed_email_domains'], 'plural domain configuration wins');
+$legacyMultiDomain = app_config(['ALLOWED_EMAIL_DOMAINS' => ' BICOL-U.EDU.PH, example.edu, bicol-u.edu.ph ']);
+assert_same(['bicol-u.edu.ph'], $legacyMultiDomain['app']['allowed_email_domains'], 'legacy multi-domain configuration is normalized to the enforced BU-only allowlist');
+assert_same('bicol-u.edu.ph', app_config(['ALLOWED_EMAIL_DOMAIN' => 'example.edu'])['app']['allowed_email_domains'][0], 'singular domain fallback is also enforced to BU-only');
+assert_same(['bicol-u.edu.ph'], app_config(['ALLOWED_EMAIL_DOMAINS' => 'bicol-u.edu.ph', 'ALLOWED_EMAIL_DOMAIN' => 'example.edu'])['app']['allowed_email_domains'], 'plural domain configuration wins and remains BU-only');
 assert_throws(static fn() => app_config(['ALLOWED_EMAIL_DOMAINS' => 'https://example.edu']), 'malformed', 'malformed domain configuration is rejected');
 assert_throws(static fn() => app_config(['ALLOWED_EMAIL_DOMAINS' => '']), 'at least one domain', 'empty plural domain configuration is rejected');
 

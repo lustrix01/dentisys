@@ -29,6 +29,11 @@ export interface ParsedRosterStudent {
 const NAME_SUFFIX = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i;
 const SURNAME_PARTICLE = /^(de|del|dela|delos|delas|dos|san|santa|sta\.?|sto\.?|van|von|da|di|du|la|los|las)$/i;
 
+/** CSV template offered by the roster importer. */
+export function getSampleRegistrarCSV(): string {
+  return 'Student ID,Last Name,First Name,Middle Name,Email,Year Level,Sex,Contact #\n2099-1234-56789,Dela Cruz,Ana,Reyes,ana.fixture@bicol-u.edu.ph,4,Female,\n2099-01-12345,Peña,José,,jose.fixture@bicol-u.edu.ph,3,Male,';
+}
+
 /** Last, First Middle: last given token (with surname particles) is the middle name; the Faculty still reviews every split. */
 export function splitFullName(rawName: string) {
   const cleaned = rawName.normalize('NFC').trim().replace(/\s+/g, ' ');
@@ -77,12 +82,12 @@ export function validateRosterStudents(rows: ParsedRosterStudent[], allowedDomai
   }
   return rows.map(row => {
     const errors: string[] = [];
-    if (row.studentId.trim().length < 3) errors.push('Student number must contain at least 3 characters.');
-    if (row.studentId.trim().length > 50) errors.push('Student number must contain at most 50 characters.');
+    if (row.studentId.trim().length < 3) errors.push('Student number must contain at least 3 characters. Add the missing characters, then try again.');
+    if (row.studentId.trim().length > 50) errors.push('Student number must contain at most 50 characters. Shorten it, then try again.');
     const contact = normalizePhMobile(row.contact ?? '');
     if (contact === null) errors.push(PH_MOBILE_MESSAGE);
     const sex = normalizeRosterSex(row.sex ?? '');
-    if ((counts.get(row.studentId.trim().toLowerCase()) ?? 0) > 1) errors.push('Duplicate student number in this file.');
+    if ((counts.get(row.studentId.trim().toLowerCase()) ?? 0) > 1) errors.push('Duplicate student number in this file. Keep one row per student number, then try again.');
     for (const key of ['prefix', 'firstName', 'middleName', 'lastName', 'suffix'] as const) {
       const raw = row[key] ?? '';
       const error = personNameFieldError(key, raw);
@@ -91,16 +96,16 @@ export function validateRosterStudents(rows: ParsedRosterStudent[], allowedDomai
       const normalized = affix ? normalizeNameAffix(raw.trim(), key === 'prefix' ? 'prefix' : 'suffix') : raw.trim().replace(/\s+/g, ' ').replace(/(^| )(jr|sr)\.?(?= |$)/gi, '$1$2.');
       const maxBytes = affix ? 50 : 100;
       const label = { prefix: 'Prefix', firstName: 'First name', middleName: 'Middle name', lastName: 'Last name', suffix: 'Suffix' }[key];
-      if (new TextEncoder().encode(normalized).length > maxBytes) errors.push(`${label} must contain at most ${maxBytes} UTF-8 bytes.`);
+      if (new TextEncoder().encode(normalized).length > maxBytes) errors.push(`${label} must contain at most ${maxBytes} UTF-8 bytes. Shorten it, then try again.`);
     }
-    if (!row.email.trim()) errors.push('Institutional email is required before this row can be imported.');
+    if (!row.email.trim()) errors.push('Institutional email is required. Enter a complete @bicol-u.edu.ph address before importing this row.');
     else {
       const email = row.email.trim();
-      if (new TextEncoder().encode(email).length > 254) errors.push('Email must contain at most 254 UTF-8 bytes.');
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Provide a complete institutional email address.');
-      else if (!allowedDomains.some(domain => domain.toLowerCase() === email.split('@')[1].toLowerCase())) errors.push('Email domain is not allowed by the server configuration.');
+      if (new TextEncoder().encode(email).length > 254) errors.push('Email must contain at most 254 UTF-8 bytes. Shorten the address, then try again.');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Enter a complete email address such as name@bicol-u.edu.ph, then check for spelling errors.');
+      else if (!allowedDomains.some(domain => domain.toLowerCase() === email.split('@')[1].toLowerCase())) errors.push('Only official @bicol-u.edu.ph addresses can be imported. Replace this address, then try again.');
     }
-    if (row.yearLevel !== null && (!Number.isInteger(row.yearLevel) || row.yearLevel < 1 || row.yearLevel > 6)) errors.push('Year level must be between 1 and 6, or blank.');
+    if (row.yearLevel !== null && (!Number.isInteger(row.yearLevel) || row.yearLevel < 1 || row.yearLevel > 6)) errors.push('Year level must be a whole number from 1 to 6, or blank. Correct the value, then try again.');
     const needsReview = !row.reviewed && (row.requiresNameReview || row.possibleCrossedOut);
     return { ...row, sex, ...(contact !== null && row.contact !== undefined ? { contact } : {}), status: errors.length ? 'error' : needsReview ? 'warning' : 'valid', validationMessage: errors.length ? errors.join(' ') : needsReview ? 'Review the source and name fields before selecting this row.' : undefined };
   });
@@ -397,8 +402,4 @@ export function parsePDFRoster(pages: RosterPDFPage[]): RosterPDFResult {
   }
   const header = parsePDFHeader(headerText, headerLines);
   return { students, total, header, official: hasProgram || Boolean(header.courseCode) };
-}
-
-export function getSampleRegistrarCSV(): string {
-  return 'Student ID,Last Name,First Name,Middle Name,Email,Year Level,Sex,Contact #\n2099-1234-56789,Dela Cruz,Ana,Reyes,ana.fixture@bicol-u.edu.ph,4,Female,\n2099-01-12345,Peña,José,,jose.fixture@bicol-u.edu.ph,3,Male,';
 }

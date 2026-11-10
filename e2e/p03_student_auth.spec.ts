@@ -360,7 +360,7 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(main.getByText('Open · Present until 10:30')).toBeVisible();
     await expect(main.getByText('Opens in 3h 30m')).toBeVisible();
     await expect(main.getByText('WEEK103')).toBeVisible();
-    await expect(main.getByText('Thu, Oct 15 · 08:00–11:00')).toBeVisible();
+    await expect(main.getByText('Thu, Oct 15 · 8:00 AM–11:00 AM')).toBeVisible();
     await expect(main.getByText('FAR104')).toHaveCount(0);
 
     await main.getByRole('button', { name: 'Show all upcoming' }).click();
@@ -398,8 +398,8 @@ test.describe('P03 Student identity and authentication', () => {
     await page.goto('/student/attendance');
     const main = page.getByRole('main');
     await expect(main.getByText('NIGHT101').first()).toBeVisible();
-    await expect(main.getByText('23:00–02:00 (next day)')).toBeVisible();
-    if (!closed) await expect(main.getByText('Open · Late until 01:00 (next day)')).toBeVisible();
+    await expect(main.getByText('11:00 PM–2:00 AM (next day)')).toBeVisible();
+    if (!closed) await expect(main.getByText('Open · Late until 1:00 AM (next day)')).toBeVisible();
   });
   }
 

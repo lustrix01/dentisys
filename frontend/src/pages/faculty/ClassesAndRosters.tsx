@@ -1,4 +1,4 @@
-import { filterPersonNameInput, preventInvalidPersonNameKey } from '../../utils/personNameValidation';
+import { filterPersonNameInput, personNameFieldError, preventInvalidPersonNameKey, type PersonNamePartKey } from '../../utils/personNameValidation';
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import {
@@ -73,12 +73,14 @@ import { RoomSelector, RetiredRoomWarning, retiredRoomError, useRooms } from '..
 import { OverlapConfirmModal, overlapsFrom, type BookingOverlap } from '../../components/OverlapConfirmModal';
 import { RosterImportModal } from '../../components/RosterImportModal';
 import { recordAudit } from '../../services/auditService';
-import { createSecretaryInvitation, fetchSecretaryInvitations, type SecretaryInvitation } from '../../services/authService';
+import { createSecretaryInvitation, fetchSecretaryInvitations, validateBicolUEmail, type SecretaryInvitation } from '../../services/authService';
 import { useAuth } from '../../context/AuthContext';
 import { downloadXlsx } from '../../utils/xlsxDownload';
 import { buildClassList, termLine } from '../../utils/reportWorkbook';
 
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
+const isOfficialBicolEmail = (email: string): boolean => validateBicolUEmail(email, [DEFAULT_EMAIL_DOMAIN]).isValid;
+const nameFieldError = (key: PersonNamePartKey, value: string): string | null => value.trim() ? personNameFieldError(key, value) : null;
 
 type CourseComponents = 'both' | 'lecture' | 'lab';
 
@@ -119,7 +121,7 @@ const venueSummary = (cls: FacultyClassItem, component: 'Lecture' | 'Laboratory'
   const rows = (cls.meetings ?? []).filter(meeting => meeting.component === component);
   if (rows.length === 0) return fallback || null;
   if (fallback && fallback.split(';').length !== rows.length) return fallback; // keep legacy text that has no meeting
-  const clock = (time: string) => displayMeetingTime(time).replace(/^0/, '');
+  const clock = (time: string) => displayMeetingTime(time);
   const groups = new Map<string, { room: string; days: string[]; start: string; end: string }>();
   for (const m of rows) {
     const key = `${m.room}|${m.startTime}|${m.endTime}`;
@@ -769,6 +771,10 @@ export const ClassesAndRosters: React.FC = () => {
       setEditStudentError('Institutional email is required for roster edits.');
       return;
     }
+    if (!isOfficialBicolEmail(email)) {
+      setEditStudentError('Use an official @bicol-u.edu.ph email address.');
+      return;
+    }
     if (!Number.isInteger(editStudentYearLevel) || editStudentYearLevel < 1 || editStudentYearLevel > 6) {
       setEditStudentError('Year level must be between 1 and 6.');
       return;
@@ -1019,7 +1025,8 @@ export const ClassesAndRosters: React.FC = () => {
     if (newComponents !== 'lab' && parseUnitsInput(newLectureUnits) === null) add('lecUnits', 'Lecture Units', unitsMsg);
     if (newComponents !== 'lecture' && parseUnitsInput(newLabUnits) === null) add('labUnits', 'Laboratory Units', unitsMsg);
     if (!newBlock.trim()) add('block', 'Section / Block', 'Enter the section or block.');
-    if (!newTermId || !academicTerms.some(term => String(term.id) === newTermId)) add('term', 'Academic term', 'Choose an academic term.');
+    if (academicTerms.length === 0) add('term', 'Academic term', `No open term is available for ${newSchoolYear}. Ask the Dean to add the term, then try again.`);
+    else if (!newTermId || !academicTerms.some(term => String(term.id) === newTermId)) add('term', 'Academic term', 'Choose an academic term.');
     sessionSlots.forEach(slot => {
       const kind = slot.type.toLowerCase();
       if (!slot.room.trim()) add(`room-${slot.id}`, `${slot.type} room`, `Choose a ${kind} room.`);
@@ -1027,7 +1034,7 @@ export const ClassesAndRosters: React.FC = () => {
       if (slot.days.length === 0) add(`days-${slot.id}`, `${slot.type} days`, `Pick at least one ${kind} day.`);
     });
     return out;
-  }, [newCourseCode, newCourseName, newComponents, newLectureUnits, newLabUnits, newBlock, newTermId, academicTerms, sessionSlots, rooms]);
+  }, [newCourseCode, newCourseName, newComponents, newLectureUnits, newLabUnits, newBlock, newTermId, newSchoolYear, academicTerms, sessionSlots, rooms]);
   const shownProblems = createAttempted ? createClassProblems : [];
   const problemMsg = (key: string) => shownProblems.find(p => p.key === key)?.message;
   const invalidCls = 'border-rose-300 dark:border-rose-700 bg-rose-50/60 dark:bg-rose-950/30';
@@ -1148,6 +1155,10 @@ export const ClassesAndRosters: React.FC = () => {
   const handleRegisterNewStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (existingStudentMatch) {
+      if (!isOfficialBicolEmail(existingStudentMatch.email)) {
+        showFeedback(`Cannot add ${existingStudentMatch.name}: correct the Student's email to an official @bicol-u.edu.ph address in the roster, then try again.`, 'error');
+        return;
+      }
       if (!targetEnrollCsId || targetEnrollCsId <= 0) {
         showFeedback('Please select a target class section.', 'error');
         return;
@@ -1177,6 +1188,11 @@ export const ClassesAndRosters: React.FC = () => {
       showFeedback('Please fill in Student ID, first name, last name, and email.', 'error');
       return;
     }
+    const normalizedEmail = (studentEmailInput.includes('@') ? studentEmailInput.trim() : `${studentEmailInput.trim()}@${DEFAULT_EMAIL_DOMAIN}`).toLowerCase();
+    if (!isOfficialBicolEmail(normalizedEmail)) {
+      showFeedback('Use an official @bicol-u.edu.ph email address.', 'error');
+      return;
+    }
     if (!targetEnrollCsId || targetEnrollCsId <= 0) {
       showFeedback('Please select a target class section.', 'error');
       return;
@@ -1191,7 +1207,7 @@ export const ClassesAndRosters: React.FC = () => {
         firstName: studentFirstName.trim(),
         middleName: studentMiddleName.trim() || undefined,
         lastName: studentLastName.trim(),
-        email: (studentEmailInput.includes('@') ? studentEmailInput.trim() : `${studentEmailInput.trim()}@bicol-u.edu.ph`).toLowerCase(),
+        email: normalizedEmail,
         yearLevel: studentYearInput,
         classId: String(targetEnrollCsId),
       });
@@ -1280,6 +1296,10 @@ export const ClassesAndRosters: React.FC = () => {
     || pendingSecretaryInvs.some(inv => inv.className === className);
 
   const handleMakeSecretary = async (student: Student, classId: string, className: string) => {
+    if (!isOfficialBicolEmail(student.email)) {
+      showFeedback('Only official @bicol-u.edu.ph addresses can receive invitations.', 'error');
+      return;
+    }
     const res = await createSecretaryInvitation({
       studentId: student.studentId,
       studentName: student.name,
@@ -1309,6 +1329,10 @@ export const ClassesAndRosters: React.FC = () => {
   };
 
   const handleSendStudentEmailInvite = async (student: Student) => {
+    if (!isOfficialBicolEmail(student.email)) {
+      setNotification({ type: 'info', message: `Cannot invite ${student.name}: use an official @bicol-u.edu.ph address.` });
+      return;
+    }
     const classId = invitationClassId(student);
     if (!classId) {
       setNotification({ type: 'info', message: `${student.name} has no server-authoritative class enrollment to invite from.` });
@@ -1371,11 +1395,13 @@ export const ClassesAndRosters: React.FC = () => {
 
 const handleSendAllStudentInvites = async () => {
     setIsSendingInvitations(true);
-    const invitable = filteredStudents.filter(student => {
+    const needsInvitation = filteredStudents.filter(student => {
       const accountStatus = student.accountStatus ?? 'none';
       return accountStatus === 'none' || accountStatus === 'pending';
     });
-    const alreadyRegistered = filteredStudents.length - invitable.length;
+    const invitable = needsInvitation.filter(student => isOfficialBicolEmail(student.email));
+    const unsupportedEmailCount = needsInvitation.length - invitable.length;
+    const alreadyRegistered = filteredStudents.length - needsInvitation.length;
     const emailActionId = crypto.randomUUID(); // one id for the whole bulk click
     const results = await Promise.all(invitable.map(async student => {
       const classId = invitationClassId(student);
@@ -1389,13 +1415,16 @@ const handleSendAllStudentInvites = async () => {
     }));
     const invited = results.filter(result => result.issued).length;
     const deliveryFailed = results.filter(result => result.deliveryFailed).length;
-    const skippedNote = alreadyRegistered > 0 ? ` ${alreadyRegistered} already registered (skipped).` : '';
+    const skippedNote = `${alreadyRegistered > 0 ? ` ${alreadyRegistered} already registered (skipped).` : ''}${unsupportedEmailCount > 0 ? ` ${unsupportedEmailCount} skipped: only @bicol-u.edu.ph addresses can receive invitations.` : ''}`;
+    const resultMessage = invitable.length === 0
+      ? 'No Student invitations were issued.'
+      : deliveryFailed > 0
+        ? `Issued ${invited} of ${results.length} Student invitations; ${deliveryFailed} email deliveries failed. Review the roster and retry any that failed.`
+        : `Issued ${invited} of ${results.length} Student invitations. Review the roster and retry any that failed.`;
     setIsSendingInvitations(false);
     setNotification({
-      type: invited === results.length && deliveryFailed === 0 ? 'success' : 'info',
-      message: deliveryFailed > 0
-        ? `Issued ${invited} of ${results.length} Student invitations; ${deliveryFailed} email deliveries failed. Review the roster and retry any that failed.${skippedNote}`
-        : `Issued ${invited} of ${results.length} Student invitations. Review the roster and retry any that failed.${skippedNote}`,
+      type: invited === results.length && deliveryFailed === 0 && unsupportedEmailCount === 0 ? 'success' : 'info',
+      message: `${resultMessage}${skippedNote}`,
     });
     await fetchData();
   };
@@ -1879,7 +1908,7 @@ const handleSendAllStudentInvites = async () => {
       {activeTab === 'roster' && (
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex flex-col items-start gap-1.5 min-w-0">
               <button
                 type="button"
                 onClick={() => {
@@ -1887,7 +1916,7 @@ const handleSendAllStudentInvites = async () => {
                   setActiveTab('classes');
                   setSearchQuery('');
                 }}
-                className="inline-flex items-center gap-1.5 whitespace-nowrap px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer group flex-shrink-0 shadow-xs"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-1.5 py-1 text-xs font-semibold text-slate-500 transition-colors hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-slate-400 dark:hover:text-slate-100 cursor-pointer group flex-shrink-0"
               >
                 <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
                 <span>Back to classes</span>
@@ -2024,6 +2053,7 @@ const handleSendAllStudentInvites = async () => {
                         </td>
                         <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 max-md:order-4 max-md:w-full max-md:p-0 max-md:break-all">
                           <span className="sr-only md:hidden">BU Email Address: </span>{st.email}
+                          {!isOfficialBicolEmail(st.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Only @bicol-u.edu.ph addresses can receive invitations.</span>}
                         </td>
                         <td className="py-3.5 px-4 max-md:order-5 max-md:p-0">
                           <span className="sr-only md:hidden">Enrolled Class Section: </span>
@@ -2041,6 +2071,9 @@ const handleSendAllStudentInvites = async () => {
                             )}
                             {(() => {
                               const accountStatus = st.accountStatus ?? 'none';
+                              if (!isOfficialBicolEmail(st.email)) {
+                                return <span className="whitespace-nowrap rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">Unsupported email domain</span>;
+                              }
                               if (accountStatus === 'active' || accountStatus === 'secretary') {
                                 return (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
@@ -2111,9 +2144,9 @@ const handleSendAllStudentInvites = async () => {
                                         setOpenStudentMenuId(null);
                                         handleSendStudentEmailInvite(st);
                                       }}
-                                      disabled={isSendingInvitations || isRegistered}
+                                      disabled={isSendingInvitations || isRegistered || !isOfficialBicolEmail(st.email)}
                                       className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                                      title={isRegistered ? 'Student already has an active account' : undefined}
+                                      title={!isOfficialBicolEmail(st.email) ? 'Only @bicol-u.edu.ph addresses are supported' : isRegistered ? 'Student already has an active account' : undefined}
                                     >
                                       <Send className="w-3.5 h-3.5 text-emerald-500" />
                                       <span>{isRegistered ? 'Already registered' : isReissue ? 'Reissue invite' : 'Send invite'}</span>
@@ -2239,7 +2272,9 @@ const handleSendAllStudentInvites = async () => {
                   {loadingAvailable
                     ? <span className="text-slate-500 dark:text-slate-400">Checking existing students…</span>
                     : existingStudentMatch
-                      ? <span className="text-emerald-600 dark:text-emerald-400">Existing student found: {existingStudentMatch.name}. Their details are filled in and they will be enrolled in this class.</span>
+                      ? isOfficialBicolEmail(existingStudentMatch.email)
+                        ? <span className="text-emerald-600 dark:text-emerald-400">Existing student found: {existingStudentMatch.name}. Their details are filled in and they will be enrolled in this class.</span>
+                        : <span className="text-rose-600 dark:text-rose-300">Existing student found, but their email is not @bicol-u.edu.ph. Correct the roster email before enrolling them.</span>
                       : studentAlreadyInTargetClass
                         ? <span className="text-amber-600 dark:text-amber-400">This student is already enrolled in the selected class.</span>
                         : <span className="text-slate-500 dark:text-slate-400">Enter an existing student's ID number to fill in their details automatically.</span>}
@@ -2264,6 +2299,7 @@ const handleSendAllStudentInvites = async () => {
                     placeholder="e.g. Juan"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
                   />
+                  {nameFieldError('firstName', studentFirstName) && <span role="alert" className="mt-1 block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('firstName', studentFirstName)}</span>}
                 </div>
                 <div>
                   <label htmlFor="add-student-middle" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Middle Name</label>
@@ -2276,6 +2312,7 @@ const handleSendAllStudentInvites = async () => {
                     placeholder="e.g. Santos"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
                   />
+                  {nameFieldError('middleName', studentMiddleName) && <span role="alert" className="mt-1 block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('middleName', studentMiddleName)}</span>}
                 </div>
                 <div>
                   <label htmlFor="add-student-last" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Last Name *</label>
@@ -2289,6 +2326,7 @@ const handleSendAllStudentInvites = async () => {
                     placeholder="e.g. Dela Cruz"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
                   />
+                  {nameFieldError('lastName', studentLastName) && <span role="alert" className="mt-1 block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('lastName', studentLastName)}</span>}
                 </div>
               </div>
 
@@ -2321,6 +2359,7 @@ const handleSendAllStudentInvites = async () => {
                 {!studentEmailInput.includes('@') && <span className="text-xs font-bold text-accent-600 whitespace-nowrap">@bicol-u.edu.ph</span>}
                 </div>
               </div>
+              {studentEmailInput.includes('@') && !isOfficialBicolEmail(studentEmailInput) && <p role="alert" className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300">This Student cannot be added until the roster email is corrected to @bicol-u.edu.ph.</p>}
 
               <div>
                 <label htmlFor="add-student-year" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Year Level</label>
@@ -2556,7 +2595,7 @@ const handleSendAllStudentInvites = async () => {
                   onChange={(e) => setNewTermId(e.target.value)}
                   className={`w-full px-3.5 py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 font-medium cursor-pointer ${fieldCls('term', 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800')}`}
                 >
-                  <option value="">Choose a term</option>
+                  <option value="">{academicTerms.length === 0 ? 'No open term available' : 'Choose a term'}</option>
                   {academicTerms.map(term => <option key={term.id} value={String(term.id)}>{semesterLabel(term.semester)} {term.schoolYear} ({termDate(term.startDate)} – {termDate(term.endDate, true)})</option>)}
                 </select>
                 {fieldErr('term')}
@@ -2660,7 +2699,7 @@ const handleSendAllStudentInvites = async () => {
                     {slot.type}
                   </span>
                   <span>
-                    {slot.room || 'Venue TBA'} &bull; {slot.days.length > 0 ? slot.days.map(day => `${day} ${slot.dayTimes?.[day]?.startTime ?? slot.startTime} - ${slot.dayTimes?.[day]?.endTime ?? slot.endTime}`).join('; ') : 'No days selected'}
+                    {slot.room || 'Venue TBA'} &bull; {slot.days.length > 0 ? slot.days.map(day => `${day} ${displayMeetingTime(slot.dayTimes?.[day]?.startTime ?? slot.startTime)} - ${displayMeetingTime(slot.dayTimes?.[day]?.endTime ?? slot.endTime)}`).join('; ') : 'No days selected'}
                   </span>
                 </div>
               ))}
@@ -2748,6 +2787,7 @@ const handleSendAllStudentInvites = async () => {
                   onChange={event => setEditStudentFirstName(filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditStudentFirstName(filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
+                {nameFieldError('firstName', editStudentFirstName) && <span role="alert" className="block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('firstName', editStudentFirstName)}</span>}
               </label>
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
                 Last Name *
@@ -2757,6 +2797,7 @@ const handleSendAllStudentInvites = async () => {
                   onChange={event => setEditStudentLastName(filterPersonNameInput('lastName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditStudentLastName(filterPersonNameInput('lastName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('lastName', event)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
+                {nameFieldError('lastName', editStudentLastName) && <span role="alert" className="block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('lastName', editStudentLastName)}</span>}
               </label>
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">
                 Middle Name
@@ -2765,6 +2806,7 @@ const handleSendAllStudentInvites = async () => {
                   onChange={event => setEditStudentMiddleName(filterPersonNameInput('middleName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditStudentMiddleName(filterPersonNameInput('middleName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('middleName', event)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
+                {nameFieldError('middleName', editStudentMiddleName) && <span role="alert" className="block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('middleName', editStudentMiddleName)}</span>}
               </label>
               </fieldset>
               {editingStudent.accountActivated && (
@@ -2803,6 +2845,7 @@ const handleSendAllStudentInvites = async () => {
               </label>
             </div>
 
+            {editStudentEmail.includes('@') && !isOfficialBicolEmail(editStudentEmail) && <p role="alert" className="text-xs font-medium text-rose-600 dark:text-rose-300">Use an official @bicol-u.edu.ph email address.</p>}
             {editStudentError && (
               <div role="alert" className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl text-red-700 dark:text-red-300 text-xs font-semibold flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />

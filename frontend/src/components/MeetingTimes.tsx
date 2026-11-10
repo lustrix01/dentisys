@@ -1,4 +1,5 @@
 import { meetingDayKey, SCHEDULE_TIME_SLOTS } from '../utils/scheduleHelper';
+import { formatVisibleTime } from '../utils/timeDisplay';
 
 export type DayTimes = Record<string, { startTime: string; endTime: string; room?: string }>;
 
@@ -18,7 +19,7 @@ export function MeetingTimes({ component, days, value, defaultStart, defaultEnd,
           <select aria-label={`${component} ${day}${key === day ? '' : ` meeting ${Number(key.split(':')[1]) + 1}`} ${field === 'startTime' ? 'start' : 'end'} time`} value={current[field]}
             onChange={event => onChange({ ...value, [key]: { ...current, [field]: event.target.value } })}
             className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
-            {Array.from(new Set([...SCHEDULE_TIME_SLOTS, current[field]])).map(time => <option key={time} value={time}>{time}</option>)}
+            {Array.from(new Set([...SCHEDULE_TIME_SLOTS, current[field]])).map(time => <option key={time} value={time}>{formatVisibleTime(time)}</option>)}
           </select>
         </label>;
       })}

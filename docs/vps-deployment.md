@@ -270,10 +270,12 @@ without variable references. Do not put `GHCR_TOKEN` in this file. See
   `SMTP_FROM`. Personal Gmail is limited to roughly 500 messages/day; this is
   suitable only for modest demo traffic. See [App Passwords](https://support.google.com/accounts/answer/185833)
   and [Gmail sending limits](https://support.google.com/mail/answer/22839).
-- Set `ALLOWED_EMAIL_DOMAINS` to the approved comma-separated domains. Fill
-  `FIRST_DEAN_EMAIL`, `FIRST_DEAN_FIRST_NAME` and `FIRST_DEAN_LAST_NAME` for the
-  initial invitation; other name fields are optional. The address must use an
-  allowed domain. `GOOGLE_CLIENT_ID` is optional.
+- `ALLOWED_EMAIL_DOMAINS` is kept for compatibility with older deployments, but
+  only `@bicol-u.edu.ph` is accepted for new or updated identity, invitations,
+  sign-in, recovery and outgoing email; existing non-BU records are not rewritten.
+  Fill `FIRST_DEAN_EMAIL`, `FIRST_DEAN_FIRST_NAME` and `FIRST_DEAN_LAST_NAME` for
+  the initial invitation; other name fields are optional. The address must be an
+  `@bicol-u.edu.ph` address. `GOOGLE_CLIENT_ID` is optional.
 - Keep development mocks false. `STUDENT_AUTH_ENABLED=true` enables the existing
   Student invitation/sign-in workflow if needed for this demo.
 

@@ -140,9 +140,15 @@ expect_same(201, $ovStatus, 'A session from 23:00 to 01:00 is accepted');
 $ovRevoke((int) ($ovBody['session']['sessionId'] ?? 0));
 
 // (e) A room is required, for create, Secretary create and edit.
+$ovRoomMessage = static function (array $body): ?string {
+    foreach (($body['errors'] ?? []) as $error) {
+        if (($error['field'] ?? null) === 'room') return $error['message'] ?? null;
+    }
+    return null;
+};
 foreach ([null, '', '   '] as $ovBlank) {
     [$ovStatus, $ovBody] = integration_http_json('/api/faculty/attendance/session', $seedFacultyAccessToken, $ovSession($ovA, $ovDay(41), '08:00', '10:00', $ovBlank));
-    expect_same([422, 'Choose a room or type the place where the session happens.'], [$ovStatus, $ovBody['errors']['room'] ?? null], 'Faculty session without a room is refused');
+    expect_same([422, 'Choose a room or type the place where the session happens.'], [$ovStatus, $ovRoomMessage($ovBody)], 'Faculty session without a room is refused');
 }
 [$ovStatus] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, $ovSession($ovA, $ovDay(41), '08:00', '10:00', null));
 expect_same(422, $ovStatus, 'Secretary session without a room is refused');
@@ -158,7 +164,7 @@ $ovRetiredName = 'Retired OV ' . $ovSuffix;
 $pdo->prepare("INSERT INTO rooms (name, category_id, status, retired_at) VALUES (?, (SELECT MIN(category_id) FROM room_categories), 'retired', CURRENT_TIMESTAMP)")->execute([$ovRetiredName]);
 $ovRetiredMessage = $ovRetiredName . ' was retired by the Dean. Pick another room.';
 [$ovStatus, $ovBody] = integration_http_json('/api/faculty/attendance/session', $seedFacultyAccessToken, $ovSession($ovA, $ovDay(43), '08:00', '10:00', strtolower(str_replace(' ', '', $ovRetiredName))));
-expect_same([422, $ovRetiredMessage], [$ovStatus, $ovBody['errors']['room'] ?? null], 'A retired room typed as a custom room is refused for Faculty');
+expect_same([422, $ovRetiredMessage], [$ovStatus, $ovRoomMessage($ovBody)], 'A retired room typed as a custom room is refused for Faculty');
 [$ovStatus] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, $ovSession($ovA, $ovDay(43), '08:00', '10:00', $ovRetiredName));
 expect_same(422, $ovStatus, 'A retired room is refused for the Secretary');
 [$ovStatus] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, ['sessionId' => $ovOld, 'room' => $ovRetiredName]);

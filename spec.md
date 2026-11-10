@@ -158,6 +158,8 @@ Google authentication MUST use a stable provider identity when persistently link
 
 Google verification proves identity only; DentiSys remains responsible for authorization and account eligibility.
 
+Owner-approved amendment (2026-11-09): DentiSys accepts only official `@bicol-u.edu.ph` addresses for account identity, Student records, invitations, sign-in, password recovery and outgoing application email. This supersedes the configurable multi-domain behavior above and the earlier AUTH-004 and UI-004 multi-domain decisions. Existing database records and active enrollments are not rewritten; a non-BU address cannot be used for a new or updated identity, class enrollment, activation, invitation, sign-in, recovery or outgoing email until corrected to an official address.
+
 ## AUTH-004 — Institutional domains
 
 **Status: APPROVED**
@@ -398,6 +400,8 @@ Existing authentication rate limiting MUST be preserved when additional authenti
 
 New authentication paths SHOULD use the same security boundaries where applicable rather than creating parallel security systems.
 
+Password sign-in MUST retain its limit of 100 requests per IP address per 60 seconds. It MUST also allow no more than five failed password attempts for the same normalized institutional email within a 15-minute window; once the fifth failure is reached, further password sign-in attempts for that email MUST be blocked for 15 minutes. Attempts for unknown email addresses count under the same rule, using a one-way hash of the normalized email as the rate-limit key. Successful password verification clears the failure counter. Wrong-password and unknown-account responses MUST remain indistinguishable. A rate-limited sign-in response MUST include a human-readable retry time and a `Retry-After` header.
+
 ## SEC-005 — Audit logging
 
 **Status: CURRENT**
@@ -459,6 +463,12 @@ Lecture/Laboratory contributions where both exist, and the Midterm/Finals contri
 must each total exactly 100%, using the existing supported decimal precision.
 
 Preset values become authoritative only after a successful server save. Existing saved configurations must never be replaced automatically by preset values.
+
+Owner-approved amendment (2026-11-10): A saved combined period configuration
+for a lecture-only course opens as an editable Lecture-only draft with the
+Lecture defaults and a 50% Midterm / 50% Finals split. This draft requires no
+conversion action; defaults take effect only when Faculty saves. This exception
+does not change Lecture/Laboratory course behavior.
 
 Assessments must reference valid categories for their offering and grading period. Existing assessment identifiers, category references, raw scores, and assessment maximum scores must be preserved.
 
@@ -543,13 +553,19 @@ Existing overall and ungrouped period configurations, assessment and category
 identifiers, raw scores, history and saved grades remain preserved. Existing
 configurations continue their saved calculation until explicitly converted;
 historical offerings remain view-only. Updating an existing ungrouped period
-configuration requires explicit validated conversion to Lecture/Laboratory
-grading. Faculty must assign existing categories and resolve ambiguous assessment
-mappings before conversion can be saved; the system must not guess mappings,
-replace existing categories with defaults, or rescale saved weights automatically.
-Saving or converting a configuration must not rewrite recorded grades; explicit
-authorized recomputation applies the saved configuration. Conversion from grouped
-grading back to combined period lists is no longer supported.
+configuration for a Lecture/Laboratory course requires explicit validated
+conversion to Lecture/Laboratory grading. Faculty must assign existing
+categories and resolve ambiguous assessment mappings before conversion can be
+saved; the system must not guess mappings, replace existing categories with
+defaults, or rescale saved weights automatically. For a lecture-only course,
+Grade Weights opens an existing combined period configuration as an editable
+Lecture-only draft: it preserves the existing categories, IDs, weights, term
+shares, assessment links and scores. Defaults are used only when no saved
+configuration exists. The saved combined calculation remains active until
+Faculty saves the Lecture-only draft. The save must not rewrite recorded scores;
+current-term grades follow the existing save-triggered recomputation behavior.
+Conversion from grouped grading back to combined period lists is no longer
+supported.
 
 Grade Weights, assessment selection, server computations, Faculty/Student
 ledgers and applicable grade exports must identify Lecture and Laboratory
@@ -585,6 +601,16 @@ Past school years are not affected. Saved scores are never deleted or
 rescaled, and grades change only through authorized recomputation. Detailed
 rules: docs/contracts/lecture-only-grading.md.
 
+Owner-approved amendment (2026-11-10): Attendance is not a grading category for
+lecture-only courses. The Lecture defaults are Term Exam 50%, Quiz 20%, Outputs
+20%, and Participation 10%; Midterm and Finals are each 50%. Attendance records
+remain in Attendance Monitoring and do not contribute to the course grade. When
+a saved combined setup is opened as a Lecture-only draft, the Attendance grade
+category is removed from the draft and the default Lecture categories are used.
+The existing calculation remains active until Faculty saves; recorded
+assessment scores and attendance records are preserved. Lecture/Laboratory
+course behavior remains unchanged.
+
 Owner-approved amendment (2026-10-27): The Dean confirmed the default
 Midterm/Finals split is 50% / 50% (previously 30% / 70%) for both
 Lecture/Laboratory and lecture-only courses. It is only the unsaved default;
@@ -600,6 +626,8 @@ saved configurations keep their own split.
 Faculty may send At-Risk and Privacy Consent notices to their students using the institutional email template. When the email mode is `custom`, every outgoing email is delivered to Mailpit, and only recipients on the configured allowlist also receive it by real email; Faculty notices to other recipients are recorded in history as "Suppressed (test mode)". In `mailpit` mode all email goes to Mailpit only; in `smtp` mode all email is delivered normally.
 
 Owner-approved amendment (2026-10-12): Email Management has three tabs: Student invitations, Secretary, and History. Faculty At-Risk and Privacy Consent notices are not offered. The delivery modes (`custom`, `mailpit`, `smtp`) are unchanged for all other email.
+
+Owner-approved amendment (2026-11-10): Email Management provides Midterm Advisory and Remedial notice tabs. A Midterm Advisory remains Faculty-initiated: Faculty select eligible enrolled Students, preview the personalized message and recipient list, then explicitly send. No Midterm Advisory is sent automatically when eligibility changes. It may be sent only to a current-school-year enrollment presently on the server-calculated Midterm Watchlist under UI-003; it is informational, contains no numeric grade, and advises the Student to contact the Faculty member. A Remedial notice is sent automatically after an authorized Faculty save creates a current-school-year pending remedial attempt with a scheduled date, or changes that attempt's scheduled date to a different non-null date. It includes the course, attempt number and current scheduled date. Saving an unchanged date, removing a date, or recording an attempt outcome alone does not trigger an email. The schedule save remains committed if delivery fails; the delivery result is recorded in Email History and shown in Email Management for the matching attempt and date. Faculty may still preview and explicitly send a Remedial notice from Email Management as a retry. The server revalidates eligibility and uses the canonical Student institutional email at send time. Existing email delivery modes and allowlist behavior apply to both notice types. On mobile, the recipient lists use stacked blocks and tabs wrap without horizontal page scrolling.
 
 ---
 
@@ -631,7 +659,8 @@ The following capabilities are currently part of DentiSys and MUST NOT be remove
 | Email history and notification delivery | CURRENT  |
 | Google Sign-In                          | APPROVED |
 | Google linking after activation (REG-003) | APPROVED |
-| Multi-domain institutional allowlist    | APPROVED |
+| Multi-domain institutional allowlist    | RETIRED  |
+| Bicol University email restriction      | CURRENT  |
 
 Detailed implementation status belongs in `docs/features.md`, not here.
 
@@ -1180,6 +1209,8 @@ Owner decision (2026-10-12): In Single Activity View and Full Matrix View, auto-
 ## UI-004 - Email and invitations (PDF pages 5, 7-8)
 
 All email-entry controls default to `@bicol-u.edu.ph`, allowing local-part-only entry. Complete existing addresses and other server-allowed domains remain supported under AUTH-004. Preserve addresses and prevent duplicated suffixes; this default does not impose a single-domain restriction.
+
+Owner-approved amendment (2026-11-09): Only `@bicol-u.edu.ph` is accepted. A complete address from any other domain, including `gmail.com`, is rejected; email fields may still accept a local part and append the official domain. This supersedes the multi-domain sentence above.
 
 Faculty invitations follow the PDF's structured name fields, institutional email, clear send action, searchable status, and supported lifecycle actions. The Owner's five-part name requirement below supplements the screenshot's subset. Invitation authority, activation, password, and MFA rules remain unchanged.
 

@@ -70,7 +70,7 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.getByLabel('Academic Term *')).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Save class section' })).toBeEnabled();
     await page.getByRole('button', { name: 'Save class section' }).click();
-    await expect(page.getByText('Choose an academic term.').first()).toBeVisible();
+    await expect(page.getByText('No open term is available for 2026-2027. Ask the Dean to add the term, then try again.').first()).toBeVisible();
   });
 
   test('faculty dashboard renders properly', async ({ page }) => {
@@ -302,7 +302,7 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.getByLabel('Lecture Mon end time').selectOption('10:00 AM');
     await page.getByLabel('Lecture Tue start time').selectOption('03:00 PM');
     await page.getByLabel('Lecture Tue end time').selectOption('05:00 PM');
-    await expect(page.getByText('Room 101 • Mon 08:00 AM - 10:00 AM; Tue 03:00 PM - 05:00 PM')).toBeVisible();
+    await expect(page.getByText('Room 101 • Mon 8:00 AM - 10:00 AM; Tue 3:00 PM - 5:00 PM')).toBeVisible();
     await page.getByRole('button', { name: 'Save class section' }).click();
     await expect.poll(() => created?.meetings).toEqual([
       { component: 'Lecture', day: 'Mon', room: 'Room 101', startTime: '08:00', endTime: '10:00' },
@@ -402,8 +402,8 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.goto('/classes');
     await expect(page.getByText(/Unfinished/).first()).toBeVisible();
     await page.getByTitle('Edit class section details').first().click();
-    await expect(page.getByLabel('Lecture Mon start time', { exact: true })).toHaveValue('08:00 AM');
-    await expect(page.getByLabel('Lecture Mon meeting 2 start time')).toHaveValue('03:00 PM');
+    await expect(page.getByLabel('Lecture Mon start time', { exact: true })).toHaveValue('8:00 AM');
+    await expect(page.getByLabel('Lecture Mon meeting 2 start time')).toHaveValue('3:00 PM');
     await page.getByRole('button', { name: 'Save changes' }).click();
     await expect.poll(() => updates.length).toBe(1);
     expect(updates[0]).not.toHaveProperty('meetings');
@@ -1070,9 +1070,9 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByLabel('Custom room name')).toHaveValue(room);
     };
     const chips = page.getByRole('button', { name: /^(Mon|Thu) · / });
-    await expect(chips).toHaveText(['Mon · Lecture · 09:00–11:00 · CDM 1', 'Mon · Laboratory · 13:00–16:00 · CDM 2', 'Thu · Laboratory · 12:00–17:00 · CDM 2']);
+    await expect(chips).toHaveText(['Mon · Lecture · 9:00 AM–11:00 AM · CDM 1', 'Mon · Laboratory · 1:00 PM–4:00 PM · CDM 2', 'Thu · Laboratory · 12:00 PM–5:00 PM · CDM 2']);
     await expect(chips.nth(0)).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByText('Times from Mon · Lecture · 09:00–11:00. Pick another meeting or edit the times.')).toBeVisible();
+    await expect(page.getByText('Times from Mon · Lecture · 9:00 AM–11:00 AM. Pick another meeting or edit the times.')).toBeVisible();
     await expectTimes(['08:45', '09:15', '09:30', '11:00'], 'CDM 1');
     await expect(page.getByText('On: students check in with their face. Off: you mark attendance in the roll call.')).toBeVisible();
     await page.getByLabel('Present Cutoff', { exact: true }).fill('10:00');
@@ -1081,7 +1081,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(chips.nth(2)).toHaveAttribute('aria-pressed', 'true');
     await expect(chips.nth(0)).toHaveAttribute('aria-pressed', 'false');
     await expectTimes(['11:45', '12:15', '12:30', '17:00'], 'CDM 2');
-    await expect(page.getByLabel('Session Date (Asia/Manila)')).toHaveValue('2026-10-26');
+    await expect(page.getByLabel('Session Date (Asia/Manila)')).toHaveValue('2026-10-29');
   });
 
   for (const [title, pickRoom, expected] of [
@@ -1193,7 +1193,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.goto('/attendance');
     await openWorksheet(page, 'CLIN401 - Section A');
     await page.getByRole('button', { name: 'Sessions', exact: true }).click();
-    await expect(page.getByText('End 12:00', { exact: true })).toBeVisible();
+    await expect(page.getByText('End 12:00 PM', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'End session', exact: true }).click();
     await expect(page.getByText(/Students without an attendance record will be marked absent/)).toBeVisible();
     await page.getByRole('button', { name: 'Confirm end session' }).click();
@@ -1459,7 +1459,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     const upcoming = page.locator('div.fixed.inset-0').filter({ hasText: 'Scheduled & Upcoming Sessions' });
     await expect(upcoming).toContainText(futureDate);
     await expect(upcoming).toContainText('FUTURE-101');
-    await expect(upcoming).toContainText('08:00 – 11:00');
+    await expect(upcoming).toContainText('8:00 AM – 11:00 AM');
     await expect(upcoming.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
     const aliceRow = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
@@ -1980,7 +1980,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.getByRole('button', { name: 'Sessions', exact: true }).click();
     await page.getByRole('button', { name: /Upcoming Sessions/ }).click();
     await expect(page.getByText('EDIT-700', { exact: true })).toBeVisible();
-    await expect(page.getByText('08:00 – 11:30', { exact: true })).toBeVisible();
+    await expect(page.getByText('8:00 AM – 11:30 AM', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(page.getByText(`Date: ${session.sessionDate} (Asia/Manila)`, { exact: true })).toBeVisible();
     await expect(page.getByLabel('Present Cutoff', { exact: true })).toHaveValue('08:30');

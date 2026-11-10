@@ -1,7 +1,8 @@
-import type {
+﻿import type {
   StudentActiveSession,
   StudentAttendanceLogRecord,
 } from '../types/index.ts';
+import { formatVisibleTime } from '../utils/timeDisplay.ts';
 
 function stringValue(value: unknown): string {
   return typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value);
@@ -64,8 +65,8 @@ export function normalizeStudentAttendanceLogRecord(value: unknown): StudentAtte
   if (!time && recordedAt) {
     const parsed = new Date(recordedAt);
     time = Number.isNaN(parsed.getTime())
-      ? recordedAt
-      : parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Manila' });
+      ? formatVisibleTime(recordedAt)
+      : formatVisibleTime(parsed.toISOString());
   }
   return {
     id: Number.isFinite(parsedId) ? parsedId : 0,

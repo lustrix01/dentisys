@@ -19,6 +19,7 @@ import { canAccessAuthoritativeStudentBiometrics } from './studentGates';
 import { StudentUnavailable } from './RealStudentSurfaces';
 import { getStudentAttendanceLogs } from '../../services/apiClient';
 import type { StudentAttendanceLogRecord, AttendanceVerificationMethod } from '../../types';
+import { formatVisibleTime } from '../../utils/timeDisplay';
 
 function StatusPill({ status }: { status: string }) {
   const tone = status === 'present'
@@ -368,7 +369,7 @@ export const AttendanceLogs: React.FC = () => {
                         <span className="font-bold text-slate-800 dark:text-slate-100 block whitespace-nowrap">{rec.date}</span>
                         <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
                           <Clock className="w-3 h-3" />
-                          {rec.verifiedAt?.split(' ')[1] || '08:15 AM'}
+                          {formatVisibleTime(rec.verifiedAt) === '—' ? '8:15 AM' : formatVisibleTime(rec.verifiedAt)}
                         </span>
                       </td>
                       <td className="py-3.5">
@@ -376,7 +377,7 @@ export const AttendanceLogs: React.FC = () => {
                         <span className="text-slate-500 dark:text-slate-400 text-[10px] block mt-0.5">{rec.verifiedLocationName || 'BU Dental Clinic'}</span>
                       </td>
                       <td className="py-3.5 text-slate-500">
-                        {rec.verifiedAt?.split(' ')[1] || '—'}
+                        {formatVisibleTime(rec.verifiedAt)}
                       </td>
                       <td className="py-3.5">
                         <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">

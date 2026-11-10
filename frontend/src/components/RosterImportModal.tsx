@@ -20,11 +20,12 @@ import {
 import { Modal } from './Modal';
 import { OverlapConfirmModal, overlapsFrom, type BookingOverlap } from './OverlapConfirmModal';
 import { showFeedback } from './FeedbackCenter';
+import { validateBicolUEmail } from '../services/authService';
 import {
   ParsedRosterStudent,
   parseCSVText,
-  validateRosterStudents,
   getSampleRegistrarCSV,
+  validateRosterStudents,
   compareRosterHeader,
   findClassMatchingHeader,
   termForHeader,
@@ -474,8 +475,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
         <fieldset disabled={isImporting} className="space-y-4 min-w-0 text-left">
         {file && (
           <div role="note" className="space-y-0.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left text-xs leading-5 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-            <p>{pdfInfo?.official && <strong className="mr-1">Official class list.</strong>}{studentsOnly ? `Review the student rows before adding them to ${targetClass ? `${targetClass.courseCode} (${targetClass.block})` : 'this class'}.` : 'Review the class details and student rows before saving.'} The original file stays in this browser; only selected student fields are sent to DentiSys. Invitations are sent separately.</p>
-            <p>Required for each imported row: complete student number, first name, last name and a valid institutional email. Missing emails must be corrected in preview.</p>
+            <p>{pdfInfo?.official && <strong className="mr-1">Official class list.</strong>}{studentsOnly ? `Review the student rows before adding them to ${targetClass ? `${targetClass.courseCode} (${targetClass.block})` : 'this class'}.` : 'Review the class and student details before saving.'} Only selected fields are sent; the file stays in your browser. Send invitations separately.</p>
+            <p>Each row needs a student number, first and last name, and a valid @bicol-u.edu.ph email. Correct errors in the preview.</p>
           </div>
         )}
         {parsedStudents.length > 0 && !studentsOnly && isNewClass && !chooseExistingClass && (
@@ -751,7 +752,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                     </div>
                     <label role="cell" className="col-span-2 block min-w-0 sm:col-span-4 lg:col-span-6">
                       <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Institutional Email *</span>
-                      <input type="text" value={st.email} aria-label={`Email for ${st.studentId}`} required onChange={event => handleUpdateStudentField(st.tempKey, 'email', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                      <input type="text" value={st.email} aria-label={`Email for ${st.studentId}`} aria-invalid={Boolean(st.email && !validateBicolUEmail(st.email, ['bicol-u.edu.ph']).isValid)} required onChange={event => handleUpdateStudentField(st.tempKey, 'email', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                      {st.email && !validateBicolUEmail(st.email, ['bicol-u.edu.ph']).isValid && <span role="alert" className="mt-1 block text-[11px] font-medium text-rose-600 dark:text-rose-300">Use a valid @bicol-u.edu.ph email address.</span>}
                     </label>
                     <label role="cell" className="col-span-1 block min-w-0 sm:col-span-1 lg:col-span-2">
                       <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Year Level</span>

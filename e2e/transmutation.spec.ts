@@ -370,7 +370,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     await expect(page.getByRole('heading', { name: 'Edit Assessment Spec' })).toBeVisible();
     await expect(page.getByPlaceholder('e.g. Molar Crown Prep quiz')).toHaveValue('Unlinked assessment survives refresh');
     await expect(assessmentForm.locator('input[type="number"]').first()).toHaveValue('50');
-    await expect(assessmentForm.locator('input[type="date"]')).toHaveValue(String(postedAssessment?.dueDate));
+    await expect(assessmentForm.locator('input[type="date"]')).toHaveValue(String(postedAssessment?.dueDate ?? ''));
     await expect(assessmentForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) })).toHaveValue(String(postedAssessment?.gradingCategoryId));
     await expect(assessmentForm.locator('select', { has: page.locator('option[value="Final"]') })).toHaveValue('Midterm');
     await expect(assessmentForm.getByRole('checkbox', { name: /Enable attendance-linked transmutation/i })).toBeChecked();

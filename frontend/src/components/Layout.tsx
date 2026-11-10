@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Calculator, 
-  AlertTriangle, 
-  CalendarDays, 
-  FileSpreadsheet, 
+import {
+  LayoutDashboard,
+  Users,
+  Calculator,
+  AlertTriangle,
+  CalendarDays,
+  FileSpreadsheet,
   Settings as SettingsIcon,
   Menu,
   X,
@@ -271,7 +271,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Audit Trail', path: '/admin/audit-trail', icon: ListChecks, short: 'Audit' },
       ];
     }
-    
+
     if (currentUser.role === 'secretary') {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -302,7 +302,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       }
       return items;
     }
-    
+
     // Faculty (default)
     return [
       { name: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -466,8 +466,10 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                     {new Date(item.createdAt).toLocaleString(undefined, {
                       month: 'short',
                       day: 'numeric',
-                      hour: '2-digit',
+                      hour: 'numeric',
                       minute: '2-digit',
+                      timeZone: 'Asia/Manila',
+                      hourCycle: 'h12',
                     })}
                   </p>
                 </div>
@@ -558,7 +560,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen print:min-h-0 print:bg-white bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col relative overflow-clip print:overflow-visible font-sans">
-      
+
       {/* Background Subtle Gradient Blobs */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] aspect-square rounded-full bg-accent-200/25 dark:bg-accent-950/30 blur-[120px] pointer-events-none z-0 print:hidden" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] aspect-square rounded-full bg-clinical-200/25 dark:bg-clinical-950/20 blur-[120px] pointer-events-none z-0 print:hidden" />
@@ -855,10 +857,10 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       <div className={`print:!ml-0 flex-1 flex flex-col min-w-0 min-h-screen overflow-clip print:overflow-visible print:min-h-0 relative z-10 transition-all duration-300 ${
         isSidebarCollapsed ? 'md:ml-20' : 'md:ml-72'
       }`}>
-        
+
         {/* Desktop Header */}
         <header className="print:!hidden hidden md:flex items-center justify-between px-8 py-4 border-b border-slate-200/40 dark:border-slate-900/40 bg-white/30 dark:bg-slate-950/20 backdrop-blur-md sticky top-0 z-30">
-          
+
           {/* Dynamic Breadcrumbs Area */}
           <div className="flex flex-col space-y-1">
             <nav className="flex items-center space-x-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">

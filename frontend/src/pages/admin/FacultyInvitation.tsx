@@ -1,4 +1,4 @@
-import { filterPersonNameInput, preventInvalidPersonNameKey } from '../../utils/personNameValidation';
+import { filterPersonNameInput, personNameFieldError, preventInvalidPersonNameKey, type PersonNamePartKey } from '../../utils/personNameValidation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
@@ -34,6 +34,10 @@ import {
 
 const PREFIX_OPTIONS = ['', 'Dr.', 'Prof.', 'DMD', 'Mr.', 'Ms.', 'Mrs.'];
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
+const emailDomainError = (value: string): string => value.includes('@')
+  ? validateBicolUEmail(value, [DEFAULT_EMAIL_DOMAIN]).message
+  : '';
+const nameFieldError = (key: PersonNamePartKey, value: string): string | null => value.trim() ? personNameFieldError(key, value) : null;
 
 function completeInstitutionalEmail(value: string): string {
   const trimmed = value.trim();
@@ -381,6 +385,7 @@ export const FacultyInvitation: React.FC = () => {
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                   placeholder="Maria"
                 />
+                {nameFieldError('firstName', firstName) && <span role="alert" className="block text-[10px] font-medium normal-case text-rose-600 dark:text-rose-300">{nameFieldError('firstName', firstName)}</span>}
               </label>
 
               <label htmlFor="admin-faculty-create-middle" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-2">
@@ -392,6 +397,7 @@ export const FacultyInvitation: React.FC = () => {
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                   placeholder="Clara"
                 />
+                {nameFieldError('middleName', middleName) && <span role="alert" className="block text-[10px] font-medium normal-case text-rose-600 dark:text-rose-300">{nameFieldError('middleName', middleName)}</span>}
               </label>
 
               <label htmlFor="admin-faculty-create-last" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-3">
@@ -404,6 +410,7 @@ export const FacultyInvitation: React.FC = () => {
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                   placeholder="Santos"
                 />
+                {nameFieldError('lastName', lastName) && <span role="alert" className="block text-[10px] font-medium normal-case text-rose-600 dark:text-rose-300">{nameFieldError('lastName', lastName)}</span>}
               </label>
 
               <label htmlFor="admin-faculty-create-suffix" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-2">
@@ -441,8 +448,9 @@ export const FacultyInvitation: React.FC = () => {
                   </span>
                 )}
               </div>
+              {emailDomainError(email) && <p role="alert" className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300">{emailDomainError(email)}</p>}
               <span className="block text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                Enter a local part to use @{DEFAULT_EMAIL_DOMAIN}; other configured domains remain supported.
+                Enter a local part to use @{DEFAULT_EMAIL_DOMAIN}.
               </span>
               <datalist id="admin-faculty-create-email-domains">
                 {allowedDomains.map(d => (
@@ -598,6 +606,7 @@ export const FacultyInvitation: React.FC = () => {
                     onChange={event => setEditFullName(filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditFullName(filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)}
                     className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                   />
+                  {nameFieldError('firstName', editFullName) && <span role="alert" className="block text-[10px] font-medium normal-case text-rose-600 dark:text-rose-300">{nameFieldError('firstName', editFullName)}</span>}
                 </label>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">This legacy invitation has one stored display name. It is kept intact; name parts are not guessed.</p>
               </div>
@@ -624,6 +633,7 @@ export const FacultyInvitation: React.FC = () => {
                   onChange={event => setEditFirstName(filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditFirstName(filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                 />
+                {nameFieldError('firstName', editFirstName) && <span role="alert" className="block text-[10px] font-medium normal-case text-rose-600 dark:text-rose-300">{nameFieldError('firstName', editFirstName)}</span>}
               </label>
 
               <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-5">
@@ -633,6 +643,7 @@ export const FacultyInvitation: React.FC = () => {
                   onChange={event => setEditMiddleName(filterPersonNameInput('middleName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditMiddleName(filterPersonNameInput('middleName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('middleName', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                 />
+                {nameFieldError('middleName', editMiddleName) && <span role="alert" className="block text-[10px] font-medium normal-case text-rose-600 dark:text-rose-300">{nameFieldError('middleName', editMiddleName)}</span>}
               </label>
 
               <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-8">
@@ -643,6 +654,7 @@ export const FacultyInvitation: React.FC = () => {
                   onChange={event => setEditLastName(filterPersonNameInput('lastName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditLastName(filterPersonNameInput('lastName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('lastName', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                 />
+                {nameFieldError('lastName', editLastName) && <span role="alert" className="block text-[10px] font-medium normal-case text-rose-600 dark:text-rose-300">{nameFieldError('lastName', editLastName)}</span>}
               </label>
 
               <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-4">
@@ -676,6 +688,7 @@ export const FacultyInvitation: React.FC = () => {
                   </span>
                 )}
               </div>
+              {emailDomainError(editEmail) && <p role="alert" className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300">{emailDomainError(editEmail)}</p>}
               <datalist id="admin-faculty-edit-email-domains">
                 {allowedDomains.map(d => (
                   <option key={d} value={editEmailLocalPart ? `${editEmailLocalPart}@${d}` : `@${d}`} />

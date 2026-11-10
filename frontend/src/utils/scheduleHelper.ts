@@ -1,4 +1,5 @@
-import type { ClassMeeting, FacultyClassItem } from '../services/apiClient';
+﻿import type { ClassMeeting, FacultyClassItem } from '../services/apiClient';
+import { formatVisibleTime } from './timeDisplay.ts';
 
 export interface ClassSessionSlot {
   id: string;
@@ -189,10 +190,7 @@ export const meetingDayKey = (days: string[], index: number): string => {
   return occurrence ? `${day}:${occurrence}` : day;
 };
 
-export const displayMeetingTime = (time: string): string => {
-  const [hours, minutes] = time.split(':').map(Number);
-  return `${String(hours % 12 || 12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${hours < 12 ? 'AM' : 'PM'}`;
-};
+export const displayMeetingTime = (time: string): string => formatVisibleTime(time);
 
 /** Lecture/lab rooms with their meeting times for a class card; falls back to the single room name, or nothing when unknown. */
 export const meetingVenueLines = (meetings: ClassMeeting[] = [], fallbackRoom?: string | null): Array<{ label: string; value: string }> => {

@@ -18,6 +18,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { formatGrade } from '../../utils/gradeHelper';
+import { formatVisibleTime } from '../../utils/timeDisplay';
 
 interface TodaySessionItem {
   code: string;
@@ -35,16 +36,16 @@ const INITIAL_TODAY_SESSIONS: TodaySessionItem[] = [
     code: 'CLIN401',
     name: 'Restorative Dentistry Lab',
     room: 'Room 101',
-    schedule: '08:00 AM - 12:00 PM',
+    schedule: '8:00 AM - 12:00 PM',
     timeInStatus: 'done',
-    timeInTime: '08:15 AM',
+    timeInTime: '8:15 AM',
     timeOutStatus: 'ready',
   },
   {
     code: 'PROS402',
     name: 'Prosthodontics Clinical Practicum',
     room: 'Lab Room 204',
-    schedule: '01:00 PM - 05:00 PM',
+    schedule: '1:00 PM - 5:00 PM',
     timeInStatus: 'pending',
     timeOutStatus: 'pending',
   },
@@ -52,11 +53,11 @@ const INITIAL_TODAY_SESSIONS: TodaySessionItem[] = [
     code: 'ORAL301',
     name: 'Oral Surgery Clinic',
     room: 'Operating Room B',
-    schedule: '07:00 AM - 09:00 AM',
+    schedule: '7:00 AM - 9:00 AM',
     timeInStatus: 'done',
-    timeInTime: '07:05 AM',
+    timeInTime: '7:05 AM',
     timeOutStatus: 'done',
-    timeOutTime: '09:02 AM',
+    timeOutTime: '9:02 AM',
   }
 ];
 
@@ -93,7 +94,7 @@ export const Dashboard: React.FC = () => {
   const [todaySessions, setTodaySessions] = useState<TodaySessionItem[]>(INITIAL_TODAY_SESSIONS);
 
   const handleTimeOut = (code: string) => {
-    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const nowTime = formatVisibleTime(new Date().toISOString());
     setTodaySessions(prev => prev.map(s => {
       if (s.code === code) {
         return {

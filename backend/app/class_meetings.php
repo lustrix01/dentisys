@@ -8,7 +8,7 @@ require_once __DIR__ . '/attendance_sessions.php';
 function class_meetings_validate(mixed $value): array
 {
     if (!is_array($value) || !array_is_list($value) || count($value) > 28) {
-        throw new ValidationException(['meetings' => 'Provide a list of at most 28 meetings.']);
+        throw new ValidationException(['meetings' => 'A class can have at most 28 meetings. Remove extra meetings, then save again.']);
     }
     $result = [];
     foreach ($value as $meeting) {
@@ -17,16 +17,16 @@ function class_meetings_validate(mixed $value): array
         if (!is_array($meeting)
             || !in_array($meeting['component'] ?? null, ['Lecture', 'Laboratory'], true)
             || !in_array($meeting['day'] ?? null, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], true)) {
-            throw new ValidationException(['meetings' => 'Every meeting needs a lecture/laboratory component and a valid weekday.']);
+            throw new ValidationException(['meetings' => 'Choose Lecture or Laboratory and a valid weekday for every meeting, then save again.']);
         }
         $room = validate_required_string($meeting, 'room', 1, 100);
         foreach (['startTime', 'endTime'] as $field) {
             if (!is_string($meeting[$field] ?? null) || !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/D', $meeting[$field])) {
-                throw new ValidationException(['meetings' => 'Meeting times must use HH:MM.']);
+                throw new ValidationException(['meetings' => 'Enter a valid start and end time for every meeting, then save again.']);
             }
         }
         if ($meeting['startTime'] >= $meeting['endTime']) {
-            throw new ValidationException(['meetings' => 'Every meeting must end after it starts.']);
+            throw new ValidationException(['meetings' => 'Each meeting must end after it starts. Adjust the meeting times, then save again.']);
         }
         $result[] = ['component' => $meeting['component'], 'day' => $meeting['day'], 'room' => $room,
             'startTime' => $meeting['startTime'], 'endTime' => $meeting['endTime']];
@@ -34,7 +34,7 @@ function class_meetings_validate(mixed $value): array
     foreach ($result as $i => $a) {
         foreach (array_slice($result, $i + 1) as $b) {
             if ($a['day'] === $b['day'] && $a['startTime'] < $b['endTime'] && $b['startTime'] < $a['endTime']) {
-                throw new ValidationException(['meetings' => "Class meetings overlap on {$a['day']}."]);
+                throw new ValidationException(['meetings' => "Class meetings overlap on {$a['day']}. Move one meeting to a different time, then save again."]);
             }
         }
     }

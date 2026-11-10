@@ -23,22 +23,23 @@ import type { FacultyLegacyComputedResult, FacultyPeriodModeComputedResult, Facu
 
 test('Grade Weights banner shows the current schema and the saved or unsaved badges', () => {
   const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../pages/faculty/GradeComputation.tsx'), 'utf8');
-  const start = source.indexOf('<span>BU Dental Medicine {loadedConfig');
+  const start = source.indexOf('<span>BU Dental Medicine {isCombinedLectureOnlyDraft');
   assert.ok(start >= 0);
   const banner = source.slice(start, source.indexOf('</span>', start) + '</span>'.length);
   const compiled = ts.transpileModule(`return (${banner});`, {
     fileName: 'banner.tsx',
     compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const render = (loadedConfig: object | null, midterm: string, final: string, componentMode = 'lecture_laboratory') => renderToStaticMarkup(
-    new Function('React', 'loadedConfig', 'componentWeights', 'termRatio', 'componentMode', compiled)(
-      React, loadedConfig, { lecture: '60', laboratory: '40' }, { midterm, final }, componentMode
+  const render = (loadedConfig: object | null, midterm: string, final: string, componentMode = 'lecture_laboratory', isCombinedLectureOnlyDraft = false) => renderToStaticMarkup(
+    new Function('React', 'loadedConfig', 'componentWeights', 'termRatio', 'componentMode', 'isCombinedLectureOnlyDraft', compiled)(
+      React, loadedConfig, { lecture: '60', laboratory: '40' }, { midterm, final }, componentMode, isCombinedLectureOnlyDraft
     )
   );
   assert.equal(render({ version: 1 }, '35', '65'), '<span>BU Dental Medicine Schema active: Lecture 60% / Lab 40% • Midterm 35% / Final 65%</span>');
   assert.equal(render(null, '35', '65'), '<span>BU Dental Medicine Default grade weights: Lecture 60% / Lab 40% • Midterm 35% / Final 65%</span>');
   assert.equal(render({ version: 1 }, '30', '70', 'lecture'), '<span>BU Dental Medicine Schema active: Lecture only • Midterm 30% / Final 70%</span>');
   assert.equal(render(null, '50', '50', 'lecture'), '<span>BU Dental Medicine Default grade weights: Lecture only • Midterm 50% / Final 50%</span>');
+  assert.equal(render({ version: 1 }, '50', '50', 'lecture', true), '<span>BU Dental Medicine Lecture-only draft: Lecture only • Midterm 50% / Final 50%</span>');
   // Unsaved edits replace the banner; saved versus unsaved presets are badges.
   assert.match(source, /\{isDirty \? \(/);
   assert.match(source, /You have unsaved changes\. Adjust weights or categories directly below, then click Save grade weights\./);
@@ -1506,6 +1507,9 @@ test('Lecture-only courses: editor, save payload and notices follow the contract
   // A unit change since the last save opens a draft with an amber banner; nothing is saved by itself.
   assert.match(source, /loadedComponentMode === 'lecture_laboratory' && loadedStructure === 'lecture'/);
   assert.match(source, /loadedComponentMode === 'lecture' && loadedStructure === 'lecture_laboratory'/);
+  assert.match(source, /loadedComponentMode === 'combined' && loadedStructure === 'lecture'/);
+  assert.match(source, /Lecture-only defaults are ready: Term Exam 50%, Quiz 20%, Outputs 20%, Participation 10%/);
+  assert.match(source, /Attendance is not graded/);
   assert.match(source, /This course is now Lecture only\. Save to remove the Laboratory part\./);
   assert.match(source, /This course now has Laboratory units\. Save to add the Laboratory part\./);
   // Save payload: componentMode 'lecture', Lecture categories only, no componentWeights, no conversion flag.

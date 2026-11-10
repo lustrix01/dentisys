@@ -27,7 +27,7 @@ $emails = [
 foreach ($emails as $label => $html) {
     assert_email(str_starts_with($html, '<!DOCTYPE html>'), "{$label} is a complete HTML document");
     assert_email(str_contains($html, 'Bicol University &middot; College of Dental Medicine'), "{$label} uses the institutional header");
-    assert_email(str_contains($html, 'DentiSys Academic Portal'), "{$label} shows the portal title");
+    assert_email(str_contains($html, 'DentiSYS Academic Portal'), "{$label} shows the portal title");
     assert_email(!str_contains($html, '<script'), "{$label} has no script");
 }
 

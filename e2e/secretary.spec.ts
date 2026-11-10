@@ -437,7 +437,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await form.getByRole('button', { name: 'Cancel', exact: true }).click();
     await openSessionsModal(page);
     await page.getByRole('button', { name: 'Upcoming Sessions' }).click();
-    await expect(page.getByText(/Time: .*02:00 AM \(next day\)/)).toBeVisible();
+    await expect(page.getByText(/Time: .*2:00 AM \(next day\)/)).toBeVisible();
   });
 
   test('Secretary queues a future session and sees cross-role booking conflicts', async ({ page }) => {
@@ -463,7 +463,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await form.getByRole('checkbox', { name: /Geolocation|Geofence/ }).uncheck();
     await form.getByRole('button', { name: 'Schedule session', exact: true }).click();
     await expect.poll(() => payload?.sessionDate).toBe('2099-10-02');
-    await expect(page.getByText('Session scheduled for 2099-10-02 at 08:00 (Asia/Manila). Session code: CS8-20260921-ABC123').first()).toBeVisible();
+    await expect(page.getByText('Session scheduled for 2099-10-02 at 8:00 AM (Asia/Manila). Session code: CS8-20260921-ABC123').first()).toBeVisible();
     await openSessionsModal(page);
     await page.getByRole('button', { name: 'Upcoming Sessions' }).click();
     await expect(page.getByText('(CS8-20260921-ABC123)')).toBeVisible();
@@ -829,7 +829,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await page.clock.setFixedTime(new Date('2026-10-26T00:40:00Z')); // Monday 08:40 in Asia/Manila
     await openStartPopup(page);
     const form = startForm(page);
-    const chip = form.getByRole('button', { name: 'Mon · Lecture · 09:00–11:00 · CDM 1' });
+    const chip = form.getByRole('button', { name: 'Mon · Lecture · 9:00 AM–11:00 AM · CDM 1' });
     await expect(chip).toHaveAttribute('aria-pressed', 'true');
     await expect(form.getByLabel('Opening', { exact: true })).toHaveValue('08:45');
     await expect(form.getByLabel('Class end time', { exact: true })).toHaveValue('11:00');
