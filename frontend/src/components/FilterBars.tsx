@@ -5,11 +5,9 @@ import type { TabsColor } from './Tabs';
 // List toolbar and search box used where a list switch shares its row with search and actions
 // (docs/frontend.md "Page patterns", rule R6).
 
-const card = 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-sm';
-
-/** One toolbar per list. left: switch, search, filters. right: count, export, the list's main action. below: e.g. "More filters" row. */
-export const ListToolbar: React.FC<{ left?: React.ReactNode; right?: React.ReactNode; below?: React.ReactNode; className?: string; flat?: boolean }> = ({ left, right, below, className = '', flat = false }) => (
-  <div className={`${flat ? '' : card} space-y-3 ${className}`.trim()}>
+/** One flat toolbar per list. left: switch, search, filters. right: count, export, the list's main action. below: e.g. "More filters" row. */
+export const ListToolbar: React.FC<{ left?: React.ReactNode; right?: React.ReactNode; below?: React.ReactNode; className?: string }> = ({ left, right, below, className = '' }) => (
+  <div className={`space-y-3 ${className}`.trim()}>
     <div className="flex flex-col lg:flex-row lg:items-center gap-3">
       <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5 lg:flex-1 min-w-0">{left}</div>
       {right && <div className="flex flex-wrap items-center gap-2.5 lg:justify-end">{right}</div>}

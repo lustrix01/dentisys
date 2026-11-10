@@ -46,7 +46,7 @@ Today's pages are the reference: a page's filter row stays where it is, and chan
 3. **Do not split a compact row.** A title with its filters or actions on one line stays one line.
 4. **Keep the positions people know.** Do not swap sides or push controls to the right that were on the left. Within an action group, the main action goes last and filled (rule 6).
 5. **Keep icons placed on purpose**, such as the filter and calendar icons inside selects.
-6. **A list switch with search and actions shares one row** with them: `ListToolbar` in `components/FilterBars.tsx`, switch and search on the left, actions on the right, main action last and filled. Copy `pages/admin/Rooms.tsx` or `pages/faculty/ClassesAndRosters.tsx`. Use the toolbar's `flat` variant only when it sits inside an existing card, such as the class roster; keep the card when the toolbar is its own page section (Rooms, Classes list).
+6. **A list switch with search and actions shares one row** with them: `ListToolbar` in `components/FilterBars.tsx`, switch and search on the left, actions on the right, main action last and filled. Copy `pages/admin/Rooms.tsx` or `pages/faculty/ClassesAndRosters.tsx`. The toolbar row is flat: do not wrap it in a card. Normal page spacing separates it from the header and the list; inside an existing card it keeps that card's spacing.
 7. **Roll calls and other busy screens get simpler:** fewer bars, not more.
 
 Show only one search box per view. On phones a filter row wraps onto the next line; it never scrolls sideways.

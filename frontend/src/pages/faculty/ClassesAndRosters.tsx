@@ -1908,7 +1908,6 @@ const handleSendAllStudentInvites = async () => {
           </div>
             {/* Roster toolbar: list actions on the left (same order as before), export on the right. */}
             <ListToolbar
-              flat
               className="mb-4"
               left={
                 <div className="flex flex-wrap items-center gap-2">
