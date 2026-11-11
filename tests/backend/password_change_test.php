@@ -70,6 +70,29 @@ $missing = password_change_test_throws(
 );
 password_change_test_assert(count($missing->getErrors()) === 3, 'Missing payload reports all three required fields');
 
+$maxLengthNewPassword = 'Aa1!' . str_repeat('a', 28);
+$maxLengthPayload = password_change_validate_payload([
+    'current_password' => 'CurrentPass1!',
+    'new_password' => $maxLengthNewPassword,
+    'confirm_password' => $maxLengthNewPassword,
+]);
+password_change_test_assert($maxLengthPayload['new_password'] === $maxLengthNewPassword, '32-character new password is accepted');
+
+$overMaxNewPassword = 'Aa1!' . str_repeat('a', 29);
+$overMax = password_change_test_throws(
+    static fn(): array => password_change_validate_payload([
+        'current_password' => 'CurrentPass1!',
+        'new_password' => $overMaxNewPassword,
+        'confirm_password' => $overMaxNewPassword,
+    ]),
+    '33-character new password is rejected'
+);
+password_change_test_assert(
+    array_filter($overMax->getErrors(), static fn(array $error): bool => ($error['field'] ?? null) === 'new_password'
+        && str_contains((string) ($error['message'] ?? ''), 'Use at most 32 characters.')) !== [],
+    'Password length error carries the exact maximum-length copy on new_password'
+);
+
 $controllerSource = file_get_contents($root . '/backend/controllers/PasswordChangeController.php');
 $runtimeSource = file_get_contents($root . '/backend/app/auth_runtime.php');
 $authSource = file_get_contents($root . '/backend/app/auth.php');

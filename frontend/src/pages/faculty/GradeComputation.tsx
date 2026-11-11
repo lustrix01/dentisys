@@ -550,6 +550,7 @@ export const GradeComputation: React.FC = () => {
   const [assAttendanceDate, setAssAttendanceDate] = useState('');
   const [assAttendanceCode, setAssAttendanceCode] = useState('');
   const [isTransmutationSectionOpen, setIsTransmutationSectionOpen] = useState(false);
+  const [assessmentAttempted, setAssessmentAttempted] = useState(false);
 
   const loadModalConfigForOffering = async (offering: FacultyOffering): Promise<FacultyGradingConfiguration | null> => {
     setModalConfigStatus('loading');
@@ -893,6 +894,7 @@ export const GradeComputation: React.FC = () => {
     }
 
     setEditingAssessment(null);
+    setAssessmentAttempted(false);
     setAssClassId(initialClassId);
     setAssGradingCategoryId('');
     setAssType('');
@@ -924,6 +926,7 @@ export const GradeComputation: React.FC = () => {
 
   const openEditAssessmentModal = async (ass: Assessment) => {
     setEditingAssessment(ass);
+    setAssessmentAttempted(false);
     setAssTitle(ass.title);
     const targetClassId = ass.classId;
     setAssClassId(targetClassId);
@@ -978,9 +981,37 @@ export const GradeComputation: React.FC = () => {
 
   const [maxScoreToConfirm, setMaxScoreToConfirm] = useState<number | null>(null);
 
+  // Field problems for the assessment form (shown inline once Confirm was pressed).
+  const assessmentProblems = useMemo(() => {
+    const out: { key: string; label: string; message: string }[] = [];
+    const add = (key: string, label: string, message: string) => out.push({ key, label, message });
+    if (!assTitle.trim()) add('title', 'Assessment Title', 'Enter an assessment title.');
+    const parsedMaxScore = typeof assMaxScore === 'number' ? assMaxScore : parseInt(String(assMaxScore), 10);
+    if (isNaN(parsedMaxScore) || parsedMaxScore <= 0) add('max-score', 'Maximum Score', 'Enter a maximum score greater than 0.');
+    return out;
+  }, [assTitle, assMaxScore]);
+  const shownAssessmentProblems = assessmentAttempted ? assessmentProblems : [];
+  const assessmentProblemMsg = (key: string) => shownAssessmentProblems.find(p => p.key === key)?.message;
+  const assessmentInvalidCls = 'border-rose-300 dark:border-rose-700 bg-rose-50/60 dark:bg-rose-950/30';
+  const assessmentFieldCls = (key: string, base: string) => (assessmentProblemMsg(key) ? assessmentInvalidCls : base);
+  const assessmentFieldErr = (key: string) => {
+    const msg = assessmentProblemMsg(key);
+    return msg ? <p id={`assessment-err-${key}`} className="mt-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400">{msg}</p> : null;
+  };
+  const assessmentFieldAria = (key: string) => (assessmentProblemMsg(key) ? { 'aria-invalid': true as const, 'aria-describedby': `assessment-err-${key}` } : {});
+  const focusAssessmentField = (key: string) => {
+    const el = document.getElementById(`assessment-${key}`);
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el?.focus({ preventScroll: true });
+  };
+
   const handleAssessmentSubmit = async (e: React.FormEvent | null, maxScoreConfirmed = false) => {
     e?.preventDefault();
-    if (!assTitle.trim()) return;
+    if (assessmentProblems.length > 0) {
+      setAssessmentAttempted(true);
+      focusAssessmentField(assessmentProblems[0].key);
+      return;
+    }
     if (!availableClasses.some(classItem => classItem.id === assClassId)) {
       showFeedback('Select an active class or section for the selected course.', 'error');
       return;
@@ -1019,10 +1050,6 @@ export const GradeComputation: React.FC = () => {
       : null;
 
     const parsedMaxScore = typeof assMaxScore === 'number' ? assMaxScore : parseInt(String(assMaxScore), 10);
-    if (isNaN(parsedMaxScore) || parsedMaxScore <= 0) {
-      showFeedback('Please enter a valid maximum score greater than 0.', 'error');
-      return;
-    }
     if (!maxScoreConfirmed && parsedMaxScore > 500 && parsedMaxScore !== editingAssessment?.maxScore) {
       setMaxScoreToConfirm(parsedMaxScore);
       return;
@@ -5667,7 +5694,7 @@ export const GradeComputation: React.FC = () => {
         onClose={() => setIsAssessmentModalOpen(false)}
         title={editingAssessment ? 'Edit Assessment Spec' : 'Create New Assessment Activity'}
       >
-        <form onSubmit={handleAssessmentSubmit} className="space-y-4">
+        <form onSubmit={handleAssessmentSubmit} noValidate className="space-y-4">
           <div className="space-y-1.5">
             <label htmlFor="assessment-title" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">
               Assessment Title / Activity Name
@@ -5676,11 +5703,13 @@ export const GradeComputation: React.FC = () => {
               id="assessment-title"
               type="text"
               required
+              {...assessmentFieldAria('title')}
               placeholder="e.g. Molar Crown Prep quiz"
               value={assTitle}
               onChange={(e) => setAssTitle(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+              className={`w-full px-4 py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500 ${assessmentFieldCls('title', 'dark:border-slate-800 bg-white dark:bg-slate-900')}`}
             />
+            {assessmentFieldErr('title')}
           </div>
 
           <div className="space-y-1.5">
@@ -5843,6 +5872,7 @@ export const GradeComputation: React.FC = () => {
                 type="number"
                 min="1"
                 required
+                {...assessmentFieldAria('max-score')}
                 placeholder="e.g. 50"
                 value={assMaxScore}
                 onChange={(e) => {
@@ -5854,8 +5884,9 @@ export const GradeComputation: React.FC = () => {
                     setAssMaxScore(isNaN(num) ? '' : num);
                   }
                 }}
-                className="w-full px-4 py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                className={`w-full px-4 py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500 ${assessmentFieldCls('max-score', 'dark:border-slate-800 bg-white dark:bg-slate-900')}`}
               />
+              {assessmentFieldErr('max-score')}
             </div>
 
             <div className="space-y-1.5">

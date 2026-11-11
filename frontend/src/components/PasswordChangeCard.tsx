@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 
 // Mirrors the server policy (backend/app/validation.php validate_password_policy).
 const PASSWORD_REQUIREMENTS = [
-  { key: 'hasMinLength', label: 'At least 8 characters' },
+  { key: 'hasValidLength', label: '8–32 characters' },
   { key: 'hasUppercase', label: 'An uppercase letter (A-Z)' },
   { key: 'hasLowercase', label: 'A lowercase letter (a-z)' },
   { key: 'hasNumber', label: 'A number (0-9)' },
@@ -44,6 +44,7 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
   const [success, setSuccess] = useState<string | null>(null);
 
   const criteria = validatePasswordRequirements(newPassword);
+  const newPasswordTooLong = newPassword !== '' && !criteria.hasMaxLength;
   const confirmationMismatch = confirmPassword !== '' && newPassword !== confirmPassword;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -154,13 +155,15 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 placeholder="Enter current password"
-                className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-accent-500"
+                className="w-full px-3.5 py-2.5 pr-12 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-accent-500"
               />
               <button
                 type="button"
                 onClick={() => setShowCurrent(!showCurrent)}
                 aria-label={showCurrent ? 'Hide current password' : 'Show current password'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                aria-pressed={showCurrent}
+                aria-controls="current-password"
+                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500"
               >
                 {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -180,27 +183,39 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
                 autoComplete="new-password"
                 required
                 minLength={8}
-                aria-describedby="new-password-requirements"
+                maxLength={32}
+                aria-describedby="new-password-requirements new-password-length-error"
                 aria-invalid={newPassword !== '' && !criteria.isValid}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Enter new password"
-                className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-accent-500"
+                className="w-full px-3.5 py-2.5 pr-12 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-accent-500"
               />
               <button
                 type="button"
                 onClick={() => setShowNew(!showNew)}
                 aria-label={showNew ? 'Hide new password' : 'Show new password'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                aria-pressed={showNew}
+                aria-controls="new-password"
+                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500"
               >
                 {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+            {newPasswordTooLong && (
+              <p id="new-password-length-error" role="alert" className="mt-1 text-xs font-medium text-rose-600">
+                Use at most 32 characters.
+              </p>
+            )}
             <div id="new-password-requirements" aria-live="polite" className="mt-2 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-3">
               <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Your new password must have:</p>
               <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs">
                 {PASSWORD_REQUIREMENTS.map(requirement => {
-                  const met = criteria[requirement.key];
+                  const requirementStatus: Record<string, boolean> = {
+                    ...criteria,
+                    hasValidLength: criteria.hasMinLength && criteria.hasMaxLength,
+                  };
+                  const met = requirementStatus[requirement.key];
                   return (
                     <li key={requirement.key} className={met ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}>
                       {met ? <CheckCircle2 className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" /> : <XCircle className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />}
@@ -226,17 +241,20 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
                 id="confirm-password"
                 autoComplete="new-password"
                 required
+                maxLength={32}
                 aria-invalid={confirmationMismatch}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Confirm new password"
-                className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-accent-500"
+                className="w-full px-3.5 py-2.5 pr-12 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-accent-500"
               />
               <button
                 type="button"
                 onClick={() => setShowConfirm(!showConfirm)}
                 aria-label={showConfirm ? 'Hide confirmation password' : 'Show confirmation password'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                aria-pressed={showConfirm}
+                aria-controls="confirm-password"
+                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500"
               >
                 {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>

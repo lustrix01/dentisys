@@ -58,6 +58,7 @@ export function SsoLogin() {
   const [error, setError] = useState('');
   const [linkChallengeToken, setLinkChallengeToken] = useState<string | null>(null);
   const [linkPassword, setLinkPassword] = useState('');
+  const [showLinkPassword, setShowLinkPassword] = useState(false);
   const [googleLoadState, setGoogleLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const googleButtonRef = useRef<HTMLDivElement>(null);
 
@@ -316,14 +317,29 @@ export function SsoLogin() {
               <p className="text-xs font-semibold text-purple-900">
                 Confirm your DentiSys password to link this Google account.
               </p>
-              <input
-                type="password"
-                required
-                value={linkPassword}
-                onChange={(event) => setLinkPassword(event.target.value)}
-                placeholder="DentiSys password"
-                className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-purple-600"
-              />
+              <div className="relative mt-3">
+                <input
+                  id="google-link-password"
+                  type={showLinkPassword ? 'text' : 'password'}
+                  required
+                  autoComplete="current-password"
+                  aria-label="DentiSys password"
+                  value={linkPassword}
+                  onChange={(event) => setLinkPassword(event.target.value)}
+                  placeholder="DentiSys password"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pr-12 text-xs text-slate-800 outline-none focus:border-purple-600"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowLinkPassword(!showLinkPassword)}
+                  aria-label={showLinkPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showLinkPassword}
+                  aria-controls="google-link-password"
+                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-400 hover:text-slate-600 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-purple-500"
+                >
+                  {showLinkPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               <button type="submit" disabled={isLoading} className="mt-3 w-full rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50 hover:bg-purple-700 transition-all cursor-pointer">
                 Confirm and link Google
               </button>
@@ -381,13 +397,15 @@ export function SsoLogin() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-3.5 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-purple-600/10 focus:border-purple-600 transition-all text-sm outline-none text-slate-900 placeholder-slate-400"
+                  className="w-full px-3.5 pr-12 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-purple-600/10 focus:border-purple-600 transition-all text-sm outline-none text-slate-900 placeholder-slate-400"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  aria-pressed={showPassword}
+                  aria-controls="login-password"
+                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-400 hover:text-slate-600 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-purple-500"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>

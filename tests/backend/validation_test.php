@@ -128,6 +128,30 @@ try {
     exit(1);
 }
 
+// Maximum length is a Unicode character count, not a byte count.
+$maxLengthPassword = 'Aa1!' . str_repeat('a', 28);
+assert_same(32, mb_strlen($maxLengthPassword, 'UTF-8'), 'Maximum-length fixture is 32 characters');
+try {
+    validate_password_policy($maxLengthPassword);
+    assert_same(true, true, '32-character password accepted');
+} catch (\Throwable $e) {
+    fwrite(STDERR, "FAIL: 32-character password rejected: " . $e->getMessage() . "\n");
+    exit(1);
+}
+assert_throws(fn() => validate_password_policy('Aa1!' . str_repeat('a', 29)), 'Use at most 32 characters', '33-character password rejected');
+
+$unicodeMaxPassword = 'Aa1!' . str_repeat('é', 28);
+assert_same(32, mb_strlen($unicodeMaxPassword, 'UTF-8'), 'Unicode maximum-length fixture is 32 characters');
+assert_same(60, strlen($unicodeMaxPassword), 'Unicode maximum-length fixture exceeds 32 bytes');
+try {
+    validate_password_policy($unicodeMaxPassword);
+    assert_same(true, true, '32-character Unicode password accepted even when it exceeds 32 bytes');
+} catch (\Throwable $e) {
+    fwrite(STDERR, "FAIL: 32-character Unicode password rejected: " . $e->getMessage() . "\n");
+    exit(1);
+}
+assert_throws(fn() => validate_password_policy('Aa1!' . str_repeat('é', 29)), 'Use at most 32 characters', '33-character Unicode password rejected');
+
 // Field normalization
 assert_throws(fn() => validate_person_name(['firstName' => ".-'"], 'firstName'), 'Use letters, spaces, hyphens', 'Punctuation-only name rejected with correction guidance');
 assert_same('María', validate_person_name(['firstName' => 'María'], 'firstName'), 'Accented name accepted');

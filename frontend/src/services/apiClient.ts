@@ -290,7 +290,11 @@ function isPublicAuthPath(path: string): boolean {
 }
 
 function canRefreshAfterUnauthorized(path: string, tokenOverride: string | undefined, retryDepth: number): boolean {
-  if (!accessToken || tokenOverride !== undefined || retryDepth > 0 || Date.now() - lastUserActivityAt > USER_ACTIVITY_SIGNAL_TTL_MS) return false;
+  // The server is the authority on idle and absolute expiry, so always give the
+  // session one silent renewal; a session that is truly dead is rejected there.
+  // The activity header below stays freshness-gated, so a background refresh
+  // does not extend the server's last_seen_at.
+  if (!accessToken || tokenOverride !== undefined || retryDepth > 0) return false;
   return !isPublicAuthPath(path);
 }
 

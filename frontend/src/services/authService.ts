@@ -1,4 +1,4 @@
-import { recordAudit } from './auditService';
+import { recordAudit } from './auditService.ts';
 import {
   inviteSecretaryApi,
   getSecretaryInvitationApi,
@@ -7,8 +7,8 @@ import {
   confirmPasswordResetApi,
   listSecretaryInvitationsApi,
   revokeSecretaryInvitationApi,
-} from './apiClient';
-import { normalizePersonName } from '../utils/nameNormalization';
+} from './apiClient.ts';
+import { normalizePersonName } from '../utils/nameNormalization.ts';
 
 export type UserRole = 'admin' | 'faculty' | 'secretary';
 export type AccountStatus = 'Active' | 'Pending Activation' | 'Pending Invitation';
@@ -47,6 +47,7 @@ export interface SecretaryInvitation {
 
 export interface PasswordCriteria {
   hasMinLength: boolean;
+  hasMaxLength: boolean;
   hasUppercase: boolean;
   hasLowercase: boolean;
   hasNumber: boolean;
@@ -116,16 +117,19 @@ export const validatePersonName = (name: string): { isValid: boolean; message: s
  * Evaluates password strength requirements.
  */
 export const validatePasswordRequirements = (password: string): PasswordCriteria => {
-  const hasMinLength = password.length >= 8;
+  const characterCount = Array.from(password).length;
+  const hasMinLength = characterCount >= 8;
+  const hasMaxLength = characterCount <= 32;
   const hasUppercase = /[A-Z]/.test(password);
   const hasLowercase = /[a-z]/.test(password);
   const hasNumber = /[0-9]/.test(password);
   const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
 
-  const isValid = hasMinLength && hasUppercase && hasLowercase && hasNumber && hasSpecial;
+  const isValid = hasMinLength && hasMaxLength && hasUppercase && hasLowercase && hasNumber && hasSpecial;
 
   return {
     hasMinLength,
+    hasMaxLength,
     hasUppercase,
     hasLowercase,
     hasNumber,

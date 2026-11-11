@@ -345,7 +345,7 @@ export function ActivateSecretary() {
 
                 {/* Create Password */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                  <label htmlFor="secretary-password" className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                     Create Password <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-xl shadow-sm group">
@@ -353,21 +353,32 @@ export function ActivateSecretary() {
                       <Lock className="h-4 w-4" />
                     </div>
                     <input
+                      id="secretary-password"
                       type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
                       required
+                      maxLength={32}
+                      aria-invalid={Boolean(password && !passwordCriteria.hasMaxLength)}
+                      aria-describedby="secretary-password-length-error"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-xs outline-none placeholder-slate-400 dark:text-slate-200"
+                      className="w-full pl-10 pr-12 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-xs outline-none placeholder-slate-400 dark:text-slate-200"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-pressed={showPassword}
+                      aria-controls="secretary-password"
+                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                  {password && !passwordCriteria.hasMaxLength && (
+                    <p id="secretary-password-length-error" role="alert" className="mt-1 text-[11px] font-medium text-rose-500">Use at most 32 characters.</p>
+                  )}
 
                   {/* Password Checklist */}
                   {password.length > 0 && (
@@ -376,9 +387,9 @@ export function ActivateSecretary() {
                         Password Requirements:
                       </div>
                       <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                        <div className={`flex items-center gap-1.5 ${passwordCriteria.hasMinLength ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
-                          {passwordCriteria.hasMinLength ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 opacity-60" />}
-                          <span>At least 8 characters</span>
+                        <div className={`flex items-center gap-1.5 ${passwordCriteria.hasMinLength && passwordCriteria.hasMaxLength ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
+                          {passwordCriteria.hasMinLength && passwordCriteria.hasMaxLength ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 opacity-60" />}
+                          <span>8–32 characters</span>
                         </div>
                         <div className={`flex items-center gap-1.5 ${passwordCriteria.hasUppercase ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
                           {passwordCriteria.hasUppercase ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 opacity-60" />}
@@ -403,7 +414,7 @@ export function ActivateSecretary() {
 
                 {/* Confirm Password */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                  <label htmlFor="secretary-password-confirmation" className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                     Confirm Password <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-xl shadow-sm group">
@@ -411,13 +422,17 @@ export function ActivateSecretary() {
                       <Lock className="h-4 w-4" />
                     </div>
                     <input
+                      id="secretary-password-confirmation"
                       type={showConfirmPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
                       required
+                      maxLength={32}
+                      aria-invalid={confirmTouched && confirmPassword !== '' && !isPasswordMatch}
                       value={confirmPassword}
                       onBlur={() => setConfirmTouched(true)}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
-                      className={`w-full pl-10 pr-10 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border ${
+                      className={`w-full pl-10 pr-12 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border ${
                         confirmTouched && confirmPassword && !isPasswordMatch
                           ? 'border-rose-400 focus:ring-rose-500 focus:border-rose-500'
                           : confirmTouched && confirmPassword && isPasswordMatch
@@ -428,7 +443,10 @@ export function ActivateSecretary() {
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
+                      aria-label={showConfirmPassword ? 'Hide password confirmation' : 'Show password confirmation'}
+                      aria-pressed={showConfirmPassword}
+                      aria-controls="secretary-password-confirmation"
+                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
                     >
                       {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>

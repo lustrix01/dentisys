@@ -19,6 +19,10 @@ $studentManagement = file_get_contents($root . '/frontend/src/pages/faculty/Clas
 $apiClient = file_get_contents($root . '/frontend/src/services/apiClient.ts');
 $facultyActivation = file_get_contents($root . '/frontend/src/pages/auth/ActivateFaculty.tsx');
 $studentActivation = file_get_contents($root . '/frontend/src/pages/auth/ActivateStudent.tsx');
+$secretaryActivation = file_get_contents($root . '/frontend/src/pages/auth/ActivateSecretary.tsx');
+$resetPassword = file_get_contents($root . '/frontend/src/pages/auth/ResetPassword.tsx');
+$passwordChangeCard = file_get_contents($root . '/frontend/src/components/PasswordChangeCard.tsx');
+$ssoLogin = file_get_contents($root . '/frontend/src/pages/auth/SsoLogin.tsx');
 
 assert_onboarding_contract(is_string($faculty) && is_string($studentManagement), 'Student onboarding sources are readable');
 assert_onboarding_contract(str_contains($faculty, 'Whole-name input is not supported'), 'Student create rejects a whole-name compatibility payload');
@@ -37,9 +41,28 @@ assert_onboarding_contract(str_contains($facultyInvitation, 'name_parts_from_pay
 
 foreach ([$facultyActivation, $studentActivation] as $activation) {
     assert_onboarding_contract(is_string($activation) && str_contains($activation, 'minLength={8}'), 'Activation password fields expose the server minimum');
+    assert_onboarding_contract(str_contains($activation, 'maxLength={32}'), 'Activation password fields expose the 32-character maximum');
+    assert_onboarding_contract(str_contains($activation, '8–32 characters'), 'Activation password requirements show the 8–32 character range');
+    assert_onboarding_contract(str_contains($activation, 'Use at most 32 characters.'), 'Activation password length error uses the approved copy');
     assert_onboarding_contract(str_contains($activation, 'validatePasswordRequirements') && str_contains($activation, 'PasswordRequirement'), 'Activation password requirements are visible and live');
     assert_onboarding_contract(str_contains($activation, "type={showPassword ? 'text' : 'password'}"), 'Activation password has an accessible reveal control');
+    assert_onboarding_contract(str_contains($activation, 'aria-controls="') && str_contains($activation, 'aria-pressed=') && str_contains($activation, 'focus-visible:ring-inset'), 'Activation reveal control is wired to its input, exposes pressed state, and has a keyboard focus ring');
 }
+foreach ([
+    'Secretary activation' => $secretaryActivation,
+    'Password reset' => $resetPassword,
+    'Password change card' => $passwordChangeCard,
+] as $formName => $formSource) {
+    assert_onboarding_contract(is_string($formSource) && str_contains($formSource, 'maxLength={32}'), "{$formName} enforces the 32-character maximum");
+    assert_onboarding_contract(str_contains($formSource, 'Use at most 32 characters.'), "{$formName} uses the approved maximum-length copy");
+    assert_onboarding_contract(str_contains($formSource, 'focus-visible:ring-inset') && str_contains($formSource, 'aria-controls="') && str_contains($formSource, 'aria-pressed='), "{$formName} reveal controls keep the accessible control contract");
+}
+assert_onboarding_contract(str_contains($secretaryActivation, '8–32 characters') && str_contains($resetPassword, '8–32 characters'), 'Set-password forms show the 8–32 character requirement');
+assert_onboarding_contract(str_contains($passwordChangeCard, '8–32 characters'), 'Password change card lists the 8–32 character requirement');
+assert_onboarding_contract(str_contains($ssoLogin, 'aria-controls="login-password"') && str_contains($ssoLogin, 'aria-controls="google-link-password"') && str_contains($ssoLogin, 'aria-pressed='), 'Sign-in and Google linking prompts have visible reveal controls');
+$loginPasswordStart = strpos($ssoLogin, 'id="login-password"');
+$loginPasswordAttributes = substr($ssoLogin, (int) $loginPasswordStart, 400);
+assert_onboarding_contract($loginPasswordStart !== false && !str_contains($loginPasswordAttributes, 'maxLength'), 'Sign-in password keeps accepting existing passwords (no maximum)');
 // REG-003: invitation acceptance is password-only; Google is linked from the profile afterwards.
 assert_onboarding_contract(str_contains($apiClient, "request('POST', '/auth/faculty/activate', { token, password })"), 'Faculty activation sends only the token and password');
 assert_onboarding_contract(str_contains($apiClient, "request('POST', '/auth/student/activate', { token, password })"), 'Student activation sends only the token and password');

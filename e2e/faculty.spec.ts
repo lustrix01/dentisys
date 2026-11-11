@@ -727,7 +727,7 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.click('a[href="/faculty/profile"] >> visible=true');
     await expect(page).toHaveURL('/faculty/profile');
     const requirements = page.locator('#new-password-requirements');
-    await expect(requirements).toContainText('At least 8 characters');
+    await expect(requirements).toContainText('8–32 characters');
     await expect(requirements).toContainText('An uppercase letter');
     await expect(requirements).toContainText('A lowercase letter');
     await expect(requirements).toContainText('A number');
@@ -3636,6 +3636,133 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       // Authoritative re-fetch: GET /api/faculty/assessments called
       expect(getAssessmentsCallCount).toBeGreaterThan(initialGetCount);
+    });
+
+    test('blank maximum score shows the inline field error, keeps Confirm enabled and submits nothing', async ({ page }) => {
+      let postCount = 0;
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: mockGradingConfig401 }),
+        });
+      });
+
+      await page.route('**/api/faculty/assessments', async (route) => {
+        if (route.request().method() === 'POST') postCount += 1;
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      });
+
+      await page.goto('/grades?tab=assessments');
+      await page.getByRole('button', { name: 'Add assessment' }).click();
+
+      const modalForm = page.locator('form').last();
+      const categorySelect = modalForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) });
+      await expect(categorySelect.locator('option', { hasText: 'Quizzes (25%)' })).toBeAttached();
+      await categorySelect.selectOption('11');
+      await page.getByPlaceholder('e.g. Molar Crown Prep quiz').fill('Midterm Crown Quiz');
+
+      // Confirm stays enabled; the app (not the browser) validates the field.
+      const submitBtn = modalForm.getByRole('button', { name: 'Confirm Assessment' });
+      await expect(submitBtn).toBeEnabled();
+      await submitBtn.click();
+
+      // No native validation bubble: the existing inline error pattern appears and takes focus.
+      await expect(modalForm.getByText('Enter a maximum score greater than 0.')).toBeVisible();
+      const maxScoreInput = modalForm.locator('input[type="number"]').first();
+      await expect(maxScoreInput).toHaveAttribute('aria-invalid', 'true');
+      await expect(maxScoreInput).toHaveAttribute('aria-describedby', 'assessment-err-max-score');
+      await expect(maxScoreInput).toHaveClass(/border-rose-300/);
+      await expect(maxScoreInput).toBeFocused();
+      expect(postCount).toBe(0);
+      await expect(submitBtn).toBeEnabled();
+      await expect(page.getByRole('heading', { name: 'Create New Assessment Activity' })).toBeVisible();
+    });
+
+    test('assessment title and maximum score are rejected inline and submit after correction', async ({ page }) => {
+      const postedAssessments: Array<Record<string, any>> = [];
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: mockGradingConfig401 }),
+        });
+      });
+
+      await page.route('**/api/faculty/assessments', async (route) => {
+        if (route.request().method() === 'POST') {
+          const [payload] = route.request().postDataJSON() as Array<Record<string, any>>;
+          postedAssessments.push(payload);
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'ok',
+              message: 'Assessment persisted successfully.',
+              assessments: [{ id: 'ass-validated', classId: payload.classId, title: payload.title }],
+            }),
+          });
+          return;
+        }
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      });
+
+      await page.goto('/grades?tab=assessments');
+      await page.getByRole('button', { name: 'Add assessment' }).click();
+
+      const modalForm = page.locator('form').last();
+      const categorySelect = modalForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) });
+      await expect(categorySelect.locator('option', { hasText: 'Quizzes (25%)' })).toBeAttached();
+      await categorySelect.selectOption('11');
+      const titleInput = page.getByPlaceholder('e.g. Molar Crown Prep quiz');
+      const maxScoreInput = page.getByPlaceholder('e.g. 50');
+      const submitBtn = modalForm.getByRole('button', { name: 'Confirm Assessment' });
+
+      // Whitespace-only title: previously a silent return with no feedback. Both fields are
+      // invalid, so both inline messages show and focus lands on the first invalid field.
+      await titleInput.fill('   ');
+      await submitBtn.click();
+      await expect(modalForm.getByText('Enter an assessment title.')).toBeVisible();
+      await expect(modalForm.getByText('Enter a maximum score greater than 0.')).toBeVisible();
+      await expect(titleInput).toHaveAttribute('aria-invalid', 'true');
+      await expect(titleInput).toHaveClass(/border-rose-300/);
+      await expect(titleInput).toBeFocused();
+      expect(postedAssessments).toHaveLength(0);
+
+      // 0 and negative maximum scores.
+      await titleInput.fill('Midterm Crown Quiz');
+      await maxScoreInput.fill('0');
+      await submitBtn.click();
+      await expect(modalForm.getByText('Enter an assessment title.')).toHaveCount(0);
+      await expect(modalForm.getByText('Enter a maximum score greater than 0.')).toBeVisible();
+      await expect(maxScoreInput).toHaveAttribute('aria-invalid', 'true');
+      await expect(maxScoreInput).toHaveClass(/border-rose-300/);
+      await expect(maxScoreInput).toBeFocused();
+      expect(postedAssessments).toHaveLength(0);
+
+      await maxScoreInput.fill('-5');
+      await submitBtn.click();
+      await expect(modalForm.getByText('Enter a maximum score greater than 0.')).toBeVisible();
+      expect(postedAssessments).toHaveLength(0);
+
+      // A number input sanitizes typed non-numeric text to blank, which the same guard rejects.
+      await maxScoreInput.fill('');
+      await maxScoreInput.pressSequentially('abc');
+      await expect(maxScoreInput).toHaveValue('');
+      await submitBtn.click();
+      await expect(modalForm.getByText('Enter a maximum score greater than 0.')).toBeVisible();
+      expect(postedAssessments).toHaveLength(0);
+
+      // Correcting the value clears the inline error and the assessment submits.
+      await maxScoreInput.fill('20');
+      await expect(modalForm.getByText('Enter a maximum score greater than 0.')).toHaveCount(0);
+      await submitBtn.click();
+      await expect(page.getByText('Assessment persisted successfully.')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Create New Assessment Activity' })).toHaveCount(0);
+      expect(postedAssessments).toHaveLength(1);
+      expect(postedAssessments[0]).toMatchObject({ title: 'Midterm Crown Quiz', maxScore: 20, gradingCategoryId: 11, classId: '1' });
     });
 
     test('switching assessment period preserves its selected component when category names repeat', async ({ page }) => {

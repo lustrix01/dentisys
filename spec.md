@@ -184,6 +184,8 @@ Google support MUST NOT:
 * remove password recovery/reset;
 * make Google-linked accounts passwordless.
 
+Owner-approved amendment (2026-11-11): DentiSys enforces one password policy on every flow that creates, changes or resets a password — at least 8 and at most 32 characters, counted as Unicode characters, containing at least one uppercase letter, one lowercase letter, one digit and one special character. The same rule is shown in the form that sets the password. A changed password must differ from the current one. Passwords are stored only as password hashes. Sign-in continues to accept existing passwords; the 32-character maximum applies only when a password is set, changed or reset.
+
 ## AUTH-006 — MFA
 
 **Status: CURRENT**

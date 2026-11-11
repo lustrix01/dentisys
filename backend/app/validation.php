@@ -434,8 +434,14 @@ function validate_password_policy(string $password): void
 {
     $errors = [];
 
-    if (strlen($password) < 8) {
+    $characterCount = mb_strlen($password, 'UTF-8');
+
+    if ($characterCount < 8) {
         $errors[] = ['field' => 'password', 'message' => 'Must be at least 8 characters.'];
+    }
+
+    if ($characterCount > 32) {
+        $errors[] = ['field' => 'password', 'message' => 'Use at most 32 characters.'];
     }
 
     if (!preg_match('/[A-Z]/', $password)) {

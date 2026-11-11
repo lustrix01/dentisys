@@ -77,11 +77,12 @@ export function ActivateFaculty() {
             <label htmlFor="faculty-password" className="mt-5 block text-sm font-semibold text-slate-700 dark:text-slate-200">
               Password
               <div className="relative mt-2">
-                <input id="faculty-password" aria-label="Password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" required minLength={8} aria-describedby="faculty-password-requirements" value={password} onChange={event => setPassword(event.target.value)} className="w-full rounded-lg border border-slate-300 p-3 pr-11 dark:border-slate-700 dark:bg-slate-800" />
-                <button type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute inset-y-0 right-0 px-3 text-slate-500">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+                <input id="faculty-password" aria-label="Password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" required minLength={8} maxLength={32} aria-invalid={Boolean(password && !passwordCriteria.hasMaxLength)} aria-describedby="faculty-password-requirements faculty-password-length-error" value={password} onChange={event => setPassword(event.target.value)} className="w-full rounded-lg border border-slate-300 p-3 pr-12 dark:border-slate-700 dark:bg-slate-800" />
+                <button type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} aria-controls="faculty-password" className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-slate-500 transition-colors hover:text-slate-700 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
               </div>
+              {password && !passwordCriteria.hasMaxLength && <p id="faculty-password-length-error" role="alert" className="mt-1 text-xs font-medium text-rose-600">Use at most 32 characters.</p>}
               <div id="faculty-password-requirements" className="mt-2 grid grid-cols-2 gap-1 text-xs" aria-live="polite">
-                <PasswordRequirement valid={passwordCriteria.hasMinLength} label="8+ characters" />
+                <PasswordRequirement valid={passwordCriteria.hasMinLength && passwordCriteria.hasMaxLength} label="8–32 characters" />
                 <PasswordRequirement valid={passwordCriteria.hasUppercase} label="Uppercase letter" />
                 <PasswordRequirement valid={passwordCriteria.hasLowercase} label="Lowercase letter" />
                 <PasswordRequirement valid={passwordCriteria.hasNumber} label="Number" />
@@ -91,8 +92,8 @@ export function ActivateFaculty() {
             <label htmlFor="faculty-password-confirmation" className="mt-4 block text-sm font-semibold text-slate-700 dark:text-slate-200">
               Confirm Password
               <div className="relative mt-2">
-                <input id="faculty-password-confirmation" aria-label="Confirm password" type={showConfirmation ? 'text' : 'password'} autoComplete="new-password" required minLength={8} aria-invalid={Boolean(confirmation && password !== confirmation)} value={confirmation} onChange={event => setConfirmation(event.target.value)} className="w-full rounded-lg border border-slate-300 p-3 pr-11 dark:border-slate-700 dark:bg-slate-800" />
-                <button type="button" onClick={() => setShowConfirmation(value => !value)} aria-label={showConfirmation ? 'Hide password confirmation' : 'Show password confirmation'} className="absolute inset-y-0 right-0 px-3 text-slate-500">{showConfirmation ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+                <input id="faculty-password-confirmation" aria-label="Confirm password" type={showConfirmation ? 'text' : 'password'} autoComplete="new-password" required minLength={8} maxLength={32} aria-invalid={Boolean(confirmation && password !== confirmation)} value={confirmation} onChange={event => setConfirmation(event.target.value)} className="w-full rounded-lg border border-slate-300 p-3 pr-12 dark:border-slate-700 dark:bg-slate-800" />
+                <button type="button" onClick={() => setShowConfirmation(value => !value)} aria-label={showConfirmation ? 'Hide password confirmation' : 'Show password confirmation'} aria-pressed={showConfirmation} aria-controls="faculty-password-confirmation" className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-slate-500 transition-colors hover:text-slate-700 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500">{showConfirmation ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
               </div>
               {confirmation && password !== confirmation && <p role="alert" className="mt-1 text-xs font-medium text-rose-600">Passwords do not match.</p>}
             </label>
