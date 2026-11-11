@@ -72,7 +72,6 @@ export function LandingShell({ children }: { children?: React.ReactNode }) {
     <div className="relative isolate flex min-h-screen flex-col bg-slate-50 text-slate-800">
       <div className="pointer-events-none absolute inset-0" aria-hidden="true">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_48%,rgba(139,92,246,0.15)_0%,rgba(139,92,246,0.06)_36%,transparent_72%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1.2px,transparent_1.2px)] [background-size:24px_24px] opacity-40" />
       </div>
       <header className="sticky top-0 z-50 w-full flex-shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur-xs px-4 py-3 shadow-2xs sm:px-6 sm:py-3.5 md:px-12">
         <div className="mx-auto flex max-w-7xl items-center justify-start gap-3 sm:gap-6">

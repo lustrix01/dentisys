@@ -144,11 +144,11 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           pillActive: 'text-accent-600 dark:text-accent-400 font-bold hover:bg-slate-100/60 dark:hover:bg-slate-800/40',
           iconActive: 'text-accent-600 dark:text-accent-400',
           iconHover: 'group-hover:text-accent-600 dark:group-hover:text-accent-300',
-          logoRing: 'shadow-accent-500/20',
-          avatarBg: 'from-accent-500 to-accent-600 dark:from-accent-600 dark:to-accent-700',
+          avatarBg: 'bg-accent-600 dark:bg-accent-700',
           avatarText: 'text-white font-bold font-heading',
+          brandAccentText: 'text-accent-600 dark:text-accent-400',
           crumbHover: 'hover:text-accent-500',
-          roleLabelText: 'text-accent-600 dark:text-accent-500',
+          roleLabelText: 'text-slate-500 dark:text-slate-400',
           hoverBg: 'hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white',
           sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
@@ -158,11 +158,11 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           pillActive: 'text-blue-600 dark:text-blue-400 font-bold hover:bg-slate-100/60 dark:hover:bg-slate-800/40',
           iconActive: 'text-blue-600 dark:text-blue-400',
           iconHover: 'group-hover:text-blue-600 dark:group-hover:text-blue-300',
-          logoRing: 'shadow-blue-500/20',
-          avatarBg: 'from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-700',
+          avatarBg: 'bg-blue-600 dark:bg-blue-700',
           avatarText: 'text-white font-bold font-heading',
+          brandAccentText: 'text-blue-600 dark:text-blue-400',
           crumbHover: 'hover:text-blue-500',
-          roleLabelText: 'text-blue-600 dark:text-blue-500',
+          roleLabelText: 'text-slate-500 dark:text-slate-400',
           hoverBg: 'hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white',
           sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
@@ -172,11 +172,11 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           pillActive: 'text-clinical-600 dark:text-clinical-400 font-bold hover:bg-slate-100/60 dark:hover:bg-slate-800/40',
           iconActive: 'text-clinical-600 dark:text-clinical-400',
           iconHover: 'group-hover:text-clinical-600 dark:group-hover:text-clinical-300',
-          logoRing: 'shadow-clinical-500/20',
-          avatarBg: 'from-clinical-500 to-accent-600 dark:from-clinical-600 dark:to-accent-700',
+          avatarBg: 'bg-clinical-600 dark:bg-clinical-700',
           avatarText: 'text-white font-bold font-heading',
+          brandAccentText: 'text-clinical-600 dark:text-clinical-400',
           crumbHover: 'hover:text-clinical-500',
-          roleLabelText: 'text-emerald-700 dark:text-emerald-500',
+          roleLabelText: 'text-slate-500 dark:text-slate-400',
           hoverBg: 'hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white',
           sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
@@ -625,7 +625,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                 setIsProfileOpen(!isProfileOpen);
                 setIsNotificationsOpen(false);
               }}
-              className={`w-8 h-8 rounded-xl bg-gradient-to-tr ${colors.avatarBg} ${colors.avatarText} text-xs font-extrabold flex items-center justify-center shadow-xs cursor-pointer`}
+              className={`w-8 h-8 rounded-full ${colors.avatarBg} ${colors.avatarText} text-xs font-extrabold flex items-center justify-center cursor-pointer`}
               title="Profile menu"
             >
               {initials}
@@ -667,14 +667,14 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             <img
               src="/bu-cdm-logo.png"
               alt="BU CDM logo"
-              className={`w-10 h-10 rounded-full object-cover shadow-lg ${colors.logoRing} flex-shrink-0 transition-transform duration-300`}
+              className="w-10 h-10 rounded-full object-cover flex-shrink-0"
             />
             {!isSidebarCollapsed && (
               <div className="transition-opacity duration-300 min-w-0">
-                <h1 className="font-heading font-extrabold text-xl tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-1.5 truncate">
-                  DentiSYS
+                <h1 className="font-heading font-bold text-xl tracking-tight text-slate-800 dark:text-slate-100 flex items-center truncate">
+                  <span>Denti</span><span className={colors.brandAccentText}>SYS</span>
                 </h1>
-                <p className="text-[9px] font-bold text-slate-500 dark:text-slate-500 tracking-wide uppercase md:whitespace-nowrap">
+                <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 md:whitespace-nowrap">
                   BU College of Dental Medicine
                 </p>
               </div>
@@ -686,11 +686,11 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             <button
               type="button"
               onClick={handleToggleCollapse}
-              className="hidden md:flex absolute right-0 top-1.5 w-7 h-7 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 border border-slate-200/60 dark:border-slate-700/60 items-center justify-center hover:scale-105 active:scale-95 transition-all cursor-pointer group flex-shrink-0 ml-2 shadow-xs"
+              className="hidden md:flex absolute right-0 top-1.5 w-7 h-7 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 items-center justify-center transition-colors cursor-pointer flex-shrink-0 ml-2"
               title="Collapse sidebar"
               aria-label="Collapse sidebar"
             >
-              <ChevronLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+              <ChevronLeft className="w-4 h-4" />
             </button>
           )}
 
@@ -936,9 +936,9 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                   setIsProfileOpen(!isProfileOpen);
                   setIsNotificationsOpen(false);
                 }}
-                className="flex items-center space-x-3 pl-3 py-1.5 pr-2 rounded-xl hover:bg-slate-100/60 dark:hover:bg-slate-900/60 transition-colors border-l border-slate-200 dark:border-slate-800"
+                className="flex items-center space-x-3 pl-2 py-1.5 pr-2 rounded-lg hover:bg-slate-100/60 dark:hover:bg-slate-900/60 transition-colors"
               >
-                <div className={`w-8 h-8 rounded-xl bg-gradient-to-tr ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} text-sm shadow-md`}>
+                <div className={`w-8 h-8 rounded-full ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} text-sm`}>
                   {initials}
                 </div>
                   <div className="text-left hidden lg:block">

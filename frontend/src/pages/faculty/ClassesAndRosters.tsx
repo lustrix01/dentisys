@@ -1491,7 +1491,7 @@ const handleSendAllStudentInvites = async () => {
                 <Card key={cls.id} className={`p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4 ${historicalClass ? 'border-slate-300/80 dark:border-slate-700' : ''}`}>
                   <div className="space-y-2">
                     <div className="flex max-sm:flex-wrap lg:max-[1535px]:flex-wrap items-center justify-between max-sm:gap-y-2 lg:max-[1535px]:gap-y-2">
-                      <span className="max-sm:whitespace-nowrap lg:max-[1535px]:whitespace-nowrap px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 text-[10px] font-extrabold uppercase tracking-wider">
+                      <span className="max-sm:whitespace-nowrap lg:max-[1535px]:whitespace-nowrap px-2.5 py-1 rounded-lg bg-clinical-50 dark:bg-clinical-950/40 text-clinical-700 dark:text-clinical-300 text-[10px] font-extrabold uppercase tracking-wider">
                         {cls.courseCode} &bull; Year {cls.yearLevel}
                       </span>
                       <div className={`flex flex-wrap items-center gap-1.5 max-sm:gap-1 lg:max-[1535px]:gap-1 min-w-0 ${historicalClass ? 'ml-auto max-sm:ml-0 max-sm:order-3 max-sm:basis-full lg:max-[1535px]:ml-0 lg:max-[1535px]:order-3 lg:max-[1535px]:basis-full' : ''}`}>
@@ -1529,11 +1529,11 @@ const handleSendAllStudentInvites = async () => {
 
                       <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
                         <div className="flex items-center gap-2">
-                          <Calendar className="w-3.5 h-3.5 text-accent-500 flex-shrink-0" />
+                          <Calendar className="w-3.5 h-3.5 text-clinical-600 dark:text-clinical-400 flex-shrink-0" />
                           <span>{semesterLabel(cls.semester)} &bull; {cls.schoolYear || '2025-2026'}</span>
                         </div>
                         <div className="flex items-start gap-2">
-                          <MapPin className="w-3.5 h-3.5 text-accent-500 flex-shrink-0 mt-0.5" />
+                          <MapPin className="w-3.5 h-3.5 text-clinical-600 dark:text-clinical-400 flex-shrink-0 mt-0.5" />
                           <div className="space-y-0.5">
                             {cls.lecRoom && (
                               <div>
@@ -1589,7 +1589,7 @@ const handleSendAllStudentInvites = async () => {
 
                       <button
                         onClick={() => handleOpenClassRoster(cls)}
-                        className="inline-flex items-center gap-1 text-xs font-bold px-2.5 max-[359px]:px-2 py-1.5 max-sm:whitespace-nowrap lg:max-[1535px]:whitespace-nowrap rounded-lg text-accent-600 dark:text-accent-400 bg-accent-50 dark:bg-accent-950/40 hover:bg-accent-100 dark:hover:bg-accent-900/50 transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1 text-xs font-bold px-2.5 max-[359px]:px-2 py-1.5 max-sm:whitespace-nowrap lg:max-[1535px]:whitespace-nowrap rounded-lg text-clinical-700 dark:text-clinical-300 bg-clinical-50 dark:bg-clinical-950/40 hover:bg-clinical-100 dark:hover:bg-clinical-900/50 transition-colors cursor-pointer"
                         title="View class roster"
                       >
                         <span>View roster</span>
@@ -2057,7 +2057,7 @@ const handleSendAllStudentInvites = async () => {
                         </td>
                         <td className="py-3.5 px-4 max-md:order-5 max-md:p-0">
                           <span className="sr-only md:hidden">Enrolled Class Section: </span>
-                          <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 font-extrabold text-[10px] uppercase tracking-wider border border-accent-200/60 dark:border-accent-800/40">
+                          <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-clinical-50 dark:bg-clinical-950/40 text-clinical-700 dark:text-clinical-300 font-extrabold text-[10px] uppercase tracking-wider border border-clinical-200/60 dark:border-clinical-800/40">
                             {assignedClassLabel}
                           </span>
                         </td>
@@ -2067,7 +2067,7 @@ const handleSendAllStudentInvites = async () => {
                         <td className="py-3.5 px-4 text-right max-md:order-6 max-md:ml-auto max-md:p-0">
                           <div className="relative inline-flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                             {displayedSections.some(sec => sec.isSecretary) && (
-                              <span className="whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 border border-accent-200/60 dark:border-accent-800/40">Class Secretary</span>
+                              <span className="whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold bg-clinical-50 dark:bg-clinical-950/40 text-clinical-700 dark:text-clinical-300 border border-clinical-200/60 dark:border-clinical-800/40">Class Secretary</span>
                             )}
                             {(() => {
                               const accountStatus = st.accountStatus ?? 'none';
@@ -2356,7 +2356,7 @@ const handleSendAllStudentInvites = async () => {
                   placeholder="username"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
-                {!studentEmailInput.includes('@') && <span className="text-xs font-bold text-accent-600 whitespace-nowrap">@bicol-u.edu.ph</span>}
+                {!studentEmailInput.includes('@') && <span className="text-xs font-bold text-clinical-600 dark:text-clinical-400 whitespace-nowrap">@bicol-u.edu.ph</span>}
                 </div>
               </div>
               {studentEmailInput.includes('@') && !isOfficialBicolEmail(studentEmailInput) && <p role="alert" className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300">This Student cannot be added until the roster email is corrected to @bicol-u.edu.ph.</p>}
@@ -2825,7 +2825,7 @@ const handleSendAllStudentInvites = async () => {
                   onChange={event => setEditStudentEmail(event.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
-                {!editStudentEmail.includes('@') && <span className="text-xs font-bold text-accent-600 whitespace-nowrap">@bicol-u.edu.ph</span>}
+                {!editStudentEmail.includes('@') && <span className="text-xs font-bold text-clinical-600 dark:text-clinical-400 whitespace-nowrap">@bicol-u.edu.ph</span>}
                 </span>
               </label>
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
