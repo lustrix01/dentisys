@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Archive, DoorOpen, MapPin, Navigation, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import Tabs from '../../components/Tabs';
+import { ListToolbar } from '../../components/FilterBars';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { LocationPicker } from '../../components/LocationPicker';
@@ -237,42 +238,50 @@ export const Rooms: React.FC = () => {
 
   return (
     <section id="rooms" className="space-y-6 animate-fade-in max-w-7xl mx-auto">
-      <div className="flex flex-col gap-3 px-1.5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-2 px-1.5">
+        <p className="max-w-3xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+          The rooms Faculty and Secretaries pick for classes and sessions. A retired room leaves the lists, and the Faculty using it are told to pick another room. Once nothing uses it, it can be deleted.
+        </p>
         <p className="text-xs text-slate-500 dark:text-slate-400">
           <b className="text-slate-800 dark:text-slate-100">{activeCount}</b> active · {retiredRooms} retired · {plural(categories.length, 'category', 'categories')}
         </p>
-        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-          <button
-            type="button"
-            disabled={loading || busy}
-            className="inline-flex h-11 min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-            onClick={() => { setError(''); setCatDraft({ name: '' }); }}
-          >
-            Add category
-          </button>
-          <button
-            type="button"
-            disabled={loading || busy}
-            className="inline-flex h-11 min-h-11 items-center justify-center gap-2 rounded-xl bg-accent-600 px-4 text-xs font-bold text-white shadow-xs transition-all hover:bg-accent-700 hover:shadow-md active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-            onClick={() => openDraft()}
-          >
-            <Plus className="w-4 h-4" />
-            Add room
-          </button>
-        </div>
       </div>
 
-      <Tabs
-        variant="section"
-        color="accent"
-        className="w-full"
-        label="Room views"
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          { id: 'rooms', label: 'Rooms', icon: <DoorOpen className="w-4 h-4" />, count: activeCount },
-          { id: 'retired', label: 'Retired', icon: <Archive className="w-4 h-4" />, count: retiredRooms + retiredCategories },
-        ]}
+      <ListToolbar
+        left={(
+          <Tabs
+            variant="switch"
+            color="accent"
+            label="Room views"
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { id: 'rooms', label: 'Rooms', icon: <DoorOpen className="w-4 h-4" />, count: activeCount },
+              { id: 'retired', label: 'Retired', icon: <Archive className="w-4 h-4" />, count: retiredRooms + retiredCategories },
+            ]}
+          />
+        )}
+        right={(
+          <>
+            <button
+              type="button"
+              disabled={loading || busy}
+              className="inline-flex h-11 min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              onClick={() => { setError(''); setCatDraft({ name: '' }); }}
+            >
+              Add category
+            </button>
+            <button
+              type="button"
+              disabled={loading || busy}
+              className="inline-flex h-11 min-h-11 items-center justify-center gap-2 rounded-xl bg-accent-600 px-4 text-xs font-bold text-white shadow-xs transition-all hover:bg-accent-700 hover:shadow-md active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => openDraft()}
+            >
+              <Plus className="w-4 h-4" />
+              Add room
+            </button>
+          </>
+        )}
       />
 
       {loading ? (
@@ -297,6 +306,7 @@ export const Rooms: React.FC = () => {
                   <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                     <span className="text-sm font-extrabold tracking-tight text-slate-800 dark:text-slate-100">{cat.name}</span>
                     <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-700">{subtitle}</span>
+                    {tab === 'rooms' && !catRetired && activeInCat > 0 && <span className="block w-full text-[11px] text-slate-500 dark:text-slate-400">{hint}</span>}
                   </div>
                   {(tab === 'rooms' || catRetired) && (
                     <div className="flex shrink-0 items-center gap-2">

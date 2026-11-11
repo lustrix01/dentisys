@@ -8,6 +8,17 @@ class AuthException extends \RuntimeException
 
 const AUTH_IDLE_TIMEOUT_SECONDS = 1800;
 
+/**
+ * True when an auth session has been idle for the full idle limit.
+ * A session that has never been touched falls back to its creation time.
+ */
+function auth_session_idle_expired(?string $lastSeenAt, string $createdAt, int $now): bool
+{
+    $lastSeen = new DateTimeImmutable($lastSeenAt ?? $createdAt, new DateTimeZone('UTC'));
+
+    return $lastSeen->getTimestamp() + AUTH_IDLE_TIMEOUT_SECONDS <= $now;
+}
+
 function auth_lock_user_for_session(PDO $pdo, int $userId): array
 {
     if (!$pdo->inTransaction()) {
@@ -278,12 +289,11 @@ function auth_verify_access_token(
 
     $clock = $clock ?? fn(): int => time();
     $sessionExpiresAt = new DateTimeImmutable($session['expires_at'], new DateTimeZone('UTC'));
-    $lastSeenAt = new DateTimeImmutable((string) ($session['last_seen_at'] ?? $session['created_at']), new DateTimeZone('UTC'));
 
     if ($sessionExpiresAt->getTimestamp() <= $clock()) {
         throw new AuthException('Session has expired.');
     }
-    if ($lastSeenAt->getTimestamp() + AUTH_IDLE_TIMEOUT_SECONDS <= $clock()) {
+    if (auth_session_idle_expired($session['last_seen_at'] ?? null, (string) $session['created_at'], $clock())) {
         throw new AuthException('Session expired after inactivity.');
     }
 

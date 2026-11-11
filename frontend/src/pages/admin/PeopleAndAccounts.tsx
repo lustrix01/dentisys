@@ -59,6 +59,9 @@ export const PeopleAndAccounts: React.FC = () => {
   ), [tab, search, classFilter, statusFilter, twoFactorFilter]);
   const counts = { faculty: PREVIEW_ACCOUNTS.faculty.length, students: PREVIEW_ACCOUNTS.students.length, deans: PREVIEW_ACCOUNTS.deans.length };
   const activeCount = PREVIEW_ACCOUNTS[tab].filter(account => account.status === 'Active').length;
+  // One dialog for the selected account, rendered once at page level. The desktop table row and
+  // the phone block both mount an ActionMenu, so the dialog must not live inside it (duplicate dialog).
+  const menuAccount = openMenu ? accounts.find(account => account.id === openMenu) ?? null : null;
 
   return (
     <section className="mx-auto max-w-7xl animate-fade-in space-y-6">
@@ -152,6 +155,10 @@ export const PeopleAndAccounts: React.FC = () => {
         )}
       </div>
       <p className="px-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">Invitation rules follow the current account lifecycle. Faculty can be invited here; Students are invited from assigned class rosters, and Dean access follows deployment setup.</p>
+
+      <Modal isOpen={Boolean(menuAccount)} onClose={() => setOpenMenu(null)} title="Account Options" size="sm">
+        {menuAccount && <AccountOptions account={menuAccount} tab={tab} />}
+      </Modal>
     </section>
   );
 };
@@ -179,7 +186,7 @@ function AccountRow({ account, tab, open, onToggle }: { account: PreviewAccount;
     <td className="px-4 py-4"><StatusPill status={account.status} /></td>
     <td className="px-4 py-4"><span className={`inline-flex items-center gap-1.5 ${account.twoFactor === 'On' ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400'}`}><KeyRound className="h-3.5 w-3.5" />{account.twoFactor}</span></td>
     <td className="px-4 py-4 whitespace-nowrap text-slate-500 dark:text-slate-400">{account.lastActive}</td>
-    <td className="relative px-4 py-4 text-right"><ActionMenu account={account} tab={tab} open={open} onToggle={onToggle} /></td>
+    <td className="relative px-4 py-4 text-right"><ActionMenu account={account} open={open} onToggle={onToggle} /></td>
   </tr>;
 }
 
@@ -187,7 +194,7 @@ function AccountBlock({ account, tab, open, onToggle }: { account: PreviewAccoun
   return <article className="relative rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
     <div className="flex items-start justify-between gap-3">
       <div className="flex min-w-0 items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-50 text-accent-700 dark:bg-accent-950/50 dark:text-accent-300"><UserRound className="h-5 w-5" /></span><div className="min-w-0"><h3 className="break-words text-sm font-bold text-slate-800 dark:text-slate-100">{account.name}</h3><p className="break-all text-xs text-slate-500 dark:text-slate-400">{account.email}</p></div></div>
-      <ActionMenu account={account} tab={tab} open={open} onToggle={onToggle} />
+      <ActionMenu account={account} open={open} onToggle={onToggle} />
     </div>
     <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
       {tab === 'students' && <div><dt className="text-[10px] font-semibold text-slate-400">Class</dt><dd className="mt-1 text-xs text-slate-700 dark:text-slate-300">{account.className}</dd></div>}
@@ -199,25 +206,26 @@ function AccountBlock({ account, tab, open, onToggle }: { account: PreviewAccoun
   </article>;
 }
 
-function ActionMenu({ account, tab, open, onToggle }: { account: PreviewAccount; tab: RoleTab; open: boolean; onToggle: () => void }) {
+// Button only: the dialog is rendered once at page level for the selected account, so the
+// desktop table row and the CSS-hidden phone block cannot mount two dialogs for one open action.
+function ActionMenu({ account, open, onToggle }: { account: PreviewAccount; open: boolean; onToggle: () => void }) {
+  return <button type="button" aria-label={`Account options for ${account.name}`} aria-haspopup="dialog" aria-expanded={open} onClick={onToggle} className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"><Ellipsis className="h-4 w-4" /></button>;
+}
+
+function AccountOptions({ account, tab }: { account: PreviewAccount; tab: RoleTab }) {
   const statusAction = account.status === 'Deactivated' ? 'Reactivate account' : 'Deactivate account';
-  return <>
-    <button type="button" aria-label={`Account options for ${account.name}`} aria-haspopup="dialog" onClick={onToggle} className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"><Ellipsis className="h-4 w-4" /></button>
-    <Modal isOpen={open} onClose={onToggle} title="Account Options" size="sm">
-      <div className="space-y-4 p-5 sm:p-6">
-        <div>
-          <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{account.name}</p>
-          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{account.email} · {roleLabels[tab]}</p>
-        </div>
-        <div role="note" className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
-          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>Preview only. These actions are unavailable until account management is connected.</p>
-        </div>
-        <div className="space-y-2">
-          {[statusAction, 'Reset 2FA', 'Sign out all devices'].map(label => <button key={label} type="button" disabled title={unavailable} className="flex min-h-11 w-full cursor-not-allowed items-center justify-between gap-3 rounded-xl border border-slate-200 px-3.5 text-left text-xs font-bold text-slate-400 opacity-75 dark:border-slate-700 dark:text-slate-500" aria-label={`${label} for ${account.name} unavailable`}><span>{label}</span><span className="text-[9px] font-bold uppercase tracking-wide">Unavailable</span></button>)}
-        </div>
-        {tab === 'deans' && <p className="text-[11px] text-slate-500 dark:text-slate-400">Administrator accounts require additional protection.</p>}
-      </div>
-    </Modal>
-  </>;
+  return <div className="space-y-4 p-5 sm:p-6">
+    <div>
+      <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{account.name}</p>
+      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{account.email} · {roleLabels[tab]}</p>
+    </div>
+    <div role="note" className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+      <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+      <p>Preview only. These actions are unavailable until account management is connected.</p>
+    </div>
+    <div className="space-y-2">
+      {[statusAction, 'Reset 2FA', 'Sign out all devices'].map(label => <button key={label} type="button" disabled title={unavailable} className="flex min-h-11 w-full cursor-not-allowed items-center justify-between gap-3 rounded-xl border border-slate-200 px-3.5 text-left text-xs font-bold text-slate-400 opacity-75 dark:border-slate-700 dark:text-slate-500" aria-label={`${label} for ${account.name} unavailable`}><span>{label}</span><span className="text-[9px] font-bold uppercase tracking-wide">Unavailable</span></button>)}
+    </div>
+    {tab === 'deans' && <p className="text-[11px] text-slate-500 dark:text-slate-400">Administrator accounts require additional protection.</p>}
+  </div>;
 }

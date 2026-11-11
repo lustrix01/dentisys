@@ -130,12 +130,14 @@ export const Classes: React.FC = () => {
       <ListToolbar
         left={<SearchField value={search} onChange={setSearch} placeholder="Search course, section or Faculty…" color="accent" />}
         right={(
-          <>
-            <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">School Year</span><select aria-label="School Year" value={schoolYear} onChange={event => setSchoolYear(event.target.value)} className={filterClass}><option value="all">All School Years</option>{years.map(year => <option key={year} value={year}>S.Y. {year}</option>)}</select></label>
-            <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Faculty</span><select aria-label="Faculty" value={faculty} onChange={event => setFaculty(event.target.value)} className={filterClass}><option value="all">All Faculty</option>{facultyNames.map(name => <option key={name} value={name}>{name}</option>)}</select></label>
+          // Full-width controls on phones, and a width-capped group at lg so the filters wrap
+          // inside the toolbar instead of colliding with the search field.
+          <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto lg:max-w-[24rem] lg:justify-end xl:max-w-none">
+            <label className="w-full min-w-0 sm:w-auto sm:flex-none"><span className="sr-only">School Year</span><select aria-label="School Year" value={schoolYear} onChange={event => setSchoolYear(event.target.value)} className={filterClass}><option value="all">All School Years</option>{years.map(year => <option key={year} value={year}>S.Y. {year}</option>)}</select></label>
+            <label className="w-full min-w-0 sm:w-auto sm:flex-none"><span className="sr-only">Faculty</span><select aria-label="Faculty" value={faculty} onChange={event => setFaculty(event.target.value)} className={filterClass}><option value="all">All Faculty</option>{facultyNames.map(name => <option key={name} value={name}>{name}</option>)}</select></label>
             <button type="button" onClick={() => { setSchoolYear('all'); setFaculty('all'); setSearch(''); }} className="min-h-10 rounded-lg px-3 text-xs font-bold text-accent-700 hover:bg-accent-50 dark:text-accent-300 dark:hover:bg-accent-950/40">Clear filters</button>
             {view === 'active' && <button type="button" onClick={startCreate} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-accent-700 hover:shadow-md"><Plus className="h-4 w-4" />Create Class</button>}
-          </>
+          </div>
         )}
       />
 

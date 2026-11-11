@@ -277,13 +277,21 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
   return 'An unexpected error occurred. Please try again.';
 }
 
+// Sign-in and MFA endpoints answer 401 for bad input (wrong password, wrong
+// authenticator or recovery code, expired challenge). Those 401s must reach the
+// form and never trigger a refresh or a sign-out.
+const PUBLIC_AUTH_PREFIXES = [
+  '/auth/login', '/auth/google', '/auth/refresh', '/auth/logout', '/auth/password',
+  '/auth/student', '/auth/faculty', '/auth/secretary', '/auth/development', '/auth/mfa',
+];
+
+function isPublicAuthPath(path: string): boolean {
+  return PUBLIC_AUTH_PREFIXES.some(prefix => path.startsWith(prefix));
+}
+
 function canRefreshAfterUnauthorized(path: string, tokenOverride: string | undefined, retryDepth: number): boolean {
   if (!accessToken || tokenOverride !== undefined || retryDepth > 0 || Date.now() - lastUserActivityAt > USER_ACTIVITY_SIGNAL_TTL_MS) return false;
-  const publicAuthPrefixes = [
-    '/auth/login', '/auth/google', '/auth/refresh', '/auth/logout', '/auth/password',
-    '/auth/student', '/auth/faculty', '/auth/secretary', '/auth/development',
-  ];
-  return !publicAuthPrefixes.some(prefix => path.startsWith(prefix));
+  return !isPublicAuthPath(path);
 }
 
 function emitWindowEvent(name: string, detail?: unknown): void {
@@ -404,6 +412,12 @@ async function request<T>(
       }
     }
     if (errorStatus === 401 && authRetryDepth > 0) {
+      clearAccessToken();
+      emitWindowEvent(AUTH_EXPIRED_EVENT);
+    } else if (errorStatus === 401 && token !== null && tokenOverride === undefined && !isPublicAuthPath(path)) {
+      // The request carried a session access token but could not be refreshed
+      // (the session is idle/dead): clear authentication immediately so
+      // AuthContext signs out instead of leaving a stale token signed in.
       clearAccessToken();
       emitWindowEvent(AUTH_EXPIRED_EVENT);
     }

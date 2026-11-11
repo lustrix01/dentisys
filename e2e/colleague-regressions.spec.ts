@@ -32,9 +32,9 @@ test('Student pending standing stays unresolved and past-only courses never beco
   await expect(page.getByText('No remedial exams required', { exact: true })).toHaveCount(0);
   records = [{ ...course, schoolYear: '2025-2026', isCurrent: false, isPast: true }];
   await page.reload();
-  await expect(page.getByText('No courses enrolled for the active term.')).toBeVisible();
+  await expect(page.getByText('No courses enrolled for the active term.').filter({ visible: true }).first()).toBeVisible();
   await page.getByRole('tab', { name: /Past Courses/ }).click();
-  await expect(page.getByText('DENT401', { exact: true })).toBeVisible();
+  await expect(page.getByText('DENT401', { exact: true }).filter({ visible: true }).first()).toBeVisible();
 });
 
 test('Student standing reads "Grades pending", not "No grade yet", once one current subject is graded', async ({ page }) => {
@@ -501,7 +501,7 @@ for (const enabled of [true, false]) {
     if (enabled) {
       await expect(page.getByText('Development-only Retention prototype', { exact: false })).toBeVisible();
       await expect(page.getByRole('columnheader', { name: 'Sample Grade' })).toBeVisible();
-      await expect(page.getByText('No sample courses available.', { exact: true })).toBeVisible();
+      await expect(page.getByText('No sample courses available.', { exact: true }).filter({ visible: true }).first()).toBeVisible();
       await expect(page.getByRole('row')).toHaveCount(2);
     } else {
       await expect(page.getByRole('heading', { name: 'Retention Monitoring unavailable' })).toBeVisible();

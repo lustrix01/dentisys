@@ -516,6 +516,11 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
 
         $lockedUser = auth_lock_user_for_session($pdo, $sessionRow['user_id']);
 
+        // Per-session refresh rate limit, enforced before the user-status checks
+        // (restored from 086cc51; the idle-expiry commit had moved it later).
+        $sessionScope = bin2hex(hash('sha256', 'session:' . $sessionRow['session_uuid'], true));
+        rate_limit_check($rateStorage, $sessionScope, 'post_auth_refresh', 60, 300);
+
         $sessionExpiresAt = new DateTimeImmutable($sessionRow['expires_at'], new DateTimeZone('UTC'));
         $nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
 
@@ -527,8 +532,7 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
             throw new ChallengeException('Authentication required.');
         }
 
-        $lastSeenAt = new DateTimeImmutable((string) ($sessionRow['last_seen_at'] ?? $sessionRow['created_at']), new DateTimeZone('UTC'));
-        if ($lastSeenAt->getTimestamp() + AUTH_IDLE_TIMEOUT_SECONDS <= $nowUtc->getTimestamp()) {
+        if (auth_session_idle_expired($sessionRow['last_seen_at'] ?? null, (string) $sessionRow['created_at'], $nowUtc->getTimestamp())) {
             $auditCtx = audit_begin_operation($pdo);
             auth_revoke_session($pdo, (int) $sessionRow['session_id'], 'Idle timeout', $nowUtc);
             audit_finish_operation($pdo, $auditCtx, [
@@ -543,6 +547,7 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
                 'target_type' => 'session',
                 'target_id' => (string) $sessionRow['session_id'],
                 'description' => 'User session expired after 30 minutes of inactivity.',
+                'reason' => 'Idle timeout',
                 'http_method' => $context['http_method'],
                 'endpoint' => $context['endpoint'],
                 'request_id' => $context['request_id'],
@@ -588,9 +593,6 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $lockedToken['family_uuid'])) {
             throw new ChallengeException('Authentication required.');
         }
-
-        $sessionScope = bin2hex(hash('sha256', 'session:' . $sessionRow['session_uuid'], true));
-        rate_limit_check($rateStorage, $sessionScope, 'post_auth_refresh', 60, 300);
 
         // Defer the audit-chain row lock until all Student provenance and
         // eligibility checks have passed. Those checks may append a denial on

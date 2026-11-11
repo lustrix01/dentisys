@@ -133,8 +133,8 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await dialog.getByRole('button', { name: 'Save term' }).click();
     await expect(row).toContainText('Aug 1 – Dec 31, 2026');
     await expect(row).toContainText('Current');
-    await expect(row.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
-    await row.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(row.getByRole('button', { name: /^Delete / })).toBeDisabled();
+    await row.getByRole('button', { name: /^Edit / }).click();
     dialog = page.getByRole('dialog');
     await expect(dialog.getByLabel('School Year')).toHaveAttribute('readonly', '');
     await expect(dialog.getByLabel('Semester')).toBeDisabled();
@@ -144,7 +144,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(row).toContainText('Oct 10, 2026');
     expect(saves).toBe(2);
     expect(posted.some(data => data.confirmedExpiringEnrollments !== undefined)).toBe(false);
-    await row.getByRole('button', { name: 'Edit', exact: true }).click();
+    await row.getByRole('button', { name: /^Edit / }).click();
     dialog = page.getByRole('dialog');
     await dialog.getByLabel('End date').fill('2026-10-09');
     await dialog.getByRole('button', { name: 'Save term' }).click();
@@ -159,7 +159,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(section).toContainText('Review and adjust their dates.');
     const copied = section.getByTestId('2027-2028-1ST');
     await expect(copied).toBeVisible();
-    await copied.getByRole('button', { name: 'Delete', exact: true }).click();
+    await copied.getByRole('button', { name: /^Delete / }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete term', exact: true }).click();
     await expect(copied).toHaveCount(0);
   });
@@ -186,9 +186,9 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(section.getByTestId('2025-2026-Summer')).toContainText('Dates not set');
 
     const used = section.getByTestId('2026-2027-1ST');
-    await expect(used.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
-    await expect(used.getByRole('button', { name: 'Delete', exact: true })).toHaveAttribute('title', 'A term used by a class cannot be deleted.');
-    await expect(section.getByTestId('2026-2027-2ND').getByRole('button', { name: 'Delete', exact: true })).toBeEnabled();
+    await expect(used.getByRole('button', { name: /^Delete / })).toBeDisabled();
+    await expect(used.getByRole('button', { name: /^Delete / })).toHaveAttribute('title', 'A term used by a class cannot be deleted.');
+    await expect(section.getByTestId('2026-2027-2ND').getByRole('button', { name: /^Delete / })).toBeEnabled();
 
     await section.getByTestId('2026-2027-Summer').getByRole('button', { name: 'Add dates' }).click();
     const dialog = page.getByRole('dialog');

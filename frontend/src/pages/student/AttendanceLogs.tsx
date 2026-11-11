@@ -18,8 +18,23 @@ import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { canAccessAuthoritativeStudentBiometrics } from './studentGates';
 import { StudentUnavailable } from './RealStudentSurfaces';
 import { getStudentAttendanceLogs } from '../../services/apiClient';
-import type { StudentAttendanceLogRecord, AttendanceVerificationMethod } from '../../types';
+import type { StudentAttendanceLogRecord, AttendanceVerificationMethod, AttendanceRecord } from '../../types';
 import { formatVisibleTime } from '../../utils/timeDisplay';
+
+// Non-authoritative records have no verification method of their own; the prototype
+// sets verificationType only on simulated check-ins. Anything else must stay blank.
+function formatMockVerificationMethod(record: AttendanceRecord): string | null {
+  switch (record.verificationType) {
+    case 'facial_geofence':
+      return 'Facial & geofence verified';
+    case 'manual_override':
+      return 'Manual override';
+    case 'standard':
+      return 'Standard verification';
+    default:
+      return null;
+  }
+}
 
 function StatusPill({ status }: { status: string }) {
   const tone = status === 'present'
@@ -321,14 +336,14 @@ export const AttendanceLogs: React.FC = () => {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <span className="block font-bold text-slate-800 dark:text-slate-100">{rec.date}</span>
-                      <span className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400"><Clock className="h-3 w-3" />{formatVisibleTime(rec.verifiedAt) === '—' ? '8:15 AM' : formatVisibleTime(rec.verifiedAt)}</span>
+                      <span className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400"><Clock className="h-3 w-3" />{formatVisibleTime(rec.verifiedAt)}</span>
                     </div>
                     <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider ${rec.status === 'present' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300' : rec.status === 'late' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300' : 'bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300'}`}><span className="sr-only">Attendance Status: </span>{rec.status}</span>
                   </div>
-                  <div><span className="block font-mono font-bold text-blue-600 dark:text-blue-400">{rec.subjectCode}</span><span className="text-[11px] text-slate-500 dark:text-slate-400">{rec.verifiedLocationName || 'BU Dental Clinic'}</span></div>
+                  <div><span className="block font-mono font-bold text-blue-600 dark:text-blue-400">{rec.subjectCode}</span><span className="text-[11px] text-slate-500 dark:text-slate-400">{rec.verifiedLocationName || '—'}</span></div>
                   <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
                     <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Check-In Time</dt><dd className="mt-0.5 text-slate-700 dark:text-slate-300">{formatVisibleTime(rec.verifiedAt)}</dd></div>
-                    <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Verification Method</dt><dd className="mt-0.5 flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300"><ShieldCheck className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />Facial &amp; geofence verified</dd></div>
+                    <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Verification Method</dt><dd className="mt-0.5 flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">{formatMockVerificationMethod(rec) ? <><ShieldCheck className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />{formatMockVerificationMethod(rec)}</> : '—'}</dd></div>
                     <div className="col-span-2"><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Session Location</dt><dd className="mt-0.5 flex items-center gap-1 text-slate-600 dark:text-slate-300">{rec.verifiedLocationName ? <><MapPin className="h-3 w-3 shrink-0 text-blue-600" />{rec.verifiedLocationName}</> : '—'}</dd></div>
                   </dl>
                 </li>

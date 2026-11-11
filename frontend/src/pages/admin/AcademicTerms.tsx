@@ -183,35 +183,40 @@ export const AcademicTermsSettings: React.FC = () => {
 
   return (
     <section id="academic-terms" className="mx-auto max-w-7xl scroll-mt-6 space-y-6 animate-fade-in">
-      <div className="flex flex-col gap-3 px-1.5 sm:flex-row sm:items-center sm:justify-between">
-        <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-          <span>Current School Year <b className="text-slate-800 dark:text-slate-100">{currentYear || 'Not configured'}</b></span>
-          <span>{currentTermObj ? `${semesterLabel(currentTermObj.semester)} active` : 'No active semester today'}</span>
-          <span><b className="text-slate-800 dark:text-slate-100">{years.length}</b> {years.length === 1 ? 'school year' : 'school years'} · {definedTerms.length} {definedTerms.length === 1 ? 'term' : 'terms'}</span>
-          <span><b className="text-slate-800 dark:text-slate-100">{totalClassesCount}</b> {totalClassesCount === 1 ? 'class' : 'classes'} linked</span>
+      <div className="space-y-3 px-1.5">
+        <p className="max-w-3xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+          Set the dates Faculty use for classes and Student face enrollment. Dates use Asia/Manila; each term ends at the end of its end date.
         </p>
-        <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:shrink-0">
-          <button
-            type="button"
-            disabled={loading || busy || !latestYear}
-            className="px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 text-slate-700 dark:text-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-            onClick={() => {
-              setError('');
-              setCopying(true);
-            }}
-          >
-            <Copy className="w-4 h-4" />
-            Add next school year
-          </button>
-          <button
-            type="button"
-            disabled={loading || busy || !currentYear}
-            className="px-4 py-2.5 rounded-xl text-xs font-bold bg-accent-600 hover:bg-accent-700 active:scale-95 text-white shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            onClick={() => open()}
-          >
-            <Plus className="w-4 h-4" />
-            Add term
-          </button>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+            <span>Current School Year <b className="text-slate-800 dark:text-slate-100">{currentYear || 'Not configured'}</b></span>
+            <span>{currentTermObj ? `${semesterLabel(currentTermObj.semester)} active` : 'No active semester today'}</span>
+            <span><b className="text-slate-800 dark:text-slate-100">{years.length}</b> {years.length === 1 ? 'school year' : 'school years'} · {definedTerms.length} {definedTerms.length === 1 ? 'term' : 'terms'}</span>
+            <span><b className="text-slate-800 dark:text-slate-100">{totalClassesCount}</b> {totalClassesCount === 1 ? 'class' : 'classes'} linked</span>
+          </p>
+          <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:shrink-0">
+            <button
+              type="button"
+              disabled={loading || busy || !latestYear}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 text-slate-700 dark:text-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+              onClick={() => {
+                setError('');
+                setCopying(true);
+              }}
+            >
+              <Copy className="w-4 h-4" />
+              Add next school year
+            </button>
+            <button
+              type="button"
+              disabled={loading || busy || !currentYear}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold bg-accent-600 hover:bg-accent-700 active:scale-95 text-white shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={() => open()}
+            >
+              <Plus className="w-4 h-4" />
+              Add term
+            </button>
+          </div>
         </div>
       </div>
 

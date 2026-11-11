@@ -98,12 +98,14 @@ export const CourseCatalog: React.FC = () => {
       <ListToolbar
         left={<SearchField value={search} onChange={setSearch} placeholder="Search course code or title…" color="accent" />}
         right={(
-          <>
-            <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Semester</span><select aria-label="Semester" value={semester} onChange={event => setSemester(event.target.value)} className={filterClass}><option value="all">All Semesters</option><option>1st Semester</option><option>2nd Semester</option><option>Summer</option></select></label>
-            <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Year Level</span><select aria-label="Year Level" value={yearLevel} onChange={event => setYearLevel(event.target.value)} className={filterClass}><option value="all">All Year Levels</option>{[1, 2, 3, 4, 5, 6].map(level => <option key={level} value={level}>{`Year ${level}`}</option>)}</select></label>
+          // Full-width controls on phones, and a width-capped group at lg so the filters wrap
+          // inside the toolbar instead of colliding with the search field.
+          <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto lg:max-w-[24rem] lg:justify-end xl:max-w-none">
+            <label className="w-full min-w-0 sm:w-auto sm:flex-none"><span className="sr-only">Semester</span><select aria-label="Semester" value={semester} onChange={event => setSemester(event.target.value)} className={filterClass}><option value="all">All Semesters</option><option>1st Semester</option><option>2nd Semester</option><option>Summer</option></select></label>
+            <label className="w-full min-w-0 sm:w-auto sm:flex-none"><span className="sr-only">Year Level</span><select aria-label="Year Level" value={yearLevel} onChange={event => setYearLevel(event.target.value)} className={filterClass}><option value="all">All Year Levels</option>{[1, 2, 3, 4, 5, 6].map(level => <option key={level} value={level}>{`Year ${level}`}</option>)}</select></label>
             <button type="button" onClick={() => { setSearch(''); setSemester('all'); setYearLevel('all'); }} className="min-h-10 rounded-lg px-3 text-xs font-bold text-accent-700 hover:bg-accent-50 dark:text-accent-300 dark:hover:bg-accent-950/40">Clear filters</button>
             {tab === 'active' && <button type="button" onClick={openCreate} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-accent-700 hover:shadow-md"><Plus className="h-4 w-4" />Add Course</button>}
-          </>
+          </div>
         )}
       />
 
@@ -146,6 +148,7 @@ export const CourseCatalog: React.FC = () => {
             <Field label="Year Level"><select value={draft.yearLevel} onChange={event => setDraft({ ...draft, yearLevel: Number(event.target.value) })} className={inputClass}>{[1, 2, 3, 4, 5, 6].map(level => <option key={level} value={level}>Year {level}</option>)}</select></Field>
             <Field label="Semester"><select value={draft.semester} onChange={event => setDraft({ ...draft, semester: event.target.value })} className={inputClass}><option>1st Semester</option><option>2nd Semester</option><option>Summer</option></select></Field>
           </div>
+          <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200"><input type="checkbox" checked={draft.isClinical} onChange={event => setDraft({ ...draft, isClinical: event.target.checked })} className="h-4 w-4 accent-accent-600" />Clinical course</label>
           <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 dark:border-slate-800 sm:flex-row sm:justify-end"><button type="button" onClick={() => { setDraft(null); setEditingId(null); }} className="min-h-11 rounded-xl px-4 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button><button type="submit" className="min-h-11 rounded-xl bg-accent-600 px-4 text-xs font-bold text-white hover:bg-accent-700">{editingId ? 'Save Changes' : 'Add Course'}</button></div>
         </form>}
       </Modal>

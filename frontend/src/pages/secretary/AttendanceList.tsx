@@ -969,15 +969,17 @@ export const AttendanceList: React.FC = () => {
                   <span>Sessions</span>
                 </button>
 
-                {/* Keep session creation available while a live session is running. */}
-                <button
-                  type="button"
-                  onClick={() => void openStartSession()}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
-                >
-                  <Play className="w-3.5 h-3.5 fill-white" />
-                  <span>Start session</span>
-                </button>
+                {/* Start session CTA (hidden while a session is live) */}
+                {!liveCurrentSession && (
+                  <button
+                    type="button"
+                    onClick={() => void openStartSession()}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-white" />
+                    <span>Start session</span>
+                  </button>
+                )}
 
                 {/* Refresh button */}
                 <button

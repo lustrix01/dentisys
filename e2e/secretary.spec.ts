@@ -436,7 +436,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(form.getByTestId('time-summary')).toHaveText('A session can last at most 12 hours.');
     await form.getByRole('button', { name: 'Cancel', exact: true }).click();
     await openSessionsModal(page);
-    await page.getByRole('button', { name: 'Upcoming Sessions' }).click();
+    await page.getByRole('tab', { name: 'Upcoming Sessions' }).click();
     await expect(page.getByText(/Time: .*2:00 AM \(next day\)/)).toBeVisible();
   });
 
@@ -465,7 +465,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect.poll(() => payload?.sessionDate).toBe('2099-10-02');
     await expect(page.getByText('Session scheduled for 2099-10-02 at 8:00 AM (Asia/Manila). Session code: CS8-20260921-ABC123').first()).toBeVisible();
     await openSessionsModal(page);
-    await page.getByRole('button', { name: 'Upcoming Sessions' }).click();
+    await page.getByRole('tab', { name: 'Upcoming Sessions' }).click();
     await expect(page.getByText('(CS8-20260921-ABC123)')).toBeVisible();
     await expect(page.getByText('Live session')).toHaveCount(0);
     await page.keyboard.press('Escape');
@@ -495,10 +495,10 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     });
     await page.goto('/secretary/attendance?view=worksheet');
     await openSessionsModal(page);
-    await page.getByRole('button', { name: 'Upcoming Sessions' }).click();
+    await page.getByRole('tab', { name: 'Upcoming Sessions' }).click();
     await page.getByRole('button', { name: 'Revoke', exact: true }).click();
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-    await page.getByRole('button', { name: 'Current Session' }).click();
+    await page.getByRole('tab', { name: 'Current Session' }).click();
     await page.getByRole('button', { name: 'Revoke session', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm revoke session', exact: true }).click();
     await expect.poll(() => revokedId).toBe('42');
