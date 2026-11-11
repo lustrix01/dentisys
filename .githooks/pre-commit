@@ -1,0 +1,12 @@
+#!/bin/sh
+# encoding-guard: block commits that add non-plain-UTF-8 text (BOM / UTF-16 /
+# ANSI-mojibake / invalid UTF-8). Installed via: git config core.hooksPath .githooks
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "encoding-guard: node not found on PATH; cannot verify encodings." >&2
+  echo "encoding-guard: install Node.js, or bypass with: git commit --no-verify" >&2
+  exit 1
+fi
+
+exec node "$here/check-staged-encoding.mjs"
