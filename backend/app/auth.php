@@ -6,6 +6,8 @@ class AuthException extends \RuntimeException
 {
 }
 
+const AUTH_IDLE_TIMEOUT_SECONDS = 1800;
+
 function auth_lock_user_for_session(PDO $pdo, int $userId): array
 {
     if (!$pdo->inTransaction()) {
@@ -244,7 +246,7 @@ function auth_verify_access_token(
     }
 
     $stmt = $pdo->prepare(
-        "SELECT session_id, session_uuid, user_id, issued_token_version, revoked_at, expires_at, authentication_source
+        "SELECT session_id, session_uuid, user_id, issued_token_version, revoked_at, expires_at, created_at, last_seen_at, authentication_source
          FROM auth_sessions WHERE session_uuid = ?"
     );
     $stmt->execute([$claims['sid']]);
@@ -276,9 +278,13 @@ function auth_verify_access_token(
 
     $clock = $clock ?? fn(): int => time();
     $sessionExpiresAt = new DateTimeImmutable($session['expires_at'], new DateTimeZone('UTC'));
+    $lastSeenAt = new DateTimeImmutable((string) ($session['last_seen_at'] ?? $session['created_at']), new DateTimeZone('UTC'));
 
     if ($sessionExpiresAt->getTimestamp() <= $clock()) {
         throw new AuthException('Session has expired.');
+    }
+    if ($lastSeenAt->getTimestamp() + AUTH_IDLE_TIMEOUT_SECONDS <= $clock()) {
+        throw new AuthException('Session expired after inactivity.');
     }
 
     $jtiDigest = hash('sha256', $claims['jti'], true);
@@ -297,6 +303,28 @@ function auth_verify_access_token(
     $student = null;
     if (in_array($user['role'], ['student', 'secretary'], true)) {
         $student = auth_assert_student_eligible($pdo, $config, (int) $user['user_id']);
+    }
+
+    if (request_header('X-DentiSys-User-Activity') === '1') {
+        $seenAt = (new DateTimeImmutable('@' . $clock()))->setTimezone(new DateTimeZone('UTC'));
+        $touch = $pdo->prepare(
+            "UPDATE auth_sessions
+                SET last_seen_at = ?
+              WHERE session_id = ?
+                AND revoked_at IS NULL
+                AND expires_at > ?
+                AND COALESCE(last_seen_at, created_at) > ?"
+        );
+        $seenAtSql = $seenAt->format('Y-m-d H:i:s.u');
+        $touch->execute([
+            $seenAtSql,
+            (int) $session['session_id'],
+            $seenAtSql,
+            $seenAt->sub(new DateInterval('PT' . AUTH_IDLE_TIMEOUT_SECONDS . 'S'))->format('Y-m-d H:i:s.u'),
+        ]);
+        if ($touch->rowCount() !== 1) {
+            throw new AuthException('Session expired after inactivity.');
+        }
     }
 
     return [

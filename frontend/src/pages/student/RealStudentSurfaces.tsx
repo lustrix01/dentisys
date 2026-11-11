@@ -319,8 +319,8 @@ export const RealStudentDashboard: React.FC = () => {
             </div>
           ) : (
             <>
-            <div className="hidden sm:block lg:hidden xl:block overflow-x-auto">
-              <table className="w-full text-xs text-left">
+            <div className="hidden overflow-x-auto md:block lg:hidden xl:block">
+              <table className="w-full min-w-[700px] text-xs text-left">
                 <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 uppercase text-[10px] font-bold border-b border-slate-100 dark:border-slate-800">
                   <tr>
                     <th className="py-3 px-4">Subject</th>
@@ -366,7 +366,7 @@ export const RealStudentDashboard: React.FC = () => {
               </table>
             </div>
             {/* Stacked rows where the card is too narrow for the table: phones, and landscape tablets (two-column dashboard). */}
-            <ul className="sm:hidden lg:block xl:hidden divide-y divide-slate-100 dark:divide-slate-800">
+            <ul className="md:hidden lg:block xl:hidden divide-y divide-slate-100 dark:divide-slate-800">
               {classes.map((cls) => (
                 <li key={cls.enrollmentId} className="p-4 space-y-1.5 text-xs">
                   <div className="flex items-start justify-between gap-2">

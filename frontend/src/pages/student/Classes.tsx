@@ -556,7 +556,22 @@ export const Classes: React.FC = () => {
       {otherClasses.length > 0 && <Card className="p-5 space-y-3">
         <h2 className="font-bold text-sm">Other School-Year Enrollments</h2>
         <p className="text-xs text-slate-500">These records are outside the configured current year or their school-year classification is unavailable.</p>
-        <div className="overflow-x-auto"><table className="w-full text-left text-xs">
+        <div className="space-y-3 md:hidden">
+          {otherClasses.map(cls => (
+            <article key={cls.enrollmentId} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-xs dark:border-slate-800 dark:bg-slate-950/40">
+              <h3 className="font-bold text-slate-800 dark:text-slate-100">{cls.courseCode} · {cls.courseName}</h3>
+              <p className="mt-0.5 text-slate-500 dark:text-slate-400">{cls.className}</p>
+              <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
+                <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">School Year</dt><dd className="mt-0.5 font-semibold">{cls.schoolYear || 'Unavailable'}</dd></div>
+                <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Grade</dt><dd className="mt-0.5 font-semibold">{cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage} grade={cls.grade} lecture={cls.gradingComponentMode === 'lecture' ? lectureHoverSteps(cls.gradeComponents) : null}>{formatGrade(cls.grade)}</GradeValue>}</dd></div>
+                <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Score %</dt><dd className="mt-0.5 font-semibold">{cls.percentage === null ? 'Pending' : `${cls.percentage}%`}</dd></div>
+                <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Clinical Hours</dt><dd className="mt-0.5 font-semibold">{cls.clinicHoursCompleted} hrs</dd></div>
+                <div className="col-span-2"><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Retention</dt><dd className="mt-0.5 font-semibold">{cls.retentionState || 'Unavailable'}</dd></div>
+              </dl>
+            </article>
+          ))}
+        </div>
+        <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[620px] text-left text-xs">
           <thead><tr><th className="p-2">Course</th><th className="p-2">School Year</th><th className="p-2">Grade</th><th className="p-2">Score %</th><th className="p-2">Clinical Hours</th><th className="p-2">Retention</th></tr></thead>
           <tbody>{otherClasses.map(cls => <tr key={cls.enrollmentId}>
             <td className="p-2">{cls.courseCode} · {cls.courseName} · {cls.className}</td>

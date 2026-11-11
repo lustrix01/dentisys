@@ -101,7 +101,7 @@ function build_preflight_response(string $allowedOriginsStr, ?string $requestOri
         ];
     }
 
-    $allowedHeaders = ['Content-Type', 'Authorization', 'X-Audit-Batch-Id'];
+    $allowedHeaders = ['Content-Type', 'Authorization', 'X-Audit-Batch-Id', 'X-DentiSys-User-Activity'];
 
     if ($requestHeaders !== null) {
         $requestedHeaders = array_map('trim', explode(',', $requestHeaders));
@@ -124,7 +124,7 @@ function build_preflight_response(string $allowedOriginsStr, ?string $requestOri
             build_cors_headers($matched),
             [
                 'Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS',
-                'Access-Control-Allow-Headers: Content-Type, Authorization, X-Audit-Batch-Id',
+                'Access-Control-Allow-Headers: Content-Type, Authorization, X-Audit-Batch-Id, X-DentiSys-User-Activity',
                 'Access-Control-Max-Age: 86400',
             ]
         ),

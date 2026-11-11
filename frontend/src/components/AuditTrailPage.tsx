@@ -62,7 +62,7 @@ export const AuditCompactList: React.FC<{ entries: AuditEntry[]; variant?: 'list
   </ul>
 );
 
-const ChangesTable: React.FC<{ changes: AuditEntry['details']['changes'] }> = ({ changes }) => {
+const ChangesTable: React.FC<{ changes: AuditEntry['details']['changes']; phoneCards?: boolean }> = ({ changes, phoneCards = false }) => {
   const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState('');
   const needle = search.trim().toLowerCase();
@@ -74,7 +74,20 @@ const ChangesTable: React.FC<{ changes: AuditEntry['details']['changes'] }> = ({
       {changes.length > CHANGES_PREVIEW && (
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search changes..." aria-label="Search changes" className={control} />
       )}
-      <div className="overflow-x-auto rounded-lg bg-slate-50 dark:bg-slate-900">
+      {phoneCards && (
+        <ul className="space-y-2 md:hidden">
+          {shown.length === 0 ? <li className="rounded-lg bg-slate-50 p-3 text-center text-[11px] text-slate-500 dark:bg-slate-900 dark:text-slate-400">No changes match.</li> : shown.map((change, index) => (
+            <li key={index} className="rounded-lg bg-slate-50 p-3 text-[11px] dark:bg-slate-900">
+              <dl className="space-y-2">
+                <div><dt className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Field</dt><dd className="break-words font-semibold">{change.field}</dd></div>
+                <div><dt className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Before</dt><dd className="break-words text-slate-500">{change.before}</dd></div>
+                <div><dt className="text-[9px] font-bold uppercase tracking-wider text-slate-500">After</dt><dd className="break-words text-slate-700 dark:text-slate-300">{change.after}</dd></div>
+              </dl>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className={`overflow-x-auto rounded-lg bg-slate-50 dark:bg-slate-900 ${phoneCards ? 'hidden md:block' : ''}`}>
         <table className="w-full min-w-[420px] text-left text-[11px]">
           <thead className="text-[9px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
             <tr><th className="px-3 py-2">Field</th><th className="px-3 py-2">Before</th><th className="px-3 py-2">After</th></tr>
@@ -588,7 +601,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
             <div className="sm:col-span-2"><Field label="Reason">{selected.details.reason || '—'}</Field></div>
             <div className="sm:col-span-2 min-w-0">
               <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">Changes</p>
-              <ChangesTable key={selected.id} changes={selected.details.changes} />
+              <ChangesTable key={selected.id} changes={selected.details.changes} phoneCards={role === 'secretary'} />
             </div>
             {selected.details.technical && (
               <details className="sm:col-span-2 min-w-0">

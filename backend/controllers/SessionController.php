@@ -17,6 +17,7 @@ function handle_refresh(): void
         'user_agent' => request_user_agent(),
         'http_method' => request_method(),
         'endpoint' => request_path(),
+        'user_activity' => request_header('X-DentiSys-User-Activity') === '1',
     ];
 
     try {

@@ -2,6 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Keep iOS Safari from inflating compact table text and clipping dense rows. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Nested horizontal table scrollers need momentum scrolling on iOS Safari. */
+.overflow-x-auto,
+.overflow-y-auto,
+.overflow-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
 @layer base {
   body {
     @apply bg-slate-50 text-slate-800 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100 font-sans antialiased;

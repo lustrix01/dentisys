@@ -25,6 +25,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { Modal } from '../../components/Modal';
+import Tabs from '../../components/Tabs';
 import { StartSessionModal, type StartSessionValues } from '../../components/StartSessionModal';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { DEVELOPMENT_LOCATION_FIXTURES } from '../../services/developmentProviders';
@@ -968,15 +969,15 @@ export const AttendanceList: React.FC = () => {
                   <span>Sessions</span>
                 </button>
 
-                {/* Start session CTA (hidden while a session is live) */}
-                {!liveCurrentSession && <button
+                {/* Keep session creation available while a live session is running. */}
+                <button
                   type="button"
                   onClick={() => void openStartSession()}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
                 >
                   <Play className="w-3.5 h-3.5 fill-white" />
                   <span>Start session</span>
-                </button>}
+                </button>
 
                 {/* Refresh button */}
                 <button
@@ -1357,45 +1358,22 @@ export const AttendanceList: React.FC = () => {
           title={<>Attendance Sessions — <span className="whitespace-nowrap">{activeCard?.className || className || 'Class Section'}</span></>}
         >
           <div className="space-y-4 text-xs">
-            {/* Modal Tabs Header with Secretary Blue Accent */}
-            <div className="flex items-center gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl">
-              <button
-                type="button"
-                onClick={() => setSessionModalTab('current')}
-                className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                  sessionModalTab === 'current'
-                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-200 border border-blue-200/60 dark:border-blue-800/60 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                {liveCurrentSession && (
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="Session in progress" />
-                )}
-                <span>Current Session</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSessionModalTab('upcoming')}
-                className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                  sessionModalTab === 'upcoming'
-                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-200 border border-blue-200/60 dark:border-blue-800/60 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <span>Upcoming Sessions</span>
-                {upcomingSessions.length > 0 && (
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                      sessionModalTab === 'upcoming'
-                        ? 'bg-blue-200/80 text-blue-900 dark:bg-blue-900 dark:text-blue-100'
-                        : 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300'
-                    }`}
-                  >
-                    {upcomingSessions.length}
-                  </span>
-                )}
-              </button>
-            </div>
+            <Tabs
+              variant="section"
+              color="blue"
+              label="Attendance sessions"
+              value={sessionModalTab}
+              onChange={setSessionModalTab}
+              className="w-full [&>button]:flex-1"
+              tabs={[
+                {
+                  id: 'current',
+                  label: 'Current Session',
+                  icon: liveCurrentSession ? <span className="h-2 w-2 rounded-full bg-emerald-400" title="Session in progress" /> : <Clock className="h-4 w-4" />,
+                },
+                { id: 'upcoming', label: 'Upcoming Sessions', icon: <CalendarDays className="h-4 w-4" />, count: upcomingSessions.length },
+              ]}
+            />
 
             {/* TAB 1: CURRENT SESSION */}
             {sessionModalTab === 'current' && (
@@ -1525,15 +1503,29 @@ export const AttendanceList: React.FC = () => {
 
             {/* TAB 2: UPCOMING SESSIONS */}
             {sessionModalTab === 'upcoming' && (
-              <div className="space-y-3">
+              <div className="space-y-4">
+                <div className="flex flex-col gap-3 border-b border-slate-100 pb-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">Scheduled sessions</p>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Plan attendance for this class in advance.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setIsSessionModalOpen(false); void openStartSession(); }}
+                    className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700"
+                  >
+                    <CalendarDays className="h-4 w-4" />
+                    <span>Schedule session</span>
+                  </button>
+                </div>
                 {upcomingSessions.length === 0 ? (
-                  <div className="p-8 text-center text-slate-500 dark:text-slate-400 space-y-2">
-                    <Calendar className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
-                    <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-                      No upcoming sessions scheduled.
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      You can schedule future sessions with Start session.
+                  <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-5 py-8 text-center dark:border-slate-700 dark:bg-slate-900/40 sm:py-10">
+                    <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-300">
+                      <Calendar className="h-6 w-6" />
+                    </span>
+                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">No sessions scheduled yet</p>
+                    <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">
+                      Scheduled sessions for this class will appear here. Create one when you are ready to plan attendance.
                     </p>
                   </div>
                 ) : (
