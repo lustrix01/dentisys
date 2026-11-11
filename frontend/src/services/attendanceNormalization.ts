@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   StudentActiveSession,
   StudentAttendanceLogRecord,
 } from '../types/index.ts';

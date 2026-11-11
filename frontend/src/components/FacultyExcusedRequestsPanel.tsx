@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Filter as FilterIcon, Search } from 'lucide-react';
 import { Card } from './Card';
 import { Modal } from './Modal';

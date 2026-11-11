@@ -1,4 +1,4 @@
-﻿import type { ClassMeeting, FacultyClassItem } from '../services/apiClient';
+import type { ClassMeeting, FacultyClassItem } from '../services/apiClient';
 import { formatVisibleTime } from './timeDisplay.ts';
 
 export interface ClassSessionSlot {
