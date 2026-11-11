@@ -245,7 +245,7 @@ export const Rooms: React.FC = () => {
           <button
             type="button"
             disabled={loading || busy}
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="inline-flex h-11 min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             onClick={() => { setError(''); setCatDraft({ name: '' }); }}
           >
             Add category
@@ -253,7 +253,7 @@ export const Rooms: React.FC = () => {
           <button
             type="button"
             disabled={loading || busy}
-            className="px-4 py-2.5 rounded-xl text-xs font-bold bg-accent-600 hover:bg-accent-700 active:scale-95 text-white shadow-xs hover:shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="inline-flex h-11 min-h-11 items-center justify-center gap-2 rounded-xl bg-accent-600 px-4 text-xs font-bold text-white shadow-xs transition-all hover:bg-accent-700 hover:shadow-md active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => openDraft()}
           >
             <Plus className="w-4 h-4" />
@@ -314,31 +314,35 @@ export const Rooms: React.FC = () => {
                     </div>
                   )}
                 </div>
-                <div className="border-t border-slate-100 dark:border-slate-800 px-4 sm:px-5 py-1.5">
-                  {all.length === 0 && <p className="py-2.5 text-xs text-slate-500 dark:text-slate-400">No rooms yet. Add a room and pick this category.</p>}
-                  {all.length > 0 && shown.length === 0 && <p className="py-2.5 text-xs text-slate-500 dark:text-slate-400">All rooms here are retired. They are in the Retired tab.</p>}
+                <div className="grid grid-cols-1 gap-3 border-t border-slate-100 bg-slate-50/40 p-3 dark:border-slate-800 dark:bg-slate-950/20 sm:grid-cols-2 sm:p-4 xl:grid-cols-3">
+                  {all.length === 0 && <p className="rounded-xl border border-dashed border-slate-200 bg-white p-4 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 sm:col-span-2 xl:col-span-3">No rooms yet. Add a room and pick this category.</p>}
+                  {all.length > 0 && shown.length === 0 && <p className="rounded-xl border border-dashed border-slate-200 bg-white p-4 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 sm:col-span-2 xl:col-span-3">All rooms here are retired. They are in the Retired tab.</p>}
                   {shown.map(room => {
                     const retired = room.status === 'retired';
                     const hasLocation = room.latitude != null && room.longitude != null;
                     return (
-                      <div
+                      <article
                         key={room.roomId}
                         data-testid={`room-${room.name}`}
-                        className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-slate-100 py-3 last:border-b-0 dark:border-slate-800 lg:grid-cols-[minmax(9rem,1.1fr)_auto_minmax(8rem,1fr)_minmax(9rem,1.2fr)_auto] lg:gap-x-5"
+                        className="flex min-h-44 min-w-0 flex-col rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-colors hover:border-accent-200 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-accent-900"
                       >
-                        <span className={`text-sm font-bold ${retired ? 'text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100'}`}>{room.name}</span>
-                        <span className="row-start-1 col-start-2 lg:row-start-auto lg:col-start-auto justify-self-end lg:justify-self-start">
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className={`text-sm font-extrabold ${retired ? 'text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>{room.name}</h3>
                           <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold tracking-wide inline-flex items-center gap-1.5 border ${retired ? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border-slate-200/60' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/50'}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${retired ? 'bg-slate-400' : 'bg-emerald-500'}`} />
                             {retired ? 'Retired' : 'Active'}
                           </span>
-                        </span>
-                        <span className="col-span-2 inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 lg:col-span-1">
-                          <MapPin className="w-3 h-3" aria-hidden="true" />
-                          {hasLocation ? `Location set${room.radiusMeters ? ` · ${room.radiusMeters} m` : ''}` : 'No location'}
-                        </span>
-                        <span className="col-span-2 text-xs text-slate-500 dark:text-slate-400 lg:col-span-1">{usedBy(room.usage)}</span>
-                        <span className="col-span-2 flex items-center justify-end gap-2 lg:col-span-1">
+                        </div>
+                        <div className="mt-4 space-y-2 text-xs text-slate-500 dark:text-slate-400">
+                          <p className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{hasLocation ? `Location set${room.radiusMeters ? ` · ${room.radiusMeters} m` : ''}` : 'No location'}</p>
+                          <p>{usedBy(room.usage)}</p>
+                        </div>
+                        {retired && !room.deletable && (
+                          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                            {`${usedBy(room.usage)}. Move ${room.usage.classes + room.usage.meetings + room.usage.scheduledSessions === 1 ? 'it' : 'them'} to another room first; then it can be deleted.`}
+                          </p>
+                        )}
+                        <div className="mt-auto flex items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
                           {retired ? (
                             <>
                               <button
@@ -372,13 +376,8 @@ export const Rooms: React.FC = () => {
                               <button type="button" aria-label={`Retire room ${room.name}`} title={`Retire room ${room.name}`} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800" disabled={busy} onClick={() => setConfirm({ kind: 'retire', room })}><Archive className="h-4 w-4" /></button>
                             </>
                           )}
-                        </span>
-                        {retired && !room.deletable && (
-                          <span className="col-span-2 lg:col-span-5 text-right text-[11px] text-slate-500 dark:text-slate-400">
-                            {`${usedBy(room.usage)}. Move ${room.usage.classes + room.usage.meetings + room.usage.scheduledSessions === 1 ? 'it' : 'them'} to another room first; then it can be deleted.`}
-                          </span>
-                        )}
-                      </div>
+                        </div>
+                      </article>
                     );
                   })}
                 </div>

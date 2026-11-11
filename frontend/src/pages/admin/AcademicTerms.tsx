@@ -277,7 +277,7 @@ export const AcademicTermsSettings: React.FC = () => {
                 </button>
 
                 {isOpen && (
-                  <div className="border-t border-slate-100 px-4 py-1.5 dark:border-slate-800 sm:px-5">
+                  <div className="grid grid-cols-1 gap-3 border-t border-slate-100 bg-slate-50/40 p-3 dark:border-slate-800 dark:bg-slate-950/20 sm:grid-cols-2 sm:p-4 xl:grid-cols-3">
                     {SEMESTER_ORDER.map((semester) => {
                       const term = yearSet.find((t) => t.semester === semester);
                       const slot = !term;
@@ -285,34 +285,35 @@ export const AcademicTermsSettings: React.FC = () => {
                       const status = termStatus(term ?? { startDate: null, endDate: null });
                       const classCount = (term ?? placeholder)?.classCount ?? 0;
                       return (
-                        <div
+                        <article
                           key={semester}
                           data-testid={`${year}-${semester}`}
-                          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-slate-100 py-3 last:border-b-0 dark:border-slate-800 sm:grid-cols-[minmax(8rem,1.1fr)_minmax(10rem,1.5fr)_auto_minmax(5rem,.6fr)_auto] sm:gap-x-5"
+                          className="flex min-h-40 min-w-0 flex-col rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-colors hover:border-accent-200 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-accent-900"
                         >
-                          <span className={`text-sm font-bold ${slot ? 'text-slate-500 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>
-                            {semesterLabel(semester)}
-                          </span>
-                          <span className={`col-span-2 sm:col-span-1 row-start-2 sm:row-start-auto text-xs ${slot ? 'italic text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-200'}`}>
-                            {formatDates(term?.startDate ?? null, term?.endDate ?? null)}
-                          </span>
-                          <span className="row-start-1 sm:row-start-auto col-start-2 sm:col-start-auto justify-self-end sm:justify-self-start">
+                          <div className="flex items-start justify-between gap-3">
+                            <h3 className={`text-sm font-extrabold ${slot ? 'text-slate-600 dark:text-slate-300' : 'text-slate-900 dark:text-slate-100'}`}>
+                              {semesterLabel(semester)}
+                            </h3>
                             {status && (
-                              <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold tracking-wide inline-flex items-center gap-1.5 ${status.className}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${status.dotClass}`} />
+                              <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-wide ${status.className}`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${status.dotClass}`} />
                                 {status.label}
                               </span>
                             )}
-                          </span>
-                          <span className="row-start-3 sm:row-start-auto col-start-1 sm:col-start-auto text-xs text-slate-500 dark:text-slate-400">
-                            {classCount} {classCount === 1 ? 'class' : 'classes'}
-                          </span>
-                          <span className="row-start-3 col-start-2 flex items-center justify-end gap-2 sm:row-start-auto sm:col-start-auto">
+                          </div>
+                          <p className={`mt-4 text-sm ${slot ? 'italic text-slate-400 dark:text-slate-500' : 'font-semibold text-slate-700 dark:text-slate-200'}`}>
+                            {formatDates(term?.startDate ?? null, term?.endDate ?? null)}
+                          </p>
+                          <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              <strong className="text-slate-800 dark:text-slate-200">{classCount}</strong> {classCount === 1 ? 'class' : 'classes'}
+                            </span>
+                            <div className="flex items-center gap-2">
                             <button
                               type="button"
                               aria-label={`${slot ? 'Add dates for' : 'Edit'} ${semesterLabel(semester)} ${year}`}
                               title={`${slot ? 'Add dates for' : 'Edit'} ${semesterLabel(semester)} ${year}`}
-                              className={`inline-flex h-10 w-10 items-center justify-center rounded-xl transition-all disabled:opacity-40 ${slot ? 'bg-accent-600 text-white hover:bg-accent-700' : 'border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'}`}
+                              className={`inline-flex h-10 w-10 items-center justify-center rounded-xl transition-all disabled:opacity-40 ${slot ? 'bg-accent-600 text-white shadow-xs hover:bg-accent-700' : 'border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'}`}
                               disabled={busy}
                               onClick={() => open(term ?? { id: null, schoolYear: year, semester, startDate: null, endDate: null, classCount: 0 })}
                             >
@@ -337,8 +338,9 @@ export const AcademicTermsSettings: React.FC = () => {
                                 <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                               </button>
                             )}
-                          </span>
-                        </div>
+                            </div>
+                          </div>
+                        </article>
                       );
                     })}
                   </div>

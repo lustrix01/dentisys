@@ -37,6 +37,7 @@ export const CourseCatalog: React.FC = () => {
   const [yearLevel, setYearLevel] = useState('all');
   const [draft, setDraft] = useState<CourseDraft | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [newCourseComponents, setNewCourseComponents] = useState<'lecture' | 'combined'>('combined');
   const [retiring, setRetiring] = useState<CatalogCourse | null>(null);
 
   const filtered = useMemo(() => courses.filter(course => course.status === tab
@@ -49,6 +50,7 @@ export const CourseCatalog: React.FC = () => {
 
   const openCreate = () => {
     setEditingId(null);
+    setNewCourseComponents('combined');
     setDraft({ courseCode: '', name: '', lectureUnits: 0, labUnits: 0, yearLevel: 1, semester: '1st Semester', isClinical: false });
   };
   const openEdit = (course: CatalogCourse) => {
@@ -126,12 +128,24 @@ export const CourseCatalog: React.FC = () => {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Course Code"><input required value={draft.courseCode} onChange={event => setDraft({ ...draft, courseCode: event.target.value })} placeholder="e.g. DENT 101" className={inputClass} /></Field>
             <Field label="Course Title"><input required value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} placeholder="Course title" className={inputClass} /></Field>
+            {!editingId && <fieldset className="space-y-2 sm:col-span-2">
+              <legend className="text-xs font-bold text-slate-700 dark:text-slate-200">Course Components</legend>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-3.5 text-xs font-semibold transition ${newCourseComponents === 'lecture' ? 'border-accent-500 bg-accent-50 text-accent-800 ring-2 ring-accent-500/15 dark:bg-accent-950/30 dark:text-accent-200' : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'}`}>
+                  <input type="radio" name="courseComponents" value="lecture" checked={newCourseComponents === 'lecture'} onChange={() => { setNewCourseComponents('lecture'); setDraft(current => current ? { ...current, labUnits: 0 } : current); }} className="h-4 w-4 accent-accent-600" />
+                  <span><span className="block">Lecture only</span><span className="mt-0.5 block text-[11px] font-normal opacity-75">No Laboratory component</span></span>
+                </label>
+                <label className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-3.5 text-xs font-semibold transition ${newCourseComponents === 'combined' ? 'border-accent-500 bg-accent-50 text-accent-800 ring-2 ring-accent-500/15 dark:bg-accent-950/30 dark:text-accent-200' : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'}`}>
+                  <input type="radio" name="courseComponents" value="combined" checked={newCourseComponents === 'combined'} onChange={() => setNewCourseComponents('combined')} className="h-4 w-4 accent-accent-600" />
+                  <span><span className="block">Lecture + Laboratory</span><span className="mt-0.5 block text-[11px] font-normal opacity-75">Includes both components</span></span>
+                </label>
+              </div>
+            </fieldset>}
             <Field label="Lecture Units"><input type="number" min="0" max="20" step="0.5" value={draft.lectureUnits} onChange={event => setDraft({ ...draft, lectureUnits: Number(event.target.value) })} className={inputClass} /></Field>
-            <Field label="Laboratory Units"><input type="number" min="0" max="20" step="0.5" value={draft.labUnits} onChange={event => setDraft({ ...draft, labUnits: Number(event.target.value) })} className={inputClass} /></Field>
+            {(editingId || newCourseComponents === 'combined') && <Field label="Laboratory Units"><input type="number" min="0" max="20" step="0.5" value={draft.labUnits} onChange={event => setDraft({ ...draft, labUnits: Number(event.target.value) })} className={inputClass} /></Field>}
             <Field label="Year Level"><select value={draft.yearLevel} onChange={event => setDraft({ ...draft, yearLevel: Number(event.target.value) })} className={inputClass}>{[1, 2, 3, 4, 5, 6].map(level => <option key={level} value={level}>Year {level}</option>)}</select></Field>
             <Field label="Semester"><select value={draft.semester} onChange={event => setDraft({ ...draft, semester: event.target.value })} className={inputClass}><option>1st Semester</option><option>2nd Semester</option><option>Summer</option></select></Field>
           </div>
-          <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200"><input type="checkbox" checked={draft.isClinical} onChange={event => setDraft({ ...draft, isClinical: event.target.checked })} className="h-4 w-4 accent-accent-600" />Clinical course</label>
           <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 dark:border-slate-800 sm:flex-row sm:justify-end"><button type="button" onClick={() => { setDraft(null); setEditingId(null); }} className="min-h-11 rounded-xl px-4 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button><button type="submit" className="min-h-11 rounded-xl bg-accent-600 px-4 text-xs font-bold text-white hover:bg-accent-700">{editingId ? 'Save Changes' : 'Add Course'}</button></div>
         </form>}
       </Modal>
