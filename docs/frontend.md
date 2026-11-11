@@ -55,7 +55,7 @@ Every tab bar uses `Tabs`, which also gives screen readers the tab roles and let
 
 ## Phone blocks
 
-On phones (below 768 px) these lists show each row as a stacked block instead of a table that scrolls sideways: Student Dashboard enrolled subjects, Student Attendance Logs, the Faculty and Secretary roll calls, the Faculty roster, the Reports grade summary, Email Management invitation lists, Faculty Invitations and the Audit Trail. A block shows every field of the desktop row in the same data format; it may put the name or date first, join two related fields on one line and leave out a field that is empty for that row. Fields without a visible label get a screen-reader label. Tablets and desktop keep the table. Other tables scroll sideways inside their card on phones, never the whole page. The rule is recorded in `spec.md` UI-001 ([amendment of 2026-11-03](spec-amendments-2026-11-03-responsive-audit.md)).
+On phones (below 768 px), every Student and Secretary data table shows stacked row cards instead of horizontal scrolling; each card preserves every field and action. The same phone-block pattern applies to the Faculty and Reports lists named in `spec.md` UI-001. Fields without a visible label get a screen-reader label. Tablet and desktop layouts keep their tables. Other tables scroll sideways inside their card on phones, never the whole page. The Student and Secretary scope was approved in `spec.md` UI-001 on 2026-11-11.
 
 ## Authentication routes
 

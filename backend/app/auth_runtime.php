@@ -516,9 +516,6 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
 
         $lockedUser = auth_lock_user_for_session($pdo, $sessionRow['user_id']);
 
-        $sessionScope = bin2hex(hash('sha256', 'session:' . $sessionRow['session_uuid'], true));
-        rate_limit_check($rateStorage, $sessionScope, 'post_auth_refresh', 60, 300);
-
         $sessionExpiresAt = new DateTimeImmutable($sessionRow['expires_at'], new DateTimeZone('UTC'));
         $nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
 
@@ -528,6 +525,32 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
 
         if ($sessionRow['revoked_at'] !== null) {
             throw new ChallengeException('Authentication required.');
+        }
+
+        $lastSeenAt = new DateTimeImmutable((string) ($sessionRow['last_seen_at'] ?? $sessionRow['created_at']), new DateTimeZone('UTC'));
+        if ($lastSeenAt->getTimestamp() + AUTH_IDLE_TIMEOUT_SECONDS <= $nowUtc->getTimestamp()) {
+            $auditCtx = audit_begin_operation($pdo);
+            auth_revoke_session($pdo, (int) $sessionRow['session_id'], 'Idle timeout', $nowUtc);
+            audit_finish_operation($pdo, $auditCtx, [
+                'module_code' => 'auth',
+                'action_code' => 'logout',
+                'event_status' => 'Success',
+                'actor_user_id' => (int) $lockedUser['user_id'],
+                'actor_username' => $lockedUser['login_email'],
+                'actor_role' => $lockedUser['role'],
+                'actor_display_name' => $lockedUser['display_name'],
+                'session_id' => (int) $sessionRow['session_id'],
+                'target_type' => 'session',
+                'target_id' => (string) $sessionRow['session_id'],
+                'description' => 'User session expired after 30 minutes of inactivity.',
+                'http_method' => $context['http_method'],
+                'endpoint' => $context['endpoint'],
+                'request_id' => $context['request_id'],
+                'ip_address' => $context['ip_address'],
+                'user_agent' => $context['user_agent'],
+            ], $macKey);
+            $pdo->commit();
+            return ['type' => 'expired'];
         }
 
         if ($lockedUser['status'] !== 'Active') {
@@ -565,6 +588,9 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $lockedToken['family_uuid'])) {
             throw new ChallengeException('Authentication required.');
         }
+
+        $sessionScope = bin2hex(hash('sha256', 'session:' . $sessionRow['session_uuid'], true));
+        rate_limit_check($rateStorage, $sessionScope, 'post_auth_refresh', 60, 300);
 
         // Defer the audit-chain row lock until all Student provenance and
         // eligibility checks have passed. Those checks may append a denial on
@@ -643,6 +669,10 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
         $childTokenId = (int) $stmtIns->fetchColumn();
 
         $accessResult = auth_issue_access_token($lockedUser, $sessionRow, $jwtKey, 900);
+        if (($context['user_activity'] ?? false) === true) {
+            $touchSession = $pdo->prepare('UPDATE auth_sessions SET last_seen_at = ? WHERE session_id = ?');
+            $touchSession->execute([$nowSql, (int) $sessionRow['session_id']]);
+        }
 
         $childExpiryParsed = new DateTimeImmutable($childExpiresSql, new DateTimeZone('UTC'));
         $responseTime = new DateTimeImmutable('now', new DateTimeZone('UTC'));

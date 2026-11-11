@@ -306,8 +306,53 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+              {todaySessions.map(session => (
+                <div key={session.code} className="space-y-3 py-4 text-xs">
+                  <div>
+                    <span className="block font-mono font-bold text-blue-600 dark:text-blue-400">{session.code}</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-100">{session.name}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Schedule &amp; Room</span>
+                      <span className="block font-semibold text-slate-700 dark:text-slate-300">{session.schedule}</span>
+                      <span className="block text-slate-500 dark:text-slate-400">{session.room}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Time-In Status</span>
+                      <span className={`mt-1 inline-flex max-w-full items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${session.timeInStatus === 'done' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+                        {session.timeInStatus === 'done' && <CheckCircle2 className="h-3 w-3 shrink-0" />}
+                        {session.timeInStatus === 'done' ? `Done (${session.timeInTime})` : 'Pending time-in'}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Time-Out Status</span>
+                      <span className={`mt-1 inline-flex max-w-full items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${session.timeOutStatus === 'done' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' : session.timeInStatus === 'done' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>
+                        {session.timeOutStatus === 'done' && <CheckCircle2 className="h-3 w-3 shrink-0" />}
+                        {session.timeOutStatus === 'done' ? `Done (${session.timeOutTime})` : session.timeInStatus === 'done' ? 'Ready for time-out' : 'Pending'}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Action</span>
+                      {session.timeInStatus === 'pending' ? (
+                        <button onClick={() => navigate('/student/attendance')} className="mt-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-xs">
+                          Check-in (time in)
+                        </button>
+                      ) : session.timeOutStatus !== 'done' ? (
+                        <button onClick={() => handleTimeOut(session.code)} className="mt-1 rounded-lg bg-amber-600 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-xs">
+                          Check-out (time out)
+                        </button>
+                      ) : (
+                        <span className="mt-1 block text-[10px] font-bold text-slate-500 dark:text-slate-400">Completed ✓</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[620px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <th className="pb-3">Class Subject</th>

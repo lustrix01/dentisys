@@ -297,8 +297,19 @@ export const RetentionMonitoring: React.FC = () => {
         <Card className="p-5 space-y-3">
           <h2 className="font-bold">Course Performance Breakdown ({sampleSubjects.length} Enrolled)</h2>
           <p className="text-xs">Sample retention threshold: {threshold === null ? 'Unavailable' : threshold.toFixed(2)}</p>
+          <div className="space-y-2 md:hidden">
+            {sampleSubjects.length === 0 ? <p className="py-4 text-center text-xs text-slate-500">No sample courses available.</p> : sampleSubjects.map(subject => (
+              <article key={subject.code} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs dark:border-slate-800 dark:bg-slate-950/40">
+                <h3 className="font-bold">{subject.code} · {subject.name}</h3>
+                <dl className="mt-2 grid grid-cols-2 gap-2">
+                  <div><dt className="text-[10px] text-slate-500">Sample Grade</dt><dd className="font-mono font-semibold">{formatGrade(subject.grade)}</dd></div>
+                  <div><dt className="text-[10px] text-slate-500">Sample Standing</dt><dd>{threshold === null ? 'Unavailable' : subject.isClinical && subject.grade >= threshold ? 'Sample retention review' : 'No sample retention review'}</dd></div>
+                </dl>
+              </article>
+            ))}
+          </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="hidden w-full min-w-[520px] text-left text-xs md:table">
               <thead><tr><th className="p-2">Course</th><th className="p-2">Sample Grade</th><th className="p-2">Sample Standing</th></tr></thead>
               <tbody>{sampleSubjects.length === 0 && <tr><td colSpan={3} className="p-2">No sample courses available.</td></tr>}{sampleSubjects.map(subject => <tr key={subject.code}>
                 <td className="p-2">{subject.code} · {subject.name}</td>
@@ -389,8 +400,28 @@ export const RetentionMonitoring: React.FC = () => {
       {/* --- TAB 1: ACTIVE COURSES --- */}
       {activeTab === 'current' && (
         <Card className="overflow-hidden border border-slate-200 dark:border-slate-800">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+          <div className="space-y-2 p-3 md:hidden">
+            {currentRecords.length === 0 ? (
+              <p className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">No courses enrolled for the active term.</p>
+            ) : currentRecords.map(cls => {
+              const isPending = cls.grade === null;
+              const isAtRisk = (cls.retentionState || '').toLowerCase() === 'remedial';
+              const hasRemedial = readRemedialProgression(cls).stage !== 'none';
+              return (
+                <article key={cls.enrollmentId} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs dark:border-slate-800 dark:bg-slate-950/40">
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100"><span className="font-mono text-blue-600 dark:text-blue-400">{cls.courseCode}</span> · {cls.courseName}</h3>
+                  <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">{[courseKind(cls), `${cls.units} Units`, cls.instructorName || 'Faculty'].filter(Boolean).join(' · ')}</p>
+                  <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
+                    <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Midterm</dt><dd className="mt-0.5 font-semibold">{cls.midtermEvaluation?.complete ? <>{cls.midtermEvaluation.percentage !== null ? `${cls.midtermEvaluation.percentage.toFixed(1)}%` : '—'}{cls.midtermEvaluation.isAtRisk && <span className="ml-1 text-[10px] text-amber-700 dark:text-amber-300">At risk</span>}</> : <span className="italic text-slate-500">Pending</span>}</dd></div>
+                    <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Final Grade</dt><dd className="mt-0.5"><GradePill grade={cls.grade} percentage={cls.percentage} /></dd></div>
+                    <div className="col-span-2"><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Standing</dt><dd className="mt-0.5 flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${!isPending && isAtRisk ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' : !isPending ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>{isPending ? 'In progress' : isAtRisk ? 'Deficient' : 'Cleared'}</span>{hasRemedial && <button type="button" onClick={() => setActiveTab('remedials')} className="font-bold text-rose-600 underline">View exam</button>}</dd></div>
+                  </dl>
+                </article>
+              );
+            })}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[560px] text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-50/50 dark:bg-slate-800/40">
                   <th className="py-3 px-4">Course</th>
@@ -606,8 +637,23 @@ export const RetentionMonitoring: React.FC = () => {
           </div>
 
           <Card className="overflow-hidden border border-slate-200 dark:border-slate-800">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="space-y-2 p-3 md:hidden">
+              {midtermRiskRecords.length === 0 ? (
+                <div className="py-6 text-center text-xs text-slate-500 dark:text-slate-400"><CheckCircle2 className="mx-auto mb-1 h-6 w-6 text-emerald-500" />{currentRecords.length === 0 ? 'No current courses available for a midterm advisory.' : 'No courses are on the Midterm Advisory.'}</div>
+              ) : midtermRiskRecords.map(cls => (
+                <article key={cls.enrollmentId} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs dark:border-slate-800 dark:bg-slate-950/40">
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100"><span className="font-mono text-blue-600 dark:text-blue-400">{cls.courseCode}</span> · {cls.courseName}</h3>
+                  <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">Instructor: {cls.instructorName || 'Faculty'}</p>
+                  <dl className="mt-3 grid grid-cols-2 gap-2">
+                    <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Midterm Score</dt><dd className="mt-0.5 font-mono font-bold">{typeof cls.midtermEvaluation?.percentage === 'number' ? `${cls.midtermEvaluation.percentage.toFixed(1)}%` : 'Pending'}</dd></div>
+                    <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Midterm Grade</dt><dd className="mt-0.5 font-mono font-extrabold text-amber-600 dark:text-amber-400">{typeof cls.midtermEvaluation?.grade === 'number' ? <GradeValue percentage={cls.midtermEvaluation.percentage} raw={cls.midtermEvaluation.rawPercentage} period="Midterm" grade={cls.midtermEvaluation.grade}>{formatGrade(cls.midtermEvaluation.grade)}</GradeValue> : 'Pending'}</dd></div>
+                    <div className="col-span-2"><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Recommendation</dt><dd className="mt-0.5 text-slate-600 dark:text-slate-300"><span className="block font-bold">At risk · Midterm</span>Review lessons and consult instructor before finals.</dd></div>
+                  </dl>
+                </article>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[620px] text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-50/50 dark:bg-slate-800/40">
                     <th className="py-3 px-4">Course</th>
@@ -691,8 +737,20 @@ export const RetentionMonitoring: React.FC = () => {
                   </button>
 
                   {isExpanded && (
-                    <div className="p-3 border-t border-slate-100 dark:border-slate-800 overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
+                    <>
+                    <ul className="divide-y divide-slate-100 border-t border-slate-100 px-3 dark:divide-slate-800 dark:border-slate-800 md:hidden">
+                      {sem.records.map(cls => (
+                        <li key={cls.enrollmentId} className="space-y-2 py-3 text-xs">
+                          <h5 className="font-bold text-slate-800 dark:text-slate-100"><span className="font-mono text-blue-600 dark:text-blue-400">{cls.courseCode}</span> · {cls.courseName}</h5>
+                          <dl className="grid grid-cols-2 gap-2">
+                            <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Grade</dt><dd className="mt-0.5"><GradePill grade={cls.grade} percentage={cls.percentage} /></dd></div>
+                            <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Status</dt><dd className="mt-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300">{cls.retentionState || 'State unavailable'}</dd></div>
+                          </dl>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="hidden overflow-x-auto border-t border-slate-100 p-3 dark:border-slate-800 md:block">
+                      <table className="w-full min-w-[520px] text-left text-xs border-collapse">
                         <thead>
                           <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                             <th className="py-2 px-3">Course</th>
@@ -720,6 +778,7 @@ export const RetentionMonitoring: React.FC = () => {
                         </tbody>
                       </table>
                     </div>
+                    </>
                   )}
                 </div>
               );

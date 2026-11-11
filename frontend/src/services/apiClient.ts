@@ -42,9 +42,13 @@ const configuredBase = import.meta.env?.VITE_API_BASE_URL?.trim();
 const API_BASE_URL = configuredBase
   ? configuredBase.replace(/\/+$/, '')
   : '/api';
+const AUTH_EXPIRED_EVENT = 'dentisys:auth-expired';
+const ACCESS_TOKEN_REFRESHED_EVENT = 'dentisys:access-token-refreshed';
+const USER_ACTIVITY_SIGNAL_TTL_MS = 10 * 60 * 1000;
 
 let accessToken: string | null = null;
 let refreshInFlight: Promise<{ access_token: string; user: { user_id: number } }> | null = null;
+let lastUserActivityAt = 0;
 
 export function setAccessToken(token: string): void {
   accessToken = token;
@@ -56,6 +60,10 @@ export function clearAccessToken(): void {
 
 export function getAccessToken(): string | null {
   return accessToken;
+}
+
+export function setRecentUserActivity(timestamp = Date.now()): void {
+  lastUserActivityAt = timestamp;
 }
 
 export class ApiError extends Error {
@@ -269,6 +277,20 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
   return 'An unexpected error occurred. Please try again.';
 }
 
+function canRefreshAfterUnauthorized(path: string, tokenOverride: string | undefined, retryDepth: number): boolean {
+  if (!accessToken || tokenOverride !== undefined || retryDepth > 0 || Date.now() - lastUserActivityAt > USER_ACTIVITY_SIGNAL_TTL_MS) return false;
+  const publicAuthPrefixes = [
+    '/auth/login', '/auth/google', '/auth/refresh', '/auth/logout', '/auth/password',
+    '/auth/student', '/auth/faculty', '/auth/secretary', '/auth/development',
+  ];
+  return !publicAuthPrefixes.some(prefix => path.startsWith(prefix));
+}
+
+function emitWindowEvent(name: string, detail?: unknown): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(name, { detail }));
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -279,6 +301,7 @@ async function request<T>(
   // keepalive lets a refresh finish even if the page reloads/closes after the server rotated the token
   keepalive = false,
   auditBatchId?: string,
+  authRetryDepth = 0,
 ): Promise<T> {
   const headers: Record<string, string> = {
     accept: 'application/json',
@@ -294,6 +317,9 @@ async function request<T>(
   const token = tokenOverride ?? accessToken;
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (lastUserActivityAt > 0 && Date.now() - lastUserActivityAt <= USER_ACTIVITY_SIGNAL_TTL_MS) {
+    headers['X-DentiSys-User-Activity'] = '1';
   }
 
   let response: Response;
@@ -362,7 +388,26 @@ async function request<T>(
       responseData && typeof responseData === 'object'
         ? (responseData as Record<string, unknown>)
         : undefined;
-    throw new ApiError(errorStatus, mapError(errorStatus, backendMessage, responseData), errorsPayload, code, requestId, details);
+    const apiError = new ApiError(errorStatus, mapError(errorStatus, backendMessage, responseData), errorsPayload, code, requestId, details);
+    if (errorStatus === 401 && canRefreshAfterUnauthorized(path, tokenOverride, authRetryDepth)) {
+      try {
+        const refreshed = await refreshSession();
+        setAccessToken(refreshed.access_token);
+        emitWindowEvent(ACCESS_TOKEN_REFRESHED_EVENT, refreshed.access_token);
+        return await request<T>(method, path, body, refreshed.access_token, timeoutMs, signal, keepalive, auditBatchId, 1);
+      } catch (refreshError) {
+        if (refreshError instanceof ApiError && refreshError.status === 401) {
+          clearAccessToken();
+          emitWindowEvent(AUTH_EXPIRED_EVENT);
+        }
+        throw refreshError;
+      }
+    }
+    if (errorStatus === 401 && authRetryDepth > 0) {
+      clearAccessToken();
+      emitWindowEvent(AUTH_EXPIRED_EVENT);
+    }
+    throw apiError;
   }
 
   return responseData as T;
