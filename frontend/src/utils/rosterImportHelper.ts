@@ -141,7 +141,24 @@ const aliases: Record<string, string[]> = {
   prefix: ['prefix', 'nameprefix'], suffix: ['suffix', 'namesuffix'],
 };
 
-export function parseCSVText(text: string): ParsedRosterStudent[] {
+export interface ParsedCSVRoster {
+  students: ParsedRosterStudent[];
+  /** True when the first row had no recognised roster heading, so the columns were read by position. */
+  positional: boolean;
+}
+
+/** A headerless file is usable only when a row starts with a student number and the file holds an email address. */
+function headerlessLooksLikeRoster(rows: string[][]): boolean {
+  const hasEmail = rows.some(values => values.some(value => value.includes('@')));
+  const hasStudentNumber = rows.some(values => {
+    const first = (values[0] ?? '').trim();
+    return /^[A-Za-z0-9][A-Za-z0-9._/-]{2,}$/.test(first) && /\d/.test(first);
+  });
+  return hasEmail && hasStudentNumber;
+}
+
+/** Same rows as parseCSVText, plus whether a recognised header row or the column position decided the fields. */
+export function parseCSVRoster(text: string): ParsedCSVRoster {
   const clean = text.replace(/^\uFEFF/, '');
   // Detect separators outside quotes in the first non-empty logical row.
   let quoted = false;
@@ -158,12 +175,15 @@ export function parseCSVText(text: string): ParsedRosterStudent[] {
   }
   const delimiter = [...counts].sort((a, b) => b[1] - a[1])[0][0];
   const rows = delimitedRows(clean, delimiter);
-  if (!rows.length) return [];
+  if (!rows.length) return { students: [], positional: false };
   const headers = rows[0].map(value => value.toLowerCase().replace(/[^a-z0-9]/g, ''));
   const columns = Object.fromEntries(Object.entries(aliases).map(([field, names]) => [field, headers.findIndex(header => names.includes(header))]));
   const hasHeader = columns.studentId >= 0 || columns.firstName >= 0 || columns.originalName >= 0;
   if (hasHeader && columns.studentId < 0) throw new Error('The roster needs a Student ID or Student No. column.');
-  return (hasHeader ? rows.slice(1) : rows).map((values, index) => {
+  if (!hasHeader && !headerlessLooksLikeRoster(rows)) {
+    throw new Error('The file must start each row with a student number and include an email address.');
+  }
+  const students = (hasHeader ? rows.slice(1) : rows).map((values, index) => {
     const get = (field: string) => columns[field] >= 0 ? values[columns[field]] ?? '' : '';
     const originalName = hasHeader ? get('originalName') : values[1] ?? '';
     const structured = hasHeader && columns.firstName >= 0 && columns.lastName >= 0;
@@ -184,6 +204,11 @@ export function parseCSVText(text: string): ParsedRosterStudent[] {
       reviewed: structured, included: structured, status: 'valid' as const,
     };
   });
+  return { students, positional: !hasHeader };
+}
+
+export function parseCSVText(text: string): ParsedRosterStudent[] {
+  return parseCSVRoster(text).students;
 }
 
 export interface RosterPDFTextItem { text: string; x: number; y: number; width: number; height: number }
@@ -338,7 +363,7 @@ export function parsePDFRoster(pages: RosterPDFPage[]): RosterPDFResult {
       return /Student\s*(?:No\.?|Number|ID)/i.test(text) && /Name/i.test(text) && /Year\s*Level/i.test(text);
     });
     if (!header && /Total\s+Number\s+of\s+Students|NOTHING\s+FOLLOWS/i.test(pageText)) continue;
-    if (!header) throw new Error(`Page ${page.page}: unsupported PDF table layout. Use the provisional CSV template instead.`);
+    if (!header) throw new Error(`Page ${page.page}: this page has no class list table.`);
     const headerItems = header.items.filter(item => item.text.trim());
     const programItem = headerItems.find(entry => entry.text.trim().toLowerCase() === 'program');
     // The official Program column is read only to keep it out of the name.
@@ -347,7 +372,7 @@ export function parsePDFRoster(pages: RosterPDFPage[]): RosterPDFResult {
     const labels = ['#', 'Student No.', ...(programItem ? ['Program'] : []), 'Name', 'Gender', 'Year Level', 'Contact #'];
     const headers = labels.map(label => {
       const item = headerItems.find(entry => entry.text.trim().toLowerCase() === label.toLowerCase());
-      if (!item) throw new Error(`Page ${page.page}: expected ${label} table header.`);
+      if (!item) throw new Error(`Page ${page.page}: the class list has no "${label}" column.`);
       return item;
     });
     // Headers are centered in unequal-width cells. Use left text positions,

@@ -5,7 +5,7 @@ import { requestConfirmation } from './FeedbackCenter';
 import type { Assessment, AssessmentScore, Student } from '../types';
 import type { FacultyGradingCategoryItem, FacultyGradingConfiguration } from '../services/apiClient';
 import {
-  buildPlan, buildPreview, checkWorkbookFile, emptyDecisions, OUT, parseWorkbook,
+  buildPlan, buildPreview, checkWorkbookFile, emptyDecisions, isUsed, OUT, parseWorkbook,
   type Cell, type CellView, type Component, type Decisions, type GradeSheetImportPlan, type ImportContext,
   type ItemView, type ParsedSheet, type Period, type SavedAssessment, type SavedCategory,
 } from '../utils/gradeSheetImport';
@@ -99,17 +99,21 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
 
   const readFile = async (file: File) => {
     setError(''); setSheets([]); setDec(emptyDecisions()); setFileName(file.name);
-    const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
-    const problem = checkWorkbookFile(file, head);
-    if (problem) { setError(problem); return; }
     setReading(true);
     try {
+      const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+      const problem = checkWorkbookFile(file, head);
+      if (problem) { setError(problem); return; }
       const { default: readExcelFile } = await import('read-excel-file/browser');
       const parsed = parseWorkbook((await readExcelFile(file)) as Array<{ sheet: string; data: Cell[][] }>);
       if (!parsed.length) setError('No grade sheet was found in this workbook. Each sheet needs the official layout (maximum points in row 9).');
+      else if (parsed.every(sheet => sheet.rows.length === 0 || !sheet.items.some(isUsed))) setError('No student scores were found in this workbook. Each sheet needs the official layout: maximum points in row 9 and student rows below row 9.');
       else setSheets(parsed);
-    } catch {
-      setError('This file could not be read. Check that it is an Excel .xlsx workbook that is not password protected.');
+    } catch (err) {
+      // Keep the reader's own message when it explains the failure; never replace it with a bare generic line.
+      const reason = err instanceof Error ? err.message.trim() : '';
+      const detail = reason ? `: ${reason.replace(/\.$/, '')}` : '';
+      setError(`This workbook could not be read${detail}. Check that it is an Excel .xlsx workbook that is not password protected.`);
     } finally {
       setReading(false);
     }
@@ -338,7 +342,7 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
             </div>
           </div>
         )}
-        {error && <div className={note.rose}><b className="flex items-center gap-1.5"><AlertTriangle className="w-4 h-4 shrink-0" />{error}</b></div>}
+        {error && <div role="alert" className={note.rose}><b className="flex items-start gap-1.5"><AlertTriangle className="mt-0.5 w-4 h-4 shrink-0" />{error}</b></div>}
 
         {sheets.length > 0 && !configProblem && (
           <>

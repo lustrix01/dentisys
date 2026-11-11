@@ -23,7 +23,7 @@ import { showFeedback } from './FeedbackCenter';
 import { validateBicolUEmail } from '../services/authService';
 import {
   ParsedRosterStudent,
-  parseCSVText,
+  parseCSVRoster,
   getSampleRegistrarCSV,
   validateRosterStudents,
   compareRosterHeader,
@@ -83,6 +83,19 @@ const labelCls = 'block text-xs font-semibold leading-5 text-slate-600 dark:text
 const fieldCls = 'w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500';
 const invalidFieldCls = '!border-rose-500 !bg-rose-50/70 dark:!border-rose-400 dark:!bg-rose-950/30 focus:!ring-rose-500';
 
+// One persistent banner per whole-file failure cause (T3). These sit beside the file chooser and never auto-dismiss.
+const UNSUPPORTED_TYPE_ERROR = 'This file type is not supported. Choose the official class list PDF, or a CSV, TSV or TXT roster file.';
+const PDF_LAYOUT_ERROR = 'This PDF does not use the class list layout, so no students were read. Use the official list of enrolled students PDF, or a CSV roster file.';
+const PDF_SCANNED_ERROR = 'This PDF has no readable text, so no students were read. Use the official list of enrolled students PDF, or a CSV roster file.';
+const PDF_UNREADABLE_ERROR = 'This PDF could not be read, so no students were read. Use the official list of enrolled students PDF, or a CSV roster file.';
+const PDF_NO_ROWS_ERROR = 'No students were read from this PDF. Check that it is the official list of enrolled students PDF, or use a CSV roster file.';
+const CSV_LAYOUT_ERROR = "This file's columns do not match the roster layout, so no students were read. Use the sample CSV or the official class list PDF.";
+// Amber warning, not an error: the rows were read by column position (headerless CSV support is kept).
+const CSV_POSITIONAL_WARNING = 'No column headings were recognised, so this file was read by column position. Check the preview against your file, or use the sample CSV.';
+const fileErrorNoteCls = 'p-3 rounded-xl border text-[11px] leading-relaxed';
+const fileErrorRoseCls = `${fileErrorNoteCls} bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/30 text-rose-700 dark:text-rose-400`;
+const fileErrorAmberCls = `${fileErrorNoteCls} bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/30 text-amber-700 dark:text-amber-400`;
+
 const NAME_FIELDS: (keyof ParsedRosterStudent)[] = ['firstName', 'middleName', 'lastName', 'prefix', 'suffix'];
 
 export const RosterImportModal: React.FC<RosterImportModalProps> = ({
@@ -116,6 +129,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
   const [matchPrompt, setMatchPrompt] = useState('');
   const [createdCsId, setCreatedCsId] = useState<number | null>(null);
   const [classNotice, setClassNotice] = useState('');
+  const [fileError, setFileError] = useState<{ message: string; detail?: string } | null>(null);
+  const [positionalCsv, setPositionalCsv] = useState(false);
   const meetingCounter = useRef(0);
   useEffect(() => () => { parseSequence.current++; }, []);
 
@@ -174,6 +189,17 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
     };
   };
 
+  // A file that cannot be read gets one persistent, per-cause banner and its input cleared, so the same file can be retried.
+  const failFile = (message: string, detail?: string) => {
+    setFile(null);
+    setParsedStudents([]);
+    setPdfInfo(null);
+    setPositionalCsv(false);
+    setFileError(detail ? { message, detail } : { message });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    showFeedback(message, 'error');
+  };
+
   const handleFileChange = async (selectedFile: File) => {
     if (isImporting || isParsing) return;
     const sequence = ++parseSequence.current;
@@ -181,6 +207,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
     setIsParsing(true);
     setParsedStudents([]);
     setPdfInfo(null);
+    setPositionalCsv(false);
+    setFileError(null);
     setTargetReviewed(false);
     setImportErrors([]);
     setClassNotice('');
@@ -201,7 +229,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
         if (sequence !== parseSequence.current) return;
 
         if (parsed.length === 0) {
-          showFeedback('No student records detected. Use a text PDF with the provisional table layout, or CSV.', 'error');
+          failFile(PDF_NO_ROWS_ERROR);
         } else {
           setParsedStudents(parsed);
           setPdfInfo({ ...info, read: parsed.length });
@@ -215,23 +243,33 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
           }
           showFeedback(`Previewed ${parsed.length} student record(s). Review each PDF row before selecting it.`, 'info');
         }
+      } else if (!/\.(csv|tsv|txt)$/i.test(fileName)) {
+        failFile(UNSUPPORTED_TYPE_ERROR);
       } else {
         // CSV / TSV / TXT
         const text = await selectedFile.text();
-        if (!/\.(csv|tsv|txt)$/i.test(fileName)) throw new Error('Supported files are PDF, CSV, TSV and TXT.');
-        const parsed = parseCSVText(text);
-        if (sequence !== parseSequence.current) return;
-
-        if (parsed.length === 0) {
-          showFeedback('No student records found in the uploaded file.', 'error');
-        } else {
-          setParsedStudents(parsed);
-          showFeedback(`Parsed ${parsed.length} student record(s) from CSV!`, 'success');
+        try {
+          const parsed = parseCSVRoster(text);
+          if (sequence !== parseSequence.current) return;
+          if (parsed.students.length === 0) {
+            failFile(CSV_LAYOUT_ERROR, 'No student records were found in the uploaded file.');
+          } else {
+            setParsedStudents(parsed.students);
+            setPositionalCsv(parsed.positional);
+            // A positional read gets the amber banner above the preview instead of a success toast.
+            if (!parsed.positional) showFeedback(`Parsed ${parsed.students.length} student record(s) from CSV!`, 'success');
+          }
+        } catch (csvError: any) {
+          if (sequence !== parseSequence.current) return;
+          failFile(CSV_LAYOUT_ERROR, typeof csvError?.message === 'string' ? csvError.message : undefined);
         }
       }
     } catch (err: any) {
       if (sequence !== parseSequence.current) return;
-      showFeedback(`Failed to parse file: ${err.message || 'Unknown format'}`, 'error');
+      const reason = typeof err?.message === 'string' ? err.message.trim() : '';
+      if (/no readable text/i.test(reason)) failFile(PDF_SCANNED_ERROR, reason);
+      else if (/^Page \d+:/i.test(reason)) failFile(PDF_LAYOUT_ERROR, reason);
+      else failFile(PDF_UNREADABLE_ERROR, reason || undefined);
     } finally {
       if (sequence === parseSequence.current) setIsParsing(false);
     }
@@ -452,6 +490,13 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
   const namesLeft = tickable.filter(student => student.requiresNameReview && !student.possibleCrossedOut).length;
   const leftText = [namesLeft > 0 && `${namesLeft} ${namesLeft === 1 ? 'name' : 'names'} to check`, crossedOutLeft > 0 && `${crossedOutLeft} possible crossed-out ${crossedOutLeft === 1 ? 'row' : 'rows'}`].filter(Boolean).join(' and ');
   const allSelectableStudentsSelected = selectableStudents.length > 0 && selectableStudents.every(student => student.included);
+  // Why the main action is disabled, so a blocked button always says what to do next.
+  const importDisabledReason = isImporting || isParsing ? ''
+    : runtime.loading ? 'Wait for the page setup to finish loading.'
+    : matchPrompt ? ''
+    : !isNewClass && !readyStudents.length && parsedStudents.length > 0 ? 'No students are ready to import yet. Correct the rows marked in red, or tick the rows you checked against the file.'
+    : !targetReviewed && parsedStudents.length > 0 ? 'Tick the review box above to enable importing.'
+    : '';
   const handleSelectAllStudents = () => {
     const selected = !allSelectableStudentsSelected;
     const selectableKeys = new Set(selectableStudents.map(student => student.tempKey));
@@ -471,7 +516,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
       title={studentsOnly ? 'Import Students' : 'Import Class and Roster'}
       size="xl"
     >
-      <div className="space-y-5 font-sans text-sm max-h-[80vh] overflow-y-auto pr-1">
+      <div className="space-y-5 font-sans text-sm">
         <fieldset disabled={isImporting} className="space-y-4 min-w-0 text-left">
         {file && (
           <div role="note" className="space-y-0.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left text-xs leading-5 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
@@ -525,7 +570,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                 type="button"
                 onClick={() => {
                   parseSequence.current++;
-                  setFile(null); setParsedStudents([]); setPdfInfo(null); setDraft(null); setMatchPrompt(''); setPickedFromFile(false); setChooseExistingClass(false); setTargetReviewed(false); setIsParsing(false);
+                  setFile(null); setParsedStudents([]); setPdfInfo(null); setDraft(null); setMatchPrompt(''); setPickedFromFile(false); setChooseExistingClass(false); setTargetReviewed(false); setIsParsing(false); setFileError(null); setPositionalCsv(false);
                   if (fileInputRef.current) fileInputRef.current.value = '';
                 }}
                 className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-xs cursor-pointer"
@@ -644,8 +689,10 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,.tsv,.txt,.pdf"
+              id="roster-file-input"
               aria-label="Class list or student roster file"
+              aria-invalid={Boolean(fileError)}
+              aria-describedby={fileError ? 'roster-file-error' : undefined}
               disabled={isParsing || isImporting}
               className="hidden"
               onChange={(e) => {
@@ -671,11 +718,27 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
         </div>
         )}
 
+        {fileError && (
+          <div id="roster-file-error" role="alert" className={fileErrorRoseCls}>
+            <b className="flex items-start gap-1.5">
+              <AlertTriangle className="mt-0.5 w-4 h-4 shrink-0" aria-hidden="true" />
+              <span>{fileError.message}</span>
+            </b>
+            {fileError.detail && <p className="mt-1 pl-[1.375rem] text-[11px] font-normal">{fileError.detail}</p>}
+          </div>
+        )}
+
         {/* Loading Spinner during parse */}
         {isParsing && (
           <div className="p-6 text-center text-slate-500 space-y-2">
             <RefreshCw className="w-6 h-6 animate-spin mx-auto text-emerald-600" />
             <p className="font-bold text-xs">Extracting and analyzing registrar student records...</p>
+          </div>
+        )}
+
+        {!isParsing && positionalCsv && parsedStudents.length > 0 && (
+          <div role="status" className={fileErrorAmberCls}>
+            {CSV_POSITIONAL_WARNING}
           </div>
         )}
 
@@ -725,8 +788,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                 <ul className="mt-1 list-disc space-y-0.5 pl-4">{headerDiffs.map(diff => <li key={diff}>{diff}</li>)}</ul>
               </div>
             )}
-            <p className="text-xs text-amber-700 dark:text-amber-300">Check student names and exclusions against the original PDF before importing. Names that could be split more than one way are flagged on their row. Red strike-throughs are flagged; other colors may not be detected.</p>
-            <p role="status" className="text-xs font-semibold text-amber-700 dark:text-amber-300">{leftText && `Left for you to tick after checking the PDF: ${leftText}.`}</p>
+            <p className="text-xs text-amber-700 dark:text-amber-300">Check student names and exclusions against the original file before importing. Names that could be split more than one way are flagged on their row. Red strike-throughs are flagged; other colors may not be detected.</p>
+            <p role="status" className="text-xs font-semibold text-amber-700 dark:text-amber-300">{leftText && `Left for you to tick after checking the file: ${leftText}.`}</p>
             <div role="table" aria-label="Student roster preview" className="max-h-96 overflow-y-auto overflow-x-hidden rounded-xl border border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/30">
               <div role="rowgroup" className="divide-y divide-slate-200 dark:divide-slate-800">
                 {orderedPreview.map(st => (
@@ -815,7 +878,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
         )}
 
         {/* Action Buttons */}
-        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-end gap-2">
+          {importDisabledReason && <span className="mr-auto min-w-0 text-xs text-slate-500 dark:text-slate-400">{importDisabledReason}</span>}
           {isNewClass && pdfInfo && !isParsing && !parsedStudents.some(st => st.status !== 'error') && <span className="text-slate-500 dark:text-slate-400 text-xs mr-auto">No students are ready to add. To make an empty class, use Create class.</span>}
           <button
             type="button"

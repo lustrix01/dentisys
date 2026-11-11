@@ -607,6 +607,8 @@ export const AttendanceList: React.FC = () => {
   const dateSessions = useMemo(() => sessions.filter(s => inSection(scopedCard, s) && (!date || (s.sessionDate || s.date) === date)), [sessions, date, scopedCard]);
   const revokedSessionCount = countRevokedSessions(dateSessions);
   const shownSessions = visibleSessions(dateSessions, showRevoked);
+  // A session queued for the selected date, shown while it is not running yet.
+  const scheduledSession = dateSessions.find(session => session.status === 'scheduled') ?? null;
   const allSessionsHidden = dateSessions.length > 0 && shownSessions.length === 0;
   // The roll call opens on the live session, else the most recent one for the date.
   const autoSessionId = (shownSessions.find(s => s.sessionId === liveCurrentSession?.sessionId)
@@ -930,72 +932,6 @@ export const AttendanceList: React.FC = () => {
                 <ArrowLeft className="w-4 h-4" />
                 <span>Back to Assigned Classes</span>
               </button>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Live Session Badge */}
-                {liveCurrentSession && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSessionModalTab('current');
-                      setIsSessionModalOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-300/80 dark:border-blue-700/60 shadow-xs cursor-pointer hover:bg-blue-100 transition-all"
-                    title="Click to view and manage live session details"
-                  >
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                    </span>
-                    <span>Live session</span>
-                    {liveCurrentSession.sessionCode && (
-                      <span className="font-mono text-[11px] font-bold text-blue-800 dark:text-blue-200">
-                        ({liveCurrentSession.sessionCode})
-                      </span>
-                    )}
-                  </button>
-                )}
-
-                {/* Sessions button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSessionModalTab(liveCurrentSession ? 'current' : 'upcoming');
-                    setIsSessionModalOpen(true);
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200/70 dark:border-blue-800/50 text-xs font-bold transition-all cursor-pointer shadow-xs"
-                >
-                  <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-300" />
-                  <span>Sessions</span>
-                </button>
-
-                {/* Start session CTA (hidden while a session is live) */}
-                {!liveCurrentSession && (
-                  <button
-                    type="button"
-                    onClick={() => void openStartSession()}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-white" />
-                    <span>Start session</span>
-                  </button>
-                )}
-
-                {/* Refresh button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRefreshVersion(version => version + 1);
-                    void load();
-                  }}
-                  disabled={loading || submitting || sessionLoading}
-                  aria-label="Refresh attendance worksheet"
-                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:opacity-50"
-                  title="Refresh worksheet"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loading || sessionLoading ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
             </div>
 
             {/* Class Title and Metadata Badges */}
@@ -1038,6 +974,103 @@ export const AttendanceList: React.FC = () => {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* Session strip: read-only status on the left, actions on the right (phone: stacked) */}
+            <div className="flex flex-col gap-3.5 rounded-2xl border border-slate-200/80 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-900/40 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:p-4">
+              <div role="status" aria-live="polite" className="min-w-0 flex-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Session status</span>
+                <div className="mt-1.5">
+                  {loading || sessionLoading ? (
+                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      Checking
+                    </span>
+                  ) : liveCurrentSession ? (
+                    <span className="inline-flex max-w-full flex-col items-start gap-0.5 rounded-full border border-blue-300/80 bg-blue-50 px-3.5 py-1.5 text-blue-700 dark:border-blue-700/60 dark:bg-blue-950/50 dark:text-blue-200">
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                        </span>
+                        Live session
+                      </span>
+                      <span className="mt-0.5 flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 pl-[14px] text-[11px] font-semibold">
+                        {liveCurrentSession.sessionCode && (
+                          <span className="break-words font-mono font-bold text-blue-800 dark:text-blue-200">{liveCurrentSession.sessionCode}</span>
+                        )}
+                        {liveCurrentSession.openingTime && (
+                          <span className="text-blue-700/90 dark:text-blue-200/90">&middot; started {formatVisibleTime(liveCurrentSession.openingTime)}</span>
+                        )}
+                      </span>
+                    </span>
+                  ) : scheduledSession ? (
+                    <span className="inline-flex max-w-full flex-col items-start gap-0.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3.5 py-1.5 text-indigo-700 dark:text-indigo-300">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider">Scheduled session</span>
+                      <span className="mt-0.5 flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 pl-[14px] text-[11px] font-semibold text-indigo-700/90 dark:text-indigo-200/90">
+                        {scheduledSession.sessionDate && <span>{scheduledSession.sessionDate}</span>}
+                        <span>{formatVisibleTime(scheduledSession.openingTime)}&ndash;{formatVisibleTime(scheduledSession.classEndTime)}</span>
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-600" aria-hidden="true" />
+                      No session running
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5 sm:shrink-0 sm:items-end">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 sm:text-right">Actions</span>
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSessionModalTab(liveCurrentSession ? 'current' : 'upcoming');
+                      setIsSessionModalOpen(true);
+                    }}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-2xl bg-blue-50 px-3.5 py-2 text-xs font-bold text-blue-700 shadow-xs transition-all hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/50 border border-blue-200/70 dark:border-blue-800/50 cursor-pointer sm:w-auto"
+                  >
+                    <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-300" />
+                    <span>Sessions</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRefreshVersion(version => version + 1);
+                      void load();
+                    }}
+                    disabled={loading || submitting || sessionLoading}
+                    aria-label="Refresh attendance worksheet"
+                    className="inline-flex min-h-11 min-w-11 w-full items-center justify-center rounded-xl bg-slate-100 p-2 text-slate-600 transition-all hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer sm:w-auto"
+                    title="Refresh worksheet"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading || sessionLoading ? 'animate-spin' : ''}`} />
+                  </button>
+
+                  {!liveCurrentSession ? (
+                    <button
+                      type="button"
+                      onClick={() => void openStartSession()}
+                      className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-2xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-blue-600/20 transition-all hover:bg-blue-700 cursor-pointer sm:w-auto"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-white" />
+                      <span>Start session</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void openStartSession()}
+                      className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-2xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-blue-600/20 transition-all hover:bg-blue-700 cursor-pointer sm:w-auto"
+                    >
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>Schedule session</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

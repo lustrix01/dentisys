@@ -485,6 +485,26 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(page.getByRole('button', { name: 'Start session', exact: true })).toHaveCount(0);
   });
 
+  test('session status is read-only and separate from the session action buttons', async ({ page }) => {
+    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ json: { status: 'ok', activeSession: null } }));
+    await page.goto('/secretary/attendance?view=worksheet');
+    const status = page.getByRole('status').filter({ hasText: 'Session status' });
+    await expect(status).toContainText('No session running');
+    await expect(status.getByRole('button')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Sessions', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Start session', exact: true })).toBeVisible();
+
+    // TEMP visual check
+    const card = page.getByRole('button', { name: 'Back to Assigned Classes' }).locator('xpath=ancestor::div[contains(@class,"rounded-3xl")]');
+    for (const width of [320, 390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(150);
+      const box = await card.evaluate(el => ({ sw: el.scrollWidth, cw: el.clientWidth }));
+      console.log(`T7 ${width}`, box);
+      await card.screenshot({ path: `${process.env.TEMP}\\t7-${width}.png` });
+    }
+  });
+
   test('cancelling a queued revocation does not change the active-session revoke target', async ({ page }) => {
     let revokedId: string | null = null;
     const queued = { ...mockActiveSession, sessionId: '101', status: 'scheduled', sessionDate: '2099-10-02', date: '2099-10-02', openingTime: '08:00', classEndTime: '13:00' };

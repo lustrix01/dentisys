@@ -38,7 +38,7 @@ export async function parseRosterPDF(buffer: ArrayBuffer) {
         const [x, y] = viewport.convertToViewportPoint(item.transform[4], item.transform[5]);
         return [{ text: item.str, x, y, width: item.width, height: item.height }];
       });
-      if (!items.length) throw new Error(`Page ${pageNumber}: scanned/image-only PDFs are not supported. Use a text PDF or CSV.`);
+      if (!items.length) throw new Error(`Page ${pageNumber}: this page has no readable text (it may be a scan).`);
       const canvas = window.document.createElement('canvas');
       canvas.width = Math.ceil(viewport.width);
       canvas.height = Math.ceil(viewport.height);

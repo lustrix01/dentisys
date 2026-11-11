@@ -452,6 +452,9 @@ export const AttendanceMonitoring: React.FC = () => {
     return classes.find(c => String(c.csId) === selectedCsId) || null;
   }, [classes, selectedCsId]);
 
+  // The scheduled session for the selected worksheet date, if that is the worksheet's active state.
+  const scheduledWorksheetSession = worksheet?.attendanceSession?.status === 'scheduled' ? worksheet.attendanceSession : null;
+
   // Handle direct Class Card selection
   const handleSelectClass = (classItem: FacultyClassItem) => {
     worksheetRequest.current++;
@@ -1237,69 +1240,6 @@ export const AttendanceMonitoring: React.FC = () => {
                 <ArrowLeft className="w-4 h-4" />
                 <span>Back to Assigned Classes</span>
               </button>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                {liveCurrentSession ? (
-                  <button
-                    type="button"
-                    onClick={() => selectedClass && handleOpenClassSessionModal(selectedClass)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-700/60 shadow-xs cursor-pointer hover:bg-emerald-100 transition-all"
-                    title="Click to view and manage live session details"
-                  >
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                    </span>
-                    <span>Live session</span>
-                    {liveCurrentSession.sessionCode && (
-                      <span className="font-mono text-[11px] font-bold text-emerald-800 dark:text-emerald-200">
-                        ({liveCurrentSession.sessionCode})
-                      </span>
-                    )}
-                  </button>
-                ) : worksheet?.attendanceSession?.status === 'scheduled' ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20">
-                    <span>Scheduled session</span>
-                  </span>
-                ) : null}
-
-                {selectedClass && !isArchivedCurrentYear(selectedClass) && (
-                  <button
-                    type="button"
-                    onClick={() => handleOpenClassSessionModal(selectedClass)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-colors cursor-pointer shadow-xs"
-                  >
-                    <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-                    <span>Sessions</span>
-                  </button>
-                )}
-
-                {!liveCurrentSession && <button
-                  type="button"
-                  onClick={() => {
-                    setIsStartSessionOpen(true);
-                  }}
-                  disabled={selectedClassIsPast || loadingWorksheet || attendanceWritePending}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <Play className="w-3.5 h-3.5 fill-white" />
-                  <span>Start session</span>
-                </button>}
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const csIdNum = parseInt(selectedCsId, 10);
-                    if (csIdNum > 0) loadWorksheet(csIdNum, selectedDate);
-                  }}
-                  disabled={loadingWorksheet || attendanceWritePending}
-                  aria-label="Refresh attendance worksheet"
-                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:opacity-50"
-                  title="Refresh worksheet"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loadingWorksheet ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
             </div>
 
             {/* Class Title and Metadata Badges */}
@@ -1345,6 +1285,113 @@ export const AttendanceMonitoring: React.FC = () => {
                     <span>{selectedClass.schedule}</span>
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* Session strip: read-only status on the left, actions on the right (phone: stacked) */}
+            <div className="flex flex-col gap-3.5 rounded-2xl border border-slate-200/80 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-900/40 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:p-4">
+              <div role="status" aria-live="polite" className="min-w-0 flex-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Session status</span>
+                <div className="mt-1.5">
+                  {loadingWorksheet ? (
+                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      Checking
+                    </span>
+                  ) : selectedClassIsPast ? (
+                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-amber-300/80 bg-amber-50 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-700 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+                      View only
+                    </span>
+                  ) : liveCurrentSession ? (
+                    <span className="inline-flex max-w-full flex-col items-start gap-0.5 rounded-full border border-emerald-300/80 bg-emerald-50 px-3.5 py-1.5 text-emerald-700 dark:border-emerald-700/60 dark:bg-emerald-950/50 dark:text-emerald-200">
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                        </span>
+                        Live session
+                      </span>
+                      <span className="mt-0.5 flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 pl-[14px] text-[11px] font-semibold">
+                        {liveCurrentSession.sessionCode && (
+                          <span className="break-words font-mono font-bold text-emerald-800 dark:text-emerald-100">{liveCurrentSession.sessionCode}</span>
+                        )}
+                        {liveCurrentSession.openingTime && (
+                          <span className="text-emerald-700/90 dark:text-emerald-200/90">&middot; started {formatVisibleTime(liveCurrentSession.openingTime)}</span>
+                        )}
+                      </span>
+                    </span>
+                  ) : scheduledWorksheetSession ? (
+                    <span className="inline-flex max-w-full flex-col items-start gap-0.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3.5 py-1.5 text-indigo-700 dark:text-indigo-300">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider">Scheduled session</span>
+                      <span className="mt-0.5 flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 pl-[14px] text-[11px] font-semibold text-indigo-700/90 dark:text-indigo-200/90">
+                        {scheduledWorksheetSession.sessionDate && <span>{scheduledWorksheetSession.sessionDate}</span>}
+                        <span>{formatVisibleTime(scheduledWorksheetSession.openingTime)}&ndash;{formatVisibleTime(scheduledWorksheetSession.classEndTime)}</span>
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-600" aria-hidden="true" />
+                      No session running
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5 sm:shrink-0 sm:items-end">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 sm:text-right">Actions</span>
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                  {selectedClass && !isArchivedCurrentYear(selectedClass) && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenClassSessionModal(selectedClass)}
+                      className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-2xl bg-slate-100 px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 cursor-pointer sm:w-auto"
+                    >
+                      <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                      <span>Sessions</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const csIdNum = parseInt(selectedCsId, 10);
+                      if (csIdNum > 0) loadWorksheet(csIdNum, selectedDate);
+                    }}
+                    disabled={loadingWorksheet || attendanceWritePending}
+                    aria-label="Refresh attendance worksheet"
+                    className="inline-flex min-h-11 min-w-11 w-full items-center justify-center rounded-xl bg-slate-100 p-2 text-slate-600 transition-all hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer sm:w-auto"
+                    title="Refresh worksheet"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingWorksheet ? 'animate-spin' : ''}`} />
+                  </button>
+
+                  {!liveCurrentSession ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsStartSessionOpen(true);
+                      }}
+                      disabled={selectedClassIsPast || loadingWorksheet || attendanceWritePending}
+                      className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-2xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-700 disabled:opacity-50 cursor-pointer sm:w-auto"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-white" />
+                      <span>Start session</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsStartSessionOpen(true);
+                      }}
+                      disabled={selectedClassIsPast || loadingWorksheet || attendanceWritePending}
+                      className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-2xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-700 disabled:opacity-50 cursor-pointer sm:w-auto"
+                    >
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>Schedule session</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

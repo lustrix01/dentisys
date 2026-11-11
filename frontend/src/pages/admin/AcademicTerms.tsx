@@ -264,7 +264,7 @@ export const AcademicTermsSettings: React.FC = () => {
                   type="button"
                   aria-expanded={isOpen}
                   data-testid={`year-${year}`}
-                  className="flex w-full items-center gap-3 bg-slate-50/70 px-4 py-3.5 text-left cursor-pointer dark:bg-slate-950/30 sm:px-5"
+                  className="flex w-full flex-wrap items-center gap-3 bg-slate-50/70 px-4 py-3.5 text-left cursor-pointer dark:bg-slate-950/30 sm:px-5"
                   onClick={() => setExpanded({ ...expanded, [year]: !isOpen })}
                 >
                   <ChevronRight className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} aria-hidden="true" />

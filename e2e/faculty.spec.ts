@@ -444,6 +444,42 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.getByText('An unexpected error occurred. Please try again.')).toHaveCount(0);
   });
 
+  test('Classes and Rosters roster header stays inside its card at 320 and 390 px', async ({ page }) => {
+    await page.route('**/api/faculty/classes', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok',
+        classes: [{ id: '77', csId: 77, csName: 'CLIN401-SecA', courseId: 1, courseCode: 'CLIN401', courseName: 'Clinical Dentistry I', units: 3, schoolYear: '2025-2026', semester: '1st Semester', yearLevel: 4, block: 'Section 4-A', schedule: 'Mon/Wed', lecRoom: 'Hall A', labRoom: 'Lab A', enrolledCount: 1, instructorName: 'Prof. Jane Doe', status: 'Active' }],
+      }) });
+    });
+    await page.route('**/api/faculty/courses', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', courses: [] }) });
+    });
+    await page.route('**/api/faculty/students', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
+        { id: '42', studentId: 'P03-42', name: 'Active Student', email: 'active.student@bicol-u.edu.ph', yearLevel: 4, status: 'active', classSections: [{ classId: '77', className: 'Section 4-A', enrollmentId: '88' }] },
+      ]) });
+    });
+
+    await page.click('a[href="/classes"]');
+    await page.getByRole('button', { name: 'View roster' }).click();
+
+    const rosterCard = page.locator('div.glass').filter({ hasText: 'Back to classes' }).first();
+    await expect(rosterCard).toBeVisible();
+
+    // The layout uses transition-all for the sidebar margin; measuring mid-transition would be flaky.
+    await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; animation: none !important; }' });
+
+    // Phone widths: the roster header must fit its card (measured 77/37/22/7 px overflow before the fix).
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 800 });
+      const cardOverflow = await rosterCard.evaluate(el => el.scrollWidth - el.clientWidth);
+      expect(cardOverflow, `roster header overflow at ${width}px`).toBeLessThanOrEqual(1);
+      const titleOverflow = await rosterCard.locator('h2').first().evaluate(el => el.scrollWidth - el.clientWidth);
+      expect(titleOverflow, `roster title overflow at ${width}px`).toBeLessThanOrEqual(1);
+    }
+    await expect(rosterCard.getByText(/Clinical Dentistry I/)).toBeVisible();
+  });
+
   test('Email Management records a successfully delivered Student invitation', async ({ page }) => {
     const appPage = await page.context().newPage();
     let emailLogs: Array<Record<string, unknown>> = [];

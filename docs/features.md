@@ -9,6 +9,8 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 
 - First Dean/Admin account created by a controlled bootstrap script — REG-010 — implemented, tests passing.
 - Password sign-in with optional authenticator-app 2FA and recovery codes — AUTH-005, AUTH-006 — implemented, tests passing.
+- Password policy: 8–32 characters with the existing composition rules, shown in every set-password form; the show/hide control stays aligned to the input row — AUTH-005 amendment 2026-11-11 — implemented, tests passing.
+- A 401 on a non-auth request attempts one silent session refresh; the server remains authoritative for the 30-minute idle limit and the activity header only marks genuinely active requests — AUTH-007 — implemented, tests passing.
 - Google Sign-In for existing accounts, linked only after password and 2FA confirmation, bound to a stable Google ID — AUTH-003, AUTH-010 — implemented, tests passing.
 - Five-part structured names (Prefix, First, Middle, Last, Suffix) for every person and invitation, with Unicode-aware validation — ID-002 — implemented, tests passing.
 - One canonical name source; a name change shows everywhere without rewriting business tables — ID-002 — implemented, tests passing.
@@ -32,6 +34,7 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 - Faculty edit grading categories and weights; weights must total exactly 100% and grades stay computed — GRD-002, GRD-003 — implemented, tests passing.
 - Grades follow the official BUCDM grade sheet: plain category averages, whole-percent rounding (.5 up), the 2026-10-17 conversion table with below 75% = 5.0, and a hover showing the steps (e.g. "83.77% → 84% → 2.5"); server and screen produce the same value — UI-003, spec amendment 2026-10-26 — implemented, tests passing.
 - Assessment categories say Lecture or Laboratory; a new max score starts empty and asks for confirmation above 500 points; a cell shows "Incomplete" with a note naming categories that have no assessments; students without a final grade show "No Grade Yet" in Dean reports, exports and the Dashboard — GRD-002 — implemented in code.
+- The assessment dialog shows inline field errors for a blank title or non-positive maximum score using the existing Create Class field-error pattern, and keeps Confirm enabled — UI-002/GRD-002 — implemented, tests passing.
 - Students see grades only; exports are .xlsx in the official layouts — GRD-002 — implemented in code.
 - Score entry (single assessment and full matrix) saves when Faculty leave a cell while Auto-save is on, keeps a visible Saving / Saved / Failed – Retry bar, asks before clearing a stored score, and saves the matrix all-or-nothing; the matrix pins student ID and name columns — UI-002 — implemented, tests passing.
 - Grade ledgers, retention lists and attendance registers export as CSV or a printable PDF of the open section — GRD-002 — implemented, tests passing for CSV and print content; the open-section-only PDF was checked manually.
@@ -41,11 +44,13 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 - Two remedial attempts, each passing at 50% or more; the second only after a failed first; the original course grade never changes — UI-003 — implemented, tests passing.
 - Students get a stored in-app notification when a remedial is assigned — UI-003, NTF-001 — implemented, tests passing.
 - Student roster import into existing classes from the official class list PDF (or the CSV template; no "Official format not confirmed" label since 2026-10-28), with total-count and wrong-class checks — IMP-001 — implemented, tests passing.
+- Roster import shows persistent per-cause errors for an unsupported file, a non-class-list PDF, a scanned PDF or an unusable CSV; headerless/positional CSV still parses with an amber warning, and the same file can be retried. Grade Sheet Import shows a persistent error when a workbook has no grade-sheet records — IMP-001 — implemented, tests passing.
 - Official grade sheet workbook (.xlsx) import of raw scores, name matching, ticked create/link/remove and one all-or-nothing save — IMP-001 — implemented, tests passing.
 
 ## Attendance
 
 - Attendance Monitoring offers only the Faculty's assigned courses, and only sections of the chosen course — ATT-001 — implemented, tests passing.
+- The attendance worksheet header separates a read-only "Session status" panel (Live session + code + start time / Scheduled session / No session running / View only / Checking) from an actions row (Start session when idle; Schedule session while live; Sessions), keeping the hide-while-live rule — UI-005 — implemented in code.
 - Every Secretary manual change (first mark, change, Excused) is a request the section's Faculty approves, with bulk approve, reject with a note and history. Approved records read "Secretary (approved by Faculty)". Requests close on a direct Faculty mark, a session revoke or a face check-in. Notices are in-app only — ATT-006 — implemented, tests passing.
 - Every Secretary or Faculty override records actor, Student, class, session, old and new status, reason and time — ATT-006 — implemented, tests passing.
 - Faculty Class Attendance Activity, a tab in Attendance Monitoring, shows their own and their Secretary's attendance changes with that full context — ATT-006 — implemented, tests passing.

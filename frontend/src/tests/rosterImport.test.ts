@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { catalogUnitsNote, compareRosterHeader, findClassMatchingHeader, newClassBlockers, parseCSVText, parsePDFRoster, parseScheduleLines, termForHeader, parsePDFRosterPages, splitFullName, nameSplitIsAmbiguous, validateRosterStudents, type RosterPDFPage } from '../utils/rosterImportHelper.ts';
+import { catalogUnitsNote, compareRosterHeader, findClassMatchingHeader, newClassBlockers, parseCSVRoster, parseCSVText, parsePDFRoster, parseScheduleLines, termForHeader, parsePDFRosterPages, splitFullName, nameSplitIsAmbiguous, validateRosterStudents, type RosterPDFPage } from '../utils/rosterImportHelper.ts';
 
 const domains = ['bicol-u.edu.ph', 'example.edu'];
 
@@ -28,8 +28,7 @@ test('quoted full names and multiline fields stay intact and need explicit name 
   assert.throws(() => parseCSVText('Student ID,Name\n2099,"unfinished'), /Unclosed/);
 });
 
-test('TSV, semicolon and headerless full-name inputs retain preview support', () => {
-  for (const delimiter of ['\t', ';']) {
+test('TSV, semicolon and headerless full-name inputs retain preview support', () => {  for (const delimiter of ['\t', ';']) {
     const row = parseCSVText(['Student ID', 'First Name', 'Last Name', 'Email'].join(delimiter) + '\n' + ['2099-1234-56789', 'Ana', 'Reyes', 'ana@example.edu'].join(delimiter))[0];
     assert.equal(row.studentId, '2099-1234-56789');
     assert.equal(row.included, true);
@@ -45,6 +44,17 @@ test('TSV, semicolon and headerless full-name inputs retain preview support', ()
   assert.equal(positional.lastName, 'Reyes');
   assert.equal(positional.middleName, 'M');
   assert.equal(positional.included, false);
+});
+
+test('a headerless roster is read positionally and flagged for the amber warning', () => {
+  const parsed = parseCSVRoster('2099-1234-56789,Juan Cruz,juan@example.edu\n2099-1234-56790,Ana Reyes,ana@example.edu');
+  assert.equal(parsed.positional, true);
+  assert.equal(parsed.students.length, 2);
+  assert.equal(parsed.students[0].studentId, '2099-1234-56789');
+});
+
+test('an unusable CSV layout is rejected instead of read as students', () => {
+  assert.throws(() => parseCSVRoster('Foo,Bar\n1,2'), /student number and include an email/);
 });
 
 test('missing optional values stay absent; malformed and duplicate rows are blocked', () => {
@@ -160,7 +170,7 @@ test('preview applies server name-byte limits without truncating names', () => {
 });
 
 test('unsupported PDF layouts fail instead of guessing student fields', () => {
-  assert.throws(() => parsePDFRosterPages([{ page: 1, width: 595, height: 842, items: [], redMarkBands: [] }]), /unsupported PDF table layout/);
+  assert.throws(() => parsePDFRosterPages([{ page: 1, width: 595, height: 842, items: [], redMarkBands: [] }]), /this page has no class list table/);
 });
 
 test('PDF rows follow visual coordinates even when stream objects are reversed', () => {
@@ -237,7 +247,7 @@ test('a last page with only the total is allowed; other table-less pages still f
   assert.equal(result.total, 2);
   assert.equal(result.official, true);
   const stray = { ...totalOnly, items: [{ text: 'Something else', x: 30, y: 60, width: 60, height: 9 }] };
-  assert.throws(() => parsePDFRoster([officialPage(1, fixtureRows), stray]), /Page 2: unsupported PDF table layout/);
+  assert.throws(() => parsePDFRoster([officialPage(1, fixtureRows), stray]), /Page 2: this page has no class list table/);
   // The total may also sit under the table; it is never read as a student row.
   assert.deepEqual(parsePDFRoster([officialPage(1, fixtureRows, [['Total Number of Students: 3', 30, 300]])]).total, 3);
   assert.equal(parsePDFRoster([officialPage(1, fixtureRows, [['Total Number of Students: 3', 30, 300]])]).students.length, 2);

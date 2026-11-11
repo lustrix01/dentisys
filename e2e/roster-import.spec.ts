@@ -222,7 +222,7 @@ test('Select all students ticks only plain names; ambiguous splits stay unticked
   await expect(page.getByLabel('Include student 2099-0002-00004', { exact: true })).not.toBeChecked();
   await expect(page.getByText('Review the source and name fields before selecting this row.', { exact: true })).toHaveCount(2);
   await expect(page.getByLabel('Include student 2099-0002-00003', { exact: true })).toHaveAccessibleDescription(/Review the source and name fields/);
-  await expect(page.getByRole('status').filter({ hasText: 'Left for you to tick after checking the PDF' })).toHaveText('Left for you to tick after checking the PDF: 2 names to check.');
+  await expect(page.getByRole('status').filter({ hasText: 'Left for you to tick after checking the file' })).toHaveText('Left for you to tick after checking the file: 2 names to check.');
   await expect(page.getByRole('button', { name: 'Clear selection' })).toBeVisible();
   // (b) Editing a field other than a name keeps the row ticked.
   await page.getByLabel('Email for 2099-0002-00001', { exact: true }).fill('ana.edited@bicol-u.edu.ph');
@@ -230,7 +230,7 @@ test('Select all students ticks only plain names; ambiguous splits stay unticked
   // With a filter, the button speaks about the rows shown only.
   await page.getByPlaceholder('Filter preview...').fill('Lim');
   await expect(page.getByRole('button', { name: 'Select the 0 shown' })).toBeDisabled();
-  await expect(page.getByRole('status').filter({ hasText: 'Left for you to tick after checking the PDF' })).toContainText('2 names to check');
+  await expect(page.getByRole('status').filter({ hasText: 'Left for you to tick after checking the file' })).toContainText('2 names to check');
 });
 
 test('a class list that matches none of the Faculty classes can switch to an existing class', async ({ page }) => {

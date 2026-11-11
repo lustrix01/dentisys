@@ -612,7 +612,7 @@ export const DeanReports: React.FC = () => {
           <div className="space-y-4">
             {/* Drill-down Header & Filters */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 rounded-2xl shadow-sm">
-              <div className="flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => {
@@ -622,12 +622,11 @@ export const DeanReports: React.FC = () => {
                   className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
-                  <span className="hidden xs:inline">Back to classes</span>
-                  <span className="xs:hidden">Back</span>
+                  <span>Back</span>
                 </button>
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-sm sm:text-base font-extrabold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2 truncate">
-                    <span className="truncate">{currentSelectedClass?.name || 'Class Roster'}</span>
+                <div className="min-w-0 w-full sm:w-auto sm:flex-1">
+                  <h2 className="text-sm sm:text-base font-extrabold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2 truncate max-sm:flex-wrap max-sm:whitespace-normal max-sm:overflow-visible">
+                    <span className="truncate max-sm:whitespace-normal">{currentSelectedClass?.name || 'Class Roster'}</span>
                     {currentSelectedClass?.yearLevel && (
                       <span className="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md bg-accent-50 dark:bg-accent-950/40 text-accent-600 dark:text-accent-400">
                         Year {currentSelectedClass.yearLevel}
@@ -635,7 +634,7 @@ export const DeanReports: React.FC = () => {
                     )}
                   </h2>
                   {currentSelectedClass?.subjectCode && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate max-sm:whitespace-normal">
                       {currentSelectedClass.subjectCode} {currentSelectedClass.subjectName ? `· ${currentSelectedClass.subjectName}` : ''}
                     </p>
                   )}
@@ -937,7 +936,7 @@ export const DeanReports: React.FC = () => {
           <div className="space-y-4">
             {/* Drill-down Header & Filters */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 rounded-2xl shadow-sm">
-              <div className="flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => {
@@ -947,12 +946,11 @@ export const DeanReports: React.FC = () => {
                   className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
-                  <span className="hidden xs:inline">Back to classes</span>
-                  <span className="xs:hidden">Back</span>
+                  <span>Back</span>
                 </button>
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-sm sm:text-base font-extrabold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2 truncate">
-                    <span className="truncate">{currentSelectedClass?.name || 'Class Retention'}</span>
+                <div className="min-w-0 w-full sm:w-auto sm:flex-1">
+                  <h2 className="text-sm sm:text-base font-extrabold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2 truncate max-sm:flex-wrap max-sm:whitespace-normal max-sm:overflow-visible">
+                    <span className="truncate max-sm:whitespace-normal">{currentSelectedClass?.name || 'Class Retention'}</span>
                     {currentSelectedClass?.yearLevel && (
                       <span className="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400">
                         Year {currentSelectedClass.yearLevel}
@@ -960,7 +958,7 @@ export const DeanReports: React.FC = () => {
                     )}
                   </h2>
                   {currentSelectedClass?.subjectCode && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate max-sm:whitespace-normal">
                       {currentSelectedClass.subjectCode} {currentSelectedClass.subjectName ? `· ${currentSelectedClass.subjectName}` : ''}
                     </p>
                   )}
@@ -1271,7 +1269,7 @@ export const DeanReports: React.FC = () => {
           <div className="space-y-4">
             {/* Drill-down Header & Filters */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 rounded-2xl shadow-sm">
-              <div className="flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => {
@@ -1281,12 +1279,11 @@ export const DeanReports: React.FC = () => {
                   className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
-                  <span className="hidden xs:inline">Back to classes</span>
-                  <span className="xs:hidden">Back</span>
+                  <span>Back</span>
                 </button>
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-sm sm:text-base font-extrabold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2 truncate">
-                    <span className="truncate">{currentSelectedClass?.name || 'Attendance History'}</span>
+                <div className="min-w-0 w-full sm:w-auto sm:flex-1">
+                  <h2 className="text-sm sm:text-base font-extrabold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2 truncate max-sm:flex-wrap max-sm:whitespace-normal max-sm:overflow-visible">
+                    <span className="truncate max-sm:whitespace-normal">{currentSelectedClass?.name || 'Attendance History'}</span>
                     {currentSelectedClass?.yearLevel && (
                       <span className="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400">
                         Year {currentSelectedClass.yearLevel}
@@ -1294,7 +1291,7 @@ export const DeanReports: React.FC = () => {
                     )}
                   </h2>
                   {currentSelectedClass?.subjectCode && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate max-sm:whitespace-normal">
                       {currentSelectedClass.subjectCode} {currentSelectedClass.subjectName ? `· ${currentSelectedClass.subjectName}` : ''}
                     </p>
                   )}

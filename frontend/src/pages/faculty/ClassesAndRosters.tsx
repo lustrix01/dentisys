@@ -1922,13 +1922,13 @@ const handleSendAllStudentInvites = async () => {
                 <span>Back to classes</span>
               </button>
               <div className="min-w-0">
-                <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2 truncate">
+                <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2 truncate max-sm:flex-wrap max-sm:whitespace-normal max-sm:overflow-visible">
                   <span>{selectedClass ? `${selectedClass.courseCode} (${selectedClass.block})` : 'Class'} Roster</span>
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex-shrink-0">
                     {filteredStudents.length} {filteredStudents.length === 1 ? 'Student' : 'Students'}
                   </span>
                 </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-sm:whitespace-normal">
                   {selectedClass?.courseName ? `${selectedClass.courseName} • ` : ''}Room: {(selectedClass && (venueSummary(selectedClass, 'Lecture', selectedClass.lecRoom) || venueSummary(selectedClass, 'Laboratory', selectedClass.labRoom))) || 'N/A'}
                 </p>
               </div>

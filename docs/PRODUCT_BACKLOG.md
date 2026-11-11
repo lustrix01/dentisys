@@ -247,3 +247,45 @@ Owner decisions (2026-10-15): both actions get the existing per-user limit used 
 - U4: on phones the section tabs of Grades, Reports and Email take 3 rows and Retention 2. Short phone names, as Dean Reports already uses, bring them to 2, 2, 1 and 1 rows (a wording change).
 - U5: on phones the Student My Classes tab names split onto two lines. Moving the year out of the tab and tightening the padding keeps both tabs on one line, side by side; not yet measured below 390 px.
 - Student My Classes and Student Retention use two tab looks found nowhere else, so a student sees two different tab bars.
+
+---
+
+# 10. Ticket batch 1 (2026-11-11) — remaining backlog
+
+The Owner reviewed the first ticket batch on 2026-11-11. Delivered in that batch: T2 (32-character password policy with the show-password control fix), T4-D1 (silent refresh on a non-auth 401), T10 (assessment-dialog inline validation using the existing field-error pattern), T3 (import feedback: persistent per-cause errors, headerless CSV kept with an amber warning), T6 (roster-header wrap + Dean SystemAudit and Academic Terms header fixes) and T7 (three-zone session card separating status from actions). T9 (session after browser close) was closed as intended behaviour. The items below are the rest, kept for a later batch; effort and detail are in `audit-output/tickets-2026-11-15/` (gitignored evidence).
+
+## 10.1 T1 — transmutation defaults and the attendance link
+
+**Status: Not started (needs Owner answers).** The code already implements the official `(score ÷ items) × 50 + 50` formula when transmutation is enabled with 50–100 bounds. Three decisions are open: (a) make transmutation ON by default for new assessments (Admin Settings toggle, existing assessments unchanged); (b) keep the optional attendance link — it is the only way an absence zeroes a linked assessment, so it is not the cause of "(scores/items)*50"; (c) align the Reports bundle `%` column with the effective (transmuted) percentage instead of raw score/max. Also identify the class/assessment where the Owner saw `(scores/items)*50` so a stored 0–50 range or an older build can be confirmed or corrected.
+
+## 10.2 T4 — Full-Matrix sign-out proof and unsaved-edit protection
+
+**Status: Not started (needs Owner environment).** The matrix path alone cannot expire the session on the current build (auto-save and heartbeat are activity-flagged). Ranked causes and the demo-DB fingerprint queries are in `t4-matrix-scenario.md`; the Owner needs to provide the date/time, browser and whether the tab predated the 2026-11-11 14:56 deploy. Separately, a forced sign-out silently loses matrix edits pending in the 10-second debounce or invalid cells; a sessionStorage draft + restore was proposed and is not implemented.
+
+## 10.3 T5 — iOS Safari verification process
+
+**Status: Not started (process work).** Playwright WebKit with iPhone descriptors now exists (26 frames; 0 px page overflow on the converted Student/Secretary pages) but is not yet part of a release gate. Add the WebKit sweep to the device audit, keep the Owner's real-iPhone pass at 320/390 per release, and use a real-device cloud only for device-only bugs. If the original T5 report was about a Faculty/Dean table (Full Matrix, Reports), that is a separate look decision.
+
+## 10.4 T8 + T11 — grading system clarification
+
+**Status: Not started (deferred, needs the college's answers).** The retention band (pass ≤2.40 / remedial 2.41–4.84 / automatic FAIL >4.84, Failed state, reclassification) and the remedial pass mark (75 % raw vs 75 % transmuted vs freeze-as-recorded) are on hold until the interview colleagues answer `GRADING-QA.md`. The official conversion table gives 5.0 for every below-75 % final, so the proposed 3.1–4.84 band has no current conversion; where 4.84 comes from must be confirmed. The remedial module does exist (two attempts, scheduling, notices, cost recovery, notifications, audit); its ownership and scoring rules must also be confirmed. While deferred, also flag the cost-recovery pass boundary currently `< 2.50` (so legacy 2.41–2.49 grades pass), which is not clearly approved in `spec.md`.
+
+## 10.5 T2 — hashing and remaining password-form polish
+
+**Status: Not started.** 32 multi-byte characters can exceed bcrypt's 72-byte hash limit (silent truncation); moving new hashes to Argon2id with rehash-on-login removes that limit and allows a plain character policy. `GoogleLinkCard`'s confirm-password field still lacks a reveal control/label; add it with the next auth polish. The login/sign-in fields intentionally have no maximum (existing passwords must keep working).
+
+## 10.6 T3 — remaining import polish
+
+**Status: Not started.** The public landing page still advertises "PDF / Excel roster import" although the roster importer accepts no Excel file (copy change needs Owner approval). The "partially readable grade-sheet workbook" case (found + zero counts) has persistent errors after this batch but no crafted official-layout fixture in the test suite; add one when touching this area. Never use real class lists or the Owner's workbook for fixtures.
+
+## 10.7 T6 — other header/layout defects
+
+**Status: Backlog.** Student Profile, Face Registration and the measured retention-row overlap still need their own phone-width pass; they are separate from the class roster header fixed in this batch. Dean SystemAudit and Academic Terms header fixes are in this batch.
+
+## 10.8 T7 — session-card follow-ups
+
+**Status: Backlog (visual verification only).** The three-zone card with status vs actions is implemented with the settled labels ("Sessions", "Start session", "Schedule session"). The earlier mock used "View sessions"/"Schedule next session"; the implementation keeps the spec wording. The Scheduled and View-only pill variants were not captured in the design mock; verify them on the implemented card with seeded states, and review the desktop spacing in the next UI pass.
+
+## 10.9 T9 — no action
+
+**Status: Closed (2026-11-11).** The Owner confirmed that a logged-in site should restore the session after closing/restarting the computer; the persistent session (30-minute idle, 7-day absolute) stays unchanged.
