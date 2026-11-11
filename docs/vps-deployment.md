@@ -35,12 +35,14 @@ Do these AWS steps manually before starting the command:
    team-tested calibration in your local `.env`. Docker is not needed on this PC
    for provisioning; image publishing remains a separate manual operation.
 
-From the repository on Windows PowerShell 5.1:
+From the repository on Windows. A plain PowerShell window can refuse an unsigned `.ps1` ("... is not digitally signed"), so run every Windows script in this guide as `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\<script>.ps1 <arguments>` (`powershell` accepts the same switches):
 
 ```powershell
-.\scripts\provision-vps.ps1 -Ip 203.0.113.10 -KeyFile 'C:\path\to\aws.pem'
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\provision-vps.ps1 -Ip 203.0.113.10 -KeyFile 'C:\path\to\aws.pem'
 # Optional: -Domain demo.example.com -NoDbTunnel -User opsadmin
 ```
+
+The same form applies to `harden-vps.ps1`, `publish-images.ps1`, `upload-vps.ps1` and `sync-vps-db.ps1` below.
 
 `-User` names the sudo/SSH account the script creates (`devops` by default; a
 lowercase Linux username other than `root` or `ubuntu`). Use the same `-User` on

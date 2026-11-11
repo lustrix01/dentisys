@@ -12,6 +12,8 @@ One fixed, repeatable benchmark for the **demo server or a throwaway local stack
 ./scripts/benchmark.ps1 -CaptureFace <selfie-video.mp4>   # one-time face frames
 ```
 
+If a plain PowerShell window refuses the unsigned script, run it as `pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/benchmark.ps1 -Target demo`.
+
 - Runs only on request (no automatic runs after deploys; there is no CI).
 - **demo**: `DEMO_BASE_URL` (e.g. `https://demo.bu-dentisys.com`) of the server in `~/.dentisys/demo.env`, SSH from the same file. Load comes from this PC. The script talks to the server in four SSH sessions per run (upload, start, face phase, finish) because the server's firewall blocks a sixth connection within 30 seconds.
 - **local**: a separate production-like stack (`docker-compose.web.yml` images **built from the current code**) under its own Docker project with its own empty database, loaded with `database/seeds/development-demo.sql`, removed after the run. The development stack and its database are never touched; the development stack is never benchmarked.

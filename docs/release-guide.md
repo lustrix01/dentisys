@@ -24,6 +24,16 @@ Nothing is edited directly on the demo or production. They only receive versions
 
 Claude never runs `promote-prod.ps1` and never touches the production server, its keys or the `-prod` images.
 
+## Running these scripts on Windows
+
+A plain PowerShell window can refuse an unsigned `.ps1` with "... is not digitally signed". Run repository scripts with the execution policy bypassed for that one process:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\<script>.ps1 <arguments>
+```
+
+`pwsh` is PowerShell 7; `powershell` (Windows PowerShell 5.1) accepts the same switches. Claude Code's own PowerShell tool already adds this bypass, so Claude-run steps need no change — only a command you type in your own terminal does.
+
 ## The release, step by step
 
 | # | Step | Who | Command or action |
@@ -34,10 +44,10 @@ Claude never runs `promote-prod.ps1` and never touches the production server, it
 | 4 | Database migrations (only if the release adds them) | Claude | `.\scripts\demo-vps.ps1 migrate`. It backs up the database first. Watchtower alone is not enough. |
 | 5 | Wait until the demo runs the new version | Claude | `.\scripts\demo-vps.ps1 wait-deploy <sha>`. It waits up to 15 minutes for every container to run that sha and be healthy. |
 | 6 | Test the demo | Claude | `.\scripts\demo-test.ps1` signs in as each role through the tunnel at `http://localhost:15180`, plus any checks specific to the feature. For the grade-rules release, Claude first shows you the list of grades that change (`.\scripts\demo-vps.ps1 recompute-grades preview`, writes nothing), then applies it on the demo (`... recompute-grades apply`). |
-| 7 | Report | Claude → Owner | Pass/fail in chat, ending with the approved sha and the exact command: `.\scripts\promote-prod.ps1 -Sha <sha>`. The change doc is updated only when the Owner asks. |
+| 7 | Report | Claude → Owner | Pass/fail in chat, ending with the approved sha and the exact command: `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\promote-prod.ps1 -Sha <sha>`. The change doc is updated only when the Owner asks. |
 | 8 | Approve the demo | Owner, then Claude | Both say "approved". Open the demo yourself at its address. |
 | 9 | Promote to production | **Owner** | See below. |
-| 10 | Check production | **Owner** | `.\scripts\demo-test.ps1 -Prod`, about 2 minutes. See below. |
+| 10 | Check production | **Owner** | `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\demo-test.ps1 -Prod`, about 2 minutes. See below. |
 
 ### Step 9: promote to production (Owner)
 
@@ -45,8 +55,8 @@ Use the sha from Claude's demo report (the version tested on the demo), not simp
 
 ```powershell
 git checkout <approved sha>
-.\scripts\promote-prod.ps1 -Sha <approved sha> -DryRun
-.\scripts\promote-prod.ps1 -Sha <approved sha>
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\promote-prod.ps1 -Sha <approved sha> -DryRun
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\promote-prod.ps1 -Sha <approved sha>
 git checkout lighthal9-responsive
 ```
 
@@ -73,7 +83,7 @@ git checkout lighthal9-responsive
 The local demo-test cannot see production, so the Owner runs the same read-only sign-in check against it after each promote:
 
 ```powershell
-.\scripts\demo-test.ps1 -Prod
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\demo-test.ps1 -Prod
 ```
 
 It reads `~\.dentisys\prod-test.env` (yours only: `PROD_BASE_URL` and an email and password for each role's test account), signs in as each role, and checks the audit chain over SSH with your `prod.env` settings. Claude has no access to either file.

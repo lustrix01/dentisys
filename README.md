@@ -214,6 +214,8 @@ docker compose logs -f web                 # follow the API log
 docker compose down                        # stop; keeps your data
 ```
 
+If a plain PowerShell window refuses a script with "... is not digitally signed", run it with the execution policy bypassed for that one process: `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1` (any script, same form; `powershell` accepts the same switches).
+
 `docker compose down -v` **deletes your local database**. Use it only when you really mean to start over.
 
 ### A11. Upgrading an existing setup or switching branches

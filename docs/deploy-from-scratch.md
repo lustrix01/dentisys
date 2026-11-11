@@ -37,7 +37,7 @@ firewall, DNS) is always done by hand.
 | Working local setup with calibrated `BIOMETRIC_*` values in the local `.env` | your PC | See [README](../README.md) Part A and [biometric calibration](biometric-calibration-deployment.md). The launcher copies only these values and `ALLOWED_EMAIL_DOMAINS` / `GOOGLE_CLIENT_ID` as defaults. |
 | Face model at `..\dentisys-biometric-assets\face_landmarker.task` (next to the repo folder) | your PC | Same file the local stack uses. |
 | Gmail account with **2-Step Verification** and an **App Password** | Google account | Sends invitations and notices (~500 emails/day limit). |
-| GitHub account and the published images `ghcr.io/<owner>/dentisys-{web,frontend,biometric}:demo` | GitHub | To use your own namespace: `docker login ghcr.io`, then `.\scripts\publish-images.ps1 -Namespace <your-github-user>`. Then create a **classic token with `read:packages`** for the server. |
+| GitHub account and the published images `ghcr.io/<owner>/dentisys-{web,frontend,biometric}:demo` | GitHub | To use your own namespace: `docker login ghcr.io`, then `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-images.ps1 -Namespace <your-github-user>`. Then create a **classic token with `read:packages`** for the server. |
 | Google OAuth client ID (optional, for Google Sign-In) | Google Cloud Console | Add the site URL to *Authorized JavaScript origins* after step 2. |
 | VPS provider account and **two SSH key pairs, made before creating any server** | Vultr (or AWS) | One key per server, never shared: a demo key (`ssh-keygen -t ed25519 -f $HOME\.ssh\dentisys-demo`, no passphrase, so Claude can run demo deploys and tests) and a production key with a passphrase (`ssh-keygen -t ed25519 -f $HOME\.ssh\dentisys-prod`; only the Owner uses it). Add both `.pub` files under *Account → SSH Keys* and select only the matching one when creating each server. AWS: one EC2 key pair (`.pem`) per server. Keep private keys in `%USERPROFILE%\.ssh\` (see troubleshooting for permissions). |
 
@@ -66,10 +66,10 @@ site falls back to `https://<ip-with-dashes>.sslip.io` (e.g.
 
 ## 3. Run the command
 
-In Windows PowerShell, from the repository folder:
+In Windows PowerShell, from the repository folder. A plain window can refuse an unsigned `.ps1` ("... is not digitally signed"), so run scripts with the execution policy bypassed for that process — `pwsh` is PowerShell 7 and `powershell` accepts the same switches:
 
 ```powershell
-.\scripts\provision-vps.ps1 -Ip <server-ip> -KeyFile $HOME\.ssh\<key> -InitialUser root -User <name>
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\provision-vps.ps1 -Ip <server-ip> -KeyFile $HOME\.ssh\<key> -InitialUser root -User <name>
 ```
 
 - `-InitialUser` is the provider's first login on port 22: `root` on Vultr,
@@ -162,12 +162,12 @@ Follow the [release guide](release-guide.md). It covers who publishes the demo i
 Production is a second server with its own images (`dentisys-*-prod`, tag `:prod`). Production images are never built: the Owner promotes the exact demo images of the approved commit. Claude has no access to the production server, its credentials or the `-prod` packages.
 
 First setup, in this order:
-1. Check out the approved commit and run `.\scripts\promote-prod.ps1 -Sha <approved> -DryRun`, then without `-DryRun`. Without `~\.dentisys\prod.env` it promotes the images only.
+1. Check out the approved commit and run `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\promote-prod.ps1 -Sha <approved> -DryRun`, then the same command without `-DryRun`. Without `~\.dentisys\prod.env` it promotes the images only.
 2. Server steps as in section 2, with the production key (passphrase; never the demo key) selected when creating the server.
-3. `.\scripts\provision-vps.ps1 -Ip <ip> -KeyFile <key> -InitialUser root -Production`. It writes the `-prod:prod` images, turns real biometrics on by default (production is a public test site, spec 2026-11-02), disables pgAdmin and skips the database tunnel. The GHCR token it asks for is your own classic token with `read:packages` (the bot cannot read `-prod` packages).
+3. `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\provision-vps.ps1 -Ip <ip> -KeyFile <key> -InitialUser root -Production`. It writes the `-prod:prod` images, turns real biometrics on by default (production is a public test site, spec 2026-11-02), disables pgAdmin and skips the database tunnel. The GHCR token it asks for is your own classic token with `read:packages` (the bot cannot read `-prod` packages).
 4. Create `$HOME\.dentisys\prod.env` with `PROD_SSH_HOST`, `PROD_SSH_PORT` (default 2202), `PROD_SSH_USER` (default devops) and `PROD_SSH_KEY`.
 
-Later releases: `git checkout <approved sha>`, then `.\scripts\promote-prod.ps1 -Sha <sha>`. It syncs migrations (with a backup) first, copies the images, checks the digests and waits for Watchtower. A release with database migrations must go through this script (or `sync-vps-db.ps1 -Apply`; on the demo, `demo-vps.ps1 migrate`); never rely on Watchtower alone.
+Later releases: `git checkout <approved sha>`, then `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\promote-prod.ps1 -Sha <sha>`. It syncs migrations (with a backup) first, copies the images, checks the digests and waits for Watchtower. A release with database migrations must go through this script (or `sync-vps-db.ps1 -Apply`; on the demo, `demo-vps.ps1 migrate`); never rely on Watchtower alone.
 
 ## 7. Troubleshooting
 
