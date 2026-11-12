@@ -27,6 +27,7 @@ export function normalizeStudentActiveSession(value: unknown): StudentActiveSess
     geofenceRequired: typeof row.geofenceRequired === 'boolean' ? row.geofenceRequired : undefined,
     geofenceEnabled: typeof row.geofenceEnabled === 'boolean' ? row.geofenceEnabled : undefined,
     isOpen: typeof row.captureOpen === 'boolean' ? row.captureOpen : typeof row.isOpen === 'boolean' ? row.isOpen : undefined,
+    captureStatus: nullableStringValue(row.captureStatus),
     alreadyRecordedStatus: status,
     openingTime: nullableStringValue(row.openingTime),
     presentCutoff: nullableStringValue(row.presentCutoff),
@@ -84,4 +85,44 @@ export function normalizeStudentAttendanceLogRecord(value: unknown): StudentAtte
     status,
     verificationMethod,
   };
+}
+
+/**
+ * ATT-003: at the Late cutoff, biometric capture closes and the Student must be
+ * directed to Secretary/Faculty for manual attendance. These reasons are a
+ * session-timing outcome, never a camera or biometric-service failure.
+ */
+const CAPTURE_WINDOW_REJECTION_CODES = [
+  'attendance_not_open',
+  'attendance_capture_closed',
+  'session_timing_unconfigured',
+  'session_not_active',
+  'session_revoked',
+] as const;
+
+type CaptureWindowSession = Pick<StudentActiveSession, 'captureStatus' | 'openingTime' | 'presentCutoff' | 'lateCutoff'>;
+
+const MANUAL_ATTENDANCE_DIRECTION = 'Ask your course instructor or Class Secretary to record your attendance manually.';
+
+export function isCaptureWindowRejection(reason: string | null | undefined): boolean {
+  return typeof reason === 'string' && (CAPTURE_WINDOW_REJECTION_CODES as readonly string[]).includes(reason);
+}
+
+/**
+ * Plain-language capture-window notice shared by the session card, the check-in
+ * button and the challenge rejection handler. Returns null for any non-timing
+ * reason, so real camera or biometric-service failures keep their own copy.
+ */
+export function captureWindowNotice(reason: string | null | undefined, session: CaptureWindowSession): string | null {
+  if (!isCaptureWindowRejection(reason)) return null;
+  if (reason === 'attendance_not_open' && session.openingTime) {
+    return `Biometric capture opens at ${formatVisibleTime(session.openingTime)}. ${MANUAL_ATTENDANCE_DIRECTION}`;
+  }
+  if (reason === 'attendance_capture_closed' && session.lateCutoff) {
+    return `Biometric capture closed at ${formatVisibleTime(session.lateCutoff)}. ${MANUAL_ATTENDANCE_DIRECTION}`;
+  }
+  if (reason === 'session_timing_unconfigured') {
+    return `This session has no attendance window configured. ${MANUAL_ATTENDANCE_DIRECTION}`;
+  }
+  return `Biometric capture is no longer available for this session. ${MANUAL_ATTENDANCE_DIRECTION}`;
 }

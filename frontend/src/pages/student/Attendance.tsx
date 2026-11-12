@@ -55,6 +55,7 @@ import { GuidedCaptureStatus } from '../../components/GuidedCaptureStatus';
 import { playGuidanceSuccessTone, primeGuidanceAudio } from '../../utils/guidanceAudio';
 import { isNextDay } from '../../utils/sessionTimes';
 import { formatVisibleTime } from '../../utils/timeDisplay';
+import { captureWindowNotice } from '../../services/attendanceNormalization';
 
 // Mock Geofence center for simulation only
 const BU_DENTAL_CLINIC_COORDS = {
@@ -453,6 +454,12 @@ export const Attendance: React.FC = () => {
 
   // Selected Authoritative Session Object
   const currentSelectedSession = activeSessions.find(s => s.id === selectedSessionId) || activeSessions[0] || null;
+  // ATT-003: once the Late cutoff passes the session stays active until its class
+  // end, but capture is closed. The server reports that through captureOpen=false.
+  const currentCaptureClosed = currentSelectedSession?.isOpen === false;
+  const currentCaptureClosedNotice = currentCaptureClosed && currentSelectedSession
+    ? captureWindowNotice(currentSelectedSession.captureStatus ?? 'attendance_capture_closed', currentSelectedSession)
+    : null;
 
   // --- AUTHORITATIVE ATTENDANCE PROCESS ---
   const scrollStagePanelIntoView = () => {
@@ -467,6 +474,14 @@ export const Attendance: React.FC = () => {
 
   const handleStartAuthoritativeCheckIn = async (session = currentSelectedSession) => {
     if (!session) return;
+    // ATT-003: capture that already closed cannot start, even from an older render.
+    const captureNotice = session.isOpen === false
+      ? captureWindowNotice(session.captureStatus ?? 'attendance_capture_closed', session)
+      : null;
+    if (captureNotice !== null) {
+      setFailureNotice(captureNotice);
+      return;
+    }
     setFailureNotice(null);
     setAuthError(null);
     setLocationStatus(null);
@@ -575,7 +590,20 @@ export const Attendance: React.FC = () => {
     } catch (err) {
       if (cameraAbortRef.current === abortController && !abortController.signal.aborted) {
         stopCamera();
-        if (cameraOpened) {
+        const rejectCode = err && typeof err === 'object' && 'code' in err ? (err as { code?: unknown }).code : null;
+        const captureNotice = currentSelectedSession
+          ? captureWindowNotice(typeof rejectCode === 'string' ? rejectCode : null, currentSelectedSession)
+          : null;
+        if (captureNotice !== null) {
+          // ATT-003: a closed capture window is a session-timing outcome, not a
+          // camera or biometric-service failure. Leave the camera stage and
+          // direct the Student to Secretary/Faculty manual attendance.
+          setCameraError(null);
+          setCameraErrorIsChallenge(false);
+          setFailureNotice(captureNotice);
+          setCheckInStage('idle');
+          void loadAuthoritativeData();
+        } else if (cameraOpened) {
           setCameraErrorIsChallenge(true);
           setCameraError(err instanceof Error && err.message ? err.message : 'The liveness check could not be started. Choose Retry.');
         } else {
@@ -589,7 +617,7 @@ export const Attendance: React.FC = () => {
         setCameraLoading(false);
       }
     }
-  }, [currentSelectedSession, stopCamera]);
+  }, [currentSelectedSession, loadAuthoritativeData, stopCamera]);
 
   useEffect(() => {
     if (
@@ -1325,6 +1353,10 @@ export const Attendance: React.FC = () => {
                       {activeSessions.map((sess) => {
                         const isSelected = sess.id === selectedSessionId;
                         const requiresGeofence = Boolean(sess.geofenceRequired ?? sess.geofenceEnabled);
+                        const captureClosed = sess.isOpen === false;
+                        const captureClosedNotice = captureClosed
+                          ? captureWindowNotice(sess.captureStatus ?? 'attendance_capture_closed', sess)
+                          : null;
                         return (
                           <div
                             key={sess.id}
@@ -1342,8 +1374,10 @@ export const Attendance: React.FC = () => {
                               <span className="font-mono text-xs font-extrabold text-blue-600 dark:text-blue-400">
                                 {sess.courseCode}
                               </span>
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
-                                Session active
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${captureClosed
+                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
+                                : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'}`}>
+                                {captureClosed ? 'Capture closed' : 'Session active'}
                               </span>
                             </div>
                             <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">
@@ -1369,6 +1403,11 @@ export const Attendance: React.FC = () => {
                               {sess.alreadyRecordedStatus && (
                                 <p className="text-emerald-600 dark:text-emerald-400 font-semibold pt-1">
                                   ✓ Already recorded as {sess.alreadyRecordedStatus}
+                                </p>
+                              )}
+                              {captureClosedNotice && !sess.alreadyRecordedStatus && (
+                                <p className="text-rose-600 dark:text-rose-400 font-semibold pt-1">
+                                  {captureClosedNotice}
                                 </p>
                               )}
                             </div>
@@ -1615,23 +1654,29 @@ export const Attendance: React.FC = () => {
                 <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
                   <div className="space-y-0.5 text-center sm:text-left">
                     <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                      Ready to check in for {currentSelectedSession.courseCode}?
+                      {currentCaptureClosed
+                        ? `Biometric capture is closed for ${currentSelectedSession.courseCode}`
+                        : `Ready to check in for ${currentSelectedSession.courseCode}?`}
                     </h4>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Ensure your camera is enabled and you are within the designated area if geofencing is required.
+                    <p className={`text-[11px] ${currentCaptureClosed ? 'text-rose-600 dark:text-rose-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
+                      {currentCaptureClosed && currentCaptureClosedNotice
+                        ? currentCaptureClosedNotice
+                        : 'Ensure your camera is enabled and you are within the designated area if geofencing is required.'}
                     </p>
                   </div>
 
                   <button
                     onClick={() => { void handleStartAuthoritativeCheckIn(); }}
-                    disabled={!isAuthoritativeActiveEnrolled(profile?.enrollmentStatus) || Boolean(currentSelectedSession.alreadyRecordedStatus)}
-                    className={`px-6 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 flex-shrink-0 ${isAuthoritativeActiveEnrolled(profile?.enrollmentStatus) && !currentSelectedSession.alreadyRecordedStatus
+                    disabled={currentCaptureClosed || !isAuthoritativeActiveEnrolled(profile?.enrollmentStatus) || Boolean(currentSelectedSession.alreadyRecordedStatus)}
+                    className={`px-6 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 flex-shrink-0 ${!currentCaptureClosed && isAuthoritativeActiveEnrolled(profile?.enrollmentStatus) && !currentSelectedSession.alreadyRecordedStatus
                       ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20 active:scale-[0.99] cursor-pointer'
                       : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed'
                       }`}
                   >
                     <Camera className="w-4 h-4" />
-                    <span>{currentSelectedSession.alreadyRecordedStatus ? 'Attendance already recorded' : 'Begin attendance check-in'}</span>
+                    <span>{currentCaptureClosed
+                      ? 'Capture closed'
+                      : currentSelectedSession.alreadyRecordedStatus ? 'Attendance already recorded' : 'Begin attendance check-in'}</span>
                   </button>
                 </div>
               )}

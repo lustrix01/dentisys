@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   normalizeStudentActiveSession,
   normalizeStudentAttendanceLogRecord,
+  isCaptureWindowRejection,
+  captureWindowNotice,
 } from '../services/attendanceNormalization.ts';
 
 test('Attendance log normalization accepts the nested backend row contract', () => {
@@ -72,4 +74,61 @@ test('Attendance log normalization does not invent missing provenance', () => {
   });
 
   assert.equal(normalized.verificationMethod, 'unknown');
+});
+
+test('Active session normalization carries the closed capture window (ATT-003)', () => {
+  const normalized = normalizeStudentActiveSession({
+    sessionId: 7,
+    course: { code: 'IT404', name: 'Information Technology 404' },
+    captureOpen: false,
+    captureStatus: 'attendance_capture_closed',
+    openingTime: '12:45',
+    presentCutoff: '13:15',
+    lateCutoff: '13:30',
+  });
+
+  assert.equal(normalized.isOpen, false);
+  assert.equal(normalized.captureStatus, 'attendance_capture_closed');
+  assert.equal(normalized.lateCutoff, '13:30');
+});
+
+test('Capture-window rejection codes are classified as timing, never biometrics', () => {
+  for (const code of ['attendance_not_open', 'attendance_capture_closed', 'session_timing_unconfigured', 'session_not_active', 'session_revoked']) {
+    assert.equal(isCaptureWindowRejection(code), true, code);
+  }
+  for (const code of ['biometric_verification_failed', 'liveness_failed', 'quality_failed', 'biometric_service_unavailable', '', null, undefined]) {
+    assert.equal(isCaptureWindowRejection(code), false, String(code));
+  }
+});
+
+test('Closed capture window notice names the Late cutoff and directs to manual attendance', () => {
+  const notice = captureWindowNotice('attendance_capture_closed', {
+    captureStatus: 'attendance_capture_closed',
+    openingTime: '12:45',
+    presentCutoff: '13:15',
+    lateCutoff: '13:30',
+  });
+
+  assert.ok(notice);
+  assert.match(notice, /closed at 1:30 PM/);
+  assert.match(notice, /course instructor or Class Secretary/);
+  assert.match(notice, /manually/);
+});
+
+test('Not-open capture window notice names the opening time', () => {
+  const notice = captureWindowNotice('attendance_not_open', {
+    captureStatus: 'attendance_not_open',
+    openingTime: '12:45',
+    presentCutoff: '13:15',
+    lateCutoff: '13:30',
+  });
+
+  assert.ok(notice);
+  assert.match(notice, /opens at 12:45 PM/);
+});
+
+test('Capture-window notice stays silent for real biometric or service failures', () => {
+  assert.equal(captureWindowNotice('biometric_verification_failed', { captureStatus: null }), null);
+  assert.equal(captureWindowNotice('biometric_service_unavailable', { captureStatus: null }), null);
+  assert.equal(captureWindowNotice(null, { captureStatus: null }), null);
 });

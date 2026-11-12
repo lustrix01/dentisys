@@ -255,6 +255,8 @@ export interface StudentActiveSession {
   geofenceRequired?: boolean;
   geofenceEnabled?: boolean;
   isOpen?: boolean;
+  /** Server timing outcome: 'present' or 'late' while capture is open, otherwise the rejection code. */
+  captureStatus?: string | null;
   alreadyRecordedStatus?: 'present' | 'late' | 'absent' | 'excused' | 'unresolved' | null;
   /** @deprecated Use alreadyRecordedStatus, which mirrors the API contract. */
   attendedStatus?: 'present' | 'late' | 'absent' | 'excused' | 'unresolved' | null;
