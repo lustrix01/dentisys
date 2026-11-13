@@ -937,8 +937,8 @@ export const RetentionMonitoring: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="text-[10px] uppercase text-slate-500 dark:text-slate-400">
+            <table className="w-full text-left text-xs max-md:block">
+              <thead className="text-[10px] uppercase text-slate-500 dark:text-slate-400 max-md:hidden">
                 <tr>
                   <th className="p-3">Student</th>
                   <th className="p-3">Class</th>
@@ -947,16 +947,17 @@ export const RetentionMonitoring: React.FC = () => {
                   <th className="p-3">Status</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="max-md:block">
                 {midtermDisplayRecords.map(record => {
                   return (
-                    <tr key={record.enrollmentId} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="p-3 font-bold">
-                        {record.studentName}
-                        <span className="block text-[10px] font-normal text-slate-500 dark:text-slate-400">{record.studentNumber}</span>
+                    <tr key={record.enrollmentId} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
+                      <td className="p-3 font-bold max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm">
+                        <span className="sr-only md:hidden">Student: </span>{record.studentName}
+                        <span className="block text-[10px] font-normal text-slate-500 dark:text-slate-400 max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{record.studentNumber}</span>
                       </td>
-                      <td className="p-3">{record.className}</td>
-                      <td className="p-3">
+                      <td className="p-3 max-md:order-2 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Class: </span>{record.className}</td>
+                      <td className="p-3 max-md:order-3 max-md:p-0">
+                        <span className="sr-only md:hidden">Final Midterm Grade: </span>
                         {isFiniteNumber(record.midtermPercentage) ? (
                           <div className="font-mono">
                             <span className="font-bold">{record.midtermPercentage.toFixed(2)}%</span>
@@ -968,12 +969,13 @@ export const RetentionMonitoring: React.FC = () => {
                           <span className="text-slate-500 dark:text-slate-400 italic">Incomplete assessments</span>
                         )}
                       </td>
-                      <td className="p-3">
+                      <td className="p-3 max-md:order-4 max-md:p-0 max-md:empty:hidden">
                         {isMidtermAtRisk(record) && (
                           <span className="inline-flex rounded-full px-2 py-1 text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300">At risk</span>
                         )}
                       </td>
-                      <td className="p-3">
+                      <td className="p-3 max-md:order-5 max-md:ml-auto max-md:p-0">
+                        <span className="sr-only md:hidden">Status: </span>
                         <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60">
                           Computed · Ready
                         </span>
@@ -1016,18 +1018,18 @@ export const RetentionMonitoring: React.FC = () => {
             <p className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">{isLoading ? 'Loading authoritative retention records...' : (selectedClassId !== 'all' || selectedSubjectCode !== 'all' || searchQuery.trim() ? 'No students needing retention action match these filters.' : 'No students need retention action in this school year.')}</p>
           ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Student Number</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center">Course Grade</th><th className="py-3 px-4">State</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+            <table className="w-full text-left text-xs border-collapse max-md:block">
+              <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Student Number</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center">Course Grade</th><th className="py-3 px-4">State</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
                 {watchlistRecords.map(record => (
-                  <tr key={record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(record.studentName, 'Student name unavailable')}</td>
-                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-mono">{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
-                    <td className="py-3.5 px-4 font-mono">{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
-                    <td className="py-3.5 px-4">{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
-                    <td className="py-3.5 px-4 text-center font-mono">{isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage} grade={record.gwa}>{formatGrade(record.gwa)}</GradeValue> : 'Grade unavailable'}<span className="block text-[10px] text-slate-500 dark:text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
-                    <td className="py-3.5 px-4"><button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1.5 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button></td>
-                    <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-1.5"><button type="button" onClick={() => openSchedule(record)} disabled={!canScheduleRecord(record)} title={!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam'} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button></div></td>
+                  <tr key={record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
+                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm"><span className="sr-only md:hidden">Student: </span>{textOrUnavailable(record.studentName, 'Student name unavailable')}</td>
+                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-mono max-md:order-2 max-md:p-0 max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student Number: </span>{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
+                    <td className="py-3.5 px-4 font-mono max-md:order-3 max-md:p-0"><span className="sr-only md:hidden">Subject: </span>{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
+                    <td className="py-3.5 px-4 max-md:order-4 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Class: </span>{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
+                    <td className="py-3.5 px-4 text-center font-mono max-md:order-5 max-md:p-0 max-md:text-left"><span className="md:hidden font-sans text-slate-500 dark:text-slate-400">Course grade </span>{isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage} grade={record.gwa}>{formatGrade(record.gwa)}</GradeValue> : 'Grade unavailable'}<span className="block text-[10px] text-slate-500 dark:text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
+                    <td className="py-3.5 px-4 max-md:order-6 max-md:p-0"><span className="sr-only md:hidden">State: </span><button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1.5 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button></td>
+                    <td className="py-3.5 px-4 text-right max-md:order-7 max-md:ml-auto max-md:p-0"><div className="flex items-center justify-end gap-1.5"><button type="button" onClick={() => openSchedule(record)} disabled={!canScheduleRecord(record)} title={!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam'} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -1047,15 +1049,16 @@ export const RetentionMonitoring: React.FC = () => {
             <p className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">{isLoading ? 'Loading authoritative remedial records...' : 'No remedial records match the selected filters.'}</p>
           ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Original Grade</th><th className="py-3 px-4">Attempts</th><th className="py-3 px-4">Current Stage</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+            <table className="w-full text-left text-xs border-collapse max-md:block">
+              <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Original Grade</th><th className="py-3 px-4">Attempts</th><th className="py-3 px-4">Current Stage</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
                 {remedialRows.map(row => (
-                  <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-500 dark:text-slate-400 font-mono">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
-                    <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-500 dark:text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage} grade={row.record.gwa}>{formatGrade(row.record.gwa)}</GradeValue> : <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Grade unavailable</span>}</td>
-                    <td className="py-3.5 px-4 whitespace-nowrap">
+                  <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
+                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm"><span className="sr-only md:hidden">Student: </span>{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-500 dark:text-slate-400 font-mono max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
+                    <td className="py-3.5 px-4 max-md:order-2 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Subject / Class: </span><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-500 dark:text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
+                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100 max-md:order-3 max-md:p-0"><span className="md:hidden font-normal text-slate-500 dark:text-slate-400">Original grade </span>{isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage} grade={row.record.gwa}>{formatGrade(row.record.gwa)}</GradeValue> : <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Grade unavailable</span>}</td>
+                    <td className="py-3.5 px-4 whitespace-nowrap max-md:order-4 max-md:w-full max-md:whitespace-normal max-md:p-0">
+                      <span className="sr-only md:hidden">Attempts: </span>
                       {(() => {
                         const activeAttemptNumber = row.progression.attempts.length === 2
                           ? 2
@@ -1073,7 +1076,7 @@ export const RetentionMonitoring: React.FC = () => {
                                 : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300';
 
                         return (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 max-md:flex-wrap">
                             <span className="font-bold text-slate-800 dark:text-slate-200">
                               Attempt {activeAttemptNumber}
                             </span>
@@ -1089,8 +1092,9 @@ export const RetentionMonitoring: React.FC = () => {
                         );
                       })()}
                     </td>
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
+                    <td className="py-3.5 px-4 whitespace-nowrap max-md:order-5 max-md:w-full max-md:whitespace-normal max-md:p-0">
+                      <span className="sr-only md:hidden">Current Stage: </span>
+                      <div className="flex items-center gap-2 max-md:flex-wrap">
                         <span className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
                           row.progression.stage === 'passed' || row.progression.stage === 'cost_recovery_passed'
                             ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
@@ -1117,8 +1121,8 @@ export const RetentionMonitoring: React.FC = () => {
                         </button>
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="py-3.5 px-4 text-right whitespace-nowrap max-md:order-6 max-md:w-full max-md:whitespace-normal max-md:p-0 max-md:text-left">
+                      <div className="flex items-center justify-end gap-2 max-md:flex-wrap max-md:justify-start">
                         {canScheduleRecord(row.record) && !isPastYearRecord(row.record) && (
                           <button
                             type="button"

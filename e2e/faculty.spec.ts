@@ -665,6 +665,27 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.getByRole('row').filter({ hasText: 'Current Candidate' })).toHaveCount(2);
   });
 
+  test('retention status rows become stacked cards on phones and a table again on desktop', async ({ page }) => {
+    const base = { studentId: '42', schoolYear: '2026-2027', percentage: 70 };
+    await page.route('**/api/faculty/retention', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', retentionThreshold: 2.5, retention: [
+      { ...base, enrollmentId: '901', studentNumber: '2026-0042', studentName: 'Phone Candidate', classId: '77', className: 'CLIN401-A', subjectCode: 'CLIN401', gwa: 2.8, state: 'remedial', remedialEligible: true, remedialProgression: { stage: 'none', attempts: [], passedAttempt: null, legacyUnclassified: false } },
+      { ...base, enrollmentId: '902', studentId: '43', studentNumber: '2026-0043', studentName: 'Second Candidate', classId: '78', className: 'CLIN402-A', subjectCode: 'CLIN402', gwa: 5.0, state: 'irregular_reenrollment', remedialEligible: false },
+    ] }) }));
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/retention');
+    const row = page.getByRole('row').filter({ hasText: 'Phone Candidate' });
+    await expect(row).toBeVisible();
+    await expect(page.locator('thead').filter({ hasText: 'Course Grade' })).toBeHidden();
+    await expect(row.getByText('Phone Candidate')).toBeVisible();
+    await expect(row.getByText('2026-0042')).toBeVisible();
+    await expect(row.getByText('Course grade')).toBeVisible();
+    await expect(row.getByTitle('Schedule remedial exam')).toBeVisible();
+    const wrapper = page.locator('div.overflow-x-auto').filter({ has: row });
+    expect(await wrapper.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(page.getByRole('columnheader', { name: 'Course Grade' })).toBeVisible();
+  });
+
   test('faculty name dialog shows MFA, displays server errors, and sends no email', async ({ page }) => {
     let postedProfile: Record<string, unknown> | null = null;
     let firstName = 'Jane';

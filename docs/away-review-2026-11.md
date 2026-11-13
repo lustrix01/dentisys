@@ -10,6 +10,7 @@ Claude reviewed the four commits made while it was unavailable: DeepSeek's `3d4f
 
 - **B1, assessment dialog category (ticket T10 follow-up).** Confirm assessment no longer greys out while no grading category is picked. Pressing it marks Category Type with "Choose a grading category.", the same field-error pattern as the title and maximum score.
 - **B2, roster import error once (ticket T3 follow-up).** An unreadable file no longer shows a pop-up banner on top of the dialog's own message, so the error appears once and stays.
+- **C1, Retention Monitoring on phones (FAC-02).** Below 768 px the Retention Status, Remedial Progression and Midterm Watchlist tables use the roster's phone-block pattern: each row is a card with every field and action, student numbers never break, and grades carry a short visible label. Tablet and desktop are unchanged (desktop pixel-identical).
 - **Test clean-up.** Removed a leftover "TEMP visual check" from `e2e/secretary.spec.ts` that saved screenshots to the temp folder on every run.
 
 ## Ticket batch 1 check (2026-11-13)
@@ -22,7 +23,7 @@ Claude re-checked the 11 tickets on the running app at iPhone SE and iPhone 13 m
 | T2 password length | Fixed: 8–32 characters on every form and on the server. |
 | T3 wrong file layout | Fixed: a lasting message per cause; shown once since B2. |
 | T4 idle session | The early sign-out cause (10–25 minutes on polling pages) is fixed and covered by unit tests. A live 17-minute idle run stayed signed in, but the page had stopped polling before the token expired, so the renewal path was not exercised live. Full Matrix draft protection is still undecided. |
-| T5 iOS sideways scroll | No code change. In WebKit at 375 px the wide tables scroll inside their card and the page does not; it needs a real-iPhone check of the reported screen. |
+| T5 / FAC-02 iOS sideways scroll | Fixed in C1: on phones the three Faculty Retention Monitoring lists show each row as a card (Owner-approved UI-001 amendment, 2026-11-13). Before, only 4 of 7 columns fit at 375 px and the grade, state and action buttons were off-screen with no visible scroll bar on iPhones. |
 | T6 Back to classes | Fixed: Back sits above the class name; nothing is cut at 320 or 375 px. |
 | T7 create session button | Fixed: Start session when idle, Schedule session while live. |
 | T8 4.84 threshold | Replaced by the 2026-11-13 amendment (2.5–4.9 remedial, 5.0 irregular reenrollment). |
@@ -34,7 +35,8 @@ Claude re-checked the 11 tickets on the running app at iPhone SE and iPhone 13 m
 
 - Overflow was measured on all three drill-down tabs at 320, 360, 390, 430, 768, 1024, 1280, 1440 and 1920 px, with nothing outside the card.
 - The 360 px and wider Academic Terms shots are pixel-identical to before.
-- Light and dark mode were checked on screen, for A6, A7, B1 and B2.
+- Light and dark mode were checked on screen, for A6, A7, B1, B2 and C1.
+- C1: retention UI tests pass 7 of 7, including a new phone-card test at 375 px.
 - B1/B2: focused UI suites (faculty, secretary, roster import, transmutation) pass 165 of 165.
 - `npx tsc -b`, `eslint` on the changed files and `check.ps1` pass.
 
