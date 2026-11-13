@@ -38,7 +38,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\<script>.ps1 <arguments>
 
 | # | Step | Who | Command or action |
 |---|---|---|---|
-| 1 | Agree the change, build it, run the checks | Claude, Owner approves | `.\scripts\check.ps1` |
+| 1 | Agree the change, build it, update the current-reference docs it affects, run the checks. **Docs updated?** Every changed behaviour, setup step, env var, script or screen is described as it is now in README, `docs/`, `spec.md` and `.env.example`. | Claude, Owner approves | `.\scripts\check.ps1` (its docs contract fails on an env var missing from `.env.example`, a broken docs link, or a dated file outside `docs/archive/`) |
 | 2 | Push the commit | Claude, when the Owner says "push" | `git push` |
 | 3 | Publish the demo images | Claude | `.\scripts\publish-images.ps1 -Tag demo`. It prints the 12-character sha. |
 | 4 | Database migrations (only if the release adds them) | Claude | `.\scripts\demo-vps.ps1 migrate`. It backs up the database first. Watchtower alone is not enough. |

@@ -78,7 +78,7 @@ These documents are kept for history. They describe past plans, handoffs, and ev
 
 ## Docs sync, November 2026
 
-- [Docs sync audit](../sync-audit-2026-11.md) (moves here when the sync is finished)
+- [Docs sync audit](sync-audit-2026-11.md)
 - [Changed statements in the current-reference docs](docs-sync-changes-2026-11.md)
 - [spec.md merge proposal](spec-merge-proposal-2026-11.md)
 - [Backlog items closed before 2026-11-14](backlog-done-2026-11.md)
