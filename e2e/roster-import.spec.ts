@@ -46,6 +46,15 @@ async function setup(page: Page, failEmail = '') {
   return { creates, enrolls, classCreates };
 }
 
+test('an unsupported file shows its error once, inside the dialog, and it stays', async ({ page }) => {
+  await setup(page);
+  await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'notes.docx', mimeType: 'application/octet-stream', buffer: Buffer.from('not a roster') });
+  const message = 'This file type is not supported. Choose the official class list PDF, or a CSV, TSV or TXT roster file.';
+  await expect(page.getByText(message, { exact: true })).toHaveCount(1);
+  await page.waitForTimeout(4000);
+  await expect(page.getByText(message, { exact: true })).toBeVisible();
+});
+
 test('provisional PDF keeps all rows unselected, flags marks, preserves fields and resolves existing server IDs', async ({ page }) => {
   const { creates, enrolls } = await setup(page);
   await page.getByLabel('Class list or student roster file').setInputFiles('e2e/fixtures/provisional-roster.pdf');

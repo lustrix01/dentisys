@@ -197,7 +197,6 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
     setPositionalCsv(false);
     setFileError(detail ? { message, detail } : { message });
     if (fileInputRef.current) fileInputRef.current.value = '';
-    showFeedback(message, 'error');
   };
 
   const handleFileChange = async (selectedFile: File) => {

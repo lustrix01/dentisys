@@ -977,8 +977,9 @@ export const GradeComputation: React.FC = () => {
     if (!assTitle.trim()) add('title', 'Assessment Title', 'Enter an assessment title.');
     const parsedMaxScore = typeof assMaxScore === 'number' ? assMaxScore : parseInt(String(assMaxScore), 10);
     if (isNaN(parsedMaxScore) || parsedMaxScore <= 0) add('max-score', 'Maximum Score', 'Enter a maximum score greater than 0.');
+    if (modalConfigStatus === 'configured' && !assGradingCategoryId) add('category', 'Category Type', 'Choose a grading category.');
     return out;
-  }, [assTitle, assMaxScore]);
+  }, [assTitle, assMaxScore, modalConfigStatus, assGradingCategoryId]);
   const shownAssessmentProblems = assessmentAttempted ? assessmentProblems : [];
   const assessmentProblemMsg = (key: string) => shownAssessmentProblems.find(p => p.key === key)?.message;
   const assessmentInvalidCls = 'border-rose-300 dark:border-rose-700 bg-rose-50/60 dark:bg-rose-950/30';
@@ -5780,7 +5781,8 @@ export const GradeComputation: React.FC = () => {
                       setModalCategoryWarning(false);
                     }}
                     required
-                    className="w-full pl-4 pr-10 truncate py-2.5 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                    {...assessmentFieldAria('category')}
+                    className={`w-full pl-4 pr-10 truncate py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500 ${assessmentFieldCls('category', 'dark:border-slate-800 bg-white dark:bg-slate-900')}`}
                   >
                     <option value="">Select grading category</option>
                     {(() => {
@@ -5838,6 +5840,7 @@ export const GradeComputation: React.FC = () => {
                       );
                     })()}
                   </select>
+                  {assessmentFieldErr('category')}
                 </div>
               )}
             </div>
@@ -6029,8 +6032,7 @@ export const GradeComputation: React.FC = () => {
               type="submit"
               disabled={
                 modalConfigStatus === 'loading' ||
-                modalConfigStatus === 'error' ||
-                (modalConfigStatus === 'configured' && !assGradingCategoryId)
+                modalConfigStatus === 'error'
               }
               className="px-4 py-2.5 rounded-xl bg-clinical-500 hover:bg-clinical-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md"
             >

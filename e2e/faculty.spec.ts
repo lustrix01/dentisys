@@ -3652,13 +3652,14 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await modalForm.locator('input[type="text"]').first().fill('Midterm Crown Quiz');
       await modalForm.locator('input[type="number"]').first().fill('20');
 
-      // Attempt submit without category selection: Confirm button is disabled
+      // Attempt submit without category selection: the form says a category is needed
       const submitBtn = modalForm.getByRole('button', { name: 'Confirm Assessment' });
-      await expect(submitBtn).toBeDisabled();
+      await submitBtn.click();
+      await expect(modalForm.getByText('Choose a grading category.')).toBeVisible();
 
       // Select 'Quizzes (25%)'
       await categorySelect.selectOption('11');
-      await expect(submitBtn).toBeEnabled();
+      await expect(modalForm.getByText('Choose a grading category.')).toHaveCount(0);
 
       const initialGetCount = getAssessmentsCallCount;
       await submitBtn.click();
@@ -3751,10 +3752,18 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const modalForm = page.locator('form').last();
       const categorySelect = modalForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) });
       await expect(categorySelect.locator('option', { hasText: 'Quizzes (25%)' })).toBeAttached();
-      await categorySelect.selectOption('11');
       const titleInput = page.getByPlaceholder('e.g. Molar Crown Prep quiz');
       const maxScoreInput = page.getByPlaceholder('e.g. 50');
       const submitBtn = modalForm.getByRole('button', { name: 'Confirm Assessment' });
+
+      // No category yet: Confirm stays clickable and says what is missing instead of greying out.
+      await expect(submitBtn).toBeEnabled();
+      await submitBtn.click();
+      await expect(modalForm.getByText('Choose a grading category.')).toBeVisible();
+      await expect(categorySelect).toHaveAttribute('aria-invalid', 'true');
+      expect(postedAssessments).toHaveLength(0);
+      await categorySelect.selectOption('11');
+      await expect(modalForm.getByText('Choose a grading category.')).toHaveCount(0);
 
       // Whitespace-only title: previously a silent return with no feedback. Both fields are
       // invalid, so both inline messages show and focus lands on the first invalid field.
@@ -4098,11 +4107,13 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       // Modal displays warning alert
       await expect(page.getByText(/requires a valid grading category assignment/i)).toBeVisible();
 
-      // Category select is empty and submit button is disabled
+      // Category select is empty and saving is blocked with a field message
       const categorySelect = modalForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) });
       await expect(categorySelect).toHaveValue('');
       const submitBtn = modalForm.getByRole('button', { name: 'Confirm Assessment' });
-      await expect(submitBtn).toBeDisabled();
+      await submitBtn.click();
+      await expect(modalForm.getByText('Choose a grading category.')).toBeVisible();
+      expect(postedAssessmentPayload).toBeNull();
 
       // Explicitly assign category 11
       await categorySelect.selectOption('11');

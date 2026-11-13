@@ -493,16 +493,6 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(status.getByRole('button')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Sessions', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Start session', exact: true })).toBeVisible();
-
-    // TEMP visual check
-    const card = page.getByRole('button', { name: 'Back to Assigned Classes' }).locator('xpath=ancestor::div[contains(@class,"rounded-3xl")]');
-    for (const width of [320, 390, 1440]) {
-      await page.setViewportSize({ width, height: 900 });
-      await page.waitForTimeout(150);
-      const box = await card.evaluate(el => ({ sw: el.scrollWidth, cw: el.clientWidth }));
-      console.log(`T7 ${width}`, box);
-      await card.screenshot({ path: `${process.env.TEMP}\\t7-${width}.png` });
-    }
   });
 
   test('cancelling a queued revocation does not change the active-session revoke target', async ({ page }) => {
