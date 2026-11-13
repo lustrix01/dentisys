@@ -241,7 +241,7 @@ function handle_password_reset_confirm(): void
                 }
             }
 
-            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+            $passwordHash = password_hash_user_password($password);
             $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
             // All auth mutation paths lock account/session/token rows before
             // the shared audit-chain row. Keep eligibility checks before this

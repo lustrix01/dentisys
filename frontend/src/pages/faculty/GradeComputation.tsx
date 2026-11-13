@@ -50,7 +50,6 @@ import {
   importGradeSheet,
   deleteFacultyAssessmentApi,
   getFacultyClassesApi,
-  getFacultySettingsApi,
   saveFacultyAssessmentScoresApi,
   saveFacultyScoreBatchesApi,
   type FacultyScoreEntry,
@@ -183,7 +182,6 @@ export const GradeComputation: React.FC = () => {
   const [selectedClassId, setSelectedClassId] = useState('');
 
   const [loading, setLoading] = useState(true);
-  const [transmutationDefaults, setTransmutationDefaults] = useState({ minimumPercentage: 50, maximumPercentage: 100 });
 
   const isClassCurrentSchoolYear = useCallback((c: FacultyClassItem) => {
     if (c.isCurrentSchoolYear === true) return true;
@@ -258,17 +256,14 @@ export const GradeComputation: React.FC = () => {
 
   useEffect(() => {
     // Settings only provide transmutation defaults; a settings failure must not hide the classes.
-    Promise.allSettled([getFacultyClassesApi(), getFacultySettingsApi()])
-      .then(([classesResult, settingsResult]) => {
+    Promise.allSettled([getFacultyClassesApi()])
+      .then(([classesResult]) => {
         if (classesResult.status === 'fulfilled') {
           const classesResponse = classesResult.value;
           const loadedClasses = Array.isArray(classesResponse.classes) ? classesResponse.classes : [];
           setCurrentSchoolYear(classesResponse.currentSchoolYear || '');
           setSelectedSchoolYear(classesResponse.currentSchoolYear || '');
           setFacultyClasses(loadedClasses);
-        }
-        if (settingsResult.status === 'fulfilled' && settingsResult.value.settings?.transmutationDefaults) {
-          setTransmutationDefaults(settingsResult.value.settings.transmutationDefaults);
         }
         setLoading(false);
       });
@@ -545,8 +540,6 @@ export const GradeComputation: React.FC = () => {
   const [assRemarks, setAssRemarks] = useState('');
   const [assStatus, setAssStatus] = useState<'Active' | 'Closed'>('Active');
   const [assTransmutationEnabled, setAssTransmutationEnabled] = useState(false);
-  const [assTransmutationMinimum, setAssTransmutationMinimum] = useState(50);
-  const [assTransmutationMaximum, setAssTransmutationMaximum] = useState(100);
   const [assAttendanceDate, setAssAttendanceDate] = useState('');
   const [assAttendanceCode, setAssAttendanceCode] = useState('');
   const [isTransmutationSectionOpen, setIsTransmutationSectionOpen] = useState(false);
@@ -906,8 +899,6 @@ export const GradeComputation: React.FC = () => {
     setAssRemarks('');
     setAssStatus('Active');
     setAssTransmutationEnabled(false);
-    setAssTransmutationMinimum(transmutationDefaults.minimumPercentage);
-    setAssTransmutationMaximum(transmutationDefaults.maximumPercentage);
     setAssAttendanceDate('');
     setAssAttendanceCode('');
     setIsTransmutationSectionOpen(false);
@@ -937,8 +928,6 @@ export const GradeComputation: React.FC = () => {
     setAssRemarks(ass.remarks || '');
     setAssStatus(ass.status === 'Archived' ? 'Active' : ass.status);
     setAssTransmutationEnabled(ass.transmutationEnabled ?? false);
-    setAssTransmutationMinimum(ass.transmutationMinimumPercentage ?? transmutationDefaults.minimumPercentage);
-    setAssTransmutationMaximum(ass.transmutationMaximumPercentage ?? transmutationDefaults.maximumPercentage);
     setAssAttendanceDate(ass.attendanceSessionDate || '');
     setAssAttendanceCode(ass.attendanceSessionCode || '');
     setAssGradingCategoryId(ass.gradingCategoryId ? String(ass.gradingCategoryId) : '');
@@ -1037,10 +1026,6 @@ export const GradeComputation: React.FC = () => {
       showFeedback('Please select both session date and session code, or leave both blank for no attendance link.', 'error');
       return;
     }
-    if (assTransmutationMinimum < 0 || assTransmutationMaximum > 100 || assTransmutationMinimum > assTransmutationMaximum) {
-      showFeedback('Transmutation bounds must be between 0% and 100%, with minimum not exceeding maximum.', 'error');
-      return;
-    }
 
     const targetClass = facultyClasses.find(c => c.id === assClassId);
     const targetSubjectCode = targetClass?.courseCode || selectedSubjectCode;
@@ -1068,8 +1053,6 @@ export const GradeComputation: React.FC = () => {
         remarks: assRemarks,
         status: assStatus as 'Active' | 'Closed' | 'Archived',
         transmutationEnabled: assTransmutationEnabled,
-        transmutationMinimumPercentage: assTransmutationMinimum,
-        transmutationMaximumPercentage: assTransmutationMaximum,
         attendanceSessionDate: assAttendanceDate || null,
         attendanceSessionCode: assAttendanceCode || null,
         ...(numericCategoryId ? { gradingCategoryId: numericCategoryId } : {}),
@@ -1086,8 +1069,6 @@ export const GradeComputation: React.FC = () => {
         remarks: assRemarks,
         status: assStatus as 'Active' | 'Closed' | 'Archived',
         transmutationEnabled: assTransmutationEnabled,
-        transmutationMinimumPercentage: assTransmutationMinimum,
-        transmutationMaximumPercentage: assTransmutationMaximum,
         attendanceSessionDate: assAttendanceDate || null,
         attendanceSessionCode: assAttendanceCode || null,
         ...(numericCategoryId ? { gradingCategoryId: numericCategoryId } : {}),
@@ -3941,7 +3922,7 @@ export const GradeComputation: React.FC = () => {
                         {ass.transmutationEnabled && (
                           <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                             <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-bold bg-clinical-50 dark:bg-clinical-950/40 dark:text-clinical-400 border border-clinical-200 dark:border-clinical-800">
-                              Transmuted ({ass.transmutationMinimumPercentage ?? 50}%–{ass.transmutationMaximumPercentage ?? 100}%)
+                              Transmuted (50%–100%)
                             </span>
                             {ass.attendanceSessionDate ? (
                               <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">
@@ -5329,7 +5310,7 @@ export const GradeComputation: React.FC = () => {
 
                     if (isPeriodMode) {
                       const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
-                      const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
+                      const isFailsRetention = subj && evalResult.overallGwa !== null && evalResult.overallGwa >= settings.retentionThreshold && evalResult.overallGwa < 5.0 && (evalResult.retentionState != null
                           ? evalResult.retentionState === 'remedial'
                           : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
                             && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
@@ -5403,7 +5384,7 @@ export const GradeComputation: React.FC = () => {
                                     ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                                     : 'bg-emerald-100 text-emerald-700'
                               }`}>
-                              {isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : isPending ? 'PENDING' : isIncomplete ? 'INCOMPLETE' : 'PASS'}
+                              {isFailed ? 'IRREGULAR REENROLLMENT' : isFailsRetention ? 'FAILS RETENTION' : isPending ? 'PENDING' : isIncomplete ? 'INCOMPLETE' : 'PASS'}
                             </span>
                           </td>
                         </tr>
@@ -5412,7 +5393,7 @@ export const GradeComputation: React.FC = () => {
 
                     // Legacy overall view
                     const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
-                    const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
+                    const isFailsRetention = subj && evalResult.overallGwa !== null && evalResult.overallGwa >= settings.retentionThreshold && evalResult.overallGwa < 5.0 && (evalResult.retentionState != null
                         ? evalResult.retentionState === 'remedial'
                         : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
                           && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
@@ -5441,7 +5422,7 @@ export const GradeComputation: React.FC = () => {
                                 ? 'bg-amber-100 text-amber-700'
                                 : 'bg-emerald-100 text-emerald-700'
                             }`}>
-                            {!hasGrade ? 'UNCOMPUTED' : isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : 'PASS'}
+                            {!hasGrade ? 'UNCOMPUTED' : isFailed ? 'IRREGULAR REENROLLMENT' : isFailsRetention ? 'FAILS RETENTION' : 'PASS'}
                           </span>
                         </td>
                       </tr>
@@ -5496,7 +5477,7 @@ export const GradeComputation: React.FC = () => {
 
               if (isPeriodMode) {
                 const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
-                const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
+                const isFailsRetention = subj && evalResult.overallGwa !== null && evalResult.overallGwa >= settings.retentionThreshold && evalResult.overallGwa < 5.0 && (evalResult.retentionState != null
                     ? evalResult.retentionState === 'remedial'
                     : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
                       && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
@@ -5524,7 +5505,7 @@ export const GradeComputation: React.FC = () => {
                     ? `Prior: ${formatGrade(evalResult.historicalGwa)} (Historical)`
                     : '—';
                 const remarksStr = isFailed
-                  ? 'FAILED'
+                  ? 'IRREGULAR REENROLLMENT'
                   : isFailsRetention
                     ? 'FAILS RETENTION'
                     : isPending
@@ -5559,13 +5540,13 @@ export const GradeComputation: React.FC = () => {
 
               // Legacy print row
               const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
-              const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
+              const isFailsRetention = subj && evalResult.overallGwa !== null && evalResult.overallGwa >= settings.retentionThreshold && evalResult.overallGwa < 5.0 && (evalResult.retentionState != null
                   ? evalResult.retentionState === 'remedial'
                   : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
                     && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
               const isFailed = subj && typeof subj.grade === 'number' && subj.grade === 5.0;
               const hasGrade = subj && typeof subj.grade === 'number' && subj.grade > 0;
-              const remarksStr = !hasGrade ? 'UNCOMPUTED' : isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : 'PASS';
+              const remarksStr = !hasGrade ? 'UNCOMPUTED' : isFailed ? 'IRREGULAR REENROLLMENT' : isFailsRetention ? 'FAILS RETENTION' : 'PASS';
 
               return (
                 <tr key={student.id}>
@@ -5927,7 +5908,7 @@ export const GradeComputation: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Scale raw percentages or link to a biometric attendance session</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Apply (score ÷ maximum score) × 50 + 50, with optional attendance handling</p>
                 </div>
               </div>
               <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
@@ -5948,34 +5929,8 @@ export const GradeComputation: React.FC = () => {
                 </label>
                 {assTransmutationEnabled && (
                   <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Minimum Percentage
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          value={assTransmutationMinimum}
-                          onChange={(event) => setAssTransmutationMinimum(Number(event.target.value) || 0)}
-                          className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
-                        />
-                      </label>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Maximum Percentage
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          value={assTransmutationMaximum}
-                          onChange={(event) => setAssTransmutationMaximum(Number(event.target.value) || 0)}
-                          className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
-                        />
-                      </label>
-                    </div>
                     <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                      Preview: 0% raw -&gt; {assTransmutationMinimum.toFixed(2)}%, 50% raw -&gt; {(assTransmutationMinimum + (assTransmutationMaximum - assTransmutationMinimum) / 2).toFixed(2)}%, 100% raw -&gt; {assTransmutationMaximum.toFixed(2)}%. Absent -&gt; 0%.
+                      Preview: 0% raw → 50%, 50% raw → 75%, 100% raw → 100%. Absent → 0%.
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">

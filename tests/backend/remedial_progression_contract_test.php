@@ -95,7 +95,7 @@ function remedial_contract_submit_attempt(
 
     $percentageResult = remedial_contract_validate_score($score);
     // Deliberately ignore $clientStatus: outcome is authoritative and derived here.
-    $outcome = $percentageResult >= 50.0 ? 'passed' : 'failed';
+    $outcome = $percentageResult >= 75.0 ? 'passed' : 'failed';
     $state['attempts'][] = [
         'attemptNumber' => $attemptNumber,
         'scheduledDate' => $scheduledDate,
@@ -113,9 +113,9 @@ function remedial_contract_submit_attempt(
 
 $boundaryExpectations = [
     [0, 'failed'],
-    [49.99, 'failed'],
-    [50, 'passed'],
-    [50.01, 'passed'],
+    [74.99, 'failed'],
+    [75, 'passed'],
+    [75.01, 'passed'],
     [100, 'passed'],
 ];
 foreach ($boundaryExpectations as [$score, $expectedOutcome]) {
@@ -167,8 +167,8 @@ $originalAcademicResult = [
     $firstPass['originalGwa'],
     $firstPass['rawScores'],
 ];
-remedial_contract_submit_attempt($firstPass, 1, 50, 41);
-remedial_contract_assert($firstPass['progression'] === 'passed', 'First attempt at exactly 50 passes');
+remedial_contract_submit_attempt($firstPass, 1, 75, 41);
+remedial_contract_assert($firstPass['progression'] === 'passed', 'First attempt at exactly 75 passes');
 remedial_contract_assert(count($firstPass['attempts']) === 1, 'First-attempt pass persists exactly one attempt');
 remedial_contract_assert(
     [$firstPass['originalPercentage'], $firstPass['originalGwa'], $firstPass['rawScores']] === $originalAcademicResult,
@@ -193,8 +193,8 @@ $twoAttempts = [
 ];
 remedial_contract_submit_attempt($twoAttempts, 1, 49.99, 41, '2027-01-10');
 remedial_contract_assert($twoAttempts['progression'] === 'second_attempt_available', 'First-attempt failure opens only the second attempt');
-remedial_contract_submit_attempt($twoAttempts, 2, 50.01, 41, '2027-01-17', 'failed');
-remedial_contract_assert($twoAttempts['progression'] === 'passed', 'Second attempt at 50.01 passes regardless of client status');
+remedial_contract_submit_attempt($twoAttempts, 2, 75.01, 41, '2027-01-17', 'failed');
+remedial_contract_assert($twoAttempts['progression'] === 'passed', 'Second attempt at 75.01 passes regardless of client status');
 remedial_contract_assert($twoAttempts['attempts'][1]['outcome'] === 'passed', 'Second-attempt outcome is server-derived');
 remedial_contract_assert(
     [$twoAttempts['originalPercentage'], $twoAttempts['originalGwa'], $twoAttempts['rawScores']] === [68.0, 2.68, ['quiz' => 49.5]],
@@ -291,9 +291,10 @@ remedial_contract_assert(
 );
 remedial_contract_assert(
     preg_match('/is_finite|isFinite/', $faculty) === 1
-        && preg_match('/50(?:\.0+)?/', $faculty) === 1
+        && str_contains($faculty, 'faculty_remedial_attempt_outcome')
+        && str_contains($faculty, 'return $percentage >= 75.0')
         && preg_match('/attempt[_A-Za-z]*\s*(?:<=|<).*2|2.*attempt[_A-Za-z]*\s*(?:<=|<)/i', $faculty) === 1,
-    'Backend validates finite percentage input, the 50 percent boundary, and the two-attempt limit'
+    'Backend validates finite percentage input, the 75 percent boundary, and the two-attempt limit'
 );
 remedial_contract_assert(
     (static function () use ($faculty): bool {

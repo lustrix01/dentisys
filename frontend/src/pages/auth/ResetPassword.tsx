@@ -30,7 +30,7 @@ export function ResetPassword() {
       setError('Password does not meet all security requirements.');
       return;
     }
-    if (password !== confirmPassword) {
+    if (password.normalize('NFC') !== confirmPassword.normalize('NFC')) {
       setError('Passwords do not match.');
       return;
     }
@@ -142,7 +142,7 @@ export function ResetPassword() {
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="new-password"
                     required
-                    maxLength={32}
+                    maxLength={256}
                     aria-invalid={Boolean(password && !passwordCriteria.hasMaxLength)}
                     aria-describedby="password-length-error"
                     value={password}
@@ -210,8 +210,8 @@ export function ResetPassword() {
                     type={showConfirmPassword ? 'text' : 'password'}
                     autoComplete="new-password"
                     required
-                    maxLength={32}
-                    aria-invalid={Boolean(confirmPassword && password !== confirmPassword)}
+                    maxLength={256}
+                    aria-invalid={Boolean(confirmPassword && password.normalize('NFC') !== confirmPassword.normalize('NFC'))}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="w-full px-3.5 pr-12 py-2.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-purple-600/10 focus:border-purple-600 transition-all text-sm outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
@@ -228,7 +228,7 @@ export function ResetPassword() {
                     {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                {confirmPassword && password !== confirmPassword && (
+                {confirmPassword && password.normalize('NFC') !== confirmPassword.normalize('NFC') && (
                   <p className="mt-1 text-xs font-medium text-rose-600">Passwords do not match.</p>
                 )}
               </div>

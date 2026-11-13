@@ -189,7 +189,11 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
             'midtermEvaluation' => $midtermEvaluation,
             // A passed remedial attempt or cost recovery clears the Student for
             // the course; the recorded grade itself is unchanged.
-            'retentionState' => retention_effective_state((string) $row['retention_state'], $progressions[$enrollmentId] ?? []),
+            'retentionState' => retention_effective_state(
+                (string) $row['retention_state'],
+                $progressions[$enrollmentId] ?? [],
+                $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null
+            ),
             'remedial' => remedial_state_json_legacy_payload($row['remedial_state_json']),
             'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
             'clinicHoursCompleted' => (int) $row['clinic_hours_completed'],

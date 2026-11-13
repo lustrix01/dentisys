@@ -95,8 +95,8 @@ function handle_admin_dashboard_kpis(): void
                 s.year_level, 
                 s.status AS student_status,
                 AVG(COALESCE(egb.final_gwa, e.final_gwa)) AS final_gwa,
-                MAX(CASE " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . "
-                    WHEN 'remedial' THEN 2 ELSE 1 END) AS risk_score
+                MAX(CASE " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)', 'COALESCE(egb.final_gwa, e.final_gwa)') . "
+                    WHEN 'remedial' THEN 3 WHEN 'irregular_reenrollment' THEN 2 ELSE 1 END) AS risk_score
             FROM students s
             LEFT JOIN enrollments e ON s.student_id = e.student_id AND e.cs_id NOT IN (SELECT hx.cs_id FROM class_sections hx WHERE hx.archive_reason IN ('cancelled', 'mistake'))
             LEFT JOIN class_sections cs_scope ON cs_scope.cs_id = e.cs_id
@@ -150,6 +150,7 @@ function handle_admin_dashboard_kpis(): void
         $goodStanding = 0;
         $noGrade = 0;
         $remedialCount = 0;
+        $irregularReenrollmentCount = 0;
         $atRiskStudents = [];
 
         $gwa1_15 = 0;
@@ -159,9 +160,11 @@ function handle_admin_dashboard_kpis(): void
 
         foreach ($students as $s) {
             $riskScore = (int) ($s['risk_score'] ?? 0);
-            if ($riskScore >= 2) {
+            if ($riskScore >= 3) {
                 $remedialCount++;
                 $atRiskStudents[(int) $s['student_id']] = true;
+            } elseif ($riskScore === 2) {
+                $irregularReenrollmentCount++;
             } elseif (isset($s['final_gwa'])) {
                 $goodStanding++;
             } else {
@@ -256,6 +259,7 @@ function handle_admin_dashboard_kpis(): void
                 'noGrade' => $noGrade,
                 'atRisk' => $atRisk,
                 'remedialCount' => $remedialCount,
+                'irregularReenrollmentCount' => $irregularReenrollmentCount,
                 'attendanceRate' => $attendanceRate,
             ],
             'facultyList' => $facultyList,
@@ -269,6 +273,7 @@ function handle_admin_dashboard_kpis(): void
                 'active' => $goodStanding,
                 'noGrade' => $noGrade,
                 'remedial' => $remedialCount,
+                'irregular_reenrollment' => $irregularReenrollmentCount,
             ],
             'classAttendance' => $classAttendance,
             'recentAuditEvents' => admin_recent_audit_events($pdo, (int) $authCtx['user_id']),
@@ -489,23 +494,14 @@ function handle_admin_settings_get(): void
         $pdo = create_pdo($config);
         $authCtx = admin_verify_auth($pdo, $config);
 
-        $stmt = $pdo->query(
-            "SELECT setting_key, setting_value FROM system_settings
-             WHERE setting_key = 'grading_defaults'"
-        );
-        $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_KEY_PAIR) : [];
-        $grading = isset($rows['grading_defaults']) ? json_decode($rows['grading_defaults'], true) : [];
-        $transmutation = $grading['transmutation_defaults'] ?? [];
         $themeStmt = $pdo->prepare("SELECT theme FROM user_accounts WHERE user_id = ?");
         $themeStmt->execute([$authCtx['user_id']]);
         $settings = [
             'theme' => $themeStmt->fetchColumn() ?: 'light',
-            // Fixed college policy (read-only): GWA 2.5 or worse triggers remedial.
+            // Fixed college policy (read-only): GWA 2.5+ is at risk; DentiSys
+            // remedial attempts are limited to completed grades through 4.9.
             'retentionThreshold' => remedial_attempts_course_grade_threshold(),
-            'transmutationDefaults' => [
-                'minimumPercentage' => (float) ($transmutation['minimum_percentage'] ?? 50),
-                'maximumPercentage' => (float) ($transmutation['maximum_percentage'] ?? 100),
-            ],
+            'transmutationDefaults' => ['minimumPercentage' => 50.0, 'maximumPercentage' => 100.0],
         ];
 
         json_response(['status' => 'ok', 'settings' => $settings], 200);
@@ -530,39 +526,9 @@ function handle_admin_settings_update(): void
 
         $settings = $body['data'];
         $theme = (string) ($settings['theme'] ?? 'light');
-        // The retention trigger (fixed at 2.5) and course grading weights (set
-        // per course by Faculty) are not Admin settings; those keys are ignored.
-        $existingGradingStmt = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults' LIMIT 1");
-        $existingGrading = json_decode((string) ($existingGradingStmt->fetchColumn() ?: '{}'), true);
-        $existingTransmutation = $existingGrading['transmutation_defaults'] ?? [];
-        $transmutation = $settings['transmutationDefaults'] ?? [
-            'minimumPercentage' => $existingTransmutation['minimum_percentage'] ?? 50,
-            'maximumPercentage' => $existingTransmutation['maximum_percentage'] ?? 100,
-        ];
-        if ($transmutation instanceof \stdClass) {
-            $transmutation = get_object_vars($transmutation);
-        }
-        $transmutationIsArray = is_array($transmutation);
-        if (!$transmutationIsArray) {
-            $transmutation = [];
-        }
-        $minimumRaw = $transmutation['minimumPercentage'] ?? 50;
-        $maximumRaw = $transmutation['maximumPercentage'] ?? 100;
-        $transmutationNumbersAreValid = is_numeric($minimumRaw) && is_numeric($maximumRaw);
-        $minimumTransmutation = is_numeric($minimumRaw) ? (float) $minimumRaw : 0.0;
-        $maximumTransmutation = is_numeric($maximumRaw) ? (float) $maximumRaw : 0.0;
-        $settings['transmutationDefaults'] = [
-            'minimumPercentage' => $minimumTransmutation,
-            'maximumPercentage' => $maximumTransmutation,
-        ];
-        if (!in_array($theme, ['light', 'dark'], true)
-            || !$transmutationIsArray || !$transmutationNumbersAreValid
-            || !is_finite($minimumTransmutation) || !is_finite($maximumTransmutation)
-            || $minimumTransmutation < 0 || $minimumTransmutation > 100
-            || $maximumTransmutation < 0 || $maximumTransmutation > 100
-            || $minimumTransmutation > $maximumTransmutation
-        ) {
-            safe_error_response('A theme and valid transmutation bounds are required.', 422);
+        // Legacy transmutation bound fields from older clients are ignored.
+        if (!in_array($theme, ['light', 'dark'], true)) {
+            safe_error_response('A valid theme is required.', 422);
             return;
         }
         $pdo->beginTransaction();
@@ -571,40 +537,25 @@ function handle_admin_settings_update(): void
         $oldTheme = $oldThemeStmt->fetchColumn();
         $themeStmt = $pdo->prepare("UPDATE user_accounts SET theme = ? WHERE user_id = ?");
         $themeStmt->execute([$theme, $authCtx['user_id']]);
-        $transmutationStmt = $pdo->prepare(
-            "UPDATE system_settings
-             SET setting_value = jsonb_set(setting_value, '{transmutation_defaults}',
-                    jsonb_build_object('minimum_percentage', ?::numeric, 'maximum_percentage', ?::numeric), true),
-                 updated_at = CURRENT_TIMESTAMP(6), updated_by_user_id = ?
-             WHERE setting_key = 'grading_defaults'"
-        );
-        $transmutationStmt->execute([
-            $minimumTransmutation, $maximumTransmutation, $authCtx['user_id'],
-        ]);
-        // R3/R4: only the changed settings; no row when nothing changed. Audit state does not accept floats, so percentages are text.
-        $fmt = static fn($v): ?string => $v === null ? null : number_format((float) $v, 2, '.', '');
         $changed = audit_changed_fields(
             [
-                'transmutationMinimumPercentage' => $fmt($existingTransmutation['minimum_percentage'] ?? null),
-                'transmutationMaximumPercentage' => $fmt($existingTransmutation['maximum_percentage'] ?? null),
                 'theme' => $oldTheme === false ? null : $oldTheme,
             ],
             [
-                'transmutationMinimumPercentage' => $fmt($minimumTransmutation),
-                'transmutationMaximumPercentage' => $fmt($maximumTransmutation),
                 'theme' => $theme,
             ]
         );
         if ($changed !== null) {
             audit_record_action(
-                $pdo, $config, $authCtx, 'settings', 'system_settings_updated', 'system_settings', 'grading_defaults',
-                sprintf('Updated system settings: transmutation %.2f%%-%.2f%%, theme %s.', $minimumTransmutation, $maximumTransmutation, $theme),
+                $pdo, $config, $authCtx, 'settings', 'system_settings_updated', 'system_settings', 'account_theme',
+                sprintf('Updated account appearance setting: theme %s.', $theme),
                 ['before' => $changed[0], 'after' => $changed[1]]
             );
         }
         $pdo->commit();
 
         $settings['retentionThreshold'] = remedial_attempts_course_grade_threshold();
+        $settings['transmutationDefaults'] = ['minimumPercentage' => 50.0, 'maximumPercentage' => 100.0];
         unset($settings['weights']);
         json_response(['status' => 'ok', 'message' => 'System settings persisted successfully.', 'settings' => $settings], 200);
     } catch (\Throwable $e) {
@@ -709,7 +660,7 @@ function handle_admin_reports_summary(): void
                     s.bu_email, s.year_level, s.status, b.consent_status, b.face_enrolled,
                     COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
                     COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
-                    " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . " AS retention_state,
+                    " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)', 'COALESCE(egb.final_gwa, e.final_gwa)') . " AS retention_state,
                     e.remedial_state_json, ers.status AS normalized_remedial_status,
                     ers.original_grade AS normalized_original_grade,
                     ers.remedial_score AS normalized_remedial_score,
@@ -763,7 +714,7 @@ function handle_admin_reports_summary(): void
 
         $grouped = [];
         $gwaTotals = [];
-        $stateRank = ['remedial' => 3, 'cleared' => 2, 'active' => 1];
+        $stateRank = ['remedial' => 3, 'irregular_reenrollment' => 2, 'cleared' => 1, 'active' => 0];
         foreach ($students as $s) {
             $id = (string) $s['student_id'];
             if (!isset($grouped[$id])) {

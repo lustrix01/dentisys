@@ -97,18 +97,34 @@ $controllerSource = file_get_contents($root . '/backend/controllers/PasswordChan
 $runtimeSource = file_get_contents($root . '/backend/app/auth_runtime.php');
 $authSource = file_get_contents($root . '/backend/app/auth.php');
 $routeSource = file_get_contents($root . '/backend/routes/api.php');
+$passwordHelper = file_get_contents($root . '/backend/app/passwords.php');
 
 password_change_test_assert(str_contains($routeSource, "'path' => '/api/auth/password/change'")
     && str_contains($routeSource, "'handler' => 'handle_password_change'"), 'Password change route is registered with its handler');
 password_change_test_assert(str_contains($authSource, 'function auth_authenticated_context'), 'Authenticated bearer context uses the shared auth verifier');
 password_change_test_assert(str_contains($runtimeSource, 'FOR UPDATE')
-    && str_contains($runtimeSource, 'password_verify($currentPassword')
-    && str_contains($runtimeSource, 'password_hash($newPassword, PASSWORD_DEFAULT)'), 'Password change locks and verifies the account row before hashing');
+    && str_contains($runtimeSource, 'password_verify_user_password($currentPassword')
+    && str_contains($runtimeSource, 'password_hash_user_password($newPassword)'), 'Password change locks and verifies the account row before hashing');
 password_change_test_assert(str_contains($runtimeSource, 'token_version = token_version + 1')
     && str_contains($runtimeSource, "'action_code' => 'password_changed'"), 'Password change invalidates account credentials and records an audit event');
 password_change_test_assert(str_contains($controllerSource, "'post_auth_password_change'")
     && str_contains($controllerSource, "'sign_in_again' => true"), 'Password change is rate limited and returns a sign-in-again contract');
-password_change_test_assert(str_contains($runtimeSource, 'hash_equals($currentPassword, $newPassword)'), 'Exact current-password reuse is rejected');
+password_change_test_assert(str_contains($runtimeSource, 'password_normalize_nfc($currentPassword)')
+    && str_contains($runtimeSource, 'password_normalize_nfc($newPassword)'), 'NFC-equivalent current-password reuse is rejected');
+password_change_test_assert(str_contains($passwordHelper, 'PASSWORD_ARGON2ID')
+    && str_contains($passwordHelper, "'memory_cost' => 19456")
+    && str_contains($passwordHelper, "'time_cost' => 2")
+    && str_contains($passwordHelper, "'threads' => 1"), 'Argon2id uses the approved OWASP baseline');
+password_change_test_assert(!str_contains($runtimeSource, 'password_needs_rehash'), 'Login does not silently rehash legacy bcrypt credentials');
+foreach ([
+    'Faculty invitations' => '/backend/controllers/FacultyInvitationController.php',
+    'Secretary activation' => '/backend/controllers/SecretaryController.php',
+    'Student activation' => '/backend/controllers/StudentAuthController.php',
+    'Password reset' => '/backend/controllers/PasswordResetController.php',
+] as $flowName => $relativePath) {
+    $flowSource = file_get_contents($root . $relativePath);
+    password_change_test_assert(str_contains($flowSource, 'password_hash_user_password($password)'), "{$flowName} writes the approved Argon2id user-password hash");
+}
 
 echo "ALL PASSWORD CHANGE TESTS PASSED.\n";
 

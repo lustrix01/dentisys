@@ -186,7 +186,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     expect(computeRequestCount).toBe(0);
   });
 
-  test('admin renders and saves transmutation defaults from API values', async ({ page }) => {
+  test('admin ignores legacy transmutation defaults and saves only appearance settings', async ({ page }) => {
     await login(page, 'admin');
 
     let postedSettings: Record<string, any> | null = null;
@@ -215,15 +215,11 @@ test.describe('Assessment transmutation UI coverage', () => {
 
     await page.click('a[href="/admin/settings"] >> visible=true');
     await expect(page).toHaveURL('/admin/settings');
-    const minimum = page.locator('label').filter({ hasText: 'Minimum Percentage' }).locator('input');
-    const maximum = page.locator('label').filter({ hasText: 'Maximum Percentage' }).locator('input');
-    await expect(minimum).toHaveValue('42');
-    await expect(maximum).toHaveValue('88');
-    await minimum.fill('45');
-    await maximum.fill('95');
-    await page.getByRole('button', { name: /Save system settings/i }).click();
+    await expect(page.getByText('Minimum Percentage')).toHaveCount(0);
+    await expect(page.getByText('Maximum Percentage')).toHaveCount(0);
+    await page.getByRole('button', { name: /Save appearance setting/i }).click();
     await expect.poll(() => postedSettings).not.toBeNull();
-    expect(postedSettings?.transmutationDefaults).toEqual({ minimumPercentage: 45, maximumPercentage: 95 });
+    expect(postedSettings).not.toHaveProperty('transmutationDefaults');
     // Retention trigger and course component ratios are no longer Admin settings.
     expect(postedSettings).not.toHaveProperty('retentionThreshold');
     expect(postedSettings).not.toHaveProperty('weights');
@@ -232,7 +228,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     await expect(page.getByTestId('grading-policy-card')).toContainText('Retention trigger: Grade 2.5.');
   });
 
-  test('faculty assessment modal uses defaults and allows transmutation without an attendance link', async ({ page }) => {
+  test('faculty assessment modal uses fixed transmutation without an attendance link', async ({ page }) => {
     await login(page, 'faculty');
 
     // Assessments need saved grade weights; both courses are configured.
@@ -335,8 +331,8 @@ test.describe('Assessment transmutation UI coverage', () => {
     const toggle = page.getByRole('checkbox', { name: /Enable attendance-linked transmutation/i });
     await expect(toggle).toBeVisible();
     await toggle.check();
-    await expect(page.locator('label').filter({ hasText: 'Minimum Percentage' }).locator('input')).toHaveValue('42');
-    await expect(page.locator('label').filter({ hasText: 'Maximum Percentage' }).locator('input')).toHaveValue('88');
+    await expect(page.getByText('Minimum Percentage')).toHaveCount(0);
+    await expect(page.getByText('Maximum Percentage')).toHaveCount(0);
     await expect(page.getByLabel('Attendance session date')).toBeVisible();
     await expect(page.getByLabel('Attendance session code')).toBeVisible();
     await expect(page.getByLabel('Attendance session date').locator('option').first()).toHaveText('No link (attendance not considered)');
@@ -349,11 +345,11 @@ test.describe('Assessment transmutation UI coverage', () => {
       classId: '7',
       gradingCategoryId: expect.any(Number),
       transmutationEnabled: true,
-      transmutationMinimumPercentage: 42,
-      transmutationMaximumPercentage: 88,
       attendanceSessionDate: null,
       attendanceSessionCode: null,
     });
+    expect(postedAssessment).not.toHaveProperty('transmutationMinimumPercentage');
+    expect(postedAssessment).not.toHaveProperty('transmutationMaximumPercentage');
     const createdRow = page.getByRole('row').filter({ hasText: 'Unlinked assessment survives refresh' });
     await expect(createdRow).toBeVisible();
     await expect(createdRow.getByText('(No attendance link)')).toBeVisible();

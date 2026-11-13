@@ -202,9 +202,9 @@ function handle_faculty_dashboard_kpis(): void
         $studentStmt = $pdo->prepare("
             SELECT
                 s.student_id,
-                CASE MAX(CASE " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . "
-                        WHEN 'remedial' THEN 2 ELSE 1 END)
-                    WHEN 2 THEN 'remedial' ELSE 'active' END AS retention_state
+                CASE MAX(CASE " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)', 'COALESCE(egb.final_gwa, e.final_gwa)') . "
+                        WHEN 'remedial' THEN 3 WHEN 'irregular_reenrollment' THEN 2 ELSE 1 END)
+                    WHEN 3 THEN 'remedial' WHEN 2 THEN 'irregular_reenrollment' ELSE 'active' END AS retention_state
             FROM students s
             JOIN enrollments e ON s.student_id = e.student_id
             JOIN class_sections cs ON e.cs_id = cs.cs_id
@@ -246,6 +246,7 @@ function handle_faculty_dashboard_kpis(): void
         $totalStudents = count($students);
         $goodStanding = 0;
         $remedial = 0;
+        $irregularReenrollment = 0;
 
         // Students with a Midterm At Risk course (current school year only).
         $midtermStmt = $pdo->prepare("
@@ -271,6 +272,8 @@ function handle_faculty_dashboard_kpis(): void
                 $goodStanding++;
             } elseif ($st === 'remedial') {
                 $remedial++;
+            } elseif ($st === 'irregular_reenrollment') {
+                $irregularReenrollment++;
             } else {
                 $goodStanding++;
             }
@@ -309,6 +312,7 @@ function handle_faculty_dashboard_kpis(): void
                 'retentionAlerts' => $atRisk,
                 'goodStanding' => $goodStanding,
                 'remedialCount' => $remedial,
+                'irregularReenrollmentCount' => $irregularReenrollment,
             ],
             'classes' => $mappedClasses,
         ], 200);
@@ -354,7 +358,7 @@ function faculty_student_name_edit_locked(array $row): bool
 function faculty_map_student_rows(array $rows, ?float $retentionThreshold = null): array
 {
     $byStudent = [];
-    $statusPriority = ['active' => 0, 'cleared' => 1, 'remedial' => 2];
+    $statusPriority = ['active' => 0, 'cleared' => 1, 'irregular_reenrollment' => 2, 'remedial' => 3];
     foreach ($rows as $row) {
         $id = (string) $row['student_id'];
         if (!isset($byStudent[$id])) {
@@ -460,7 +464,7 @@ function handle_faculty_students(): void
                 cs.cs_id, cs.cs_name, cs.secretary_user_id, e.enrollment_id,
                 COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
                 e.grade_components_json,
-                " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . " AS retention_state,
+                " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)', 'COALESCE(egb.final_gwa, e.final_gwa)') . " AS retention_state,
                 e.clinic_hours_completed, c.course_code,
                 c.name AS course_name, c.units, c.is_clinical
             FROM students s
@@ -3059,20 +3063,19 @@ function faculty_course_grade_retention_state(?float $gwa, float $threshold): ?s
     return $gwa >= $threshold ? 'remedial' : 'active';
 }
 
+function faculty_remedial_attempt_outcome(float $percentage): string
+{
+    return $percentage >= 75.0 ? 'passed' : 'failed';
+}
+
+function faculty_remedial_grade_is_eligible(?float $gwa, float $threshold = 2.5): bool
+{
+    return $gwa !== null && is_finite($gwa) && $gwa >= $threshold && $gwa < 5.0;
+}
+
 function faculty_transmutation_defaults(PDO $pdo): array
 {
-    $stmt = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults' LIMIT 1");
-    $grading = json_decode((string) ($stmt->fetchColumn() ?: '{}'), true);
-    $defaults = $grading['transmutation_defaults'] ?? [];
-    $minimum = (float) ($defaults['minimum_percentage'] ?? 50);
-    $maximum = (float) ($defaults['maximum_percentage'] ?? 100);
-    if (!is_finite($minimum) || !is_finite($maximum) || $minimum < 0 || $maximum > 100 || $minimum > $maximum) {
-        throw new RuntimeException('Persisted transmutation defaults are invalid.');
-    }
-    return [
-        'minimumPercentage' => $minimum,
-        'maximumPercentage' => $maximum,
-    ];
+    return ['minimumPercentage' => 50.0, 'maximumPercentage' => 100.0];
 }
 
 /**
@@ -3126,7 +3129,7 @@ function faculty_effective_assessment_percentage(
     }
     // No link (or a revoked linked session): attendance is not considered.
     if ($attendanceStatus === null || in_array($attendanceStatus, ['present', 'late', 'excused'], true)) {
-        return $minimumPercentage + (($rawPercentage / 100) * ($maximumPercentage - $minimumPercentage));
+        return 50.0 + ($rawPercentage / 2.0);
     }
     throw new InvalidArgumentException('Attendance status is invalid for transmutation.');
 }
@@ -3598,8 +3601,8 @@ function handle_faculty_assessments_get(): void
                 'instructions' => $row['instructions'],
                 'status' => $row['status'],
                 'transmutationEnabled' => filter_var($row['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN),
-                'transmutationMinimumPercentage' => (float) $row['transmutation_minimum_percentage'],
-                'transmutationMaximumPercentage' => (float) $row['transmutation_maximum_percentage'],
+                'transmutationMinimumPercentage' => 50.0,
+                'transmutationMaximumPercentage' => 100.0,
                 'attendanceSessionDate' => $row['attendance_session_date'],
                 'attendanceSessionCode' => $row['attendance_session_code'],
                 'classId' => (string) $row['cs_id'],
@@ -3786,12 +3789,9 @@ function handle_faculty_assessments_save(): void
             $transmutationEnabled = array_key_exists('transmutationEnabled', $item)
                 ? filter_var($item['transmutationEnabled'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
                 : ($existing ? filter_var($existing['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN) : false);
-            $minimumPercentage = array_key_exists('transmutationMinimumPercentage', $item)
-                ? (float) $item['transmutationMinimumPercentage']
-                : (float) ($existing['transmutation_minimum_percentage'] ?? $transmutationDefaults['minimumPercentage']);
-            $maximumPercentage = array_key_exists('transmutationMaximumPercentage', $item)
-                ? (float) $item['transmutationMaximumPercentage']
-                : (float) ($existing['transmutation_maximum_percentage'] ?? $transmutationDefaults['maximumPercentage']);
+            // Old clients may still submit bound fields. They are ignored.
+            $minimumPercentage = 50.0;
+            $maximumPercentage = 100.0;
             $attendanceSessionDate = array_key_exists('attendanceSessionDate', $item)
                 ? trim((string) ($item['attendanceSessionDate'] ?? ''))
                 : (string) ($existing['attendance_session_date'] ?? '');
@@ -3803,20 +3803,13 @@ function handle_faculty_assessments_save(): void
             $sessionDate = $attendanceSessionDate === null
                 ? null
                 : DateTimeImmutable::createFromFormat('!Y-m-d', $attendanceSessionDate);
-            if ((array_key_exists('transmutationMinimumPercentage', $item)
-                    && !is_numeric($item['transmutationMinimumPercentage']))
-                || (array_key_exists('transmutationMaximumPercentage', $item)
-                    && !is_numeric($item['transmutationMaximumPercentage']))
-                || ($attendanceSessionCode !== null && strlen($attendanceSessionCode) > 100)
+            if (($attendanceSessionCode !== null && strlen($attendanceSessionCode) > 100)
                 || $transmutationEnabled === null
-                || !is_finite($minimumPercentage) || !is_finite($maximumPercentage)
-                || $minimumPercentage < 0 || $maximumPercentage > 100
-                || $minimumPercentage > $maximumPercentage
                 || (($attendanceSessionDate === null) !== ($attendanceSessionCode === null))
                 || ($attendanceSessionDate !== null && (!$sessionDate || $sessionDate->format('Y-m-d') !== $attendanceSessionDate))
             ) {
                 $pdo->rollBack();
-                safe_error_response('Transmutation bounds and attendance linkage are invalid.', 422);
+                safe_error_response('Attendance linkage is invalid.', 422);
                 return;
             }
             if ($attendanceSessionDate !== null && $attendanceSessionCode !== null) {
@@ -3840,7 +3833,6 @@ function handle_faculty_assessments_save(): void
                      SET cs_id = ?, title = ?, type = ?, grading_category_id = ?, grading_period = ?,
                          max_score = ?, weight = ?, due_date = ?, instructions = ?,
                          status = ?, transmutation_enabled = ?,
-                         transmutation_minimum_percentage = ?, transmutation_maximum_percentage = ?,
                          attendance_session_date = ?, attendance_session_code = ?
                      FROM class_sections AS cs
                      WHERE a.assessment_id = ? AND cs.cs_id = a.cs_id AND cs.instructor_user_id = ?"
@@ -3849,7 +3841,7 @@ function handle_faculty_assessments_save(): void
                     $csId, $title, $type, $gradingCategoryId, $period, $maxScore, $weight,
                     $item['dueDate'] ?? null, $item['instructions'] ?? null,
                     $item['status'] ?? 'Active', $transmutationEnabled ? 'true' : 'false',
-                    $minimumPercentage, $maximumPercentage, $attendanceSessionDate, $attendanceSessionCode,
+                    $attendanceSessionDate, $attendanceSessionCode,
                     $assessmentId, $authCtx['user_id'],
                 ]);
                 if ($stmt->rowCount() === 0) {
@@ -3908,8 +3900,6 @@ function handle_faculty_assessments_save(): void
                         filter_var($existing['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false',
                         $transmutationEnabled ? 'true' : 'false',
                     ],
-                    'transmutationMinimumPercentage' => [faculty_grade_text($existing['transmutation_minimum_percentage']), faculty_grade_text($minimumPercentage)],
-                    'transmutationMaximumPercentage' => [faculty_grade_text($existing['transmutation_maximum_percentage']), faculty_grade_text($maximumPercentage)],
                     'attendanceSessionDate' => [$text($existing['attendance_session_date']), $attendanceSessionDate],
                     'attendanceSessionCode' => [$text($existing['attendance_session_code']), $attendanceSessionCode],
                 ];
@@ -4642,6 +4632,10 @@ function faculty_save_computed_grade(PDO $pdo, float $percentage, float $gwa, st
  */
 function faculty_notify_grade_retention_change(PDO $pdo, array $before, string $after, float $gwa, int $enrollmentId): void
 {
+    // A 5.0 follows the in-person irregular reenrollment path, not a DentiSys remedial notice.
+    if ($gwa >= 5.0) {
+        return;
+    }
     $previous = strtolower((string) ($before['retention_state'] ?? ''));
     $current = strtolower($after);
     $recipient = (int) ($before['recipient_user_id'] ?? 0);
@@ -6879,8 +6873,7 @@ function handle_faculty_retention_get(): void
             // Same gates the remedial save endpoint enforces, so the page only
             // offers students the server will accept.
             $stage = (string) (($progressions[$enrollmentId] ?? [])['stage'] ?? 'none');
-            $remedialEligible = $gwa !== null
-                && $gwa >= $retentionThreshold
+            $remedialEligible = faculty_remedial_grade_is_eligible($gwa, $retentionThreshold)
                 && $isCurrentYear
                 && !($legacyByEnrollment[$enrollmentId] ?? false)
                 && in_array($stage, ['none', 'attempt_1_pending', 'attempt_2_available', 'attempt_2_pending'], true);
@@ -6911,7 +6904,7 @@ function handle_faculty_retention_get(): void
                 'subjectCode' => $row['course_code'],
                 'percentage' => $row['final_percentage'] !== null ? (float) $row['final_percentage'] : null,
                 'gwa' => $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
-                'state' => retention_effective_state((string) $row['retention_state'], $progressions[$enrollmentId] ?? []),
+                'state' => retention_effective_state((string) $row['retention_state'], $progressions[$enrollmentId] ?? [], $gwa),
                 'storedState' => $row['retention_state'],
                 'remedial' => remedial_state_json_legacy_payload($row['remedial_state_json']),
                 'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
@@ -6983,6 +6976,33 @@ function faculty_retention_save_legacy_remedial(PDO $pdo, array $authCtx, array 
         : [$json, $state, $studentId, $classId, $authCtx['user_id']];
 
     $pdo->beginTransaction();
+    $eligibilityWhere = $enrollmentId > 0 ? 'e.enrollment_id = ?' : 'e.student_id = ? AND e.cs_id = ?';
+    $eligibilityParams = $enrollmentId > 0
+        ? [$enrollmentId, $authCtx['user_id']]
+        : [$studentId, $classId, $authCtx['user_id']];
+    $eligibilityStmt = $pdo->prepare(
+        "SELECT COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa
+           FROM enrollments e
+           JOIN class_sections cs ON cs.cs_id = e.cs_id
+           LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+          WHERE {$eligibilityWhere} AND cs.instructor_user_id = ?
+            AND LOWER(e.status) = 'active'
+          FOR UPDATE OF e"
+    );
+    $eligibilityStmt->execute($eligibilityParams);
+    $eligibility = $eligibilityStmt->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($eligibility)) {
+        $pdo->rollBack();
+        safe_error_response('Enrollment not found in an assigned class.', 404);
+        return;
+    }
+    if (!faculty_remedial_grade_is_eligible(
+        $eligibility['final_gwa'] !== null ? (float) $eligibility['final_gwa'] : null
+    )) {
+        $pdo->rollBack();
+        safe_error_response('Remedial records require a completed final grade from 2.5 through 4.9.', 409);
+        return;
+    }
     $stmt = $pdo->prepare(
         "UPDATE enrollments AS e
             SET remedial_state_json = ?, retention_state = ?
@@ -7042,6 +7062,21 @@ function faculty_retention_save_legacy_remedial(PDO $pdo, array $authCtx, array 
  * failed. Passing (final grade better than the retention trigger) clears the
  * Student for the course; failing is final. The course grade is unchanged.
  */
+function faculty_parse_cost_recovery_grade(mixed $rawGrade): float
+{
+    if (is_bool($rawGrade) || !is_numeric($rawGrade) || !is_finite((float) $rawGrade)
+        || (float) $rawGrade < 1.0 || (float) $rawGrade > 5.0
+        || abs(((float) $rawGrade * 10) - round((float) $rawGrade * 10)) > 1e-8) {
+        throw remedial_attempts_error('Enter the cost recovery final grade from 1.0 to 5.0 using one decimal place.', 'COST_RECOVERY_GRADE_INVALID');
+    }
+    return round((float) $rawGrade * 10) / 10;
+}
+
+function faculty_cost_recovery_outcome(float $grade): string
+{
+    return $grade <= 2.4 ? 'passed' : 'failed';
+}
+
 function handle_faculty_retention_cost_recovery_save(): void
 {
     $pdo = null;
@@ -7058,11 +7093,7 @@ function handle_faculty_retention_cost_recovery_save(): void
         if ($enrollmentId <= 0) {
             throw remedial_attempts_error('A valid enrollmentId is required.', 'REMEDIAL_ENROLLMENT_REQUIRED');
         }
-        if (is_bool($rawGrade) || !is_numeric($rawGrade) || !is_finite((float) $rawGrade)
-            || (float) $rawGrade < 1.0 || (float) $rawGrade > 5.0) {
-            throw remedial_attempts_error('Enter the cost recovery final grade from 1.00 to 5.00.', 'COST_RECOVERY_GRADE_INVALID');
-        }
-        $finalGrade = round((float) $rawGrade, 2);
+        $finalGrade = faculty_parse_cost_recovery_grade($rawGrade);
 
         $pdo->beginTransaction();
         $targetStmt = $pdo->prepare(
@@ -7122,9 +7153,8 @@ function handle_faculty_retention_cost_recovery_save(): void
             return;
         }
 
-        $threshold = remedial_attempts_course_grade_threshold($pdo);
-        // Passing means a grade better (numerically lower) than the trigger.
-        $outcome = $finalGrade < $threshold ? 'passed' : 'failed';
+        // Cost recovery passes through 2.4; 2.5 and above fail.
+        $outcome = faculty_cost_recovery_outcome($finalGrade);
         $insert = $pdo->prepare(
             'INSERT INTO enrollment_cost_recovery (enrollment_id, final_grade, outcome, actor_user_id)
              VALUES (?, ?, ?, ?)'
@@ -7231,7 +7261,7 @@ function handle_faculty_retention_remedial_save(): void
             );
         }
         // Recheck the parser's finite/range contract at the write boundary;
-        // outcomes remain server-derived at the approved 50 percent threshold.
+        // outcomes remain server-derived at the approved 75 percent threshold.
         if ($request['hasPercentage'] && (!is_finite((float) $request['percentage'])
             || (float) $request['percentage'] < 0 || (float) $request['percentage'] > 100)) {
             throw remedial_attempts_error(
@@ -7328,10 +7358,10 @@ function handle_faculty_retention_remedial_save(): void
             return;
         }
         $threshold = remedial_attempts_course_grade_threshold($pdo);
-        if ((float) $target['final_gwa'] < $threshold) {
+        if (!faculty_remedial_grade_is_eligible((float) $target['final_gwa'], $threshold)) {
             $pdo->rollBack();
             remedial_attempts_error_response(remedial_attempts_error(
-                'Remedial progression is only available when the final course grade meets the configured trigger.',
+                'Remedial progression is only available for a completed final grade from 2.5 through 4.9. A 5.0 requires in-person irregular reenrollment.',
                 'REMEDIAL_NOT_REQUIRED',
                 409
             ));
@@ -7386,7 +7416,7 @@ function handle_faculty_retention_remedial_save(): void
 
         $hasScheduledDate = array_key_exists('scheduledDate', $requestData);
         $outcome = $request['hasPercentage']
-            ? ((float) $request['percentage'] >= 50.0 ? 'passed' : 'failed')
+            ? faculty_remedial_attempt_outcome((float) $request['percentage'])
             : 'pending';
         $effectiveScheduledDate = $existing === null
             ? $request['scheduledDate']
@@ -7903,7 +7933,7 @@ function handle_faculty_reports_summary(): void
                     s.bu_email, s.year_level, s.status, b.consent_status, b.face_enrolled,
                     COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
                     COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
-                    " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . " AS retention_state,
+                    " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)', 'COALESCE(egb.final_gwa, e.final_gwa)') . " AS retention_state,
                     e.remedial_state_json,
                     e.grade_components_json, e.clinic_hours_completed, cs.cs_id, cs.cs_name,
                     cs.school_year,
@@ -7926,7 +7956,7 @@ function handle_faculty_reports_summary(): void
         $grouped = [];
         // Standing across this Faculty member's courses: the most serious
         // retention state, and a unit-weighted GWA (overall and per school year).
-        $stateRank = ['remedial' => 3, 'cleared' => 2, 'active' => 1];
+        $stateRank = ['remedial' => 3, 'irregular_reenrollment' => 2, 'cleared' => 1, 'active' => 0];
         $gwaTotals = [];
         foreach ($students as $s) {
             $id = (string) $s['student_id'];
@@ -9150,7 +9180,7 @@ function handle_faculty_class_unenroll_student(): void
 function faculty_class_has_pending_remedial(PDO $pdo, int $csId): bool
 {
     $stmt = $pdo->prepare(
-        "SELECT e.enrollment_id, e.remedial_state_json,
+        "SELECT e.enrollment_id, e.remedial_state_json, COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
                 COALESCE(egb.retention_state, e.retention_state) AS retention_state
            FROM enrollments e
            LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
@@ -9169,7 +9199,11 @@ function faculty_class_has_pending_remedial(PDO $pdo, int $csId): bool
         if (in_array($stage, ['attempt_1_pending', 'attempt_2_available', 'attempt_2_pending', 'cost_recovery_required'], true)) {
             return true;
         }
-        if ($stage !== 'cost_recovery_failed' && retention_effective_state((string) $row['retention_state'], $progression) === 'remedial') {
+        if ($stage !== 'cost_recovery_failed' && retention_effective_state(
+            (string) $row['retention_state'],
+            $progression,
+            $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null
+        ) === 'remedial') {
             return true;
         }
     }

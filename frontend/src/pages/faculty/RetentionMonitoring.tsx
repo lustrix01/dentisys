@@ -253,6 +253,7 @@ const retentionStateLabel = (state: FacultyRetentionState): string => {
   switch (state) {
     case 'active': return 'Active';
     case 'remedial': return 'Remedial';
+    case 'irregular_reenrollment': return 'Irregular reenrollment';
     case 'cleared': return 'Cleared';
     case 'archived': return 'Archived';
     default: return 'Unavailable';
@@ -262,6 +263,7 @@ const retentionStateLabel = (state: FacultyRetentionState): string => {
 const statusBadgeClasses = (state: FacultyRetentionState): string => {
   switch (state) {
     case 'remedial': return 'bg-accent-50 text-accent-700 dark:bg-accent-950/40 dark:text-accent-300 border border-accent-200/60';
+    case 'irregular_reenrollment': return 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60';
     case 'active': return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60';
     case 'cleared': return 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300 border border-teal-200/60';
     case 'archived': return 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700';
@@ -581,7 +583,11 @@ export const RetentionMonitoring: React.FC = () => {
     if (!costRecoveryRecord) return;
     const grade = Number(costRecoveryGrade);
     if (!Number.isFinite(grade) || grade < 1 || grade > 5) {
-      showFeedback('Enter the cost recovery final grade from 1.00 to 5.00.', 'error');
+      showFeedback('Enter the cost recovery final grade from 1.0 to 5.0 using one decimal place.', 'error');
+      return;
+    }
+    if (Math.abs(grade * 10 - Math.round(grade * 10)) > 1e-8) {
+      showFeedback('Enter the cost recovery final grade using one decimal place.', 'error');
       return;
     }
     setIsSubmitting(true);
@@ -677,9 +683,9 @@ export const RetentionMonitoring: React.FC = () => {
     setRemedialScore(val);
     const num = Number(val);
     if (Number.isFinite(num) && val.trim() !== '') {
-      if (num >= 50 && resolveOutcome !== 'pass') {
+      if (num >= 75 && resolveOutcome !== 'pass') {
         setResolveOutcome('pass');
-      } else if (num < 50 && resolveOutcome !== 'fail') {
+      } else if (num < 75 && resolveOutcome !== 'fail') {
         setResolveOutcome('fail');
       }
     }
@@ -711,9 +717,9 @@ export const RetentionMonitoring: React.FC = () => {
       return;
     }
 
-    const outcomeContradictsScore = resolveOutcome === 'pass' ? score < 50 : resolveOutcome === 'fail' ? score >= 50 : false;
+    const outcomeContradictsScore = resolveOutcome === 'pass' ? score < 75 : resolveOutcome === 'fail' ? score >= 75 : false;
     if (outcomeContradictsScore) {
-      showFeedback('The selected outcome does not match the score. 50% or higher passes.', 'error');
+      showFeedback('The selected outcome does not match the score. 75% or higher passes.', 'error');
       return;
     }
 
@@ -734,7 +740,7 @@ export const RetentionMonitoring: React.FC = () => {
       });
 
       let attempt2Failed = false;
-      if (resolveAttemptNumber === 1 && score < 50 && reattemptDate.trim().length > 0) {
+      if (resolveAttemptNumber === 1 && score < 75 && reattemptDate.trim().length > 0) {
         try {
           await saveFacultyRemedialApi({
             enrollmentId: selectedResolveRecord.enrollmentId,
@@ -753,7 +759,7 @@ export const RetentionMonitoring: React.FC = () => {
       resetResolveForm();
       const notified = saved.notification?.created === true;
       const notifiedText = notified ? ' Student notified in their portal account.' : '';
-      const outcomeMsg = score >= 50
+      const outcomeMsg = score >= 75
         ? `Remedial exam passed! Student cleared.${notifiedText}`
         : resolveAttemptNumber === 1
           ? (attempt2Failed
@@ -1218,7 +1224,7 @@ export const RetentionMonitoring: React.FC = () => {
                     Pass
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                    Score ≥ 50%. Remedial passed and student is cleared.
+                    Score ≥ 75%. Remedial passed and student is cleared.
                   </p>
                 </button>
 
@@ -1241,8 +1247,8 @@ export const RetentionMonitoring: React.FC = () => {
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                     {resolveAttemptNumber === 1
-                      ? 'Score < 50%. Flagged for attempt 2 re-attempt.'
-                      : 'Score < 50%. Move to cost recovery program.'}
+                      ? 'Score < 75%. Flagged for attempt 2 re-attempt.'
+                      : 'Score < 75%. Move to cost recovery program.'}
                   </p>
                 </button>
               </div>
@@ -1265,7 +1271,7 @@ export const RetentionMonitoring: React.FC = () => {
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold text-sm"
               />
               <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-1">
-                The server determines pass or fail at 50% or higher. This form sends only the attempt number and percentage.
+                The server determines pass or fail at 75% or higher. This form sends only the attempt number and percentage.
               </span>
             </div>
 
@@ -1355,8 +1361,8 @@ export const RetentionMonitoring: React.FC = () => {
             <p className="text-slate-600 dark:text-slate-300">{textOrUnavailable(costRecoveryRecord.studentName, 'Student name unavailable')} · {textOrUnavailable(costRecoveryRecord.subjectCode, 'Subject code unavailable')}</p>
             <p className="text-slate-500 dark:text-slate-400">Both remedial attempts were failed. Enter the final grade earned in the cost recovery program. A grade better than the retention trigger clears the student; otherwise the course is failed. The original course grade is not changed.</p>
             <label className="font-bold text-slate-700 dark:text-slate-300 block">
-              Cost Recovery Final Grade (1.00 – 5.00)
-              <input type="number" min="1" max="5" step="0.01" required value={costRecoveryGrade} onChange={(event) => setCostRecoveryGrade(event.target.value)} placeholder="e.g. 2.25"
+              Cost Recovery Final Grade (1.0 – 5.0)
+              <input type="number" min="1" max="5" step="0.1" required value={costRecoveryGrade} onChange={(event) => setCostRecoveryGrade(event.target.value)} placeholder="e.g. 2.4"
                 className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" />
             </label>
             <div className="pt-2 flex justify-end gap-2">

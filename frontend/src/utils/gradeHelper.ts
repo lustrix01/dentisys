@@ -13,10 +13,8 @@ export const effectiveAssessmentPercentage = (
   if (!assessment.transmutationEnabled) return rawPercentage;
   if (!attendanceStatus) return null;
   if (attendanceStatus === 'absent') return 0;
-  const minimum = assessment.transmutationMinimumPercentage ?? 50;
-  const maximum = assessment.transmutationMaximumPercentage ?? 100;
   if (attendanceStatus === 'unlinked' || attendanceStatus === 'present' || attendanceStatus === 'late' || attendanceStatus === 'excused') {
-    return minimum + (rawPercentage / 100) * (maximum - minimum);
+    return 50 + rawPercentage / 2;
   }
   return null;
 };

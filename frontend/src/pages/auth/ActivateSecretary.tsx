@@ -80,7 +80,7 @@ export function ActivateSecretary() {
 
   const isPasswordMatch = useMemo(() => {
     if (!confirmPassword) return true;
-    return password === confirmPassword;
+    return password.normalize('NFC') === confirmPassword.normalize('NFC');
   }, [password, confirmPassword]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -93,7 +93,7 @@ export function ActivateSecretary() {
       return;
     }
 
-    if (password !== confirmPassword) {
+    if (password.normalize('NFC') !== confirmPassword.normalize('NFC')) {
       setErrorMessage('Passwords do not match.');
       return;
     }
@@ -357,7 +357,7 @@ export function ActivateSecretary() {
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="new-password"
                       required
-                      maxLength={32}
+                      maxLength={256}
                       aria-invalid={Boolean(password && !passwordCriteria.hasMaxLength)}
                       aria-describedby="secretary-password-length-error"
                       value={password}
@@ -426,7 +426,7 @@ export function ActivateSecretary() {
                       type={showConfirmPassword ? 'text' : 'password'}
                       autoComplete="new-password"
                       required
-                      maxLength={32}
+                      maxLength={256}
                       aria-invalid={confirmTouched && confirmPassword !== '' && !isPasswordMatch}
                       value={confirmPassword}
                       onBlur={() => setConfirmTouched(true)}

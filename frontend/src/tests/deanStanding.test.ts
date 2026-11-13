@@ -8,6 +8,7 @@ test('Good Standing needs a final grade; Remedial and Cleared keep precedence', 
   assert.equal(classStanding({ status: 'active' }), 'noGrade');
   assert.equal(classStanding({ status: 'remedial', classGraded: false }), 'remedial');
   assert.equal(classStanding({ status: 'cleared', classGraded: true }), 'cleared');
+  assert.equal(classStanding({ status: 'irregular_reenrollment', classGraded: true }), 'irregular_reenrollment');
 });
 
 test('page-wide standing counts any final grade in the year', () => {

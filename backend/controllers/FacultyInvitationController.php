@@ -976,7 +976,7 @@ function handle_auth_faculty_invitation_accept(): void
             return;
         }
 
-        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+        $passwordHash = password_hash_user_password($password);
         $tokenDigest = hash('sha256', $data['token'], true);
         $pdo = create_pdo($config);
         $pdo->beginTransaction();

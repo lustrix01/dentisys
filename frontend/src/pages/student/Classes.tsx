@@ -81,6 +81,7 @@ const retentionChip = (cls: StudentAcademicClass): { label: string; className: s
   const state = (cls.retentionState ?? '').trim();
   const key = state.toLowerCase();
   if (key === 'remedial') return { label: 'Remedial', className: 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300' };
+  if (key === 'irregular_reenrollment') return { label: 'Irregular reenrollment', className: 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300' };
   if (typeof cls.grade !== 'number') return { label: 'No grade yet', className: grey };
   if (key === 'active') return { label: 'Good Standing', className: green };
   if (key === 'cleared') return { label: 'Cleared', className: green };
@@ -566,7 +567,7 @@ export const Classes: React.FC = () => {
                 <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Grade</dt><dd className="mt-0.5 font-semibold">{cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage} grade={cls.grade} lecture={cls.gradingComponentMode === 'lecture' ? lectureHoverSteps(cls.gradeComponents) : null}>{formatGrade(cls.grade)}</GradeValue>}</dd></div>
                 <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Score %</dt><dd className="mt-0.5 font-semibold">{cls.percentage === null ? 'Pending' : `${cls.percentage}%`}</dd></div>
                 <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Clinical Hours</dt><dd className="mt-0.5 font-semibold">{cls.clinicHoursCompleted} hrs</dd></div>
-                <div className="col-span-2"><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Retention</dt><dd className="mt-0.5 font-semibold">{cls.retentionState || 'Unavailable'}</dd></div>
+                <div className="col-span-2"><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Retention</dt><dd className="mt-0.5 font-semibold">{retentionChip(cls).label}</dd></div>
               </dl>
             </article>
           ))}
@@ -579,7 +580,7 @@ export const Classes: React.FC = () => {
             <td className="p-2">{cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage} grade={cls.grade} lecture={cls.gradingComponentMode === 'lecture' ? lectureHoverSteps(cls.gradeComponents) : null}>{formatGrade(cls.grade)}</GradeValue>}</td>
             <td className="p-2">{cls.percentage === null ? 'Pending' : `${cls.percentage}%`}</td>
             <td className="p-2">{cls.clinicHoursCompleted} hrs</td>
-            <td className="p-2">{cls.retentionState || 'Unavailable'}</td>
+            <td className="p-2">{retentionChip(cls).label}</td>
           </tr>)}</tbody>
         </table></div>
       </Card>}

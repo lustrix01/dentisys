@@ -30,6 +30,10 @@ import { isAuthoritativeActiveEnrolled, type StudentAcademicProfile } from '../.
 import GradeValue from '../../components/GradeValue';
 import { formatGrade } from '../../utils/gradeHelper';
 
+const retentionStateLabel = (state: string | null | undefined): string => (
+  state?.toLowerCase() === 'irregular_reenrollment' ? 'Irregular reenrollment' : state || 'Good standing'
+);
+
 export const StudentUnavailable: React.FC<{ title: string }> = ({ title }) => (
   <div className="max-w-3xl mx-auto pt-6 animate-fade-in" role="status">
     <Card className="p-8 border-amber-200/70 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 shadow-sm">
@@ -172,7 +176,7 @@ export const RealStudentDashboard: React.FC = () => {
               : 'capitalize bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
         }`}
       >
-        {noGradeYet ? 'No grade yet' : cls.retentionState || 'Good standing'}
+        {noGradeYet ? 'No grade yet' : retentionStateLabel(cls.retentionState)}
       </span>
     );
   };

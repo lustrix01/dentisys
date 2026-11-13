@@ -55,7 +55,7 @@ type AttemptOutcome = 'passed' | 'failed';
 type Progression = 'first_attempt_pending' | 'second_attempt_available' | 'passed' | 'cost_recovery_required';
 
 const deriveOutcome = (percentageResult: number): AttemptOutcome => (
-  percentageResult >= 50 ? 'passed' : 'failed'
+  percentageResult >= 75 ? 'passed' : 'failed'
 );
 
 const nextProgression = (attemptNumber: 1 | 2, outcome: AttemptOutcome): Progression => {
@@ -66,9 +66,9 @@ const nextProgression = (attemptNumber: 1 | 2, outcome: AttemptOutcome): Progres
 test('Approved percentage boundaries derive the exact remedial outcome', () => {
   const cases: Array<[number, AttemptOutcome]> = [
     [0, 'failed'],
-    [49.99, 'failed'],
-    [50, 'passed'],
-    [50.01, 'passed'],
+    [74.99, 'failed'],
+    [75, 'passed'],
+    [75.01, 'passed'],
     [100, 'passed'],
   ];
 
@@ -109,12 +109,11 @@ test('Faculty UI exposes both attempts and the truthful terminal stage', () => {
   assert.match(facultyPage, /attemptNumber/);
   assert.match(facultyPage, /stageLabel/);
   assert.match(facultyPage, /saveFacultyRemedialApi/);
-  // UI-003 also uses 75% for informational risk projection. Check the remedial
-  // result form specifically so that its distinct 50% policy stays enforced.
+  // The remedial result form uses the 75% raw-score pass threshold.
   const resultForm = facultyPage.match(/title="Grade Remedial Exam Result"[\s\S]*?<\/form>/)?.[0];
   assert.ok(resultForm, 'Remedial result form exists');
-  assert.match(resultForm, /pass or fail at 50% or higher/);
-  assert.doesNotMatch(resultForm, /75\s*%|>=\s*75|>=\s*0\.75/);
+  assert.match(resultForm, /pass or fail at 75% or higher/);
+  assert.doesNotMatch(resultForm, /50\s*%|>=\s*50|>=\s*0\.5/);
   assert.doesNotMatch(facultyPage, /status\s*:\s*['"](?:passed|failed)['"]/i);
 });
 

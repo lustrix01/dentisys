@@ -4,13 +4,14 @@ export const STANDING_LABELS: Record<string, string> = {
   active: 'Good Standing',
   noGrade: 'No grade yet',
   remedial: 'Remedial',
+  irregular_reenrollment: 'Irregular reenrollment',
   cleared: 'Cleared',
 };
 
 /** Standing for the class shown with the student (class cards, drill-downs, exports). */
 export function classStanding(s: { status?: string | null; classGraded?: boolean }): string {
   const st = String(s.status || '').toLowerCase();
-  if (st === 'remedial' || st === 'cleared') return st;
+  if (st === 'remedial' || st === 'cleared' || st === 'irregular_reenrollment') return st;
   return s.classGraded ? 'active' : 'noGrade';
 }
 

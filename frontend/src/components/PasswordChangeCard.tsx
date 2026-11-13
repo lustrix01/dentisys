@@ -45,7 +45,7 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
 
   const criteria = validatePasswordRequirements(newPassword);
   const newPasswordTooLong = newPassword !== '' && !criteria.hasMaxLength;
-  const confirmationMismatch = confirmPassword !== '' && newPassword !== confirmPassword;
+  const confirmationMismatch = confirmPassword !== '' && newPassword.normalize('NFC') !== confirmPassword.normalize('NFC');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,7 +69,7 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
       setError('New password cannot be the same as current password.');
       return;
     }
-    if (newPassword !== confirmPassword) {
+    if (newPassword.normalize('NFC') !== confirmPassword.normalize('NFC')) {
       setError('New password and confirmation password do not match.');
       return;
     }
@@ -183,7 +183,7 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
                 autoComplete="new-password"
                 required
                 minLength={8}
-                maxLength={32}
+                maxLength={256}
                 aria-describedby="new-password-requirements new-password-length-error"
                 aria-invalid={newPassword !== '' && !criteria.isValid}
                 value={newPassword}
@@ -241,7 +241,7 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
                 id="confirm-password"
                 autoComplete="new-password"
                 required
-                maxLength={32}
+                maxLength={256}
                 aria-invalid={confirmationMismatch}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -265,7 +265,7 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
           <div className="pt-2 flex justify-end">
             <button
               type="submit"
-              disabled={submitting || !criteria.isValid || newPassword !== confirmPassword || !currentPassword}
+              disabled={submitting || !criteria.isValid || newPassword.normalize('NFC') !== confirmPassword.normalize('NFC') || !currentPassword}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-600 hover:bg-accent-700 disabled:opacity-50 text-white text-xs font-bold shadow-md transition-all cursor-pointer"
             >
               {submitting ? (

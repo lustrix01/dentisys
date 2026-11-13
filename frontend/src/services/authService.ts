@@ -117,13 +117,14 @@ export const validatePersonName = (name: string): { isValid: boolean; message: s
  * Evaluates password strength requirements.
  */
 export const validatePasswordRequirements = (password: string): PasswordCriteria => {
-  const characterCount = Array.from(password).length;
+  const normalizedPassword = password.normalize('NFC');
+  const characterCount = Array.from(normalizedPassword).length;
   const hasMinLength = characterCount >= 8;
   const hasMaxLength = characterCount <= 32;
-  const hasUppercase = /[A-Z]/.test(password);
-  const hasLowercase = /[a-z]/.test(password);
-  const hasNumber = /[0-9]/.test(password);
-  const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+  const hasUppercase = /[A-Z]/.test(normalizedPassword);
+  const hasLowercase = /[a-z]/.test(normalizedPassword);
+  const hasNumber = /[0-9]/.test(normalizedPassword);
+  const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(normalizedPassword);
 
   const isValid = hasMinLength && hasMaxLength && hasUppercase && hasLowercase && hasNumber && hasSpecial;
 

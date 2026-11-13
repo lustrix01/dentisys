@@ -498,7 +498,7 @@ function handle_student_activate(): void
             student_auth_error_response('Invalid or expired activation token.', 400);
             return;
         }
-        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+        $passwordHash = password_hash_user_password($password);
         $pdo->beginTransaction();
         try {
             // Lock order: Student, active enrollment, account, activation token.

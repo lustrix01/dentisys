@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   CheckCircle2,
   Moon,
-  Percent,
   RotateCcw,
   Save,
   ShieldAlert,
@@ -19,45 +18,24 @@ import {
 import { Modal } from "../../components/Modal";
 import { useThemePreference } from "../../hooks/useThemePreference";
 import {
-  getAdminSettingsApi,
   updateAdminSettingsApi,
 } from "../../services/apiClient";
 
 export const Settings: React.FC = () => {
   const { settings, updateSettings } = useApp();
-  // Appearance applies immediately and saves to the account on its own;
-  // the Save button below is for the institution-wide policy only.
+  // Appearance applies immediately; Save provides an explicit server sync.
   const { theme, changeTheme } = useThemePreference();
   const [themeError, setThemeError] = useState("");
-  const [transmutationDefaults, setTransmutationDefaults] = useState(
-    settings.transmutationDefaults ?? { minimumPercentage: 50, maximumPercentage: 100 },
-  );
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
 
-  useEffect(() => {
-    getAdminSettingsApi()
-      .then((res) => {
-        if (res.settings) {
-          if (res.settings.transmutationDefaults) setTransmutationDefaults(res.settings.transmutationDefaults);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     setError("");
-    if (transmutationDefaults.minimumPercentage < 0
-      || transmutationDefaults.maximumPercentage > 100
-      || transmutationDefaults.minimumPercentage > transmutationDefaults.maximumPercentage) {
-      setError('Transmutation bounds must be between 0% and 100%, with minimum not exceeding maximum.');
-      return;
-    }
     try {
-      await updateAdminSettingsApi({ theme, transmutationDefaults });
-      updateSettings({ ...settings, theme, transmutationDefaults });
+      await updateAdminSettingsApi({ theme });
+      updateSettings({ ...settings, theme });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -141,9 +119,9 @@ export const Settings: React.FC = () => {
               <div data-testid="grading-policy-card" className="space-y-3">
               <p>
                 <strong className="text-slate-700 dark:text-slate-200">Retention trigger: Grade 2.5.</strong>{" "}
-                A final course grade of 2.5 or worse (1.0 is highest, 5.0 is failing) places the
-                Student under retention monitoring and makes the course eligible for a remedial
-                attempt. This is fixed college policy and applies to every course.
+                A completed final course grade from 2.5 through 4.9 (1.0 is highest) is eligible for
+                remedial attempts in every course. A 5.0 follows the in-person irregular
+                reenrollment path outside DentiSys.
               </p>
               <p>
                 <strong className="text-slate-700 dark:text-slate-200">Grade weights</strong> are set
@@ -177,43 +155,22 @@ export const Settings: React.FC = () => {
         </div>
         <Card className="lg:col-span-8 p-0 overflow-hidden">
           <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Percent className="w-4.5 h-4.5 text-accent-500" />
-              Assessment Transmutation Defaults
+              <CardTitle className="flex items-center gap-2 text-sm">
+              <SlidersHorizontal className="w-4.5 h-4.5 text-accent-500" />
+              Fixed Assessment Transmutation
             </CardTitle>
           </CardHeader>
           <CardContent className="p-5">
             <div>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-4">New assessments start with these transmutation limits.</p>
-              <div className="grid sm:grid-cols-2 gap-4">
-                {([
-                  ['minimumPercentage', 'Minimum percentage'],
-                  ['maximumPercentage', 'Maximum percentage'],
-                ] as const).map(([key, label]) => (
-                  <label key={key} className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    {label}
-                    <div className="relative mt-1.5">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        value={transmutationDefaults[key]}
-                        onChange={(event) => setTransmutationDefaults({ ...transmutationDefaults, [key]: Number(event.target.value) || 0 })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100"
-                      />
-                      <span className="absolute right-3.5 top-2.5 text-xs text-slate-500 dark:text-slate-400">%</span>
-                    </div>
-                  </label>
-                ))}
-              </div>
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Enabled assessments use (score ÷ maximum score) × 50 + 50.</p>
+              <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">Present, Late and Excused use the formula; Absent is 0%. Unresolved linked attendance and missing scores remain incomplete.</p>
             </div>
             <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
               <button
                 className="flex items-center gap-2 whitespace-nowrap px-5 py-2.5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white text-xs font-bold shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />
-                {saved ? "Settings saved" : "Save system settings"}
+                {saved ? "Settings saved" : "Save appearance setting"}
               </button>
             </div>
           </CardContent>

@@ -22,6 +22,10 @@ const courseKind = (cls: StudentAcademicClass): string | null => {
   return cls.isClinical ? 'Clinical Lab' : null;
 };
 
+const retentionStateLabel = (state: string | null | undefined): string => (
+  state?.toLowerCase() === 'irregular_reenrollment' ? 'Irregular reenrollment' : state || 'State unavailable'
+);
+
 type RemedialStage =
   | 'none'
   | 'attempt_1_pending'
@@ -528,7 +532,7 @@ export const RetentionMonitoring: React.FC = () => {
             {remedialReviewRecords.map(cls => <Card key={cls.enrollmentId} className="p-4 border border-slate-200 dark:border-slate-800 space-y-2">
               <h4 className="text-xs font-bold"><span className="font-mono text-blue-600 mr-2">{cls.courseCode}</span>{cls.courseName}</h4>
               <p className="text-xs">Original Course Grade: {cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue>}</p>
-              <p className="text-xs">Retention: {cls.retentionState || 'State unavailable'}</p>
+              <p className="text-xs">Retention: {retentionStateLabel(cls.retentionState)}</p>
               <p className="text-[10px] text-slate-500">{semesterLabel(cls.semester)} · {cls.schoolYear}</p>
               <p className="text-xs font-semibold">{readRemedialProgression(cls).stage === 'none' ? 'No remedial attempt assigned.' : 'Remedial progression needs Faculty review.'}</p>
             </Card>)}
@@ -744,7 +748,7 @@ export const RetentionMonitoring: React.FC = () => {
                           <h5 className="font-bold text-slate-800 dark:text-slate-100"><span className="font-mono text-blue-600 dark:text-blue-400">{cls.courseCode}</span> · {cls.courseName}</h5>
                           <dl className="grid grid-cols-2 gap-2">
                             <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Grade</dt><dd className="mt-0.5"><GradePill grade={cls.grade} percentage={cls.percentage} /></dd></div>
-                            <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Status</dt><dd className="mt-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300">{cls.retentionState || 'State unavailable'}</dd></div>
+                            <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Status</dt><dd className="mt-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300">{retentionStateLabel(cls.retentionState)}</dd></div>
                           </dl>
                         </li>
                       ))}
@@ -770,7 +774,7 @@ export const RetentionMonitoring: React.FC = () => {
                               </td>
                               <td className="py-2.5 px-3">
                                 <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
-                                  {cls.retentionState || 'State unavailable'}
+                                  {retentionStateLabel(cls.retentionState)}
                                 </span>
                               </td>
                             </tr>

@@ -231,7 +231,7 @@ function handle_google_link(): void
                 throw new AuthException('Invalid link challenge.');
             }
             google_auth_validate_account($pdo, $config, $user);
-            if (!password_verify($password, (string) $user['password_hash'])) {
+            if (!password_verify_user_password($password, (string) $user['password_hash'])) {
                 throw new InvalidCredentialsException('Invalid ownership password.');
             }
             if (!empty($user['google_subject'])) {
@@ -378,7 +378,7 @@ function handle_google_profile_link(): void
                 );
             }
 
-            if (!password_verify($password, (string) $user['password_hash'])) {
+            if (!password_verify_user_password($password, (string) $user['password_hash'])) {
                 throw new InvalidCredentialsException('Invalid ownership password.');
             }
 

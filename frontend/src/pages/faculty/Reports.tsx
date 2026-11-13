@@ -60,6 +60,7 @@ type ReportsBundleSnapshot = {
   retention: FacultyRetentionRecord[];
   attendance: FacultyAttendanceWorksheetRosterItem[];
   analyticsAttendance: FacultyAttendanceWorksheetRosterItem[];
+  revokedAttendanceSessions: string[];
 };
 
 type ReportAnalyticsRow = { dataset: string; metric: string; value: number; unit: string };
@@ -127,9 +128,13 @@ async function loadReportAttendance(csId: number, date: string, selectedSessionI
 
 async function loadReportAnalyticsAttendance(csId: number, dates: string[]) {
   const records: FacultyAttendanceWorksheetRosterItem[] = [];
+  const revokedSessions = new Set<string>();
   for (const date of dates) {
     const initial = await getFacultyAttendanceWorksheetApi({ csId, date });
-    const sessionIds = (initial.worksheet?.attendanceSessions ?? [])
+    const availableSessions = initial.worksheet?.attendanceSessions ?? [];
+    availableSessions.filter(session => session.status === 'revoked')
+      .forEach(session => revokedSessions.add(`${date}|${session.sessionCode}`));
+    const sessionIds = availableSessions
       .map(session => Number(session.sessionId))
       .filter(sessionId => Number.isFinite(sessionId) && sessionId > 0);
     if (sessionIds.length === 0) {
@@ -139,9 +144,12 @@ async function loadReportAnalyticsAttendance(csId: number, dates: string[]) {
     const sessions = await Promise.all(sessionIds.map(sessionId => getFacultyAttendanceWorksheetApi({ csId, date, sessionId })));
     sessions.forEach(response => records.push(...(response.worksheet?.roster ?? [])));
   }
-  return Array.from(new Map(
-    records.map(record => [`${record.enrollmentId}:${record.attendanceSessionId ?? record.sessionCode ?? record.date}`, record]),
-  ).values());
+  return {
+    records: Array.from(new Map(
+      records.map(record => [`${record.enrollmentId}:${record.attendanceSessionId ?? record.sessionCode ?? record.date}`, record]),
+    ).values()),
+    revokedSessions: Array.from(revokedSessions),
+  };
 }
 
 export const Reports: React.FC = () => {
@@ -162,6 +170,7 @@ export const Reports: React.FC = () => {
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceError, setAttendanceError] = useState<string | null>(null);
   const [analyticsAttendanceRecords, setAnalyticsAttendanceRecords] = useState<FacultyAttendanceWorksheetRosterItem[]>([]);
+  const [revokedAnalyticsSessions, setRevokedAnalyticsSessions] = useState<string[]>([]);
   const [analyticsAttendanceLoading, setAnalyticsAttendanceLoading] = useState(false);
   const [analyticsAttendanceError, setAnalyticsAttendanceError] = useState<string | null>(null);
 
@@ -413,6 +422,7 @@ export const Reports: React.FC = () => {
   useEffect(() => {
     if (reportTab !== 'analytics' || !selectedClass?.csId || analyticsAssessmentDates.length === 0) {
       setAnalyticsAttendanceRecords([]);
+      setRevokedAnalyticsSessions([]);
       setAnalyticsAttendanceError(null);
       setAnalyticsAttendanceLoading(false);
       return;
@@ -421,10 +431,16 @@ export const Reports: React.FC = () => {
     setAnalyticsAttendanceLoading(true);
     setAnalyticsAttendanceError(null);
     loadReportAnalyticsAttendance(Number(selectedClass.csId), analyticsAssessmentDates)
-      .then(records => { if (!ignore) setAnalyticsAttendanceRecords(records); })
+      .then(result => {
+        if (!ignore) {
+          setAnalyticsAttendanceRecords(result.records);
+          setRevokedAnalyticsSessions(result.revokedSessions);
+        }
+      })
       .catch(requestError => {
         if (!ignore) {
           setAnalyticsAttendanceRecords([]);
+          setRevokedAnalyticsSessions([]);
           setAnalyticsAttendanceError(requestError instanceof Error
             ? requestError.message
             : 'Authoritative attendance records are unavailable for analytics.');
@@ -470,7 +486,7 @@ export const Reports: React.FC = () => {
   const courseRemark = (student: any, subj: any): string => {
     const grade = subj ? courseEvaluation(subj).overallGwa : null;
     if (grade === null) return 'PENDING';
-    if (grade === 5.0) return 'FAILED';
+    if (grade === 5.0) return 'IRREGULAR REENROLLMENT';
     if (retentionUnavailable) return 'RETENTION UNAVAILABLE';
     return retentionIsAtRisk(retentionForStudentSubject(student, subj, selectedClassId)) ? 'REVIEW RETENTION' : 'PASS';
   };
@@ -654,7 +670,8 @@ export const Reports: React.FC = () => {
   }, [retentionRecords, selectedClassId, selectedSchoolYear]);
 
   // Recharts Stats: Assessment Success Rates. Also used by the five-sheet export.
-  const buildAssessmentStatsData = (attendanceRows: FacultyAttendanceWorksheetRosterItem[]) => {
+  const buildAssessmentStatsData = (attendanceRows: FacultyAttendanceWorksheetRosterItem[], revokedSessions: string[] = []) => {
+    const revokedKeys = new Set(revokedSessions);
     const activeAss = assessments.filter(a =>
       assignedSubjects.includes(a.subjectCode)
       && a.status !== 'Archived'
@@ -666,12 +683,13 @@ export const Reports: React.FC = () => {
       const effectiveValues = scores
         .map(score => {
           const linked = Boolean(ass.attendanceSessionDate && ass.attendanceSessionCode);
+          const revoked = linked && revokedKeys.has(`${ass.attendanceSessionDate}|${ass.attendanceSessionCode}`);
           const attendance = ass.transmutationEnabled && linked
             ? attendanceRows.find(record => record.studentId === score.studentId
               && record.date === ass.attendanceSessionDate
               && record.sessionCode === ass.attendanceSessionCode)
             : undefined;
-          return effectiveAssessmentPercentage(score.score, ass.maxScore, ass, linked ? attendance?.status : 'unlinked');
+          return effectiveAssessmentPercentage(score.score, ass.maxScore, ass, !linked || revoked ? 'unlinked' : attendance?.status);
         })
         .filter((value): value is number => value !== null);
       if (effectiveValues.length === 0) return [];
@@ -682,7 +700,7 @@ export const Reports: React.FC = () => {
       }];
     });
   };
-  const assessmentStatsData = analyticsAttendanceLoading ? [] : buildAssessmentStatsData(analyticsAttendanceRecords);
+  const assessmentStatsData = analyticsAttendanceLoading ? [] : buildAssessmentStatsData(analyticsAttendanceRecords, revokedAnalyticsSessions);
 
   async function collectReportsBundleSnapshot(): Promise<ReportsBundleSnapshot> {
     if (!selectedClass?.csId) throw new Error('Select a class before exporting the Grades & Assessments report.');
@@ -697,7 +715,8 @@ export const Reports: React.FC = () => {
     return {
       retention: retentionResponse.retention ?? [],
       attendance: attendanceSnapshot.records,
-      analyticsAttendance,
+      analyticsAttendance: analyticsAttendance.records,
+      revokedAttendanceSessions: analyticsAttendance.revokedSessions,
     };
   }
 
@@ -728,6 +747,7 @@ export const Reports: React.FC = () => {
           || a.title.localeCompare(b.title);
       });
     const scoreByStudentAndAssessment = new Map(assessmentScores.map(score => [`${score.studentId}|${score.assessmentId}`, score.score]));
+    const revokedSessions = new Set(snapshot.revokedAttendanceSessions);
     const classStudents = ([...studentsInSelectedSubject] as Student[]).sort((a, b) => a.name.localeCompare(b.name));
     const assessmentColumns = classAssessments.map(assessment => {
       const category = categories.find(item => String(item.id ?? '') === String(assessment.gradingCategoryId ?? '')
@@ -739,13 +759,36 @@ export const Reports: React.FC = () => {
         category: category?.name ?? assessment.type,
         title: assessment.title,
         maxScore: assessment.maxScore,
+        transmutationEnabled: Boolean(assessment.transmutationEnabled),
+        attendanceSessionDate: assessment.attendanceSessionDate ?? null,
+        attendanceSessionCode: assessment.attendanceSessionCode ?? null,
       };
     });
-    const assessmentMatrixRows = classStudents.map(student => ({
-      studentNumber: student.studentId,
-      studentName: student.name,
-      scores: assessmentColumns.map(column => scoreByStudentAndAssessment.get(`${student.id}|${column.id}`) ?? null),
-    }));
+    const assessmentMatrixRows = classStudents.map(student => {
+      const scores = assessmentColumns.map(column => scoreByStudentAndAssessment.get(`${student.id}|${column.id}`) ?? null);
+      const effectivePercentages = assessmentColumns.map((column, index) => {
+        const linked = Boolean(column.attendanceSessionDate && column.attendanceSessionCode);
+        const revoked = linked && revokedSessions.has(`${column.attendanceSessionDate}|${column.attendanceSessionCode}`);
+        const attendance = linked
+          ? snapshot.analyticsAttendance.find(record => record.studentId === student.id
+            && record.date === column.attendanceSessionDate
+            && record.sessionCode === column.attendanceSessionCode)
+          : undefined;
+        const score = scores[index];
+        return score === null ? null : effectiveAssessmentPercentage(
+          score,
+          column.maxScore,
+          { transmutationEnabled: column.transmutationEnabled },
+          !linked || revoked ? 'unlinked' : attendance?.status,
+        );
+      });
+      return {
+        studentNumber: student.studentId,
+        studentName: student.name,
+        scores,
+        effectivePercentages,
+      };
+    });
     const gradeRows = classStudents.map(student => {
       const subject = (student.enrolledSubjects || []).find(sub => sub.code === selectedClass.courseCode
         && String(sub.classId ?? student.classId ?? classId) === classId) ?? null;
@@ -863,7 +906,8 @@ export const Reports: React.FC = () => {
         { value: row.studentNumber }, { value: row.studentName, align: 'left' as const },
         ...row.scores.flatMap((score, index) => {
           const max = assessmentColumns[index].maxScore;
-          return [score === null ? null : { value: score, format: '0.##' }, score === null || max <= 0 ? null : { value: score / max, format: '0.00%' }];
+          const effective = row.effectivePercentages[index];
+          return [score === null ? null : { value: score, format: '0.##' }, effective === null || max <= 0 ? null : { value: effective / 100, format: '0.00%' }];
         }),
       ]));
     const assessmentSheet: XlsxSheet = {
@@ -1451,7 +1495,7 @@ export const Reports: React.FC = () => {
                 <FileCheck className="w-4 h-4" />
                 Grade Distribution
               </h4>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-4">Students per course grade band in the selected section; 2.50 or worse triggers remedial</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-4">Students per course grade band in the selected section; grades 2.5–4.9 are eligible for remedial attempts</p>
             </div>
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
@@ -1545,8 +1589,9 @@ export const Reports: React.FC = () => {
                   <td className="id">{row.studentNumber}</td><td className="nm">{row.studentName}</td>
                   {row.scores.flatMap((score, index) => {
                     const max = bundle.assessmentColumns[index].maxScore;
+                    const effective = row.effectivePercentages[index];
                     return [<td key={`${index}-score`}>{score === null ? '?' : score}</td>,
-                      <td key={`${index}-percent`}>{score === null || max <= 0 ? '?' : `${(score / max * 100).toFixed(2)}%`}</td>];
+                      <td key={`${index}-percent`}>{effective === null || max <= 0 ? '?' : `${effective.toFixed(2)}%`}</td>];
                   })}
                 </tr>)}</tbody>
               </table>
@@ -1718,7 +1763,8 @@ export const Reports: React.FC = () => {
             {reportTab === 'retention' && facultyStudents.map((student: any) => {
               const gwa = standingGwa(student);
               const gwaText = gwa !== null ? gwa.toFixed(2) : '—';
-              const status = retentionUnavailable ? 'Unavailable' : student.status;
+              const status = retentionUnavailable ? 'Unavailable'
+                : student.status === 'irregular_reenrollment' ? 'Irregular reenrollment' : student.status;
               const remedial = remedialStatusFor(student);
               return (
                 <tr key={student.id}>

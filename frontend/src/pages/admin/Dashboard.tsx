@@ -46,6 +46,7 @@ export const Dashboard: React.FC = () => {
     { label: 'Good standing', count: Number(apiData?.statusCounts?.active) || 0, color: '#10b981' },
     { label: 'No grade yet', count: Number(apiData?.statusCounts?.noGrade) || 0, color: '#94a3b8' },
     { label: 'Remedial', count: Number(apiData?.statusCounts?.remedial) || 0, color: '#f97316' },
+    { label: 'Irregular reenrollment', count: Number(apiData?.statusCounts?.irregular_reenrollment) || 0, color: '#e11d48' },
   ];
   const classAttendance: Array<{ name: string; rate: number }> = apiData?.classAttendance ?? [];
   const recentAuditEvents = apiData?.recentAuditEvents ?? [];

@@ -151,6 +151,20 @@ try {
     exit(1);
 }
 assert_throws(fn() => validate_password_policy('Aa1!' . str_repeat('é', 29)), 'Use at most 32 characters', '33-character Unicode password rejected');
+$nfcEquivalent = 'Aa1!' . str_repeat("e\u{0301}", 28);
+validate_password_policy($nfcEquivalent);
+assert_same(32, mb_strlen(password_normalize_nfc($nfcEquivalent), 'UTF-8'), 'NFC-equivalent decomposed password counts after normalization');
+$argonHash = password_hash_user_password($nfcEquivalent);
+assert_same('argon2id', password_get_info($argonHash)['algoName'], 'New user-set password hashes use Argon2id');
+assert_same(true, password_verify_user_password(str_replace("e\u{0301}", 'é', $nfcEquivalent), $argonHash), 'NFC-equivalent input verifies against Argon2id');
+$longPasswordA = str_repeat('A', 18) . str_repeat('😀', 15) . '1!';
+$longPasswordB = str_repeat('A', 18) . str_repeat('😀', 14) . '😁1!';
+$longHash = password_hash_user_password($longPasswordA);
+assert_same(true, password_verify_user_password($longPasswordA, $longHash), 'Argon2id verifies long Unicode input beyond bcrypt byte limits');
+assert_same(false, password_verify_user_password($longPasswordB, $longHash), 'Argon2id distinguishes differing long Unicode suffixes');
+$legacyPassword = str_repeat('Legacy1!', 10);
+$legacyBcrypt = password_hash($legacyPassword, PASSWORD_BCRYPT);
+assert_same(true, password_verify_user_password($legacyPassword, $legacyBcrypt), 'Legacy bcrypt hashes remain verifiable');
 
 // Field normalization
 assert_throws(fn() => validate_person_name(['firstName' => ".-'"], 'firstName'), 'Use letters, spaces, hyphens', 'Punctuation-only name rejected with correction guidance');

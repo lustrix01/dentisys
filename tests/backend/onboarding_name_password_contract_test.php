@@ -41,7 +41,7 @@ assert_onboarding_contract(str_contains($facultyInvitation, 'name_parts_from_pay
 
 foreach ([$facultyActivation, $studentActivation] as $activation) {
     assert_onboarding_contract(is_string($activation) && str_contains($activation, 'minLength={8}'), 'Activation password fields expose the server minimum');
-    assert_onboarding_contract(str_contains($activation, 'maxLength={32}'), 'Activation password fields expose the 32-character maximum');
+    assert_onboarding_contract(str_contains($activation, 'maxLength={256}'), 'Activation password fields allow decomposed NFC input while validation enforces 32 normalized code points');
     assert_onboarding_contract(str_contains($activation, '8–32 characters'), 'Activation password requirements show the 8–32 character range');
     assert_onboarding_contract(str_contains($activation, 'Use at most 32 characters.'), 'Activation password length error uses the approved copy');
     assert_onboarding_contract(str_contains($activation, 'validatePasswordRequirements') && str_contains($activation, 'PasswordRequirement'), 'Activation password requirements are visible and live');
@@ -53,7 +53,7 @@ foreach ([
     'Password reset' => $resetPassword,
     'Password change card' => $passwordChangeCard,
 ] as $formName => $formSource) {
-    assert_onboarding_contract(is_string($formSource) && str_contains($formSource, 'maxLength={32}'), "{$formName} enforces the 32-character maximum");
+    assert_onboarding_contract(is_string($formSource) && str_contains($formSource, 'maxLength={256}'), "{$formName} permits decomposed NFC input while live validation enforces 32 normalized code points");
     assert_onboarding_contract(str_contains($formSource, 'Use at most 32 characters.'), "{$formName} uses the approved maximum-length copy");
     assert_onboarding_contract(str_contains($formSource, 'focus-visible:ring-inset') && str_contains($formSource, 'aria-controls="') && str_contains($formSource, 'aria-pressed='), "{$formName} reveal controls keep the accessible control contract");
 }

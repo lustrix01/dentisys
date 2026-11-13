@@ -748,10 +748,11 @@ export function getAdminDashboardKpisApi(schoolYear?: string): Promise<SchoolYea
     goodStanding: number;
     atRisk: number;
     remedialCount: number;
+    irregularReenrollmentCount: number;
     attendanceRate: number;
   };
   gwaBuckets: Array<{ range: string; count: number; color: string }>;
-  statusCounts: { active: number; remedial: number };
+  statusCounts: { active: number; noGrade: number; remedial: number; irregular_reenrollment: number };
   classAttendance: Array<{ name: string; rate: number }>;
   recentAuditEvents?: AuditEntry[];
 }> {
@@ -916,6 +917,7 @@ export function getFacultyDashboardKpisApi(schoolYear?: string): Promise<SchoolY
     retentionAlerts: number;
     goodStanding: number;
     remedialCount: number;
+    irregularReenrollmentCount: number;
   };
   classes: Array<{
     id: string;
@@ -929,7 +931,7 @@ export function getFacultyDashboardKpisApi(schoolYear?: string): Promise<SchoolY
   return request('GET', `/faculty/dashboard/kpis${schoolYearQuery(schoolYear)}`);
 }
 
-export type FacultyRetentionState = 'active' | 'remedial' | 'cleared' | 'archived';
+export type FacultyRetentionState = 'active' | 'remedial' | 'cleared' | 'archived' | 'irregular_reenrollment';
 export type FacultyRemedialProgressionStage =
   | 'none'
   | 'attempt_1_pending'
@@ -1089,7 +1091,10 @@ export function getFacultyAssessmentsApi(): Promise<any[]> {
 }
 
 export function saveFacultyAssessmentsApi(assessments: any[]): Promise<{ status: string; message: string; assessments: Array<{ id: string; classId: string; title: string }> }> {
-  return request('POST', '/faculty/assessments', assessments);
+  const compatibleAssessments = assessments.map(assessment => Object.fromEntries(
+    Object.entries(assessment).filter(([key]) => key !== 'transmutationMinimumPercentage' && key !== 'transmutationMaximumPercentage'),
+  ));
+  return request('POST', '/faculty/assessments', compatibleAssessments);
 }
 
 export function deleteFacultyAssessmentApi(assessmentId: string): Promise<{

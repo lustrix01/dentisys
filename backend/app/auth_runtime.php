@@ -46,7 +46,7 @@ function extract_password(array $data, string $field): string
         throw new InvalidCredentialsException('Password is required.');
     }
 
-    if ($len > 128) {
+    if ($len > 512) {
         throw new InvalidCredentialsException('Password is too long.');
     }
 
@@ -97,7 +97,7 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         throw new InvalidCredentialsException('Invalid credentials.');
     }
 
-    if (!password_verify($password, $user['password_hash'])) {
+    if (!password_verify_user_password($password, (string) $user['password_hash'])) {
         auth_audit_denial($pdo, $config, $context, 'login_failed', "Password sign-in failed for {$email}: wrong password.");
         rate_limit_record_login_failure($rateStorage, $emailScope, 'post_auth_failed_login', 900, 5, 900);
         throw new InvalidCredentialsException('Invalid credentials.');
@@ -311,18 +311,19 @@ function auth_runtime_change_password(
             throw new AuthException('Authentication required.');
         }
 
-        if (!password_verify($currentPassword, (string) $user['password_hash'])) {
+        if (!password_verify_user_password($currentPassword, (string) $user['password_hash'])) {
             throw new PasswordChangeCurrentCredentialException();
         }
 
-        if (hash_equals($currentPassword, $newPassword)) {
+        if (hash_equals(password_normalize_nfc($currentPassword), password_normalize_nfc($newPassword))) {
             throw new ValidationException([
                 ['field' => 'new_password', 'message' => 'New password must differ from the current password.'],
             ]);
         }
 
-        $passwordHash = password_hash($newPassword, PASSWORD_DEFAULT);
-        if (!is_string($passwordHash) || $passwordHash === '') {
+        try {
+            $passwordHash = password_hash_user_password($newPassword);
+        } catch (Throwable) {
             throw new AuthException('Unable to update password.');
         }
 

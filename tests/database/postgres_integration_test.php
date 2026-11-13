@@ -1274,30 +1274,31 @@ expect_same(50, $adminSettingsBefore['transmutationDefaults']['minimumPercentage
 expect_same(100, $adminSettingsBefore['transmutationDefaults']['maximumPercentage'] ?? null, 'Admin settings API initially reads maximum 100');
 
 $validAdminSettings = $adminSettingsBefore;
+$validAdminSettings['theme'] = ($adminSettingsBefore['theme'] ?? 'light') === 'dark' ? 'light' : 'dark';
 $validAdminSettings['retentionThreshold'] = 2.75;
 $validAdminSettings['transmutationDefaults'] = ['minimumPercentage' => 55, 'maximumPercentage' => 100];
 [$adminSettingsSaveStatus, $adminSettingsSaveBody] = integration_http_json('/api/admin/settings', $adminAccessToken, $validAdminSettings);
-expect_same(200, $adminSettingsSaveStatus, 'Valid Admin transmutation-default update returns HTTP 200');
+expect_same(200, $adminSettingsSaveStatus, 'Legacy Admin transmutation fields are ignored by the settings endpoint');
+expect_same($validAdminSettings['theme'], $adminSettingsSaveBody['settings']['theme'] ?? null, 'Admin settings save persists the changed appearance preference');
 expect_same(2.5, $adminSettingsSaveBody['settings']['retentionThreshold'] ?? null, 'Admin settings cannot change the fixed 2.5 retention trigger');
 expect_true(!array_key_exists('weights', $adminSettingsSaveBody['settings'] ?? []), 'Admin settings no longer expose course component ratios');
-expect_same(55, $adminSettingsSaveBody['settings']['transmutationDefaults']['minimumPercentage'] ?? null, 'Admin settings save response reports minimum 55');
+expect_same(50, $adminSettingsSaveBody['settings']['transmutationDefaults']['minimumPercentage'] ?? null, 'Admin settings save response reports the fixed 50 minimum');
 expect_same(100, $adminSettingsSaveBody['settings']['transmutationDefaults']['maximumPercentage'] ?? null, 'Admin settings save response reports maximum 100');
 
 [$adminSettingsReloadStatus, $adminSettingsReloadBody] = integration_http_get_json('/api/admin/settings', $adminAccessToken);
 expect_same(200, $adminSettingsReloadStatus, 'Admin settings reload returns HTTP 200 after valid save');
+expect_same($validAdminSettings['theme'], $adminSettingsReloadBody['settings']['theme'] ?? null, 'Admin settings reload returns the saved appearance preference');
 expect_same(2.5, $adminSettingsReloadBody['settings']['retentionThreshold'] ?? null, 'Admin settings reload still reports the fixed 2.5 retention trigger');
-expect_same(55, $adminSettingsReloadBody['settings']['transmutationDefaults']['minimumPercentage'] ?? null, 'Admin settings reload persists minimum 55');
+expect_same(50, $adminSettingsReloadBody['settings']['transmutationDefaults']['minimumPercentage'] ?? null, 'Admin settings reload keeps the fixed minimum');
 expect_same(100, $adminSettingsReloadBody['settings']['transmutationDefaults']['maximumPercentage'] ?? null, 'Admin settings reload persists maximum 100');
 
 $invalidAdminSettings = $validAdminSettings;
 $invalidAdminSettings['transmutationDefaults'] = ['minimumPercentage' => 90, 'maximumPercentage' => 80];
 [$invalidAdminSettingsStatus, $invalidAdminSettingsBody] = integration_http_json('/api/admin/settings', $adminAccessToken, $invalidAdminSettings);
-expect_same(422, $invalidAdminSettingsStatus, 'Invalid Admin transmutation bounds return HTTP 422 instead of a server error');
-expect_same('VALIDATION_ERROR', $invalidAdminSettingsBody['code'] ?? null, 'Invalid Admin transmutation bounds use the standard validation error response');
-expect_true(str_contains((string) ($invalidAdminSettingsBody['message'] ?? ''), 'valid transmutation bounds'), 'Invalid Admin transmutation bounds include a clear validation message');
+expect_same(200, $invalidAdminSettingsStatus, 'Legacy Admin transmutation fields are ignored even when malformed');
 [$adminSettingsAfterInvalidStatus, $adminSettingsAfterInvalidBody] = integration_http_get_json('/api/admin/settings', $adminAccessToken);
 expect_same(200, $adminSettingsAfterInvalidStatus, 'Admin settings remain readable after rejected invalid bounds');
-expect_same(55, $adminSettingsAfterInvalidBody['settings']['transmutationDefaults']['minimumPercentage'] ?? null, 'Rejected Admin settings update does not persist invalid minimum');
+expect_same(50, $adminSettingsAfterInvalidBody['settings']['transmutationDefaults']['minimumPercentage'] ?? null, 'Legacy Admin fields cannot change the fixed minimum');
 expect_same(100, $adminSettingsAfterInvalidBody['settings']['transmutationDefaults']['maximumPercentage'] ?? null, 'Rejected Admin settings update does not persist invalid maximum');
 expect_same(2.5, $adminSettingsAfterInvalidBody['settings']['retentionThreshold'] ?? null, 'Rejected Admin settings update leaves the fixed retention trigger');
 
@@ -3249,7 +3250,8 @@ expect_true(!str_contains(json_encode($otherHistoryBody, JSON_THROW_ON_ERROR), '
 $pdo->prepare('DELETE FROM email_outbox WHERE email_id = ?')->execute([$legacyHistoryEmailId]);
 
 // Owner decision: a computed grade that moves an enrollment into remedial, or
-// clears it, notifies the Student once per change. Rolled back afterwards.
+// clears it, notifies the Student once per change. A 5.0 uses irregular
+// reenrollment instead and must not send a remedial notice. Rolled back afterwards.
 $pdo->beginTransaction();
 try {
     $pdo->prepare("UPDATE enrollments SET retention_state = 'active', retention_override_state = NULL, retention_override_gwa = NULL WHERE enrollment_id = ?")
@@ -3260,11 +3262,11 @@ try {
         return (int) $stmt->fetchColumn();
     };
     faculty_save_computed_grade($pdo, 70.0, 5.0, 'remedial', ['fixture' => 'remedial'], $demoStudentEnrollmentId);
-    expect_same(1, $gradeNotificationCount(), 'Entering remedial through a computed grade notifies the Student');
+    expect_same(0, $gradeNotificationCount(), 'A 5.0 irregular reenrollment grade does not send a remedial notice');
     faculty_save_computed_grade($pdo, 70.0, 5.0, 'remedial', ['fixture' => 'remedial'], $demoStudentEnrollmentId);
-    expect_same(1, $gradeNotificationCount(), 'Recomputing without a state change sends no second notification');
+    expect_same(0, $gradeNotificationCount(), 'Recomputing a 5.0 sends no remedial notice');
     faculty_save_computed_grade($pdo, 90.0, 1.75, 'active', ['fixture' => 'cleared'], $demoStudentEnrollmentId);
-    expect_same(2, $gradeNotificationCount(), 'Clearing remedial through a computed grade notifies the Student');
+    expect_same(1, $gradeNotificationCount(), 'Clearing the stored remedial state through a computed grade notifies the Student once');
     $clearedTitle = $pdo->prepare("SELECT title FROM notifications WHERE entity_type = 'enrollment' AND entity_id = ? AND deduplication_key LIKE 'grade-retention:%:remedial:active:%'");
     $clearedTitle->execute([(string) $demoStudentEnrollmentId]);
     expect_true(str_starts_with((string) $clearedTitle->fetchColumn(), 'Remedial no longer required'), 'The clearing notification says remedial is no longer required');
@@ -3283,6 +3285,23 @@ $studentNotificationTargetStmt = $pdo->prepare(
 $studentNotificationTargetStmt->execute([$studentClassId]);
 $studentNotificationTarget = $studentNotificationTargetStmt->fetch(PDO::FETCH_ASSOC);
 expect_true(is_array($studentNotificationTarget) && (int) ($studentNotificationTarget['student_account_user_id'] ?? 0) > 0, 'Notification fixture resolves the canonical Student recipient account');
+$studentNotificationEnrollmentId = (int) $studentNotificationTarget['enrollment_id'];
+$studentNotificationGradeStateStmt = $pdo->prepare(
+    'SELECT e.final_gwa::text AS enrollment_final_gwa,
+            egb.final_gwa::text AS breakdown_final_gwa
+       FROM enrollments e
+       LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+      WHERE e.enrollment_id = ?'
+);
+$studentNotificationGradeStateStmt->execute([$studentNotificationEnrollmentId]);
+$studentNotificationOriginalGradeState = $studentNotificationGradeStateStmt->fetch(PDO::FETCH_ASSOC);
+expect_true(is_array($studentNotificationOriginalGradeState), 'Notification fixture enrollment grade state is readable');
+// The legacy remedial endpoint correctly requires an eligible completed grade;
+// make this test enrollment eligible and restore its original state afterwards.
+$pdo->prepare("UPDATE enrollments SET final_gwa = 2.5, retention_state = 'active' WHERE enrollment_id = ?")
+    ->execute([$studentNotificationEnrollmentId]);
+$pdo->prepare('UPDATE enrollment_grade_breakdowns SET final_gwa = 2.5 WHERE enrollment_id = ?')
+    ->execute([$studentNotificationEnrollmentId]);
 $studentNotificationKey = 'integration-remedial-' . strtolower(bin2hex(random_bytes(5)));
 $studentNotificationPayload = [
     'enrollmentId' => (string) $studentNotificationTarget['enrollment_id'],
@@ -3315,6 +3334,13 @@ expect_same(200, $studentNotificationReadStatus, 'Recipient can mark its notific
 $studentNotificationReadStmt = $pdo->prepare('SELECT read_at FROM notifications WHERE notification_id = ?');
 $studentNotificationReadStmt->execute([(int) $studentNotificationId]);
 expect_true($studentNotificationReadStmt->fetchColumn() !== null, 'Notification mark-read persists the recipient read state');
+$pdo->prepare('UPDATE enrollments SET final_gwa = ? WHERE enrollment_id = ?')
+    ->execute([
+        $studentNotificationOriginalGradeState['enrollment_final_gwa'],
+        $studentNotificationEnrollmentId,
+    ]);
+$pdo->prepare('UPDATE enrollment_grade_breakdowns SET final_gwa = ? WHERE enrollment_id = ?')
+    ->execute([$studentNotificationOriginalGradeState['breakdown_final_gwa'], $studentNotificationEnrollmentId]);
 // Retention is computed only: the manual override route is gone, and recomputing
 // a grade always writes the computed state and clears any old override columns.
 [$retentionOverrideRouteStatus] = integration_http_json('/api/faculty/retention/status', $seedFacultyAccessToken, [
@@ -3653,7 +3679,7 @@ expect_same('attempt_1_pending', $remedialScheduleBody['progression']['stage'] ?
     'status' => 'passed',
 ], $seedFacultyAccessToken);
 expect_same(200, $remedialFirstFailStatus, 'Faculty records a 49.99 remedial result');
-expect_same('attempt_2_available', $remedialFirstFailBody['progression']['stage'] ?? null, 'A first-attempt result below 50 opens only attempt 2');
+expect_same('attempt_2_available', $remedialFirstFailBody['progression']['stage'] ?? null, 'A first-attempt result below 75 opens only attempt 2');
 [$remedialDuplicateStatus, $remedialDuplicateBody] = $remedialPost($invitedEnrollmentId, ['attemptNumber' => 1, 'percentage' => 50], $seedFacultyAccessToken);
 expect_same(409, $remedialDuplicateStatus, 'A completed first remedial attempt cannot be overwritten');
 expect_same('REMEDIAL_ATTEMPT_DUPLICATE', $remedialErrorCode($remedialDuplicateBody), 'Duplicate remedial submission returns the duplicate error');
@@ -3677,11 +3703,11 @@ expect_same('Bring the lab manual.', $remedialSecondAttemptView[0]['notes'] ?? n
 expect_same('attempt_2_pending', $remedialSecondScheduleBody['progression']['stage'] ?? null, 'Scheduled attempt 2 is pending');
 [$remedialSecondPassStatus, $remedialSecondPassBody] = $remedialPost($invitedEnrollmentId, [
     'attemptNumber' => 2,
-    'percentage' => 50.01,
+    'percentage' => 75.01,
     'outcome' => 'failed',
 ], $seedFacultyAccessToken);
-expect_same(200, $remedialSecondPassStatus, 'Faculty records a 50.01 second-attempt result');
-expect_same('passed', $remedialSecondPassBody['progression']['stage'] ?? null, 'A second-attempt result at or above 50 passes');
+expect_same(200, $remedialSecondPassStatus, 'Faculty records a 75.01 second-attempt result');
+expect_same('passed', $remedialSecondPassBody['progression']['stage'] ?? null, 'A second-attempt result at or above 75 passes');
 expect_same(2, $remedialSecondPassBody['progression']['passedAttempt'] ?? null, 'The server reports the passing attempt number');
 $remedialPassedAttemptView = array_values(array_filter(
     $remedialSecondPassBody['progression']['attempts'] ?? [],
@@ -3695,7 +3721,7 @@ $remedialRowsStmt->execute([$invitedEnrollmentId]);
 $remedialRows = $remedialRowsStmt->fetchAll(PDO::FETCH_ASSOC);
 expect_same(2, count($remedialRows), 'Canonical remedial storage contains exactly two distinct attempts');
 expect_same(['1', '2'], array_map(static fn(mixed $value): string => (string) $value, array_column($remedialRows, 'attempt_number')), 'Canonical remedial storage preserves attempt numbering');
-expect_same(['49.99', '50.01'], array_column($remedialRows, 'percentage'), 'Canonical remedial storage preserves exact percentage precision');
+expect_same(['49.99', '75.01'], array_column($remedialRows, 'percentage'), 'Canonical remedial storage preserves exact percentage precision');
 expect_same(['failed', 'passed'], array_column($remedialRows, 'outcome'), 'Canonical remedial outcomes are server-derived');
 $remedialOriginalStmt->execute([$invitedEnrollmentId]);
 expect_same($remedialOriginalGrade, $remedialOriginalStmt->fetch(PDO::FETCH_ASSOC), 'Recording remedial outcomes leaves the original grade and raw grade components unchanged');
@@ -3735,7 +3761,7 @@ expect_same($remedialOriginalGrade, $remedialOriginalStmt->fetch(PDO::FETCH_ASSO
 // request may convert the pending attempt into a recorded result.
 [$concurrentScheduleStatus] = $remedialPost($unscopedEnrollmentId, ['attemptNumber' => 1], $seedFacultyAccessToken);
 expect_same(200, $concurrentScheduleStatus, 'Concurrent remedial fixture starts with a pending first attempt');
-$concurrentRemedialPayload = ['enrollmentId' => (string) $unscopedEnrollmentId, 'attemptNumber' => 1, 'percentage' => 50];
+$concurrentRemedialPayload = ['enrollmentId' => (string) $unscopedEnrollmentId, 'attemptNumber' => 1, 'percentage' => 75];
 $concurrentRemedialSocketA = integration_http_async_json('/api/faculty/retention/remedial', $seedFacultyAccessToken, $concurrentRemedialPayload);
 $concurrentRemedialSocketB = integration_http_async_json('/api/faculty/retention/remedial', $seedFacultyAccessToken, $concurrentRemedialPayload);
 [$concurrentRemedialStatusA] = integration_http_async_read($concurrentRemedialSocketA);
@@ -3767,9 +3793,14 @@ expect_same('COST_RECOVERY_NOT_REQUIRED', $remedialErrorCode($costEarlyBody), 'P
     'finalGrade' => 7,
 ]);
 expect_same(422, $costInvalidStatus, 'Cost recovery grade outside 1.00-5.00 is rejected');
+[$costPrecisionStatus] = integration_http_json('/api/faculty/retention/cost-recovery', $seedFacultyAccessToken, [
+    'enrollmentId' => (string) $remedialCostEnrollmentId,
+    'finalGrade' => 2.41,
+]);
+expect_same(422, $costPrecisionStatus, 'Cost recovery grades with more than one decimal place are rejected');
 [$costRecordStatus, $costRecordBody] = integration_http_json('/api/faculty/retention/cost-recovery', $seedFacultyAccessToken, [
     'enrollmentId' => (string) $remedialCostEnrollmentId,
-    'finalGrade' => 2.25,
+    'finalGrade' => 2.4,
 ]);
 expect_same(200, $costRecordStatus, 'Faculty records a cost recovery result');
 expect_same('passed', $costRecordBody['outcome'] ?? null, 'A cost recovery grade better than the trigger passes');
@@ -5375,8 +5406,8 @@ expect_same((string) $gradeClassId, (string) $disabledAssessmentRow['cs_id'], 'D
 expect_same($gradeCourseCode, $disabledAssessmentRow['course_code'], 'Disabled assessment row resolves to the intended course');
 expect_same($disabledAssessmentTitle, $disabledAssessmentRow['title'], 'Disabled assessment row preserves its title');
 expect_same(false, filter_var($disabledAssessmentRow['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN), 'Disabled assessment row remains transmutation-disabled');
-expect_same('45.00', $disabledAssessmentRow['transmutation_minimum_percentage'], 'Disabled assessment row preserves its minimum bound');
-expect_same('95.00', $disabledAssessmentRow['transmutation_maximum_percentage'], 'Disabled assessment row preserves its maximum bound');
+expect_same('50.00', $disabledAssessmentRow['transmutation_minimum_percentage'], 'New assessment stores the compatibility minimum');
+expect_same('100.00', $disabledAssessmentRow['transmutation_maximum_percentage'], 'New assessment stores the compatibility maximum');
 expect_same(null, $disabledAssessmentRow['attendance_session_date'], 'Disabled assessment requires no attendance date');
 expect_same(null, $disabledAssessmentRow['attendance_session_code'], 'Disabled assessment requires no attendance code');
 [$disabledAssessmentsGetStatus, $disabledAssessmentsGetBody] = integration_http_get_json('/api/faculty/assessments', $facultyAccessToken);
@@ -5430,7 +5461,7 @@ $enabledAssessmentRow = $enabledAssessmentRowStmt->fetch(PDO::FETCH_ASSOC);
 expect_true(is_array($enabledAssessmentRow), 'Enabled assessment creates a real PostgreSQL assessment row');
 expect_same((string) $gradeClassId, (string) $enabledAssessmentRow['cs_id'], 'Enabled assessment row belongs to the intended class-section ID');
 expect_same(true, filter_var($enabledAssessmentRow['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN), 'Enabled assessment row preserves enabled transmutation');
-expect_same('55.00', $enabledAssessmentRow['transmutation_minimum_percentage'], 'Enabled assessment row preserves its minimum override');
+expect_same('50.00', $enabledAssessmentRow['transmutation_minimum_percentage'], 'Enabled assessment ignores a legacy minimum override');
 expect_same('100.00', $enabledAssessmentRow['transmutation_maximum_percentage'], 'Enabled assessment row preserves its maximum override');
 expect_same($gradeSessionDate, $enabledAssessmentRow['attendance_session_date'], 'Enabled assessment row preserves its linked attendance date');
 expect_same($gradeSessionCode, $enabledAssessmentRow['attendance_session_code'], 'Enabled assessment row preserves its linked attendance code');
@@ -5472,7 +5503,7 @@ expect_same('15.00', $enabledEditRow['weight'] ?? null, 'Assessment edit preserv
 expect_same('2026-04-15', $enabledEditRow['due_date'] ?? null, 'Assessment edit preserves the due date');
 expect_same('Edited while preserving enabled transmutation.', $enabledEditRow['instructions'] ?? null, 'Assessment edit applies the requested text change');
 expect_same(true, filter_var($enabledEditRow['transmutation_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN), 'Assessment edit preserves enabled transmutation');
-expect_same('55.00', $enabledEditRow['transmutation_minimum_percentage'] ?? null, 'Assessment edit preserves the minimum override');
+expect_same('50.00', $enabledEditRow['transmutation_minimum_percentage'] ?? null, 'Assessment edit keeps the fixed minimum');
 expect_same('100.00', $enabledEditRow['transmutation_maximum_percentage'] ?? null, 'Assessment edit preserves the maximum override');
 expect_same($gradeSessionDate, $enabledEditRow['attendance_session_date'] ?? null, 'Assessment edit preserves linked attendance date');
 expect_same($gradeSessionCode, $enabledEditRow['attendance_session_code'] ?? null, 'Assessment edit preserves linked attendance code');
@@ -5484,7 +5515,7 @@ $enabledEditReadRows = array_values(array_filter(
 ));
 expect_same(1, count($enabledEditReadRows), 'Fresh GET returns the edited assessment under its original ID');
 expect_same(true, $enabledEditReadRows[0]['transmutationEnabled'] ?? null, 'Fresh GET preserves transmutation through an edit');
-expect_same(55.0, (float) ($enabledEditReadRows[0]['transmutationMinimumPercentage'] ?? -1), 'Fresh GET preserves edited assessment minimum');
+expect_same(50.0, (float) ($enabledEditReadRows[0]['transmutationMinimumPercentage'] ?? -1), 'Fresh GET reports the fixed assessment minimum');
 expect_same(100.0, (float) ($enabledEditReadRows[0]['transmutationMaximumPercentage'] ?? -1), 'Fresh GET preserves edited assessment maximum');
 expect_same($gradeSessionDate, $enabledEditReadRows[0]['attendanceSessionDate'] ?? null, 'Fresh GET preserves linked date through an edit');
 expect_same($gradeSessionCode, $enabledEditReadRows[0]['attendanceSessionCode'] ?? null, 'Fresh GET preserves linked code through an edit');

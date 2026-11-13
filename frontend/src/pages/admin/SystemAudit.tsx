@@ -338,6 +338,7 @@ export const DeanReports: React.FC = () => {
       warning: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
       critical: 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400',
       remedial: 'bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400',
+      irregular_reenrollment: 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400',
       cleared: 'bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400',
       noGrade: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
     };
@@ -664,6 +665,7 @@ export const DeanReports: React.FC = () => {
                     <option value="active">Good standing</option>
                     <option value="noGrade">No grade yet</option>
                     <option value="remedial">Remedial</option>
+                    <option value="irregular_reenrollment">Irregular reenrollment</option>
                     <option value="cleared">Cleared</option>
                   </select>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold whitespace-nowrap">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
@@ -988,6 +990,7 @@ export const DeanReports: React.FC = () => {
                     <option value="active">Good standing</option>
                     <option value="noGrade">No grade yet</option>
                     <option value="remedial">Remedial</option>
+                    <option value="irregular_reenrollment">Irregular reenrollment</option>
                     <option value="cleared">Cleared</option>
                   </select>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold whitespace-nowrap">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>

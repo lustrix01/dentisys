@@ -139,27 +139,29 @@ test('Faculty grade views use the inclusive authoritative retention boundary', (
     path.join(currentDirectory, '../pages/faculty/GradeComputation.tsx'),
     'utf8'
   );
-  assert.doesNotMatch(gradeComputation, /(?:overallGwa|subj\.grade)\s*>=?\s*settings\.retentionThreshold/);
   const retentionRules = [...gradeComputation.matchAll(/const isFailsRetention = ([\s\S]*?);/g)];
   assert.equal(retentionRules.length, 4, 'table and print views cover both period and legacy grades');
   for (const [, expression] of retentionRules) {
     assert.match(expression, /retentionState === 'remedial'/);
+    assert.match(expression, /overallGwa >= settings\.retentionThreshold/);
+    assert.match(expression, /overallGwa < 5\.0/);
     assert.match(expression, /percentageToGWAExact\(evalResult\.overallPercentage\) >= settings\.retentionThreshold/);
     const failsRetention = new Function('subj', 'evalResult', 'percentageToGWAExact', 'settings', `return (${expression});`);
-    for (const [percentage, retentionState, expected] of [
-      [85, 'active', false],
-      [84, 'remedial', true],
-      [84.99, 'remedial', true],
-      [81, 'remedial', true],
-      [85, undefined, false],
-      [84, undefined, true],
-      [84.99, undefined, true],
-      [null, undefined, false],
-      [Number.NaN, undefined, false],
+    for (const [percentage, retentionState, gwa, expected] of [
+      [85, 'active', 2.4, false],
+      [84, 'remedial', 2.5, true],
+      [84.99, 'remedial', 2.5, true],
+      [81, 'remedial', 2.8, true],
+      [84, 'remedial', 5.0, false],
+      [85, undefined, 2.4, false],
+      [84, undefined, 2.5, true],
+      [84.99, undefined, 2.5, true],
+      [null, undefined, null, false],
+      [Number.NaN, undefined, 2.5, false],
     ] as const) {
       assert.equal(failsRetention(
-        { isClinical: true },
-        { overallGwa: 2.5, overallPercentage: percentage, retentionState },
+        { isClinical: false },
+        { overallGwa: gwa, overallPercentage: percentage, retentionState },
         percentageToGWAExact,
         { retentionThreshold: 2.5 },
       ), expected, `percentage ${percentage}, server state ${retentionState}`);

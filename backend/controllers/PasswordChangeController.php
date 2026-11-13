@@ -50,7 +50,7 @@ function password_change_validate_payload(array $data): array
         throw new ValidationException($errors);
     }
 
-    if (!hash_equals($values['new_password'], $values['confirm_password'])) {
+    if (!hash_equals(password_normalize_nfc($values['new_password']), password_normalize_nfc($values['confirm_password']))) {
         throw new ValidationException([
             ['field' => 'confirm_password', 'message' => 'Passwords do not match.'],
         ]);

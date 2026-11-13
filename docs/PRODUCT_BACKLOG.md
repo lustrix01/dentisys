@@ -150,7 +150,7 @@ Testing must never email real or real-looking addresses (spam risk): automated t
 
 **Status: Unclear.** Blocked until the client answers.
 
-- **Cost recovery remedials:** deferred by the Owner until the client explains how cost recovery is graded (today a remedial is one 1.00–5.00 grade and a failed final).
+- **Cost recovery remedials:** implemented under the 2026-11-13 clarification. The API accepts one-decimal grades; 2.4 passes and 2.5–5.0 fail. The cost-recovery program itself remains outside DentiSys; the app records the status, grade and result.
 - **Remove-student error:** not reproduced; the client was asked for the exact message shown.
 
 ---
@@ -256,7 +256,7 @@ The Owner reviewed the first ticket batch on 2026-11-11. Delivered in that batch
 
 ## 10.1 T1 — transmutation defaults and the attendance link
 
-**Status: Not started (needs Owner answers).** The code already implements the official `(score ÷ items) × 50 + 50` formula when transmutation is enabled with 50–100 bounds. Three decisions are open: (a) make transmutation ON by default for new assessments (Admin Settings toggle, existing assessments unchanged); (b) keep the optional attendance link — it is the only way an absence zeroes a linked assessment, so it is not the cause of "(scores/items)*50"; (c) align the Reports bundle `%` column with the effective (transmuted) percentage instead of raw score/max. Also identify the class/assessment where the Owner saw `(scores/items)*50` so a stored 0–50 range or an older build can be confirmed or corrected.
+**Status: Implemented (2026-11-13).** Transmutation remains optional per assessment and uses the fixed `(score ÷ maximum score) × 50 + 50` formula. Admin and Faculty bound controls were removed; legacy bound columns remain for compatibility and are ignored. Attendance behavior and incomplete-score handling remain unchanged. The Reports bundle spreadsheet and print view show effective percentages. New assessments still default to transmutation OFF.
 
 ## 10.2 T4 — Full-Matrix sign-out proof and unsaved-edit protection
 
@@ -268,11 +268,11 @@ The Owner reviewed the first ticket batch on 2026-11-11. Delivered in that batch
 
 ## 10.4 T8 + T11 — grading system clarification
 
-**Status: Not started (deferred, needs the college's answers).** The retention band (pass ≤2.40 / remedial 2.41–4.84 / automatic FAIL >4.84, Failed state, reclassification) and the remedial pass mark (75 % raw vs 75 % transmuted vs freeze-as-recorded) are on hold until the interview colleagues answer `GRADING-QA.md`. The official conversion table gives 5.0 for every below-75 % final, so the proposed 3.1–4.84 band has no current conversion; where 4.84 comes from must be confirmed. The remedial module does exist (two attempts, scheduling, notices, cost recovery, notifications, audit); its ownership and scoring rules must also be confirmed. While deferred, also flag the cost-recovery pass boundary currently `< 2.50` (so legacy 2.41–2.49 grades pass), which is not clearly approved in `spec.md`.
+**Status: Implemented (2026-11-13).** Remedial is course-level and applies to completed final grades 2.5–4.9 across course types. A 5.0 follows the in-person irregular reenrollment path outside DentiSys. Each of at most two attempts passes at 75%; failing attempt one permits attempt two, and failing attempt two moves to cost recovery. Cost recovery accepts one-decimal grades from 1.0 to 5.0; 1.0–2.4 passes and 2.5–5.0 fails. These outcomes do not replace the original course grade. The implementation adds a read-only report for potentially affected historical rows; saved records are not backfilled. The in-person irregular reenrollment process remains outside DentiSys.
 
 ## 10.5 T2 — hashing and remaining password-form polish
 
-**Status: Not started.** 32 multi-byte characters can exceed bcrypt's 72-byte hash limit (silent truncation); moving new hashes to Argon2id with rehash-on-login removes that limit and allows a plain character policy. `GoogleLinkCard`'s confirm-password field still lacks a reveal control/label; add it with the next auth polish. The login/sign-in fields intentionally have no maximum (existing passwords must keep working).
+**Status: Password hashing implemented (2026-11-13); reveal-control polish remains.** New and reset passwords use NFC normalization and Argon2id, avoiding bcrypt's 72-byte truncation. Existing bcrypt hashes remain verifiable and are not silently rehashed; an account moves to Argon2id when its password is next set or reset. `GoogleLinkCard`'s confirm-password field still lacks a reveal control/label; address it with the next auth polish. The login/sign-in fields intentionally have no maximum so existing passwords keep working.
 
 ## 10.6 T3 — remaining import polish
 

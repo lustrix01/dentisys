@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/passwords.php';
+
 class ValidationException extends \RuntimeException
 {
     private array $errors;
@@ -434,7 +436,8 @@ function validate_password_policy(string $password): void
 {
     $errors = [];
 
-    $characterCount = mb_strlen($password, 'UTF-8');
+    $normalizedPassword = password_normalize_nfc($password);
+    $characterCount = mb_strlen($normalizedPassword, 'UTF-8');
 
     if ($characterCount < 8) {
         $errors[] = ['field' => 'password', 'message' => 'Must be at least 8 characters.'];
@@ -444,19 +447,19 @@ function validate_password_policy(string $password): void
         $errors[] = ['field' => 'password', 'message' => 'Use at most 32 characters.'];
     }
 
-    if (!preg_match('/[A-Z]/', $password)) {
+    if (!preg_match('/[A-Z]/', $normalizedPassword)) {
         $errors[] = ['field' => 'password', 'message' => 'Must contain an uppercase letter.'];
     }
 
-    if (!preg_match('/[a-z]/', $password)) {
+    if (!preg_match('/[a-z]/', $normalizedPassword)) {
         $errors[] = ['field' => 'password', 'message' => 'Must contain a lowercase letter.'];
     }
 
-    if (!preg_match('/[0-9]/', $password)) {
+    if (!preg_match('/[0-9]/', $normalizedPassword)) {
         $errors[] = ['field' => 'password', 'message' => 'Must contain a digit.'];
     }
 
-    if (!preg_match('/[!@#$%^&*()_+\-=\[\]{};\':"\\\\|,.<>\/?]/', $password)) {
+    if (!preg_match('/[!@#$%^&*()_+\-=\[\]{};\':"\\\\|,.<>\/?]/', $normalizedPassword)) {
         $errors[] = ['field' => 'password', 'message' => 'Must contain a special character.'];
     }
 

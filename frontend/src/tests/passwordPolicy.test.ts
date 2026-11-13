@@ -38,3 +38,13 @@ test('the maximum counts Unicode characters, not UTF-16 code units or UTF-8 byte
   assert.equal(validatePasswordRequirements(unicodeOverMaximum).hasMaxLength, false);
   assert.equal(validatePasswordRequirements(unicodeOverMaximum).isValid, false);
 });
+
+test('password length and composition are evaluated after NFC normalization', () => {
+  const decomposedAtMaximum = 'Aa1!' + 'e\u0301'.repeat(28);
+  assert.equal(Array.from(decomposedAtMaximum).length, 60);
+  assert.equal(Array.from(decomposedAtMaximum.normalize('NFC')).length, 32);
+  assert.equal(validatePasswordRequirements(decomposedAtMaximum).isValid, true);
+  assert.equal(validatePasswordRequirements('Aa1!' + 'e\u0301'.repeat(29)).hasMaxLength, false);
+  assert.equal(validatePasswordRequirements('Aa1!' + 'e\u0301'.repeat(28)).isValid,
+    validatePasswordRequirements('Aa1!' + 'é'.repeat(28)).isValid);
+});

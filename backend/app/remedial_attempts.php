@@ -104,9 +104,15 @@ function remedial_progression_is_cleared(array $progression): bool
     return in_array($progression['stage'] ?? null, ['passed', 'cost_recovery_passed'], true);
 }
 
-/** Retention state shown to users for one enrollment (see SQL helper below). */
-function retention_effective_state(string $storedState, array $progression): string
+/** Retention state shown to users for one enrollment; a 5.0 label is derived and never saved. */
+function retention_effective_state(string $storedState, array $progression, ?float $finalGwa = null): string
 {
+    if ($storedState === 'archived') {
+        return 'archived';
+    }
+    if ($finalGwa !== null && is_finite($finalGwa) && $finalGwa >= 5.0) {
+        return 'irregular_reenrollment';
+    }
     return in_array($storedState, ['remedial', 'active'], true) && remedial_progression_is_cleared($progression)
         ? 'cleared'
         : $storedState;
@@ -114,13 +120,15 @@ function retention_effective_state(string $storedState, array $progression): str
 
 /**
  * SQL for an enrollment's retention state as shown to users: a stored
- * 'remedial' (or plain 'active') state becomes 'cleared' once the policy is
- * satisfied. The
- * stored grade and state are unchanged (passing does not change grades).
+ * A 5.0 displays as irregular reenrollment, while a passed remedial attempt or
+ * cost recovery displays as cleared. The stored grade and state are unchanged.
  */
-function retention_effective_state_sql(string $enrollmentAlias, string $stateExpression): string
+function retention_effective_state_sql(string $enrollmentAlias, string $stateExpression, ?string $gradeExpression = null): string
 {
-    return "CASE WHEN {$stateExpression} IN ('remedial', 'active') AND (
+    $irregularGradeCase = $gradeExpression === null
+        ? ''
+        : "WHEN {$stateExpression} <> 'archived' AND {$gradeExpression} >= 5.0 THEN 'irregular_reenrollment' ";
+    return "CASE WHEN {$stateExpression} = 'archived' THEN 'archived' {$irregularGradeCase} WHEN {$stateExpression} IN ('remedial', 'active') AND (
                 EXISTS (SELECT 1 FROM enrollment_remedial_attempts ra_clear
                          WHERE ra_clear.enrollment_id = {$enrollmentAlias}.enrollment_id AND ra_clear.outcome = 'passed')
                 OR EXISTS (SELECT 1 FROM enrollment_cost_recovery cr_clear
@@ -408,9 +416,10 @@ function remedial_attempts_parse_request(array $data): array
 }
 
 /**
- * College policy: a course GWA of 2.5 or worse (2.5 to 5.0) triggers remedial;
- * 1.0 up to (but not including) 2.5 is passing. The trigger is fixed and is no
- * longer an Admin setting.
+ * College policy: a completed course GWA of 2.5 or worse is retained as an
+ * at-risk state; only grades through 4.9 are eligible for DentiSys remedial
+ * attempts, while 5.0 follows the in-person irregular reenrollment path.
+ * The trigger is fixed and is no longer an Admin setting.
  */
 const RETENTION_GWA_TRIGGER = 2.5;
 

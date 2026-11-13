@@ -505,7 +505,7 @@ function handle_secretary_activate(): void
             return;
         }
 
-        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+        $passwordHash = password_hash_user_password($password);
         $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
 
         $pdo->beginTransaction();

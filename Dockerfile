@@ -5,9 +5,9 @@ RUN composer install --no-dev --no-interaction --prefer-dist --classmap-authorit
 
 FROM php:8.4-apache-bookworm AS runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libpq-dev \
+    && apt-get install -y --no-install-recommends libpq-dev libicu-dev \
     && rm -rf /var/lib/apt/lists/* \
-    && docker-php-ext-install -j"$(nproc)" pdo_pgsql \
+    && docker-php-ext-install -j"$(nproc)" intl pdo_pgsql \
     && a2enmod rewrite
 
 WORKDIR /var/www/html

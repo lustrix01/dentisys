@@ -56,7 +56,7 @@ export function ActivateStudent() {
       setError('Password does not meet all security requirements.');
       return;
     }
-    if (password !== confirmation) {
+    if (password.normalize('NFC') !== confirmation.normalize('NFC')) {
       setError('Passwords do not match.');
       return;
     }
@@ -89,7 +89,7 @@ export function ActivateStudent() {
             <label htmlFor="student-password" className="mt-5 block text-sm font-semibold text-slate-700 dark:text-slate-200">
               Password
               <div className="relative mt-2">
-                <input id="student-password" aria-label="Password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" required minLength={8} maxLength={32} aria-invalid={Boolean(password && !passwordCriteria.hasMaxLength)} aria-describedby="student-password-requirements student-password-length-error" value={password} onChange={event => setPassword(event.target.value)} className="w-full rounded-lg border border-slate-300 p-3 pr-12 dark:border-slate-700 dark:bg-slate-800" />
+                <input id="student-password" aria-label="Password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" required minLength={8} maxLength={256} aria-invalid={Boolean(password && !passwordCriteria.hasMaxLength)} aria-describedby="student-password-requirements student-password-length-error" value={password} onChange={event => setPassword(event.target.value)} className="w-full rounded-lg border border-slate-300 p-3 pr-12 dark:border-slate-700 dark:bg-slate-800" />
                 <button type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} aria-controls="student-password" className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-slate-500 transition-colors hover:text-slate-700 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
               </div>
               {password && !passwordCriteria.hasMaxLength && <p id="student-password-length-error" role="alert" className="mt-1 text-xs font-medium text-rose-600">Use at most 32 characters.</p>}
@@ -104,12 +104,12 @@ export function ActivateStudent() {
             <label htmlFor="student-password-confirmation" className="mt-4 block text-sm font-semibold text-slate-700 dark:text-slate-200">
               Confirm Password
               <div className="relative mt-2">
-                <input id="student-password-confirmation" aria-label="Confirm password" type={showConfirmation ? 'text' : 'password'} autoComplete="new-password" required minLength={8} maxLength={32} aria-invalid={Boolean(confirmation && password !== confirmation)} value={confirmation} onChange={event => setConfirmation(event.target.value)} className="w-full rounded-lg border border-slate-300 p-3 pr-12 dark:border-slate-700 dark:bg-slate-800" />
+                <input id="student-password-confirmation" aria-label="Confirm password" type={showConfirmation ? 'text' : 'password'} autoComplete="new-password" required minLength={8} maxLength={256} aria-invalid={Boolean(confirmation && password.normalize('NFC') !== confirmation.normalize('NFC'))} value={confirmation} onChange={event => setConfirmation(event.target.value)} className="w-full rounded-lg border border-slate-300 p-3 pr-12 dark:border-slate-700 dark:bg-slate-800" />
                 <button type="button" onClick={() => setShowConfirmation(value => !value)} aria-label={showConfirmation ? 'Hide password confirmation' : 'Show password confirmation'} aria-pressed={showConfirmation} aria-controls="student-password-confirmation" className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-slate-500 transition-colors hover:text-slate-700 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500">{showConfirmation ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
               </div>
-              {confirmation && password !== confirmation && <p role="alert" className="mt-1 text-xs font-medium text-rose-600">Passwords do not match.</p>}
+              {confirmation && password.normalize('NFC') !== confirmation.normalize('NFC') && <p role="alert" className="mt-1 text-xs font-medium text-rose-600">Passwords do not match.</p>}
             </label>
-            <button type="submit" disabled={submitting || !invitation || !passwordCriteria.isValid || password !== confirmation} className="mt-6 w-full rounded-lg bg-accent-600 px-4 py-3 font-semibold text-white disabled:opacity-50">{submitting ? 'Activating…' : 'Accept invitation and activate'}</button>
+            <button type="submit" disabled={submitting || !invitation || !passwordCriteria.isValid || password.normalize('NFC') !== confirmation.normalize('NFC')} className="mt-6 w-full rounded-lg bg-accent-600 px-4 py-3 font-semibold text-white disabled:opacity-50">{submitting ? 'Activating…' : 'Accept invitation and activate'}</button>
           </>
         )}
         <Link to="/login" className="mt-5 block text-center text-sm font-semibold text-accent-600 hover:underline">Back to login</Link>

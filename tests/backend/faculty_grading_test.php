@@ -35,8 +35,8 @@ assert_faculty_grading(!str_contains($linkedSql, 'due_date'), 'Linked attendance
 assert_faculty_grading(str_contains($linkedSql, "ls.status = 'revoked') THEN NULL"), 'A revoked linked session counts as unlinked (GRD-001)');
 assert_faculty_grading(str_contains($linkedSql, "ls.status = 'ended') THEN 'absent'"), 'An ended linked session without a record resolves to Absent (GRD-001)');
 assert_faculty_grading(
-    faculty_effective_assessment_percentage(25, 50, true, 40, 90, 'present') === 65.0,
-    'Custom transmutation bounds are applied correctly'
+    faculty_effective_assessment_percentage(25, 50, true, 40, 90, 'present') === 75.0,
+    'Legacy custom bounds are ignored in favor of the fixed transmutation formula'
 );
 assert_faculty_grading(
     faculty_effective_assessment_percentage(25, 50, false, 40, 90, null) === 50.0,
@@ -61,6 +61,40 @@ assert_faculty_grading(
     faculty_course_grade_retention_state(null, 2.50) === null,
     'Missing or incomplete course grades remain unresolved'
 );
+assert_faculty_grading(faculty_remedial_attempt_outcome(74.99) === 'failed', 'Remedial score 74.99% fails');
+assert_faculty_grading(faculty_remedial_attempt_outcome(75.0) === 'passed', 'Remedial score 75% passes');
+assert_faculty_grading(faculty_remedial_attempt_outcome(100.0) === 'passed', 'Remedial score 100% passes for every course type');
+assert_faculty_grading(!faculty_remedial_grade_is_eligible(2.4), 'A completed 2.4 grade is not remedial eligible');
+assert_faculty_grading(faculty_remedial_grade_is_eligible(2.5), 'A completed 2.5 grade is remedial eligible');
+assert_faculty_grading(faculty_remedial_grade_is_eligible(4.9), 'A completed 4.9 grade is remedial eligible');
+assert_faculty_grading(!faculty_remedial_grade_is_eligible(5.0), 'A 5.0 grade follows the in-person irregular reenrollment path');
+assert_faculty_grading(!faculty_remedial_grade_is_eligible(null), 'An incomplete course grade is not remedial eligible');
+assert_faculty_grading(
+    retention_effective_state('remedial', remedial_attempts_empty_progression(), 5.0) === 'irregular_reenrollment',
+    'A 5.0 displays Irregular reenrollment without changing its stored state'
+);
+assert_faculty_grading(
+    retention_effective_state('archived', remedial_attempts_empty_progression(), 5.0) === 'archived',
+    'Archived 5.0 records keep their archived status'
+);
+$displayStateSql = retention_effective_state_sql('e', 'e.retention_state', 'e.final_gwa');
+assert_faculty_grading(
+    str_contains($displayStateSql, "e.final_gwa >= 5.0 THEN 'irregular_reenrollment'")
+        && str_contains($displayStateSql, "e.retention_state = 'archived' THEN 'archived'"),
+    'Read-only SQL status derivation handles 5.0 and preserves archived status'
+);
+assert_faculty_grading(faculty_cost_recovery_outcome(faculty_parse_cost_recovery_grade(1.0)) === 'passed', 'Cost recovery grade 1.0 passes');
+assert_faculty_grading(faculty_cost_recovery_outcome(faculty_parse_cost_recovery_grade(2.4)) === 'passed', 'Cost recovery grade 2.4 passes');
+assert_faculty_grading(faculty_cost_recovery_outcome(faculty_parse_cost_recovery_grade(2.5)) === 'failed', 'Cost recovery grade 2.5 fails');
+assert_faculty_grading(faculty_cost_recovery_outcome(faculty_parse_cost_recovery_grade(5.0)) === 'failed', 'Cost recovery grade 5.0 fails');
+foreach ([2.41, 2.49, 3.55, 0.9, 5.1] as $invalidCostRecoveryGrade) {
+    try {
+        faculty_parse_cost_recovery_grade($invalidCostRecoveryGrade);
+        assert_faculty_grading(false, "Cost recovery rejects invalid grade {$invalidCostRecoveryGrade}");
+    } catch (RemedialAttemptException $exception) {
+        assert_faculty_grading($exception->errorCode() === 'COST_RECOVERY_GRADE_INVALID', "Cost recovery rejects invalid grade {$invalidCostRecoveryGrade}");
+    }
+}
 
 foreach ([
     [100.0, 1.0], [99.0, 1.0], [98.0, 1.1], [97.0, 1.2], [96.0, 1.3], [95.0, 1.4], [94.0, 1.5], [93.0, 1.6],

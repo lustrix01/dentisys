@@ -237,9 +237,9 @@ export const Dashboard: React.FC = () => {
       showFeedback('Please enter a valid score (0-100).', 'error');
       return;
     }
-    const outcomeContradictsScore = remedialOutcome === 'passed' ? scoreVal < 50 : scoreVal >= 50;
+    const outcomeContradictsScore = remedialOutcome === 'passed' ? scoreVal < 75 : scoreVal >= 75;
     if (outcomeContradictsScore) {
-      showFeedback('The selected outcome does not match the score. 50% or higher passes.', 'error');
+      showFeedback('The selected outcome does not match the score. 75% or higher passes.', 'error');
       return;
     }
     const selected = pendingRemedials.find(row => row.id === selectedRemedialId);
@@ -261,7 +261,7 @@ export const Dashboard: React.FC = () => {
       });
 
       let attempt2Failed = false;
-      if (selected.attemptNumber === 1 && scoreVal < 50 && reattemptDate.trim().length > 0) {
+      if (selected.attemptNumber === 1 && scoreVal < 75 && reattemptDate.trim().length > 0) {
         try {
           await saveFacultyRemedialApi({
             enrollmentId: selected.record.enrollmentId,
@@ -611,7 +611,7 @@ export const Dashboard: React.FC = () => {
                   setRemedialScore(val);
                   const num = Number(val);
                   if (!isNaN(num) && val !== '') {
-                    setRemedialOutcome(num >= 50 ? 'passed' : 'failed');
+                    setRemedialOutcome(num >= 75 ? 'passed' : 'failed');
                   }
                 }}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-clinical-500 text-xs outline-none"
