@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Runs on the VPS as root, with no arguments, from provision-vps.ps1 (stdin protocol): hardening, .env creation,
+# deploy and verification.
 set +x
 set -euo pipefail
 umask 077

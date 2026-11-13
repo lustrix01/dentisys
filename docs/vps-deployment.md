@@ -1,15 +1,16 @@
-# VPS demonstration deployment
+# VPS deployment
 
 > For day-to-day releases (demo and production) follow the [release guide](release-guide.md). This file is the detailed reference for the server setup.
 >
-> **Since 2026-11-02** both servers run on Vultr (spec DEL-001), and production is a public test site with real biometrics on by default. This reference was written on AWS: where it says Security Group, Elastic IP, EC2 console or Session Manager, use the provider equivalents in [hosting-requirements.md](hosting-requirements.md), and pass `-InitialUser root` on Vultr. The demonstration rules below still apply to the demo server.
+> Both servers (demo and production) run on Vultr (spec DEL-001); the setup is the same, with separate images. Provider requirements are in [hosting-requirements.md](hosting-requirements.md). On Vultr pass `-InitialUser root`.
 
-This is the Owner-approved DEL-001 demonstration on one Ubuntu LTS VPS for the
-team and invited volunteer Faculty and Students. It is not production or the
-BIO-002 real Student deployment. Only team members may enroll facial biometrics.
+This is the Owner-approved DEL-001 deployment on one Ubuntu LTS VPS per
+environment. The demo server is for the team and invited volunteer Faculty and
+Students; only team members enroll facial biometrics there (BIO-002 note).
 This is an operating rule: volunteer Students can still see the enrollment UI.
-Volunteer biometric enrollment requires the institutional review in BIO-002 or
-a later Owner-approved amendment. Manual attendance remains available.
+Production is a public test site (spec BIO-008): real biometrics are on by default
+there, it is not used for real attendance, grades or retention, and real institutional
+use still requires BIO-002. Manual attendance remains available.
 
 The private-LAN prototype is unchanged; use [single-server.md](single-server.md)
 for that case. This VPS uses GHCR images built by hand from a tested commit,
@@ -20,16 +21,17 @@ internal PostgreSQL, and pgAdmin on loopback. No source checkout or CI/CD runs o
 
 ## Quick start
 
-Do these AWS steps manually before starting the command:
+Do these provider steps manually before starting the command:
 
-1. Launch an **x86-64 Ubuntu 26.04 LTS EC2 instance**, for example
-   **c7i-flex.large (4 GB RAM)**, with a **30 GB or larger disk** and your key pair.
-2. Allocate and associate an **Elastic IP**. Keep the AWS .pem private on Windows.
-3. Security Group: **22 from your IP for the first run only**, **2202 from your IP**,
-   and **80/443 for the web server**. Do not expose database or UI ports.
-4. Optionally point your own domain's A record to the Elastic IP (Cloudflare DNS-only).
+1. Create an **x86-64 Ubuntu 26.04 LTS server** of the size in
+   [hosting-requirements.md](hosting-requirements.md), with a **30 GB or larger disk**
+   and its SSH key selected.
+2. Note its fixed public IPv4 and keep the private key private on Windows.
+3. Cloud firewall (optional; the script sets up UFW): **22 for the first run only**,
+   **2202**, and **80/443 for the web server**. Do not expose database or UI ports.
+4. Optionally point your own domain's A record to the IP (Cloudflare DNS-only).
    Without `-Domain`, the script uses `<ip-with-dashes>.sslip.io`.
-5. Prepare Session Manager or configured EC2 Instance Connect recovery, publish the
+5. Make sure the provider's web console works as the recovery route, publish the
    tested `:demo` images using the publishing section below, and commit a clean tree.
    Keep the face model at `..\dentisys-biometric-assets\face_landmarker.task` and
    team-tested calibration in your local `.env`. Docker is not needed on this PC
@@ -38,7 +40,7 @@ Do these AWS steps manually before starting the command:
 From the repository on Windows. A plain PowerShell window can refuse an unsigned `.ps1` ("... is not digitally signed"), so run every Windows script in this guide as `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\<script>.ps1 <arguments>` (`powershell` accepts the same switches):
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\provision-vps.ps1 -Ip 203.0.113.10 -KeyFile 'C:\path\to\aws.pem'
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\provision-vps.ps1 -Ip 203.0.113.10 -KeyFile 'C:\path\to\server-key' -InitialUser root
 # Optional: -Domain demo.example.com -NoDbTunnel -User opsadmin
 ```
 
@@ -50,20 +52,20 @@ every rerun: if the server was already set up for a different account, the
 launcher stops at its first probe instead of creating a second one. The
 examples below use `devops`; substitute your `-User` name.
 
-For an instance rebuilt on the same Elastic IP, add `-NewInstance` to that command.
+For a server rebuilt on the same IP, add `-NewInstance` to that command.
 It scans both SSH ports, prints the new host key fingerprints, and removes the old
 entries for this IP from your `known_hosts`. Compare the printed fingerprints with
-**EC2 > Actions > Monitor and troubleshoot > Get system log**, under
-`BEGIN SSH HOST KEY FINGERPRINTS`, before confirming the run; cancel if they differ.
+the provider console (on the server: `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`)
+before confirming the run; cancel if they differ.
 Without this switch, a changed key stops and prints the exact rebuild command.
 Host key checking remains enabled.
 
-All answers and the AWS checklist confirmation come first. Passwords and the GHCR
+All answers and the firewall checklist confirmation come first. Passwords and the GHCR
 read token are hidden, kept in memory, and sent only through SSH stdin; no secret
 configuration is saved on the PC. The server applies the hardening guide steps
 1–6, creates its private environment, deploys and prints PASS/FAIL checks. The
 current SSH session continues through the port switch. `-SshPort` defaults to
-2202; use the matching Security Group rule if you change it.
+2202; use the matching firewall rule if you change it.
 
 If the updates applied in step 1 require a reboot (`/var/run/reboot-required`),
 the server reboots itself only after every PASS/FAIL check has passed; it never
@@ -74,12 +76,12 @@ deployment, waits up to 5 minutes for the containers to become healthy, repeats
 the checks, then repeats the HTTPS health check from the PC.
 
 After a successful fresh run, test the printed sudo-account login and **remove 22 from
-the Security Group**. The launcher probes ubuntu on 22 or the sudo account
+any cloud firewall**. The launcher probes the first-login account on 22 or the sudo account
 (`devops` by default) on the chosen port. Reruns ask only for the sudo password and a fresh GHCR read token, then
 preserve the server `.env` and its signing keys/database passwords. If hardening
 finished but no environment was created, it collects the missing setup answers
 at the start of the next run. `-NoDbTunnel` omits the pgAdmin/Mailpit exception.
-The script changes only the VPS; AWS resources and DNS remain manual.
+The script changes only the VPS; provider resources and DNS remain manual.
 
 Server stdout and stderr stream live. On failure, the launcher includes the last
 20 lines and prints a recovery command. The complete output is appended per run
@@ -87,22 +89,21 @@ with a UTC timestamp to **`/var/log/dentisys-provision.log`** (root-only, mode 0
 stdin secrets are never logged). To read it after the SSH switch:
 
 ```powershell
-ssh -i 'C:\path\to\aws.pem' -o IdentitiesOnly=yes -t -p 2202 devops@203.0.113.10 'sudo tail -n 80 /var/log/dentisys-provision.log'
+ssh -i 'C:\path\to\server-key' -o IdentitiesOnly=yes -t -p 2202 devops@203.0.113.10 'sudo tail -n 80 /var/log/dentisys-provision.log'
 ```
 
-If hardening stopped before the switch, use `-p 22 ubuntu@203.0.113.10` instead.
-The log is on the VPS, so retrieve it before terminating a failed instance.
+If hardening stopped before the switch, use `-p 22 root@203.0.113.10` (`ubuntu@` on AWS) instead.
+The log is on the VPS, so retrieve it before destroying a failed server.
 
 
 ## Host, DNS and firewall
 
 Use an **x86-64 Ubuntu 26.04 LTS VPS** of the size in
 [hosting-requirements.md](hosting-requirements.md) (currently Vultr High Frequency
-AMD, 1 vCPU / 2 GB, chosen from the 2026-11-04 benchmarks; re-measure with
+AMD, 1 vCPU / 2 GB, chosen from the benchmarks; re-measure with
 `scripts/benchmark.ps1` before changing it), with **at least 30 GB disk** for images,
-PostgreSQL and 14 database dumps. AWS's default 8 GB disk runs out while pulling the
-biometric image. AWS Lightsail/EC2, Vultr and DigitalOcean are possible providers;
-select an equivalent Ubuntu VPS.
+PostgreSQL and 14 database dumps; an 8 GB disk runs out while pulling the
+biometric image. Any provider offering an equivalent Ubuntu VPS works.
 The publishing script builds `linux/amd64`; do not select an ARM instance.
 
 Buy your domain and point an A record for `APP_DOMAIN` at the VPS public IPv4.
@@ -115,37 +116,34 @@ DNS must resolve correctly and port 80 must be reachable for ACME HTTP-01.
 
 The optional script applies [steps 1–6 of the Owner's Ubuntu 26.04 hardening guide](https://computingforgeeks.com/harden-ubuntu-2604-server/).
 
-On a fresh EC2 host, first allow **TCP 2202 from your IP** and **80/443 for the
-web server** in the AWS Security Group. Keep 22 available for the initial
-`ubuntu` connection. Apply equivalent IPv6 rules if enabled. Prepare recovery
-access through [Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-getting-started.html)
-or [EC2 Instance Connect](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-connect-prerequisites.html).
-Session Manager needs its agent/IAM setup; Instance Connect still needs access
-to the configured SSH listener and user. Its default port-22 browser connection
-will not reach SSH after hardening.
+If the provider has a cloud firewall, first allow **TCP 2202** and **80/443 for the
+web server**. Keep 22 available for the initial connection. Apply equivalent IPv6
+rules if enabled. Prepare recovery access through the provider's web console
+(Vultr *View Console*); a browser console that connects over port 22 will not
+reach SSH after hardening.
 
-From the repository on Windows, use the AWS `.pem`:
+From the repository on Windows, use the server's private key:
 
 ```powershell
-.\scripts\harden-vps.ps1 -Server ubuntu@replace-with-vps-ip -KeyFile 'C:\path\to\aws.pem'
+.\scripts\harden-vps.ps1 -Server root@replace-with-vps-ip -KeyFile 'C:\path\to\server-key' -InitialUser root
 # Optional: -User opsadmin (the sudo account, devops by default)
 ```
 
 The wrapper checks the key ACL and prints repair commands if needed; it does
 not change ACLs. The server first asks for the `devops` sudo password twice
-through `passwd`, then one confirmation that the Security Group already
+through `passwd`, then one confirmation that any cloud firewall already
 allows 2202/80/443. All input finishes before live host settings change, and
 steps 1–6 then run unattended. A usable existing `devops` password is retained
 on reruns. SSH switches directly to **2202, devops only**. Keep the current
 session open until a second key login succeeds:
 
 ```powershell
-ssh -i 'C:\path\to\aws.pem' -p 2202 devops@replace-with-vps-ip
+ssh -i 'C:\path\to\server-key' -p 2202 devops@replace-with-vps-ip
 ```
 
-After that test, remove 22 from the Security Group and continue with the
+After that test, remove 22 from any cloud firewall and continue with the
 publishing, bundle/model and deployment sections below. Use `devops` for every
-deployment/sync, adding `-i` with your `.pem` to the SCP/SSH commands below.
+deployment/sync, adding `-i` with your private key to the SCP/SSH commands below.
 A required reboot is reported for you to perform after testing the new login. To rerun, connect as `devops` with `-Port 2202`.
 With a different `-User` (`--user` when running the Bash script directly), read
 that name wherever `devops` appears in this guide.
@@ -259,11 +257,11 @@ without variable references. Do not put `GHCR_TOKEN` in this file. See
   These are the initial GUI login, not PostgreSQL credentials.
 - Set the absolute model path, SHA-256 and team-validated research calibration
   values. The script verifies the model hash; it invents no biometric thresholds.
-- `BIOMETRIC_SIDECAR_ENABLED=true` opts this `single-server` demo into real
-  enrollment and attendance verification, as in local development. Only team
-  members enroll (BIO-002 note); consent and manual fallback still apply. To
-  disable it, set `false` and rerun deployment. It defaults to false when absent;
-  production and test environments cannot opt in. Keep the sidecar URL/secret
+- `BIOMETRIC_SIDECAR_ENABLED=true` turns on real enrollment and attendance
+  verification, as in local development. Consent and manual fallback still apply
+  (on the demo only team members enroll, BIO-002 note). To disable it, set `false`
+  and rerun deployment. It defaults to false when absent and is read only with
+  `APP_ENV=single-server` (the VPS setting); `test` and `production` cannot opt in. Keep the sidecar URL/secret
   configured and `BIOMETRIC_CHALLENGE_TTL_SECONDS=120` unless team testing
   requires another positive lifetime.
 - Keep `EMAIL_PROVIDER=smtp`, `SMTP_HOST=smtp.gmail.com`, port `587`, encryption
@@ -331,8 +329,8 @@ active. Do not enroll volunteers' biometrics.
 
 ### Failed first database initialization
 
-An earlier deploy installed schema files with permissions unreadable by the
-container's `postgres` user (uid 999). The log shows `Permission denied` for
+If a deploy installs schema files with permissions unreadable by the
+container's `postgres` user (uid 999), The log shows `Permission denied` for
 `001-migrations.sh`, then `Skipping initialization` on restart; the database
 exists but `_schema_migrations` does not. The migration check now stops with a
 recovery message, and prints progress while waiting up to 180 seconds for db.
@@ -358,8 +356,8 @@ never waits for password input.
 
 ## Replicas and routing
 
-The overlay runs **three web and three frontend replicas, and one biometric
-sidecar**. Traefik sends `/api`, `/api/...` and `/healthcheck.php` directly to
+The overlay runs **`WEB_REPLICAS` web and `FRONTEND_REPLICAS` frontend replicas
+(3 each by default), and one biometric sidecar**. Traefik sends `/api`, `/api/...` and `/healthcheck.php` directly to
 web with higher router priority; the remaining paths go to frontend. This avoids
 Nginx's cached web IPs during Watchtower replacements. Paths, Authorization
 headers and cookies pass through intact. `APP_IS_HTTPS=true` keeps secure cookies;
@@ -415,9 +413,8 @@ not a delivery queue. The unused legacy settings/assessment path helpers have
 no callers; active settings and assessments use PostgreSQL. Protected biometric
 references stay on the single sidecar's volume, excluded from ordinary backups.
 
-The biometric gate audit found backend activation in `app/config.php` and
-frontend runtime normalization discarding `sidecar`; both now honor the demo
-opt-in. The sidecar client/controllers require the active provider, not a
+Backend activation in `app/config.php` and the frontend runtime
+normalization both honor the opt-in. The sidecar client/controllers require the active provider, not a
 development environment. Real camera, consent, enrollment and check-in screens
 use Student/linked-Secretary authorization without an environment gate. The
 remaining development-only checks belong to mocks and remain unchanged.
@@ -474,11 +471,10 @@ curl --fail https://dentisys.example.com/api/health
 
 Expect HTTP to redirect to HTTPS, HTTPS to show the application with a trusted
 certificate, API health to report `"status":"ok"`, and web/db/biometric to be
-healthy; `compose ps` must show three healthy web and three healthy frontend
-replicas, and one healthy biometric container. Check `/api/runtime-config` reports
-`biometrics.active: sidecar` when opted in. Confirm invitation delivery, sign-in,
-team-only enrollment/check-in and manual attendance in a
-browser. Replace `dentisys.example.com` above with `APP_DOMAIN`.
+healthy; `compose ps` must show `WEB_REPLICAS` healthy web and `FRONTEND_REPLICAS`
+healthy frontend replicas (3 each by default), and one healthy biometric container. Check `/api/runtime-config` reports
+`biometrics.active: sidecar` when enabled. Confirm invitation delivery, sign-in,
+enrollment/check-in and manual attendance in a browser. Replace `dentisys.example.com` above with `APP_DOMAIN`.
 Inspect Watchtower logs for registry/API errors and Traefik logs for
 DNS/ACME errors. Do not use `curl -k` to hide certificate problems.
 

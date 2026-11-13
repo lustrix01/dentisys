@@ -1,7 +1,6 @@
 # Audit logging contract
 
-Status: **APPROVED by the Owner** (2026-10-17). Before/After demo: [Audit Trail Demo](https://claude.ai/artifact/EBNfxCrXPbdk5GHDZ5rGw2).
-Once approved, this contract replaces the audit wording in `spec.md` (SEC-004, BIO-009 audit list, session-edit and term-change audit lines) with one audit section.
+Status: **Current contract**. It replaces the audit wording in `spec.md` (SEC-004, BIO-009 audit list, session-edit and term-change audit lines) with one audit section.
 
 ## 1. Purpose
 
@@ -45,9 +44,9 @@ It is not usage analytics, debugging output, or a click history. An event that s
 
 Rows are written whether or not any screen shows them. Hidden class-work rows stay sealed in the database as evidence.
 
-**O1 — Investigations (decided 2026-10-17).** The Dean has no screen access to class-work rows. For a grade dispute or a suspected stolen Faculty account, the system administrator reads the rows from the database on the Dean's request. Accepted trade-off: within the app, only the Faculty member can see their own class-work history.
+**O1 — Investigations.** The Dean has no screen access to class-work rows. For a grade dispute or a suspected stolen Faculty account, the system administrator reads the rows from the database on the Dean's request. Accepted trade-off: within the app, only the Faculty member can see their own class-work history.
 
-**O2 — Class Attendance Activity (decided 2026-10-17).** Stays as a class-records screen, not the personal audit trail: Faculty see attendance changes made by anyone (including Secretaries) in their own classes. It stays **unchanged** (Student, Section, Session, Change, Reason, By; Manila time); it reads attendance records, not audit rows.
+**O2 — Class Attendance Activity.** Stays as a class-records screen, not the personal audit trail: Faculty see attendance changes made by anyone (including Secretaries) in their own classes. It stays **unchanged** (Student, Section, Session, Change, Reason, By; Manila time); it reads attendance records, not audit rows.
 
 ## 4. Display standard (every screen)
 
@@ -83,7 +82,7 @@ Row wording for special cases: Who = **System** for automatic jobs; **Unknown ac
 
 **Dean overview note.** Under the Audit Trail title: "Class work (grades, attendance, retention) is not shown here; it stays recorded."
 
-**Phones and tablets (decided 2026-10-17; follows the 2026-10-13 rule in spec.md: below 1280 px columns and data formats match desktop, never merged, reordered or dropped, and everything stays inside its box).**
+**Phones and tablets (follows the rule in spec.md (UI-001): below 1280 px columns and data formats match desktop, never merged, reordered or dropped, and everything stays inside its box).**
 
 | Part | Phone (~375 px) | Tablet (768–1279 px) | Desktop (≥1280 px) |
 |---|---|---|---|
@@ -94,7 +93,7 @@ Row wording for special cases: Who = **System** for automatic jobs; **Unknown ac
 | Export / Print | Last item in the filter card, full width. | Same. | In the filter row, after the log count. |
 | Paging | Below the list; wraps. | Same. | Below the list. |
 
-Owner-approved amendment (2026-10-26, Owhie responsive merge): the page shows no title block of its own; the title is the top-bar heading (on phones, the page-name line under the top bar). Filters and Export / Print sit in one filter card as in the table above; the Newest / oldest sort stays in that card.
+The page shows no title block of its own; the title is the top-bar heading (on phones, the page-name line under the top bar). Filters and Export / Print sit in one filter card as in the table above; the Newest / oldest sort stays in that card.
 
 Everywhere: tap targets at least 44 px; long names and emails wrap and are never cut off; the sidebar follows the existing rule (collapsed by default at 768–1023 px). Checked at 375, 768, 1024 and 1280 px wide, in light and dark.
 
@@ -166,9 +165,9 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | Scores changed | assessment_scores_saved | **one row per save** (a full-matrix save covering many assessments is still one row); each changed cell: student, assessment, score and remark before → after; cleared scores keep old value; **plus each period/final grade that moved as a result**, before → after; **no row if nothing changed** | no | yes | CHANGE |
 | Grades recomputed (Recompute button) | grades_recomputed | counts + **each period/final grade that changed**, before → after; **no row if no grade changed**. The automatic recompute after a score save writes no row of its own (its grade changes are in the score row). | no | yes | CHANGE |
 
-**When scores are saved (decided 2026-10-17).** Auto-save no longer fires on every cell left. It saves after **10 seconds without typing**, and also when the Faculty switches assessment or view, leaves the page, or presses Save. A burst of edits is one save and one audit row. The existing unsaved-scores warning stays, and now also appears when the Faculty tries to leave during the 10-second wait. Auto-save can still be turned off, as today.
+**When scores are saved.** Auto-save no longer fires on every cell left. It saves after **10 seconds without typing**, and also when the Faculty switches assessment or view, leaves the page, or presses Save. A burst of edits is one save and one audit row. The existing unsaved-scores warning stays, and now also appears when the Faculty tries to leave during the 10-second wait. Auto-save can still be turned off, as today.
 
-**If the automatic recompute fails (decided 2026-10-17).** The scores and their audit row still save, as today. The row lists grade changes only when the recompute succeeded, and the existing "grades could not be computed yet" notice shows.
+**If the automatic recompute fails.** The scores and their audit row still save, as today. The row lists grade changes only when the recompute succeeded, and the existing "grades could not be computed yet" notice shows.
 
 ### 5.5 Attendance — own view only (Faculty also see their classes' changes in Class Attendance Activity, O2)
 
@@ -201,13 +200,13 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | Face enrolment deleted | biometric_enrollment_revoked, _revoked_by_dean, _revoked_inactive, _expired | Student, Dean, system | status before → after; never biometric data | yes | KEEP |
 | Face check failed | biometric_verification_failed | Student | error code only, no score | no | KEEP |
 
-**O3 — Dean and biometrics (decided 2026-10-17).** The Dean sees consent changes and enrolment deletions (proof under the Data Privacy Act), not enrolment attempts or failed face checks.
+**O3 — Dean and biometrics.** The Dean sees consent changes and enrolment deletions (proof under the Data Privacy Act), not enrolment attempts or failed face checks.
 
 ### 5.8 Development only
 
 `development_mock_student_session_created` — written only when development mock sign-in is enabled; never in production. KEEP.
 
-## 6. What changes from today (summary)
+## 6. What changed from the earlier audit (summary)
 
 - STOP 3 codes (token refresh, two in-between steps).
 - NEW 2 codes (wrong 2FA code, recovery codes regenerated).
@@ -218,8 +217,6 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 - Dean Audit Trail and dashboard become an overview; class work moves to the actor's own view only.
 - One display standard on every audit screen.
 - New chain check in the gates.
-
-Expected effect on the dev data (2026-09-27 → 10-17, 1,342 rows): about 72% fewer rows written; Faculty My Activity goes from 71% sign-in rows to work actions only (sign-ins one filter away).
 
 ## 7. Acceptance checks
 

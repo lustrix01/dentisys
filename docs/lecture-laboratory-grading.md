@@ -2,7 +2,9 @@
 
 Lecture/Laboratory grading is required for new or updated period configurations
 in the Grade Weights Editor for a current-year offering. The configuration applies to every section of that
-Faculty member's course, semester and school year.
+Faculty member's course, semester and school year. A Lecture-only course
+(no Laboratory units) has Lecture categories only; see
+[the lecture-only contract](contracts/lecture-only-grading.md).
 
 The editor validates three layers:
 
@@ -14,9 +16,11 @@ The editor validates three layers:
 
 For example, a 60% Lecture / 40% Laboratory ratio combines Midterm component
 results of 80% and 90% into 84%. Finals results of 90% and 80% combine into 86%.
-With 30% Midterm / 70% Finals contributions, the overall percentage is 85.4%.
-The server combines unrounded values and rounds the resulting grade for display
-and storage. GWA remains a course result.
+With 30% Midterm / 70% Finals contributions, the overall percentage is
+round(round(84 x 30%) + round(86 x 70%)) = round(25 + 60) = 85%.
+Each period grade is rounded to a whole percent (.5 rounds up) and the course
+grade is the rounded sum of the two rounded period shares; the server and the
+screen produce the same value. GWA remains a course result.
 
 ## Configure an offering
 
@@ -46,7 +50,7 @@ entered zero remains a real score.
 
 Open **Summaries & Export** to see the four component results (Midterm Lecture,
 Midterm Laboratory, Finals Lecture and Finals Laboratory), alongside the two
-period grades and overall grade. Its CSV and print views include the component
+period grades and overall grade. Its Excel and print views include the component
 columns; Faculty Reports also uses the server-provided breakdown. An older saved
 result without component detail is shown as unavailable until recomputation,
 and a result saved under an earlier configuration remains identified as prior.
@@ -57,10 +61,11 @@ required-split amendment. New conversion back to combined lists is unavailable.
 ## Attendance and existing configurations
 
 Attendance continues using the course's existing records and inclusive period
-date ranges. At most one category in a period may use the Attendance source,
-across both components. Participation and Recitation use assessment scores unless
-Faculty explicitly chooses Attendance. Assessment-linked transmutation remains
-separate and follows the existing rules.
+date ranges. The editor shows and creates assessment-source categories only;
+Participation and Recitation use assessment scores. The server still computes an
+existing Attendance-source category (at most one per period, across both
+components; never in a Lecture-only course). Assessment-linked transmutation
+remains separate and follows the existing rules.
 
 Existing combined configurations keep their saved calculations and grades until
 explicitly converted. Editing their period weights requires forward conversion:
@@ -70,9 +75,8 @@ with defaults or rescale saved weights. Conversion back to combined period lists
 is unavailable. Scores, history and recorded grades remain preserved until explicit
 recomputation.
 
-Past-school-year offerings remain view-only. Informational risk uses the saved
-weights and existing risk rules; retention thresholds and manual overrides are
-unchanged. Import workflows are outside this change.
+Past-school-year offerings remain view-only. Retention status is computed from
+the saved grades and cannot be set by hand. Import workflows are described in
+[the official imports contract](contracts/official-imports.md).
 
-The authoritative rules are [GRD-003 in spec.md](../spec.md) and
-[the approved amendment record](archive/spec-amendments-2026-10-04.md).
+The authoritative rules are GRD-002, GRD-003 and UI-003 in [spec.md](../spec.md).

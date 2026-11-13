@@ -1,7 +1,5 @@
 # DentiSys Manual Demo Readiness
 
-> **UI migration status (2026-09-24):** Follow [the UI-first plan](archive/ui-migration-plan.md). Visual parity, schema readiness, and fully wired functionality are separate milestones. Existing checklist results must not be carried forward as proof for changed screens. Temporary test deferral during UI copying does not mark these items passed.
-
 This is the living checklist for a human demonstration of the supported local DentiSys development stack. It complements automated validation; it is not a second automated QA suite. Deterministic logic, API contracts, database persistence, RBAC, and ordinary error branches should be established through the automated coverage referenced below and should not be re-proven manually unless a human-visible presentation is the purpose of the step.
 
 Use only the supported Docker Compose development runtime. The seeded credentials in this document are local development/demo-only credentials. Never use them outside development/testing, and never record real passwords, MFA codes, recovery codes, Google tokens, or other secrets in this document or in evidence.
@@ -251,7 +249,7 @@ The `Last reviewed` value is the repository commit set used to review this check
 
 1. Sign in as the local demo Faculty account.
 2. Visit `/classes` and `/students`; present the visible class, roster, eligibility, and student information for the selected class.
-3. Visit `/grades`; present the Grade Weights Editor with period preset customization (40% Midterm / 60% Finals), Faculty-defined attendance date ranges, conversion from legacy overall weighting, explicit recomputation, and authoritative period percentage / overall GWA ledger and CSV export.
+3. Visit `/grades`; present the Grade Weights Editor with period preset customization (50% Midterm / 50% Finals by default), Faculty-defined attendance date ranges, conversion from legacy overall weighting, explicit recomputation, and authoritative period percentage / overall GWA ledger and Excel/PDF export.
 4. Visit `/attendance`; select an available class/date and present the attendance records and visible status controls.
 5. Visit `/retention` and `/reports`; present the visible retention indicators and report context.
 6. Visit `/email-management`; present email history and, if using a tester-controlled eligible roster, the student-invitation presentation.
@@ -385,9 +383,9 @@ The `Last reviewed` value is the repository commit set used to review this check
 
 **Notes:** ` `
 
-### OUTPUT-01 — Reports, CSV export, and print/PDF output
+### OUTPUT-01 — Reports, Excel export, and print/PDF output
 
-**Purpose:** Confirm the human usability of report/audit output, CSV downloads, and browser print/PDF output.
+**Purpose:** Confirm the human usability of report/audit output, Excel (.xlsx) downloads, and browser print/PDF output.
 
 **Prerequisites:** At least one role with report/audit data; a browser download directory; a PDF viewer or print preview; use only local demo data.
 
@@ -395,7 +393,7 @@ The `Last reviewed` value is the repository commit set used to review this check
 
 1. Open an available Admin, Faculty, or Secretary report/audit surface after signing in with the appropriate role.
 2. Apply a meaningful filter and record the selected filter context.
-3. Use the visible CSV/export control when available and confirm that the download completes.
+3. Use the visible Excel/export control when available and confirm that the download completes.
 4. Open the downloaded file and confirm that it is readable, contains the selected data context, and does not silently omit the selected filter context.
 5. Repeat for a representative audit export when that screen provides an export control.
 6. Use the browser print control on a representative report/audit view and preview/save it as PDF.

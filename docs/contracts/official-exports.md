@@ -1,10 +1,10 @@
 # Exports in .xlsx and the official layouts — contract
 
-Status: **Grilled and demo approved** (2026-10-27). Demo: [Official Exports Demo](https://claude.ai/artifact/7dEGzt1Qf6EXzcF7fEHqx2). X23–X26 were added from the demo and approved with it.
+Status: **Current contract**, implemented.
 
-Owner request (2026-10-27): "move from .csv to .xlsx and improve the format of the export file … since we now know the original official files (importing of user list and grades), maybe we can tackle a better export so that it has the same layout? if possible".
+Owner request: "move from .csv to .xlsx and improve the format of the export file … since we now know the original official files (importing of user list and grades), maybe we can tackle a better export so that it has the same layout? if possible".
 
-## 1. What exists today
+## 1. Background (before this contract)
 
 | # | Screen and button | Who | Today's file | Columns today |
 |---|---|---|---|---|
@@ -31,7 +31,7 @@ All are built in the browser (no server endpoint) with a UTF-8 BOM and a formula
 
 The class list is a PDF: a header block (Course Code, Title, Section, Year Level, Units, Faculty, Schedules, term), then `# | Student No. | Program | Name | Gender | Year Level | Contact #`.
 
-## 3. Rules (all Owner-approved, 2026-10-27)
+## 3. Rules (all Owner-approved)
 
 ### Grade workbook (E1 and E2)
 
@@ -75,7 +75,3 @@ The class list is a PDF: a header block (Course Code, Title, Section, Year Level
 | X26 | Export buttons say "Export Excel" instead of "Export CSV" (tooltips and aria labels too). Class-list exports use the grouped **Export Excel** and **Export PDF** controls. |
 | X27 | **Export PDF** opens a styled, landscape class list with the same header details and roster columns as X15. The browser print dialog lets Faculty save the styled document as PDF, named `<Course>_<Section>_Class_List_<School year>_<Semester>.pdf`. The existing `.xlsx` export and filename in X17 remain available. |
 | X28 | **Faculty Reports → Grades & Assessments** downloads a report-only `.xlsx` workbook with five sheets, in this order: (1) `Assessment Scores` — a Grade Computation-style student-by-assessment matrix for enrolled students and non-archived assessments in the selected class, grouped by Midterm/Finals, component, and category; each assessment shows its maximum score, saved score, and score percentage, with missing scores blank; (2) `Grade Summary` — Student Number, Student Name, Midterm period percentage, Finals period percentage, overall Final Course Grade, and Remarks, using the existing server-computed period and course results; (3) `Midterm Watchlist` — selected-class records flagged at risk by the server, including student, class, complete midterm percentage/grade, risk standing and computed status; (4) `Attendance Register` — the selected class, attendance date and session roster/status; (5) `Interactive Analytics` — visual graphs for retention standings, grade distribution, and assessment averages, followed by the labeled source data. The workbook is scoped to the selected class and current report filters. **Export PDF** prints the same five report sections, in the same order, with the assessment matrix and analytics graphs. The Faculty Reports bundle is not the Grade Computation import-compatible workbook; the Grade Computation export remains unchanged. |
-
-## 4. Next steps
-
-1. Implementation by subagents, with the round-trip test (X12) on made-up rows, then `./scripts/check.ps1`.

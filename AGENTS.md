@@ -5,13 +5,13 @@ These rules apply to everyone who changes this repository — people working by 
 ## Stack and safety
 
 - DentiSys runs locally through Docker Compose only. Do not add XAMPP, native PHP, native MySQL/MariaDB, or `local.php` runtime paths.
-- Keep the stack small: React/Vite, plain PHP with Composer dependencies, PostgreSQL, Mailpit, and optional development-only pgAdmin.
+- Keep the stack small: React/Vite, plain PHP with Composer dependencies, PostgreSQL, the private biometric sidecar (Python/Flask), Mailpit, and optional development-only pgAdmin.
 - Do not delete or reuse a persisted database volume without explicit approval. Schema changes are additive, ordered migrations.
 - Current sign-in is password plus optional authenticator-app 2FA with recovery codes. Do not reintroduce email-code 2FA.
-- Google Sign-In alongside password authentication, Google-assisted registration, configurable multi-domain allowlists, facial biometrics (research prototype), image publishing, and the VPS demonstration deployment (DEL-001) are approved; check `spec.md` and the code for what is implemented before assuming something is future work.
+- Google Sign-In alongside password authentication, Google-assisted registration, facial biometrics (research prototype), image publishing, and the VPS demonstration deployment (DEL-001) are approved; check `spec.md` and the code for what is implemented before assuming something is future work.
 - Preserve existing routes, styles, assets, localStorage keys, roles, and workflows unless the task requires a behavior change.
 - Keep secrets out of version control. Docker Compose reads local values from root `.env`; backend runtime configuration comes from container environment variables.
-- Avoid unrelated refactors and formatting churn. The approved deployment is the DEL-001 VPS setup in `spec.md` (image registry, Traefik, Watchtower) plus the private-LAN single server; do not add other deployment targets, CI/CD, or cloud services without approval.
+- Avoid unrelated refactors and formatting churn. The approved deployment is the demo and production VPS setup (DEL-001) in `spec.md` (image registry, Traefik, Watchtower) plus the private-LAN single server; do not add other deployment targets, CI/CD, or cloud services without approval.
 
 ## Product specification
 

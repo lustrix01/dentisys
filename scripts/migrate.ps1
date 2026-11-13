@@ -1,3 +1,6 @@
+# Applies pending database/migrations/*.sql, in name order, to the running development database (service db).
+# Already-applied files are skipped. Parameters default to DB_NAME / DB_ADMIN_USER / DB_ADMIN_PASS from the
+# environment, else dentisys / postgres / the development password. start-dev.ps1 calls it.
 [CmdletBinding()]
 param(
     [string] $DatabaseName = $env:DB_NAME,

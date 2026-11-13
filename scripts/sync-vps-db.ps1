@@ -1,3 +1,7 @@
+# Database migration sync to a VPS over SSH (-Server user@host, -Port, -IdentityFile). Without -Apply it only
+# checks what is pending (migrate-vps.sh --check). -Apply backs up the database and applies the pending migrations;
+# -Apply -Publish also publishes the images (-Namespace, -Tag demo) afterwards. Demo: demo-vps.ps1 migrate wraps it.
+# Production: promote-prod.ps1 does the same step first.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]

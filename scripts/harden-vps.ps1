@@ -1,3 +1,6 @@
+# Hardens a fresh Ubuntu 26.04 VPS with steps 1-6 of the team's hardening guide (SSH on -Port/2202 keys only, UFW,
+# fail2ban, sudo account -User, default devops). -Server user@host, -KeyFile, -InitialUser (root or ubuntu),
+# -NoDbTunnel. provision-vps.ps1 already includes this step; run this one alone only for hardening without a deploy.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]

@@ -1,8 +1,8 @@
 # Official class list and grade sheet imports — contract
 
-Status: **Grilled and demo approved** (2026-10-26, three rounds). Scope: imports plus the new grade math; exports are a separate, later feature. Demo: [Official Imports Demo](https://claude.ai/artifact/2qfYUM9W8C5xL5PnGWTuBm).
+Status: **Current contract**, implemented. Scope: imports plus the official grade math; exports are in [official-exports.md](official-exports.md).
 
-Owner rule (2026-10-26): Faculty upload the school's files exactly as the school gives them. DentiSys adapts to the layout; it never asks Faculty to change a file.
+Owner rule: Faculty upload the school's files exactly as the school gives them. DentiSys adapts to the layout; it never asks Faculty to change a file.
 
 Sample files (kept outside the repo, they hold real student data): four "Official List of Enrolled Students" PDFs (DMD-1A, 2A, 3A, 4A) and one grade sheet workbook (`SAMPLE.xlsx`, Operative Dentistry 1, 2nd Sem AY 2025-2026). Tests use made-up rows in the same layout.
 
@@ -19,14 +19,14 @@ Where: Classes & Rosters → Import roster (existing screen). CSV import stays a
 
 ### Rules
 
-| # | Rule | Today |
+| # | Rule | Before this contract |
 |---|---|---|
 | P1 | The Program column (`DMD`) is read and ignored. It never becomes part of the name. | Bug: "DMD" is added to every first name |
 | P2 | A page with no table is allowed when it holds the total line or "NOTHING FOLLOWS". Any other page with no table still stops the import with the page number. | Bug: DMD-4A fails on page 3 |
-| P3 | The number of rows read must equal `Total Number of Students`. If not, an amber warning names both numbers; the Faculty may still save (Owner, 2026-10-26). | Not checked |
+| P3 | The number of rows read must equal `Total Number of Students`. If not, an amber warning names both numbers; the Faculty may still save. | Not checked |
 | P4 | `No University Email` means the email is missing: the row is blocked until the Faculty types a valid institutional email (IMP-001). The text never becomes part of the name. | Bug: text goes into the name |
 | P5 | The header's Course Code, Class Section, school year and semester are compared with the class the Faculty picked. A difference shows a warning listing each field (file vs class). The Faculty may still continue. Nothing is created or changed from the header, except a new class the Faculty confirms (see [class-from-class-list.md](../archive/contracts/class-from-class-list.md), 2026-10-27). | Not checked |
-| P6 | The "Official format not confirmed" label is removed for this PDF layout. Owner 2026-10-28: removed for the CSV template too; no import file shows it. | Label shown |
+| P6 | The "Official format not confirmed" label is removed for this PDF layout. Removed for the CSV template too; no import file shows it. | Label shown |
 | P7 | Unchanged: preview and class confirmation before saving, crossed-out row detection, name review, existing-Student matching by server identity, no email overwrite, invitations separate, file processed in the browser only. | — |
 
 Example warning (P5), using the files as named:
@@ -35,7 +35,7 @@ Example warning (P5), using the files as named:
 
 ## 2. Official grade sheet workbook (score import)
 
-Where: Grade Computation → Import Grade Sheets (existing tab; today it previews a simple CSV and cannot save).
+Where: Grade Computation → Import Grade Sheets.
 
 ### Layout (as given)
 
@@ -56,16 +56,16 @@ Where: Grade Computation → Import Grade Sheets (existing tab; today it preview
 | G2 | Each used item maps to one DentiSys assessment in the matching period, component and category, matched by title (e.g. "Quiz 1"). If it does not exist yet, the preview lists it as "New in the sheet" (title from the header, max from row 9, transmutation 50–100% as the sheet does). Each one is created only if the Faculty ticks it and confirms. Nothing is created automatically. |
 | G2a | An assessment that exists in DentiSys for that period and component but is not in the sheet is listed as "Not in the sheet". Default: keep. The Faculty may tick it for removal; the confirmation names each one and how many saved scores it holds ("Quiz 4 (Midterm) · 38 saved scores will be deleted"). Removal uses the existing assessment delete (its permissions, audit and grade recomputation). Unticked ones stay unchanged. |
 | G2b | When the item max in row 9 differs from the existing assessment's max, the preview shows `old max → sheet max` and blocks that item until the Faculty chooses: keep the DentiSys max (scores above it stay blocked) or update the max (existing assessment edit rules apply). |
-| G2c | Items without their own name in the sheet are named by position: "Outputs 1, 2…", "Lab Exercise 1, 2…". Every sheet item has a choice: **Create new** or **Use existing: [DentiSys assessment of that period and component]**, so a differently named assessment can be linked instead of duplicated. (Owner, 2026-10-26) |
-| G2d | An item with a max in row 9 but no scores yet is listed as "No scores yet" and is not ticked for creation by default. (Owner, 2026-10-26) |
-| G2f | One "Create all N new items that have scores" tick above the list ticks every new item with scores at once; items without scores stay unticked (G2d) and each item can still be changed. (Owner, 2026-10-26) |
+| G2c | Items without their own name in the sheet are named by position: "Outputs 1, 2…", "Lab Exercise 1, 2…". Every sheet item has a choice: **Create new** or **Use existing: [DentiSys assessment of that period and component]**, so a differently named assessment can be linked instead of duplicated. |
+| G2d | An item with a max in row 9 but no scores yet is listed as "No scores yet" and is not ticked for creation by default. |
+| G2f | One "Create all N new items that have scores" tick above the list ticks every new item with scores at once; items without scores stay unticked (G2d) and each item can still be changed. |
 | G2e | Lowering a max below a score already saved is refused, as assessment edit does today ("Maximum score cannot be lower than a score already saved…"). |
-| G12 | Only the Faculty assigned to the class may import, and only for current school-year classes; past or archived classes refuse, as score entry does today. (Owner, 2026-10-26) |
-| G13 | One "Import scores" save does everything (create, link, remove, max changes, scores) in one transaction: all or nothing. Every changed record gets its own audit row with one shared batch ID (audit R12), shown as one expandable row, e.g. "Imported grade sheet · 41 items · DM 116 DMD-3A". (Owner, 2026-10-26) |
-| G14 | `RECITATION` and `LAB PERFORMANCE` become one assessment per period and component, max 100, transmutation off (88 stays 88%). (Owner, 2026-10-26) |
-| G15 | A sheet is Lecture or Laboratory by its title row ("(LEC)"/"(LAB)"). Without either, the Faculty picks one in the preview. Sheets with no score table are ignored. (Owner, 2026-10-26) |
-| G17 | One `.xlsx` up to 10 MB at a time, read in the browser only. A password-protected workbook gets "Remove the password in Excel, then upload again." (Owner, 2026-10-26) |
-| G16 | A student picked for a sheet name is reused for the same name on the other sheet. (Owner, 2026-10-26) |
+| G12 | Only the Faculty assigned to the class may import, and only for current school-year classes; past or archived classes refuse, as score entry does today. |
+| G13 | One "Import scores" save does everything (create, link, remove, max changes, scores) in one transaction: all or nothing. Every changed record gets its own audit row with one shared batch ID (audit R12), shown as one expandable row, e.g. "Imported grade sheet · 41 items · DM 116 DMD-3A". |
+| G14 | `RECITATION` and `LAB PERFORMANCE` become one assessment per period and component, max 100, transmutation off (88 stays 88%). |
+| G15 | A sheet is Lecture or Laboratory by its title row ("(LEC)"/"(LAB)"). Without either, the Faculty picks one in the preview. Sheets with no score table are ignored. |
+| G17 | One `.xlsx` up to 10 MB at a time, read in the browser only. A password-protected workbook gets "Remove the password in Excel, then upload again." |
+| G16 | A student picked for a sheet name is reused for the same name on the other sheet. |
 | G3 | Category names in the sheet are matched to the saved Grade Weights categories by name. An unmatched category blocks its items until the Faculty picks a category. |
 | G4 | If the sheet's weights (0.1, 0.2, 0.5, Lec 60/Lab 40, Midterm 30/Final 70) differ from the saved Grade Weights, a warning shows both. Import never changes Grade Weights. |
 | G5 | Students are matched by the Names column against the class roster (same name normalisation as roster import). One exact match = matched. No match or more than one = blocked until the Faculty picks the Student or excludes the row. Row numbers are never used to match. |
@@ -73,33 +73,30 @@ Where: Grade Computation → Import Grade Sheets (existing tab; today it preview
 | G7 | A score above the item max, below 0, or not a number blocks that cell. Excel errors (`#DIV/0!`) in computed columns are ignored. |
 | G8 | A score that differs from one already saved shows `old → new` and is not saved unless the Faculty ticks it. Equal scores are skipped silently. |
 | G9 | Title and semester rows are compared with the selected class (as P5). A difference warns; the Faculty may continue. |
-| G10 | Saving uses the existing score batch save (`POST /faculty/scores`, as Full Matrix View): with its existing validation and audit rules (to be confirmed during implementation: all-or-nothing save and one audit batch). The file is read in the browser and never uploaded. |
+| G10 | Saving uses the existing score batch save (`POST /faculty/scores`, as Full Matrix View): with its existing validation and audit rules (all-or-nothing save and one audit batch, see G13). The file is read in the browser and never uploaded. |
 | G11 | Accepted file: `.xlsx`. The current `Student ID, Score` CSV import is replaced by this. |
 
-### Known differences between the sheet and DentiSys (no change proposed)
+### Known difference between the sheet and DentiSys
 
-The sheet's own grade may differ from DentiSys's. These follow `spec.md` and are not changed by this contract:
-- Midterm below 75%: sheet 5.0; spec (2026-10-17) 3.1–4.0.
-- Rounding: sheet rounds to a whole percent (74.6 → 75 → 3.0); spec rounds to 2 decimals then truncates (74.6 → 74).
-- Blank scores: the sheet counts them as 0 (grade 50% → 5.0); DentiSys leaves the grade incomplete.
+DentiSys follows the sheet's calculation (section 4b). One difference remains: the sheet counts a blank score as 0 (grade 50% → 5.0); DentiSys leaves the grade incomplete.
 
-## 3. Open questions (recommendation first)
+## 3. Questions and answers
 
-1. **Names in real sheets.** Answered (2026-10-26): real sheets have names; the sample was emptied for privacy. Name format unknown, so G5 accepts `Last, First Middle`, `Last, First M.`, `First Middle Last` and any letter case, and flags every row that does not match exactly one Student.
-2. **Sheet grade vs DentiSys grade.** Owner (2026-10-26): the sheet is closer to the truth; explore options before deciding. See section 3a. Open.
-3. **Missing and extra assessments.** Answered (2026-10-26): agreed G2, G2a, G2b; needs a demo.
-4. **File type.** Answered (2026-10-26): `.xlsx` only; a `.xls` file gets a clear message.
-5. **New library.** Answered (2026-10-26): approved, one small `.xlsx` reader, frontend only.
+1. **Names in real sheets.** Answered: real sheets have names; the sample was emptied for privacy. Name format unknown, so G5 accepts `Last, First Middle`, `Last, First M.`, `First Middle Last` and any letter case, and flags every row that does not match exactly one Student.
+2. **Sheet grade vs DentiSys grade.** Owner: the sheet is closer to the truth; explore options before deciding. See section 3a; decided: option B.
+3. **Missing and extra assessments.** Answered: agreed G2, G2a, G2b; needs a demo.
+4. **File type.** Answered: `.xlsx` only; a `.xls` file gets a clear message.
+5. **New library.** Answered: approved, one small `.xlsx` reader, frontend only.
 
-## 3a. How the sheet calculates vs DentiSys (for question 2)
+## 3a. How the sheet calculates vs DentiSys before option B (for question 2)
 
 Worked on sample student 1, Midterm Lecture: Recitation 88, Outputs 34/50, Quiz 1 14/20, Quiz 2 20/30, Major Exam 49/75.
 
-| Step | Sheet | DentiSys today |
+| Step | Sheet | DentiSys before option B |
 |---|---|---|
 | Items inside a category | Plain average of item % (Quiz 1 85%, Quiz 2 83.33% → 84.17%) | Weighted by max points (→ 84.00%) |
 | Period result | 83.77 → rounded to whole: **84 → 2.5** | 83.73 → truncated: **83 → 2.6** |
-| Midterm below 75% | 5.0 | 3.1–4.0 (spec 2026-10-17) |
+| Midterm below 75% | 5.0 | 3.1–4.0 |
 | Blank score | Counts as 0 | Grade stays incomplete |
 | Intermediate rounding | Lab sheet rounds "Midterm 30%" to a whole number; the Lecture sheet does not. Summary sheet rounds each step. | Unrounded until the end |
 
@@ -111,23 +108,23 @@ Options:
 - **C. Save the sheet's own grades** as the official grade, next to DentiSys's. Two sources of truth that can disagree; scores entered later in DentiSys would not change the grade.
 - **D. Keep DentiSys's rules**, only show the difference in the preview.
 
-Any of A–C changes GRD-002 and the 2026-10-17/2026-10-22 amendments, and applies to every class, not only imports.
+Any of A–C changes GRD-002 and applies to every class, not only imports.
 
-**Owner decision (2026-10-26): Option B.** The sheet is the Dean's official calculation for every Faculty. Blanks stay incomplete. Exact wording to approve is in section 4b.
+**Owner decision: Option B.** The sheet is the Dean's official calculation for every Faculty. Blanks stay incomplete. Exact wording to approve is in section 4b.
 
-**Owner decision (2026-10-26): lecture-only courses are a future iteration.** DentiSys has none today: GRD-002/GRD-003 require positive Lecture and Laboratory contributions. The course grade follows the summary (TFG) sheet: `round(round(Midterm × 30%) + round(Final × 70%))`. Note for later: the workbook's Lecture tab rounds once instead (`round(Midterm × 30% + Final × 70%)`; sample student 1: 89.6 → 90 → 1.9 vs 25 + 64 = 89 → 2.0). Ask the Dean which is right before lecture-only courses are added.
+**Owner decision: lecture-only courses are a future iteration.** DentiSys has none today: GRD-002/GRD-003 require positive Lecture and Laboratory contributions. The course grade follows the summary (TFG) sheet: `round(round(Midterm × 30%) + round(Final × 70%))`. Note for later: the workbook's Lecture tab rounds once instead (`round(Midterm × 30% + Final × 70%)`; sample student 1: 89.6 → 90 → 1.9 vs 25 + 64 = 89 → 2.0). Ask the Dean which is right before lecture-only courses are added.
 
-## 4. Spec change (needs Owner approval before it is applied)
+## 4. Spec change (applied to IMP-001)
 
 Replace in IMP-001 the sentences "The interface MUST state "Official format not confirmed"; a sample does not establish official Registrar compatibility." and "Official Registrar compatibility and grade-sheet importing remain unconfirmed." with:
 
-> Owner decision (2026-10-26): The BU College of Dental Medicine "Official List of Enrolled Students" PDF and the official grade sheet workbook (.xlsx) are the official import layouts. Faculty upload them unchanged; DentiSys adapts to them. The CSV template stays provisional and keeps the "Official format not confirmed" label. Grade sheet import saves raw scores only, never computed grades, through the existing score rules; it never changes Grade Weights, never turns a blank into zero, and never overwrites a saved score without the Faculty's confirmation. File headers are checked against the selected class and differences are warnings.
+> Owner decision: The BU College of Dental Medicine "Official List of Enrolled Students" PDF and the official grade sheet workbook (.xlsx) are the official import layouts. Faculty upload them unchanged; DentiSys adapts to them. The CSV template stays provisional and keeps the "Official format not confirmed" label. Grade sheet import saves raw scores only, never computed grades, through the existing score rules; it never changes Grade Weights, never turns a blank into zero, and never overwrites a saved score without the Faculty's confirmation. File headers are checked against the selected class and differences are warnings.
 
-## 4b. Grading spec change for option B (needs Owner approval before it is applied)
+## 4b. Grading spec change for option B (applied to spec.md)
 
-Add to section 9 after the 2026-10-22 amendment:
+Wording added to section 9 of the spec:
 
-> Owner-approved amendment (2026-10-26): Official BUCDM grade sheet calculation. The Dean's official grade sheet is the calculation authority for every Faculty. For current-term grades it replaces the exact-value rule of 2026-10-12, the truncation and Midterm below-75% rule of 2026-10-17, and the rounding rule of 2026-10-22.
+> Owner-approved amendment: Official BUCDM grade sheet calculation. The Dean's official grade sheet is the calculation authority for every Faculty. For current-term grades it replaces the exact-value rule of 2026-10-12, the truncation and Midterm below-75% rule of 2026-10-17, and the rounding rule of 2026-10-22.
 > 1. A category percentage is the plain average of its assessments' effective percentages (GRD-001 transmutation applies per assessment). Maximum points do not weight the average.
 > 2. A component's period grade is the weighted sum of its category percentages, rounded to a whole percent (.5 rounds up).
 > 3. With Lecture and Laboratory, a period grade is round(Lecture period grade × Lecture share + Laboratory period grade × Laboratory share), and the course grade is round(round(Midterm × Midterm share) + round(Final × Final share)).
@@ -135,21 +132,12 @@ Add to section 9 after the 2026-10-22 amendment:
 > 6. Hovering, focusing or tapping a grade shows its steps, e.g. "83.77% → 84% → 2.5". This replaces the 2026-10-12 hover sentence.
 > 7. Unchanged: a missing score keeps the dependent grade incomplete and never becomes zero; the remediation trigger is 2.50 or worse (84% or below); the Midterm Watchlist and Advisory use these grades; grades saved in closed school years stay as recorded.
 
-**Approved by the Owner on 2026-10-26 (grill round 1): sections 4 and 4b as written.** Correction (Owner, 2026-10-26): the risk-level rule was removed; risk levels were retired on 2026-10-17. Applied to `spec.md` when the grill ends, together with any wording later rounds add.
+**Approved by the Owner on 2026-10-26 (grill round 1): sections 4 and 4b as written.** Correction: the risk-level rule was removed; risk levels were retired on 2026-10-17. Applied to `spec.md` when the grill ends, together with any wording later rounds add.
 
-## 4c. Grades already saved (Owner, 2026-10-26)
+## 4c. Grades already saved
 
-At release, every current-term course grade is recalculated once with the 4b rules, as one audited batch. Before production, Claude shows the Owner the list of grades that change on the demo site.
+Releases and promotion to production never recalculate saved grades in bulk (spec UI-003). A saved grade changes under the 4b rules when Faculty next save scores or weights; grades saved in closed school years stay as recorded.
 
-How (Owner, 2026-10-26): a one-time script with `preview` (lists changes, writes nothing) and `apply` (one batch, actor "System"). On demo, Claude runs preview, shows the list, then apply. For production, `promote-prod.ps1` runs it right after deploy, so the Owner still runs one command.
+A one-time script exists for a deliberate one-off run and is not part of a release: `backend/bin/recompute-current-grades.php` with `preview` (lists changes, writes nothing) and `apply` (one audited batch, actor "System"; `demo-vps.ps1 recompute-grades` runs it on the demo). It sends no student notifications.
 
-Side effects (Owner, 2026-10-26): this one-time recalculation keeps manual retention overrides and sends no student notifications; the preview list marks students who have an override. Ordinary score saves keep today's behaviour.
-
-Grade hover (Owner, 2026-10-26): hovering, focusing or tapping a grade shows the steps, e.g. "83.77% → 84% → 2.5", instead of "Exact: 2.53 (83.73%)".
-
-## 5. Next steps
-
-1. Owner runs `/grill-me` on this draft and answers section 3.
-2. Claude builds a Before/After demo of both preview screens.
-3. Owner approves contract, spec change and demo.
-4. Implementation by subagents, tests with made-up files, `./scripts/check.ps1`.
+Grade hover: hovering, focusing or tapping a grade shows the steps, e.g. "83.77% → 84% → 2.5", instead of "Exact: 2.53 (83.73%)".

@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+# macOS/Linux counterpart of scripts/start-dev.ps1: starts or updates the development stack (README A4). Needs .env.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)

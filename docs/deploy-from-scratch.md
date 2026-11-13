@@ -1,11 +1,9 @@
 # Deploying DentiSys from scratch
 
 This guide takes a developer from an empty VPS provider account to a running,
-verified DentiSys server with **one command**. It follows the run that was
-proven end to end on 2026-10-10 on AWS (fresh Ubuntu 26.04 instance, every
-check PASS). Since 2026-11-02 both servers live on **Vultr** (spec DEL-001);
-any provider that meets [hosting-requirements.md](hosting-requirements.md)
-works. Sections 1–5 set up the **demo**; the production server is in
+verified DentiSys server with **one command**. Both servers (demo and
+production) live on **Vultr** (spec DEL-001); any provider that meets
+[hosting-requirements.md](hosting-requirements.md) works. Sections 1–5 set up the **demo**; the production server is in
 [Production VPS](#production-vps). Reference details for every step are in
 [vps-deployment.md](vps-deployment.md).
 
@@ -20,8 +18,9 @@ front, uploads a bundle, and then runs unattended on the server:
 2. **Environment** — creates `/opt/dentisys/.env` with fresh random keys and
    database passwords (never overwritten on later runs).
 3. **Deploy** — Docker, the GHCR images, PostgreSQL with all migrations,
-   3 web + 3 frontend + 1 biometric containers behind Traefik with Let's
-   Encrypt HTTPS, Watchtower, nightly backups, and the first Dean invitation.
+   `WEB_REPLICAS` web + `FRONTEND_REPLICAS` frontend (3 + 3 by default) and 1
+   biometric container behind Traefik with Let's Encrypt HTTPS, Watchtower,
+   nightly backups, and the first Dean invitation.
 4. **Verify** — PASS/FAIL checks; then, if Ubuntu needs it, one reboot and a
    second verification pass.
 
@@ -32,7 +31,7 @@ firewall, DNS) is always done by hand.
 
 | Item | Where | Notes |
 |---|---|---|
-| Windows PC with Windows PowerShell 5.1, Git, OpenSSH client | your PC | All standard on Windows 10/11. Docker Desktop is needed only to publish images. |
+| Windows PC with PowerShell 7 (`pwsh`), Git, OpenSSH client | your PC | All standard on Windows 10/11. Docker Desktop is needed only to publish images. |
 | This repository on the deployment branch, with a **clean working tree** | your PC | The scripts refuse uncommitted changes. |
 | Working local setup with calibrated `BIOMETRIC_*` values in the local `.env` | your PC | See [README](../README.md) Part A and [biometric calibration](biometric-calibration-deployment.md). The launcher copies only these values and `ALLOWED_EMAIL_DOMAINS` / `GOOGLE_CLIENT_ID` as defaults. |
 | Face model at `..\dentisys-biometric-assets\face_landmarker.task` (next to the repo folder) | your PC | Same file the local stack uses. |
@@ -66,7 +65,7 @@ site falls back to `https://<ip-with-dashes>.sslip.io` (e.g.
 
 ## 3. Run the command
 
-In Windows PowerShell, from the repository folder. A plain window can refuse an unsigned `.ps1` ("... is not digitally signed"), so run scripts with the execution policy bypassed for that process — `pwsh` is PowerShell 7 and `powershell` accepts the same switches:
+In PowerShell, from the repository folder. A plain window can refuse an unsigned `.ps1` ("... is not digitally signed"), so run scripts with the execution policy bypassed for that process:
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\provision-vps.ps1 -Ip <server-ip> -KeyFile $HOME\.ssh\<key> -InitialUser root -User <name>
@@ -96,7 +95,7 @@ Check the summary (secrets are masked) and press **Enter**. Expect about
 
 ```text
 === D. Verify containers, public HTTPS and backup scheduling ===
-PASS: containers running; 3 healthy web, 3 healthy frontend, 1 healthy biometric
+PASS: containers running; 3 healthy web, 3 healthy frontend, 1 healthy biometric   (counts follow WEB_REPLICAS / FRONTEND_REPLICAS)
 PASS: public HTTP redirects to HTTPS
 PASS: trusted, current HTTPS certificate for APP_DOMAIN issued by Let's Encrypt
 PASS: public /api/health reports ok
@@ -145,8 +144,8 @@ Site: https://<ip-with-dashes>.sslip.io
 | Face attendance | Student checks in during the session | Marked present |
 | Manual attendance | Secretary/Faculty marks a Student | Record and audit entry |
 | Email | Invitations, remedial notices | Arrive in the inbox |
-| Reports and audit | Dean → Reports, Audit Trail | Data loads; CSV/PDF export |
-| Rolling update | See the [release guide](release-guide.md) | Watchtower updates one copy at a time, no downtime (with the default 3 copies; the demo runs 1, so an update there briefly interrupts the site) |
+| Reports and audit | Dean → Reports, Audit Trail | Data loads; Excel/PDF export |
+| Rolling update | See the [release guide](release-guide.md) | Watchtower updates one copy at a time, no downtime with 3 copies; with 1 copy an update briefly interrupts the site |
 
 ## 6. Releasing changes later
 
@@ -164,7 +163,7 @@ Production is a second server with its own images (`dentisys-*-prod`, tag `:prod
 First setup, in this order:
 1. Check out the approved commit and run `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\promote-prod.ps1 -Sha <approved> -DryRun`, then the same command without `-DryRun`. Without `~\.dentisys\prod.env` it promotes the images only.
 2. Server steps as in section 2, with the production key (passphrase; never the demo key) selected when creating the server.
-3. `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\provision-vps.ps1 -Ip <ip> -KeyFile <key> -InitialUser root -Production`. It writes the `-prod:prod` images, turns real biometrics on by default (production is a public test site, spec 2026-11-02), disables pgAdmin and skips the database tunnel. The GHCR token it asks for is your own classic token with `read:packages` (the bot cannot read `-prod` packages).
+3. `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\provision-vps.ps1 -Ip <ip> -KeyFile <key> -InitialUser root -Production`. It writes the `-prod:prod` images, turns real biometrics on by default (production is a public test site, spec BIO-008), disables pgAdmin and skips the database tunnel. The GHCR token it asks for is your own classic token with `read:packages` (the bot cannot read `-prod` packages).
 4. Create `$HOME\.dentisys\prod.env` with `PROD_SSH_HOST`, `PROD_SSH_PORT` (default 2202), `PROD_SSH_USER` (default devops) and `PROD_SSH_KEY`.
 
 Later releases: `git checkout <approved sha>`, then `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\promote-prod.ps1 -Sha <sha>`. It syncs migrations (with a backup) first, copies the images, checks the digests and waits for Watchtower. A release with database migrations must go through this script (or `sync-vps-db.ps1 -Apply`; on the demo, `demo-vps.ps1 migrate`); never rely on Watchtower alone.

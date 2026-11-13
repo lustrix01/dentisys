@@ -4,10 +4,11 @@
 
 This Compose configuration is within DentiSys deployment bounds, but it is not a supported production deployment process. It is an implementation foundation for controlled private-LAN testing on one host. For the approved DEL-001 cloud VPS demonstration, use the [VPS deployment runbook](vps-deployment.md).
 
-It currently starts separate containers for Nginx frontend, PHP API, and PostgreSQL:
+It starts separate containers for the Nginx frontend, the PHP API, PostgreSQL and the private face-recognition sidecar:
 
 ```text
 Browser -> Nginx frontend -> PHP API -> PostgreSQL
+                                     -> Face-recognition sidecar
 ```
 
 Only the frontend HTTP port is published. PostgreSQL remains internal to Docker. Vite and pgAdmin are intentionally not included. Mailpit starts only when `EMAIL_PROVIDER=custom`; its UI is bound to the server's loopback address (`http://127.0.0.1:MAILPIT_UI_PORT`).
@@ -23,7 +24,7 @@ Follow [README Part B](../README.md#part-b-single-server-mode-future). It covers
 
 Do not run this prototype alongside the development stack unless one stack uses a different published application port.
 
-P03 real Student authentication can be enabled in this private-LAN prototype with `STUDENT_AUTH_ENABLED=true`, provided production-grade SMTP and normal secret/TLS controls are configured. The development identity mock remains unavailable in production-like environments; browser-created Student credentials are never accepted. Admin-issued Faculty invitations and Faculty-issued, class-scoped Student invitations govern onboarding. Google Sign-In can be enabled with `GOOGLE_CLIENT_ID`; only `@bicol-u.edu.ph` is accepted for new or updated identity, invitations, sign-in, recovery and outgoing email, and existing non-BU records are not rewritten. Google is optional identity verification during invitation acceptance, and password creation remains required.
+Real Student authentication can be enabled in this private-LAN prototype with `STUDENT_AUTH_ENABLED=true`, provided production-grade SMTP and normal secret/TLS controls are configured. The development identity mock remains unavailable in production-like environments; browser-created Student credentials are never accepted. Admin-issued Faculty invitations and Faculty-issued, class-scoped Student invitations govern onboarding. Google Sign-In can be enabled with `GOOGLE_CLIENT_ID`; only `@bicol-u.edu.ph` is accepted for new or updated identity, invitations, sign-in, recovery and outgoing email, and existing non-BU records are not rewritten. Google is optional identity verification during invitation acceptance, and password creation remains required.
 
 ## Why this is not deployment-ready
 

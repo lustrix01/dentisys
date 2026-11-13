@@ -8,9 +8,12 @@ are provisional development-only starting points. They are not production
 approval, institutional privacy approval, or evidence of ISO certification or
 formal ISO/IEC 24745:2022 conformance.
 
-Production and single-server deployments remain fail-closed in the backend
-until the deferred technical selections, target-camera validation, privacy
-review, and explicit Owner approval are complete.
+Outside development the backend enables real biometrics only in single-server
+mode (the VPS deployments) when `BIOMETRIC_SIDECAR_ENABLED=true`; otherwise they
+stay disabled and attendance falls back to manual (`backend/app/config.php`).
+`docker-compose.web.yml` alone does not forward that setting, so a plain
+single-server stack keeps biometrics off. The VPS provisioning launcher offers
+`true`.
 
 ## Model artifact
 
@@ -26,18 +29,15 @@ review, and explicit Owner approval are complete.
 
 The local `.env` uses the following non-secret values. The shared secret and
 32-byte storage key are generated locally and intentionally omitted from this
-report. The detector and verifier were originally Haar Cascade and LBPH; they
-were replaced on 2026-10-11 after offline calibration showed LBPH accepted
-45.6% of impostor attempts at its provisional rule (any 3 of 30 frames at
-distance 70).
+report. The detector is YuNet and the verifier is SFace (spec BIO-007).
 
 | Parameter | Provisional value | Technical rationale | Safety implication and limitation |
 | --- | ---: | --- | --- |
 | `BIOMETRIC_YUNET_SCORE_THRESHOLD` | `0.9` | YuNet detection confidence a face must reach; a frame is usable only if exactly one face meets it. | Weak or multiple detections are rejected as quality failures; must be validated on the target camera. |
 | `BIOMETRIC_MIN_FACE_PX` | `120` | Requires enough face detail for the provisional laptop/phone-camera pipeline, measured on the YuNet face box. | Rejects smaller or distant faces and is not a universal device threshold. |
-| `BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE` | `60.0` | Blur/low-light screening using Laplacian variance on the aligned 112×112 crop. Lowered from the provisional `100.0` (Owner decision, 2026-09-28) after ordinary 640×480 laptop webcams failed most frames as "blurry or too dark". | Only affects which frames are usable; identity matching (`SFACE_COSINE_THRESHOLD`, `MATCH_COUNT`) and liveness (`BLINK_THRESHOLD`, `HEAD_TURN_RATIO`) are unchanged. The measure still changes with exposure, compression, and camera sharpening. |
-| `BIOMETRIC_SFACE_COSINE_THRESHOLD` | `0.44` | Minimum cosine similarity between a usable frame's L2-normalized SFace embedding and the enrolled template. Chosen from offline LFW calibration through the sidecar's own pipeline (200 people, 3 impostors each, 24 enrollment samples, 30 frames per attempt, simulated good-camera and older-phone profiles): 0 impostor attempts accepted (about 555 per profile) and about 95% of genuine attempts passed on every profile (retries counted as not passing). | Approved by the Owner on 2026-10-11 with the YuNet score, minimum face, sharpness and match count (spec BIO-007). LFW cannot show error rates below about 1 in 1,000; team re-enrollment and live genuine/impostor tests on the demo server follow. Raw calibration files are in the git-ignored `calibration.local/` folder. |
-| `BIOMETRIC_MATCH_COUNT` | `3` | Requires repeated consistent matches so one frame cannot authorize attendance. | Any 3 matching frames in one attempt of up to 30 frames; calibrated together with the SFace threshold above. Each liveness action must also appear on a matching frame of the same face, so head-turn and blink frames must stay usable; the live demo test should confirm genuine pass rates hold. |
+| `BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE` | `60.0` | Blur/low-light screening using Laplacian variance on the aligned 112×112 crop. Set below the earlier `100.0` because ordinary 640×480 laptop webcams failed most frames as "blurry or too dark". | Only affects which frames are usable; identity matching (`SFACE_COSINE_THRESHOLD`, `MATCH_COUNT`) and liveness (`BLINK_THRESHOLD`, `HEAD_TURN_RATIO`) are unchanged. The measure still changes with exposure, compression, and camera sharpening. |
+| `BIOMETRIC_SFACE_COSINE_THRESHOLD` | `0.44` | Minimum cosine similarity between a usable frame's L2-normalized SFace embedding and the enrolled template. Chosen from offline LFW calibration through the sidecar's own pipeline (200 people, 3 impostors each, 24 enrollment samples, 30 frames per attempt, simulated good-camera and older-phone profiles): 0 impostor attempts accepted (about 555 per profile) and about 95% of genuine attempts passed on every profile (retries counted as not passing). | Approved by the Owner with the YuNet score, minimum face, sharpness and match count (spec BIO-007). LFW cannot show error rates below about 1 in 1,000; team re-enrollment and live genuine/impostor tests on the demo server follow. Raw calibration files are in the git-ignored `calibration.local/` folder. |
+| `BIOMETRIC_MATCH_COUNT` | `3` | Requires repeated consistent matches so one frame cannot authorize attendance. | Any 3 matching frames in one attempt (attendance captures 9 frames: 8 forward-facing plus the action frame; enrollment up to 30); calibrated together with the SFace threshold above. Each liveness action must also appear on a matching frame of the same face, so head-turn and blink frames must stay usable; the live demo test should confirm genuine pass rates hold. |
 | `BIOMETRIC_BLINK_THRESHOLD` | `0.21` | Common eye-aspect-ratio starting point for a blink signal. | Glasses, pose, eyelid shape, landmark noise, and camera frame rate can change the result. |
 | `BIOMETRIC_HEAD_TURN_RATIO` | `0.15` | Moderate normalized nose displacement from the eye midpoint for a turn signal. | It is camera- and face-pose-dependent and is not a proven presentation-attack detector. |
 | `BIOMETRIC_CHALLENGE_TTL_SECONDS` | `120` | Short-lived local challenge window that accommodates ordinary camera interaction. | Challenges remain single-use and server-generated; TTL is not a liveness or identity threshold. |
@@ -70,8 +70,8 @@ dedicated biometric volume; raw frames are not retained.
    testing. If biometric processing is unavailable or rejected, use the
    authorized manual attendance path.
 
-Existing LBPH enrollments (`lbph/` references made before 2026-10-11) never
-verify and return 503, so each environment must expire them once at deploy.
+An LBPH enrollment from the earlier pipeline (an `lbph/` reference) never
+verifies and returns 503, so an environment that still holds any must expire them once.
 Run `php /var/www/html/backend/bin/expire-lbph-biometrics.php --dry-run` inside
 the web container (same as `docker compose exec web php ...`), review the
 output, then run it again without `--dry-run`. The script deletes the encrypted

@@ -1,3 +1,6 @@
+# Runs the mocked Playwright browser tests: starts Vite on 127.0.0.1:15174, runs Playwright with any arguments
+# you pass (for example e2e/<file>.spec.ts), then stops Vite. Needs the root and frontend Node packages (npm ci).
+# macOS/Linux twin: scripts/test-e2e.sh.
 [CmdletBinding()]
 param(
     [Parameter(ValueFromRemainingArguments = $true)]

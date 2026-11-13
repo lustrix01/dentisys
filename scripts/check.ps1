@@ -1,3 +1,8 @@
+# Pre-handoff gate for runtime changes (README A12). Runs, in order: Compose config checks (development,
+# single-server, single-server with the mailpit profile), a scan for removed MariaDB/phpMyAdmin references,
+# the production-validator negative test, the frontend build and unit tests, PHP lint, the backend PHP tests,
+# the documentation contract and the mocked Playwright browser tests (npm run test:e2e).
+# Needs Docker running and the development images built once (start-dev.ps1). No parameters.
 [CmdletBinding()]
 param()
 

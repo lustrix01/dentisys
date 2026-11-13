@@ -1,6 +1,6 @@
 # Academic and role backend contract
 
-This packet describes the backend work delivered for the local demo. The shared route registry contains the handlers listed below; the snippets are also the stable contract for frontend integration.
+This packet describes the academic and role backend routes. The shared route registry contains the handlers listed below; the snippets are also the stable contract for frontend integration.
 
 ## Faculty roster and persistence
 

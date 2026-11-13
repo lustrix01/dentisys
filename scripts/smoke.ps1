@@ -1,3 +1,5 @@
+# Quick health check of a running development stack: GET /api/health and /healthcheck.php must report
+# status ok and database up. -CheckPgAdmin also requires pgAdmin to answer. -BackendUrl / -PgAdminUrl override the addresses.
 param(
     [string] $BackendUrl = "http://localhost:8080",
     [string] $PgAdminUrl = "http://127.0.0.1:5050",

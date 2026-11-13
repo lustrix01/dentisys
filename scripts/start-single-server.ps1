@@ -1,3 +1,6 @@
+# Starts or updates the single-server stack (README Part B) under the Compose project dentisys-single-server.
+# -EnvFile names the settings file (default .env.single-server). Checks the settings, starts PostgreSQL, backs up
+# before applying pending migrations, starts the stack and runs the maintenance scripts. Safe to repeat.
 [CmdletBinding()]
 param(
     [string]$EnvFile = '.env.single-server'
@@ -18,6 +21,7 @@ foreach ($line in Get-Content -LiteralPath $envPath) {
     }
 }
 
+# Only these keys are checked here; docker-compose.web.yml additionally requires every BIOMETRIC_* value, model path and model hash.
 foreach ($key in @('APP_BASE_URL', 'DB_PASS', 'DB_ADMIN_PASS', 'JWT_SIGNING_KEY_B64', 'MFA_ENCRYPTION_KEY_B64', 'AUDIT_MAC_KEY_B64', 'SMTP_HOST', 'SMTP_FROM')) {
     $value = $values[$key]
     if ([string]::IsNullOrWhiteSpace($value) -or $value -like 'replace_with_*') {

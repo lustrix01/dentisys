@@ -1,3 +1,7 @@
+# Starts or updates the development stack (README A4); safe to repeat. Needs .env. Starts PostgreSQL, applies pending
+# migrations, builds the images (-NoBuild skips this), installs frontend packages when package-lock.json changed,
+# starts every service, then runs grade-weight setup, the first-Dean invitation and the expired-biometrics sweep.
+# Never loads demo data or deletes records.
 [CmdletBinding()]
 param(
     [switch] $NoBuild

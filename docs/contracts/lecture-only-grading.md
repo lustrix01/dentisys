@@ -1,12 +1,12 @@
 # Lecture-only courses — contract
 
-Status: **Grilled and confirmed by the Owner** (2026-10-26, three rounds, 13 answers). Spec wording applied to `spec.md` (GRD-002, GRD-003). Demo approved by the Owner (2026-10-26, including the banner wording, the "Lecture only" line and the gradebook "Lecture" header): [Lecture-Only Grading Demo](https://claude.ai/artifact/383CbvDr2AFiJ7iYueyks5). Built and validated: [lecture-only-2026-10.md](../archive/lecture-only-2026-10.md).
+Status: **Current contract**, implemented. Spec wording is in `spec.md` (GRD-002, GRD-003).
 
-Owner finding (2026-10-26): some courses are Lecture only. The earlier rule "every course is Lecture + Laboratory" (GRD-002/GRD-003, [mandatory defaults](../archive/proposals/mandatory-lecture-laboratory-defaults.md)) is wrong for them. This contract adds a Lecture-only structure; Lecture + Laboratory courses keep today's rules unchanged.
+Owner finding: some courses are Lecture only. The earlier rule "every course is Lecture + Laboratory" (GRD-002/GRD-003, [mandatory defaults](../archive/proposals/mandatory-lecture-laboratory-defaults.md)) is wrong for them. This contract adds a Lecture-only structure; Lecture + Laboratory courses keep today's rules unchanged.
 
 Evidence: the only official workbook we have (`SAMPLE.xlsx`, Operative Dentistry 1) is Lecture + Laboratory. Its Lecture sheet was copied from a separate lecture-only workbook (`OA LEC.xlsx`, linked as an outside file for its grade table). That sheet's own course grade rounds once; the TFG summary for Lecture + Laboratory rounds each step. `OA LEC.xlsx` is not available yet, so the lecture-only course-grade formula is **provisional** (rule L9).
 
-## What exists today
+## Background (before this contract)
 
 - Classes & Rosters already records a course as Lecture, Laboratory, or both, from its units (`courses.lecture_units`, `courses.lab_units`), and shows "Lecture" / "Lecture & Laboratory" on the class card. Lecture-only classes can be created now.
 - Course units are shared by every Faculty and school year. They can be changed only while unrecorded, or by the Faculty who created the course.
@@ -44,7 +44,7 @@ Evidence: the only official workbook we have (`SAMPLE.xlsx`, Operative Dentistry
 | Course grade, lecture-only (L4) | 84 × 30% + 92 × 70% = 89.6 → **90 → 1.9** |
 | Same numbers with the Lecture + Laboratory rounding | 25 + 64 = 89 → 2.0 (not used for lecture-only) |
 
-## Owner answers (grill, 2026-10-26)
+## Owner answers
 
 | # | Question | Answer |
 |---|---|---|
@@ -62,13 +62,13 @@ Evidence: the only official workbook we have (`SAMPLE.xlsx`, Operative Dentistry
 | Q12 | Student and report views | No Laboratory line; existing three-column CSV; Watchlist/Advisory/remediation unchanged (L7, L11) |
 | Q13 | Order | Spec applied after the grill; then demo approval; then code |
 
-## Spec change (applied 2026-10-26)
+## Spec change (applied)
 
 GRD-002: "within the required separate Lecture/Laboratory structure" became "within the structure required for the course (GRD-003)"; the 100% rule now applies the Lecture/Laboratory contributions "where both exist".
 
-GRD-003: the opening sentence excepts lecture-only courses, and the amendment "Owner-approved amendment (2026-10-26): Lecture-only courses" records L1, L1a, L2, L4, L6–L6b and the provisional status.
+GRD-003: the opening sentence excepts lecture-only courses, and the amendment "Owner-approved amendment: Lecture-only courses" records L1, L1a, L2, L4, L6–L6b and the provisional status.
 
-## API (agreed for the build, 2026-10-26)
+## API
 
 - Grade Weights GET (saved config and unsaved default) adds `courseStructure: 'lecture' | 'lecture_laboratory' | 'unrecorded'` (from course units; Laboratory-only courses report `lecture_laboratory`) and `courseUnits: { lecture: number | null, laboratory: number | null }`.
 - `componentMode` gains `'lecture'`. A `'lecture'` config has no `componentWeights`; every period category has `component: 'Lecture'`. The unsaved default for a `'lecture'` course is the four Lecture categories for each period, Midterm 50 / Final 50.
@@ -78,7 +78,7 @@ GRD-003: the opening sentence excepts lecture-only courses, and the amendment "O
 - Computation for `'lecture'`: period grade = Lecture period grade (whole percent); course grade = `round(Midterm × share + Final × share)`, rounded once. Breakdown keeps the existing shape without Laboratory values.
 - Grade sheet import save: Laboratory items for a `'lecture'` config are refused (422); the frontend skips LAB sheets before sending.
 
-## Implementation impact
+## Implementation notes
 
 - Migration (additive): allow `component_mode = 'lecture'` in `ck_grading_configs_component_weights` (Lecture weight 100, Laboratory weight empty). No existing rows change.
 - Server: save validation, defaults and grade computation pick the structure from course units; the lecture-only course-grade formula sits next to the existing one; the unit-change guard (L6).

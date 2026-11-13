@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Runs on the VPS (as the sudo account, from the uploaded bundle): installs Docker if missing, logs in to GHCR,
+# backs up and migrates the database, starts the stack and runs the maintenance scripts. Started by
+# provision-vps.ps1 or upload-vps.ps1 -Deploy.
 set +x
 set -euo pipefail
 

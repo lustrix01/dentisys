@@ -5,7 +5,8 @@ DentiSys is an academic and clinical management system for the Bicol University 
 | Runtime | Status | Use it for |
 | --- | --- | --- |
 | [Development environment](#part-a-development-environment) | **Supported** | Daily development and local testing on one computer |
-| [Single-server mode](#part-b-single-server-mode-future) | **Unfinished prototype** | Controlled testing on one private-network server; future deployment path |
+| VPS demo and production (DEL-001) | **Supported** | The two cloud servers; see [docs/release-guide.md](docs/release-guide.md) and [docs/deploy-from-scratch.md](docs/deploy-from-scratch.md) |
+| [Single-server mode](#part-b-single-server-mode-future) | **Unfinished prototype** | Controlled testing on one private-network server (the VPS servers build on its Compose files) |
 | Separate application and database servers | **Not implemented** | Future work |
 
 **Contents**
@@ -55,7 +56,7 @@ pgAdmin (5050) -----------------------------------> PostgreSQL
 ```powershell
 git clone https://github.com/lustrix01/dentisys.git
 cd dentisys
-git switch lumbanglighthal-owhie
+git switch <current development branch>
 ```
 
 ### A3. Create your `.env`
@@ -76,6 +77,7 @@ The example already contains safe development defaults, so DentiSys starts witho
 
 - Windows alternative: double-click `start-dev.bat`.
 - macOS or Linux: `./scripts/start-dev.sh`.
+- `.\scripts\start-dev.ps1 -NoBuild` skips the image build.
 
 The first run downloads and builds images and takes several minutes. The script:
 
@@ -168,7 +170,7 @@ DentiSys starts and works without this; biometric attendance just reports that i
    (Get-FileHash ..\dentisys-biometric-assets\face_landmarker.task -Algorithm SHA256).Hash.ToLower()
    ```
 
-   The hash must be `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff`.
+   The hash must be `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff`. The sidecar also needs the YuNet and SFace models (`face_detection_yunet_2023mar.onnx`, `face_recognition_sface_2021dec.onnx`) in the same folder, each with its own SHA-256; file names, hashes and the folder layout are in [docs/biometric-calibration-deployment.md](docs/biometric-calibration-deployment.md).
 
 2. **Generate two secrets** (run twice; use one output for each):
 
@@ -181,13 +183,12 @@ DentiSys starts and works without this; biometric attendance just reports that i
 3. **Fill in `.env`:**
 
    ```dotenv
-   BIOMETRIC_SIDECAR_URL=http://biometric:8000
    BIOMETRIC_SIDECAR_SHARED_SECRET=<first generated value>
    BIOMETRIC_STORAGE_KEY_B64=<second generated value>
    MEDIAPIPE_FACE_LANDMARKER_SHA256=64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff
    ```
 
-   Also set the `BIOMETRIC_YUNET_*`, `BIOMETRIC_SFACE_*`, `BIOMETRIC_MIN_FACE_PX`, `BIOMETRIC_QUALITY_*`, `BIOMETRIC_MATCH_COUNT`, `BIOMETRIC_BLINK_THRESHOLD`, and `BIOMETRIC_HEAD_TURN_RATIO` values from the table in [docs/biometric-calibration-deployment.md](docs/biometric-calibration-deployment.md). Keep `DEV_MOCK_BIOMETRIC_ENABLED=false`.
+   Compose fixes the sidecar address at `http://biometric:8000`; there is nothing to set for it. Also set the `BIOMETRIC_YUNET_*` (including `BIOMETRIC_YUNET_SHA256`), `BIOMETRIC_SFACE_*` (including `BIOMETRIC_SFACE_SHA256`), `BIOMETRIC_MIN_FACE_PX`, `BIOMETRIC_QUALITY_*`, `BIOMETRIC_MATCH_COUNT`, `BIOMETRIC_BLINK_THRESHOLD`, and `BIOMETRIC_HEAD_TURN_RATIO` values from the table in [docs/biometric-calibration-deployment.md](docs/biometric-calibration-deployment.md). Keep `DEV_MOCK_BIOMETRIC_ENABLED=false`.
 
 4. Run `.\scripts\start-dev.ps1`. `docker compose ps` should show `biometric` as healthy.
 
@@ -239,7 +240,7 @@ Use this if you already ran an older DentiSys build (you have a `.env` and a dat
 
    ```powershell
    git fetch origin
-   git switch lumbanglighthal-owhie
+   git switch <current development branch>   # as in A2
    git pull
    ```
 
@@ -301,7 +302,7 @@ Only the frontend port is published. PostgreSQL, the API, and the sidecar are re
 ```bash
 git clone https://github.com/lustrix01/dentisys.git
 cd dentisys
-git switch lumbanglighthal-owhie
+git switch <current development branch>   # as in A2
 cp .env.single-server.example .env.single-server
 ```
 
@@ -309,7 +310,7 @@ On Windows: `Copy-Item .env.single-server.example .env.single-server`.
 
 ### B3. Fill in `.env.single-server`
 
-Every value that starts with `replace_with_` must be replaced; the start script refuses to run otherwise.
+The start script checks only eight settings and refuses to run while any is empty or still starts with `replace_with_`: `APP_BASE_URL`, `DB_PASS`, `DB_ADMIN_PASS`, `JWT_SIGNING_KEY_B64`, `MFA_ENCRYPTION_KEY_B64`, `AUDIT_MAC_KEY_B64`, `SMTP_HOST`, `SMTP_FROM`. Replace every other `replace_...` value too: Compose refuses to start unless every `BIOMETRIC_*` value, model path and model hash below is set.
 
 | Setting | What to put there |
 | --- | --- |
@@ -322,8 +323,8 @@ Every value that starts with `replace_with_` must be replaced; the start script 
 | `EMAIL_PROVIDER`, `EMAIL_TEST_ALLOWLIST` | `smtp` to e-mail everyone, or `custom` to send real e-mail only to the allowlist and keep a copy of everything in Mailpit (see [A7](#a7-choose-how-e-mail-is-delivered)). |
 | `ALLOWED_EMAIL_DOMAINS` | Kept for compatibility with older deployments. Only `bicol-u.edu.ph` is accepted for new or updated identity, invitations, sign-in, recovery, and outgoing email; existing non-BU records are not rewritten. |
 | `FIRST_DEAN_EMAIL`, `FIRST_DEAN_FIRST_NAME`, `FIRST_DEAN_LAST_NAME` | The person who receives the first Dean invitation (see [B5](#b5-the-first-dean)). |
-| `MEDIAPIPE_FACE_LANDMARKER_MODEL_HOST_PATH`, `MEDIAPIPE_FACE_LANDMARKER_SHA256` | Absolute path to the downloaded model and its hash (see [A8](#a8-optional-face-recognition-attendance), step 1). |
-| `BIOMETRIC_*` calibration values | From [docs/biometric-calibration-deployment.md](docs/biometric-calibration-deployment.md). Biometric attendance still stays off in single-server mode until it is approved for deployment. |
+| `MEDIAPIPE_FACE_LANDMARKER_MODEL_HOST_PATH`, `BIOMETRIC_YUNET_MODEL_HOST_PATH`, `BIOMETRIC_SFACE_MODEL_HOST_PATH` and `MEDIAPIPE_FACE_LANDMARKER_SHA256`, `BIOMETRIC_YUNET_SHA256`, `BIOMETRIC_SFACE_SHA256` | Absolute path to each downloaded model and its hash (see [A8](#a8-optional-face-recognition-attendance), step 1). The sidecar container cannot start without all three. |
+| `BIOMETRIC_*` calibration values | From [docs/biometric-calibration-deployment.md](docs/biometric-calibration-deployment.md). All seven are required by Compose. Real biometrics stay off in this mode: `docker-compose.web.yml` does not forward `BIOMETRIC_SIDECAR_ENABLED`. |
 
 Generate each secret separately:
 
@@ -409,7 +410,7 @@ On Windows, create a daily Task Scheduler task that runs the same command from t
 ### B8. What is still missing before real use
 
 - **Operations:** there is no HTTPS/reverse-proxy setup, firewall guidance, off-server or scheduled backups, secret rotation, or monitoring.
-- **Biometrics:** real biometric attendance is disabled outside development until it is approved for deployment.
+- **Biometrics:** real biometric attendance is off in this mode (the VPS overlay forwards `BIOMETRIC_SIDECAR_ENABLED`, see [docs/vps-deployment.md](docs/vps-deployment.md)).
 
 More detail: [docs/single-server.md](docs/single-server.md).
 
@@ -421,7 +422,7 @@ Use the smallest relevant check while working, then the gate for the kind of cha
 
 | Change | While iterating | Before handing off |
 | --- | --- | --- |
-| Documentation or instructions | `git diff --check` and link/reference checks | The documentation contract, when its covered files or migration names change |
+| Documentation or instructions | `git diff --check` and a check that the files and paths you mention exist | The documentation contract, when its covered files or migration names change |
 | Frontend or backend code | The relevant build or test | `.\scripts\check.ps1` |
 | Dockerfiles, dependency locks, Compose files | `docker compose config --quiet` and build the affected service | `.\scripts\check.ps1`, plus `.\scripts\check-postgres.ps1` when runtime behavior changes |
 | Database, authentication, milestone, or final work | The relevant targeted checks | `.\scripts\check.ps1` and `.\scripts\check-postgres.ps1` |
@@ -434,6 +435,9 @@ Repository rules for contributors and coding agents are in [AGENTS.md](AGENTS.md
 - [Documentation index](docs/README.md): architecture, features, database, and guides.
 - [Development environment details](docs/development-environment.md)
 - [Single-server details](docs/single-server.md)
-- [Deploying DentiSys from scratch](docs/deploy-from-scratch.md): step-by-step guide from an empty AWS account to a verified server with one command.
-- [VPS demonstration deployment](docs/vps-deployment.md): the approved DEL-001 cloud VPS runbook.
+- [Deploying DentiSys from scratch](docs/deploy-from-scratch.md): step-by-step guide from an empty VPS provider account to a verified server with one command.
+- [Release guide](docs/release-guide.md): demo release, testing and promotion to production.
+- [Hosting requirements](docs/hosting-requirements.md): what the demo and production servers need.
+- [VPS deployment reference](docs/vps-deployment.md): the approved DEL-001 cloud VPS runbook.
+- [Features](docs/features.md), [frontend patterns](docs/frontend.md), [benchmark](docs/benchmark.md)
 - [Demo accounts](docs/demo-accounts.md)

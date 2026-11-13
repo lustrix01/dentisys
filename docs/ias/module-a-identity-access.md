@@ -1,8 +1,8 @@
 # IAS Module A: Identity and Access Fortification
 
-> Implementation update: DentiSys now uses optional authenticator-app 2FA and recovery codes. Email-code verification and MFA method selection are retired. Google Sign-In is available alongside password authentication, with explicit password ownership, existing MFA/recovery, and DentiSys sessions remaining authoritative. Faculty onboarding requires an Admin invitation (the approval); Student onboarding requires a Faculty invitation tied to a canonical Student and class enrollment. Google is optional identity verification at invitation acceptance, while a DentiSys password remains mandatory.
+> Current model: DentiSys uses optional authenticator-app 2FA and recovery codes. Email-code verification and MFA method selection are retired. Google Sign-In is available alongside password authentication, with explicit password ownership, existing MFA/recovery, and DentiSys sessions remaining authoritative. Faculty onboarding requires an Admin invitation (the approval); Student onboarding requires a Faculty invitation tied to a canonical Student and class enrollment. Google is optional identity verification at invitation acceptance, while a DentiSys password remains mandatory.
 
-## P03 Student identity and sessions
+## Student identity and sessions
 
 Student authentication uses the existing server-issued access/refresh session machinery for password and Google provenance. `auth_sessions.authentication_source` records `password`, `google`, or the explicitly development-only `development_mock` source. Access-token verification calls `auth_assert_student_eligible()` to re-check the canonical Student identity invariant (role, account status, Student status, institutional-email match, and exactly one canonical link) without requiring a current enrollment. Enrollment is checked during Faculty invitation issuance and class-scoped activation, and by `require_owned_enrollment()` object scoping.
 
@@ -10,7 +10,7 @@ Student onboarding uses authenticated `POST /api/faculty/student-invitations`, p
 
 ### Explicit identity decisions
 
-- **Provisioning/link invariant:** Faculty invitation issuance provisions or explicitly reauthorizes one non-login-capable `Pending Activation` account. Faculty-issued Student invitations provision one `Pending Activation` `user_accounts` row and set `students.student_account_user_id`; they never backfill `students.user_id`. Student onboarding requires an active enrollment in the specific inviting class. Existing conflicting links require manual reconciliation. P06 owns legacy Secretary reconciliation.
+- **Provisioning/link invariant:** Faculty invitation issuance provisions or explicitly reauthorizes one non-login-capable `Pending Activation` account. Faculty-issued Student invitations provision one `Pending Activation` `user_accounts` row and set `students.student_account_user_id`; they never backfill `students.user_id`. Student onboarding requires an active enrollment in the specific inviting class. Existing conflicting links require manual reconciliation; legacy Secretary links are reconciled separately.
 - **Google Sign-In and invitation verification:** GIS ID tokens are verified server-side with `Google\Auth\AccessToken`, expected audience/issuer/expiry/subject/email/domain/Workspace checks, and `google` session provenance. An unlinked existing account requires explicit password confirmation and existing MFA before the nullable unique `google_subject` is atomically bound. At invitation acceptance Google is optional, must match the invited identity, and grants no invitation authority; every account remains password-backed.
 - **Student/Secretary relationship:** one canonical Student account may not be converted to admin/faculty; a legacy Secretary-only `students.user_id` link remains valid and separate. Secretary activation rejects a Student canonical link, and P03 does not merge or migrate the two identities.
 
@@ -90,7 +90,7 @@ User                    Backend                         Database
 - **Attempt limit**: Enforced by the filesystem rate limiter using the challenge JTI as part of the rate-limit key. The rate limiter is implemented in a later stage. A verification-attempt counter is NOT maintained inside the signed challenge JWT because client-side state is not authoritative.
 - No new database table or security_tokens purpose is added for challenge attempts.
 
-## Complete RBAC Matrix (125 Baseline + 7 P03 Student Grants)
+## Complete RBAC Matrix (125 Baseline + 7 Student Grants)
 
 | Role | Resource | Action | Scope |
 |------|----------|--------|-------|
@@ -170,10 +170,10 @@ User                    Backend                         Database
 | | audit_trail | read_module | assigned_class |
 | | secretary_invitation_own | accept | own |
 
-Baseline total: 125 rows (= 62 admin + 47 faculty + 16 secretary). P03 adds
+Baseline total: 125 rows (= 62 admin + 47 faculty + 16 secretary). The Student migration adds
 seven Student self-scoped grants, for 132 active grants.
 
-### Student P03 Grants
+### Student Grants
 
 | Role | Resource | Action | Scope |
 |------|----------|--------|-------|
@@ -197,7 +197,7 @@ The Faculty Student Management "delete" action maps to `enrollments.archive` (se
 - `POST /api/admin/faculty-invitations` — authenticated Admin; invitation is Faculty approval
 - `POST /api/faculty/student-invitations` — authenticated Faculty; invitation must match an owned active class enrollment
 - `POST /api/auth/password/reset-request` — unauthenticated
-- `POST /api/activate-secretary` — invitation token based
+- `POST /api/secretary/activate` — invitation token based
 - `GET /api/health` — unauthenticated
 
 ## Design Rationale

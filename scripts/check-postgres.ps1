@@ -1,3 +1,7 @@
+# Disposable integration check (README A12): creates a separate Compose project (default dentisys-integration,
+# own ports and volume), applies the demo seed twice, runs the database/PHP integration tests and the live
+# Playwright tests, then removes the project. It never touches the development database. -KeepStack keeps it
+# for inspection; -ComposeProject, -BackendHttpPort, -FrontendHttpPort and -MailpitUiPort change names and ports.
 [CmdletBinding()]
 param(
     [switch] $KeepStack,

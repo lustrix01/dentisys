@@ -1,10 +1,12 @@
 # Demo VPS access for testing: run a command over SSH, or open a localhost tunnel to the demo app.
-# Settings come from ~/.dentisys/demo.env (outside the repo). Demo only: never point it at production.
+# Settings come from ~/.dentisys/demo.env (outside the repo; see docs/release-guide.md). Demo only: never point it at production.
+#   Keys: DEMO_SSH_HOST, DEMO_SSH_USER, DEMO_SSH_KEY, DEMO_SSH_PORT, DEMO_LOCAL_PORT, DEMO_REMOTE_PORT (used here), DEMO_BASE_URL
+#   (benchmark.ps1) and DEMO_{ADMIN,FACULTY,SECRETARY,STUDENT}_{EMAIL,PASSWORD} (demo-test.ps1).
 #   ./scripts/demo-vps.ps1 run "<command>"
 #   ./scripts/demo-vps.ps1 upload <local-file> <remote-path>
 #   ./scripts/demo-vps.ps1 wait-deploy <sha>   (after publish-images.ps1: waits until the VPS runs sha-<sha>)
 #   ./scripts/demo-vps.ps1 migrate   (backs up and applies new database migrations via sync-vps-db.ps1; required before a release that adds migrations)
-#   ./scripts/demo-vps.ps1 recompute-grades preview|apply   (one-time recalculation of current-term grades on the demo; preview writes nothing)
+#   ./scripts/demo-vps.ps1 recompute-grades preview|apply   (deliberate one-off recalculation of current-term grades on the demo; preview writes nothing; not part of a release)
 #   ./scripts/demo-vps.ps1 tunnel-start | tunnel-stop | status
 [CmdletBinding()]
 param(

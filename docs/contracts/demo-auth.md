@@ -1,4 +1,4 @@
-# Local demo password-change contract
+# Password-change contract
 
 `POST /api/auth/password/change` changes the password for the account attached
 to the authenticated access token.

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Nightly PostgreSQL backup on the VPS (cron, 02:17): dumps into /opt/dentisys/backups and keeps the newest 14.
+# Installed and scheduled by deploy-vps.sh; not meant to be run by hand from a PC.
 set -euo pipefail
 set -E
 

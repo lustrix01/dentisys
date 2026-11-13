@@ -1,6 +1,6 @@
 # Hosting requirements
 
-What the demo and production servers need, in one place. Approved by the Owner on 2026-11-02 (spec DEL-001). How to set a server up: [deploy-from-scratch.md](deploy-from-scratch.md); how a release moves from demo to production: [release-guide.md](release-guide.md).
+What the demo and production servers need, in one place (spec DEL-001). How to set a server up: [deploy-from-scratch.md](deploy-from-scratch.md); how a release moves from demo to production: [release-guide.md](release-guide.md).
 
 ## Servers
 
@@ -10,10 +10,10 @@ What the demo and production servers need, in one place. Approved by the Owner o
 | Provider | Any VPS provider; currently **Vultr**, one account, Singapore region. |
 | Operating system | **Ubuntu Server 26.04 LTS** only (the hardening script refuses others). |
 | CPU type | **x86-64 (amd64)**. Images are built for `linux/amd64`; ARM servers do not work. |
-| Size, each | **Vultr High Frequency AMD, 1 vCPU / 2 GB RAM** (about 1.6 GB usable), 30 GB disk or more; both servers since 2026-11-05. Benchmarked 2026-11-04 (`benchmarks/results/`): about 34 requests/s, no errors at 25 simultaneous users, and 4 face check-ins at once add under 2 s each. A plain 1 vCPU / 1 GB plan works for the demo but swaps heavily and is roughly 2.5× slower. Move to 2 vCPU if many people browse heavily at once. 8 GB disks run out while pulling images. |
-| App copies | `WEB_REPLICAS` / `FRONTEND_REPLICAS` in the server's `.env` (default 3 each, for updates without downtime). **Both servers run 1 and 1**: on 1 vCPU this removed the errors at 25 simultaneous users and cut face check-in delay (benchmark 2026-11-04); each update briefly interrupts the site. |
+| Size, each | **Vultr High Frequency AMD, 1 vCPU / 2 GB RAM** (about 1.6 GB usable), 30 GB disk or more, on both servers. Benchmark results (`benchmarks/results/`, method in [benchmark.md](benchmark.md)): about 34 requests/s, no errors at 25 simultaneous users, and 4 face check-ins at once add under 2 s each. A plain 1 vCPU / 1 GB plan works for the demo but swaps heavily and is roughly 2.5× slower. Move to 2 vCPU if many people browse heavily at once. 8 GB disks run out while pulling images. |
+| App copies | `WEB_REPLICAS` / `FRONTEND_REPLICAS` in the server's `.env` (default 3 each, for updates without downtime). **Both servers run 1 and 1**: on 1 vCPU this removed the errors at 25 simultaneous users and cut face check-in delay in the benchmark; each update briefly interrupts the site. Each server's own `.env` holds the number it runs. |
 | IP address | One fixed public IPv4. A Vultr server keeps its IP for its lifetime; a Reserved IP is needed only to rebuild a server on the same IP. On AWS use an Elastic IP. |
-| SSH keys | **A separate key per server, both made before the first server is created**: the demo key (no passphrase; Claude uses it for demo deploys and tests) and the production key (passphrase; Owner only). Never select the demo key for production, so a leaked demo key cannot open production and Claude has no way in. Owner decision 2026-11-05. |
+| SSH keys | **A separate key per server, both made before the first server is created**: the demo key (no passphrase; Claude uses it for demo deploys and tests) and the production key (passphrase; Owner only). Never select the demo key for production, so a leaked demo key cannot open production and Claude has no way in. |
 | First login | The server's own SSH key, selected when the server is created. Vultr logs in as `root` (setup option `-InitialUser root`); AWS logs in as `ubuntu` (the default). |
 | Recovery | The provider's web console (Vultr *View Console*; AWS Session Manager or EC2 Instance Connect). Keep it available before hardening. |
 
@@ -59,7 +59,7 @@ Pinned in the repository; change them there, not on the server.
 | Email | **Required.** A dedicated Gmail account (not a personal one) with 2-Step Verification and an App Password, entered during setup. About 500 emails a day. If invitations stop arriving, check Email Management for failed sends, then the App Password. |
 | First Dean | Name and an email on an allowed domain; receives the first invitation. |
 | Who can sign in | Unchanged: invitation by the Dean or Faculty, as Faculty, Student or Secretary, with an email on the allowed domain list. |
-| Face recognition | **On by default in production** (public test site, spec BIO-002 amendment 2026-11-02). The demo keeps its 2026-10-09 rule: on only by explicit configuration, team members enroll. |
+| Face recognition | **On by default in production** (public test site, spec BIO-008). The demo is on only by explicit configuration (`BIOMETRIC_SIDECAR_ENABLED=true`); team members enroll. |
 
 ## Backups
 
@@ -68,8 +68,8 @@ Pinned in the repository; change them there, not on the server.
 - Face references are never in the backup (BIO-003/BIO-005); after a server loss people enroll again.
 - Keep a private copy of each server's `/opt/dentisys/.env`: a backup cannot be restored without its keys.
 
-## Accepted risks (Owner, 2026-11-02)
+## Accepted risks
 
 - Both servers are on one provider account and one payment method: a billing or account problem takes both down together.
 - There is no off-server backup, so test data can be lost.
-- Temporary exception (Owner, 2026-11-05): the first production server was created with the demo key. Until it is replaced with a production key, one leaked key opens both servers, and Claude must still never connect to production.
+- The first production server was created with the demo key. Until it is replaced with a production key, one leaked key opens both servers, and Claude must still never connect to production.

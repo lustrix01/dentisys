@@ -1,3 +1,7 @@
+# Uploads the deployment bundle (templates, Compose files, database files, VPS scripts) and the three face models
+# to a VPS over SSH (-Server user@host, -Port, -IdentityFile, -ModelPath, -YuNetModelPath, -SFaceModelPath).
+# -SkipModel uploads the bundle only; -Deploy then runs deploy-vps.sh on the server; -Provision is the mode used by
+# provision-vps.ps1 and cannot be combined with -Deploy or -SkipModel. Never uploads real .env files or tokens.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]

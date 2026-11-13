@@ -2,7 +2,7 @@
 
 ## Encoding safety (Windows)
 
-This machine has **PowerShell 7** (`pwsh`, 7.6.9) and **Windows PowerShell 5.1**
+This machine has **PowerShell 7** (`pwsh`) and **Windows PowerShell 5.1**
 (`powershell.exe`). They behave differently; use the right one:
 
 - `pwsh` 7 is safe: `Set-Content`/`Out-File -Encoding utf8`, default encodings and

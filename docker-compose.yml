@@ -72,7 +72,7 @@ services:
       - "127.0.0.1:${BACKEND_HTTP_PORT:-8080}:80"
     environment:
       # The default stack is intentionally development-safe when .env is absent.
-      # Production-like deployments use docker-compose.web.yml with explicit APP_ENV.
+      # Production-like deployments use docker-compose.web.yml, which fixes APP_ENV=single-server.
       APP_ENV: ${APP_ENV:-development}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:5173}
       APP_IS_HTTPS: ${APP_IS_HTTPS:-false}

@@ -1,7 +1,7 @@
 # Release guide: from approved change to production
 
 The checklist for shipping a change. It covers who does each step, the exact commands, and what to do when something fails.
-Server setup itself is in [deploy-from-scratch.md](deploy-from-scratch.md). The rules behind this guide are in `spec.md` DEL-001 (Owner decisions 2026-10-14 and 2026-11-02). Server requirements are in [hosting-requirements.md](hosting-requirements.md).
+Server setup itself is in [deploy-from-scratch.md](deploy-from-scratch.md). The rules behind this guide are in `spec.md` DEL-001. Server requirements are in [hosting-requirements.md](hosting-requirements.md).
 
 ## Where work happens: localhost → demo → production
 
@@ -43,7 +43,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\<script>.ps1 <arguments>
 | 3 | Publish the demo images | Claude | `.\scripts\publish-images.ps1 -Tag demo`. It prints the 12-character sha. |
 | 4 | Database migrations (only if the release adds them) | Claude | `.\scripts\demo-vps.ps1 migrate`. It backs up the database first. Watchtower alone is not enough. |
 | 5 | Wait until the demo runs the new version | Claude | `.\scripts\demo-vps.ps1 wait-deploy <sha>`. It waits up to 15 minutes for every container to run that sha and be healthy. |
-| 6 | Test the demo | Claude | `.\scripts\demo-test.ps1` signs in as each role through the tunnel at `http://localhost:15180`, plus any checks specific to the feature. For the grade-rules release, Claude first shows you the list of grades that change (`.\scripts\demo-vps.ps1 recompute-grades preview`, writes nothing), then applies it on the demo (`... recompute-grades apply`). |
+| 6 | Test the demo | Claude | `.\scripts\demo-test.ps1` signs in as each role through the tunnel on the `DEMO_LOCAL_PORT` port of `demo.env` (`http://localhost:<DEMO_LOCAL_PORT>`), plus any checks specific to the feature. |
 | 7 | Report | Claude → Owner | Pass/fail in chat, ending with the approved sha and the exact command: `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\promote-prod.ps1 -Sha <sha>`. The change doc is updated only when the Owner asks. |
 | 8 | Approve the demo | Owner, then Claude | Both say "approved". Open the demo yourself at its address. |
 | 9 | Promote to production | **Owner** | See below. |
@@ -57,7 +57,7 @@ Use the sha from Claude's demo report (the version tested on the demo), not simp
 git checkout <approved sha>
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\promote-prod.ps1 -Sha <approved sha> -DryRun
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\promote-prod.ps1 -Sha <approved sha>
-git checkout lighthal9-responsive
+git checkout -   # back to the branch you were on
 ```
 
 - `promote-prod.ps1` needs HEAD to equal the sha you promote, so commit nothing after the tested commit before promoting. If a commit lands anyway, ask Claude to test the new head on the demo, or promote from a detached worktree at the tested sha.
@@ -74,7 +74,7 @@ git checkout lighthal9-responsive
   3. Fingerprint (digest) check.
   4. Wait until production runs the new version.
 
-  Promotion never recalculates saved grades (spec, 2026-11-13 amendment). Grades update when Faculty next save scores or weights.
+  Promotion never recalculates saved grades (spec UI-003). Grades update when Faculty next save scores or weights.
   
   The last line reads `Production now runs sha-<sha>`.
 - A failure before step 2 leaves production untouched. Fix the cause the message names and rerun.
@@ -116,7 +116,7 @@ What lives outside Git on this PC, and what to do if the PC is replaced (about a
 | Item | Where | On a new PC |
 |---|---|---|
 | Docker login of the bot `lighthal-dev` | Docker Desktop | `docker login ghcr.io -u lighthal-dev` with the publishing token |
-| Demo settings and test passwords | `~\.dentisys\demo.env` | Copy it over, or recreate it as in *Setting up a new server* |
+| Demo settings and test passwords | `~\.dentisys\demo.env` (keys: `DEMO_SSH_HOST`, `DEMO_SSH_USER`, `DEMO_SSH_KEY`, `DEMO_SSH_PORT`, `DEMO_LOCAL_PORT`, `DEMO_REMOTE_PORT`, `DEMO_BASE_URL`, and one `DEMO_ROLE_EMAIL` / `DEMO_ROLE_PASSWORD` pair per role, ROLE = ADMIN, FACULTY, SECRETARY, STUDENT) | Copy it over, or recreate it as in *Setting up a new server* |
 | Demo SSH key | `~\.ssh\` | Copy it over, or add a new key to the demo server's `devops` account |
 | Production settings, key and test logins | `~\.dentisys\prod.env`, `prod-test.env`, the production key | Owner only: keep them backed up somewhere safe |
 

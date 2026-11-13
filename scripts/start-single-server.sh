@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+# macOS/Linux counterpart of scripts/start-single-server.ps1; the first argument is the settings file (default .env.single-server).
 set -eu
 
 env_file="${1:-.env.single-server}"
@@ -13,6 +14,7 @@ set -a
 . "$env_file"
 set +a
 
+# Only these keys are checked here; docker-compose.web.yml additionally requires every BIOMETRIC_* value, model path and model hash.
 for key in APP_BASE_URL DB_PASS DB_ADMIN_PASS JWT_SIGNING_KEY_B64 MFA_ENCRYPTION_KEY_B64 AUDIT_MAC_KEY_B64 SMTP_HOST SMTP_FROM; do
   eval "value=\${$key:-}"
   case "$value" in ''|replace_with_*) echo "Set $key before starting." >&2; exit 1;; esac

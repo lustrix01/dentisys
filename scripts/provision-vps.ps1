@@ -1,3 +1,7 @@
+# One-command setup of a new VPS (docs/deploy-from-scratch.md): -Ip, -KeyFile, -InitialUser (root on Vultr, ubuntu
+# on AWS), -User (sudo account, default devops), -Domain, -SshPort (default 2202), -NoDbTunnel, -NewInstance,
+# -Production (production images and settings). Asks every question up front, uploads the bundle, then hardens,
+# creates /opt/dentisys/.env, deploys and verifies on the server (provision-vps.sh).
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]

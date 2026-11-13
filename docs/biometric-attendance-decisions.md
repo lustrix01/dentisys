@@ -7,8 +7,8 @@ values.
 ## Approved implementation boundary
 
 - OpenCV YuNet (`FaceDetectorYN`) performs face detection and rejects zero or multiple-face captures.
-- OpenCV SFace (`FaceRecognizerSF`) performs strict authenticated-Student 1:1 verification only. This replaced the originally approved Haar Cascade + LBPH pipeline on 2026-10-11 after calibration.
-- MediaPipe Face Landmarker is used only for the two-action active-liveness analysis.
+- OpenCV SFace (`FaceRecognizerSF`) performs strict authenticated-Student 1:1 verification only.
+- MediaPipe Face Landmarker is used only for the active-liveness analysis: one random action for attendance, two for enrollment.
 - PHP remains authoritative for identity, authorization, consent, session timing, Asia/Manila calendar interpretation, geofencing, attendance status, persistence, idempotency, and audit.
 - Raw frames and Student GPS coordinates are temporary request data only.
 - Protected SFace references are AES-256-GCM encrypted in the private sidecar storage volume.

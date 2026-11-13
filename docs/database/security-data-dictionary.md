@@ -1,8 +1,8 @@
-# Security Data Dictionary — Phase 2/P03 (15 Tables + Student Identity)
+# Security Data Dictionary (baseline tables + Student identity)
 
-> Current authentication note: migration 006 removes email-code 2FA. Authenticator credentials and recovery codes continue to use `security_tokens`.
+> Authentication note: email-code 2FA does not exist (removed by migration 006). Authenticator credentials and recovery codes use `security_tokens`.
 
-> PostgreSQL P03 note: migration `005_student_identity_authentication.sql` is additive. It introduces the nullable canonical Student link, server-issued session provenance, and the live Student activation-token invariant. It does not backfill `students.user_id`; that legacy Secretary relationship remains unchanged for P06 reconciliation.
+> Student identity note: migration `005_student_identity_authentication.sql` is additive. It introduces the nullable canonical Student link, server-issued session provenance, and the live Student activation-token invariant. It does not backfill `students.user_id`; that legacy Secretary relationship stays as it is until a reconciliation is done.
 
 ## user_accounts
 
@@ -30,7 +30,7 @@
 | scope | ENUM('own','assigned_class','assigned_course','aggregate','system_wide') | NOT NULL |
 | | | UNIQUE (role_name, resource, action, scope) |
 
-The baseline contains 125 grants. P03 adds seven Student self-scoped grants
+The baseline contains 125 grants. Migration 005 adds seven Student self-scoped grants
 (132 active grants total). Missing rows = deny.
 
 ## students

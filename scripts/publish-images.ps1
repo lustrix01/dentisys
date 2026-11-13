@@ -1,3 +1,6 @@
+# Builds the web, frontend and biometric images from a clean, committed HEAD and pushes them to GHCR as
+# ghcr.io/<namespace>/dentisys-{web,frontend,biometric} with the tags sha-<12-character commit> and a moving
+# tag (-Tag, default demo; sha-* is refused). -Namespace defaults to light505. Needs docker login ghcr.io first.
 [CmdletBinding()]
 param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9-]*$')]

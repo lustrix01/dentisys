@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Runs on the VPS: --check lists pending migrations; without it, backs up and applies them.
+# Launched by sync-vps-db.ps1 and deploy-vps.sh, which hold the deploy lock.
 set -euo pipefail
 
 deploy_dir=/opt/dentisys

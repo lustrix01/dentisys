@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Runs on the VPS as root: applies the hardening guide steps 1-6 (see harden-vps.ps1, which launches it).
 set +x
 set -euo pipefail
 

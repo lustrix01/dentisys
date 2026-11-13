@@ -1,6 +1,6 @@
 # Benchmark
 
-One fixed, repeatable benchmark for the **demo server or a throwaway local stack**, so a server upgrade or an optimization can be compared with the previous run. **Never production.** Contract agreed with the Owner on 2026-11-04 (grill-me, rounds 1–3).
+One fixed, repeatable benchmark for the **demo server or a throwaway local stack**, so a server upgrade or an optimization can be compared with the previous run. **Never production.**
 
 ## Commands
 
@@ -45,7 +45,7 @@ A stage with more than 20% errors is recorded and the rest of that phase is skip
 
 - The app's development biometric mock is blocked outside local development (`backend/app/config.php`, spec BIO), so the camera is replaced, not the face service.
 - One-time: the Owner records a ~5 s selfie video (face the camera, blink, turn left and right). `-CaptureFace` turns it into frames exactly like the app's (640×480, JPEG quality 0.85) and stores them in `~/.dentisys/benchmark-face/`. **Never in the repo.**
-- One simulated check-in = 26 single-frame guidance calls, then one 9-frame verify: measured from one real check-in in the demo access log (2026-11-04: 2 liveness challenge requests handled by PHP only, 26 guidance calls about 0.6 s apart, one verify). Each simulated student is paced like the phone: send a call, wait for it, sleep the rest of 600 ms (a slower call is followed at once). Numbers: `guidanceCallsPerCheckin` and `guidanceIntervalMs` in `profile.json`.
+- One simulated check-in = 26 single-frame guidance calls, then one 9-frame verify: measured from one real check-in in the demo access log (2 liveness challenge requests handled by PHP only, 26 guidance calls about 0.6 s apart, one verify). Each simulated student is paced like the phone: send a call, wait for it, sleep the rest of 600 ms (a slower call is followed at once). Numbers: `guidanceCallsPerCheckin` and `guidanceIntervalMs` in `profile.json`.
 - The frames are chosen from the video with the face service's own guidance, then validated: one enrolment, one verify and a revoke must succeed, or `-CaptureFace` fails and saves nothing.
 - Each run enrolls a temporary reference from the frames, runs the phase over the server's internal network with the face service's shared secret, then revokes the reference. No database rows are written.
 - Reported per check-in: total time (p50/p95), the server time added beyond the client pacing (total minus 26 x 0.6 s), guidance-call and verify-call p50/p95, and how many verify calls exceed 20 s (the PHP sidecar timeout per call, `BIOMETRIC_SIDECAR_TIMEOUT_SECONDS`; the student would fall back to manual attendance).

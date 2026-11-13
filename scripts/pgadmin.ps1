@@ -1,3 +1,5 @@
+# Development only: -Action Up (default) starts pgAdmin, Down stops it, Status shows it (docker-compose.pgadmin.yml).
+# The address is http://127.0.0.1:<PGADMIN_HTTP_PORT, default 5050>.
 [CmdletBinding()]
 param(
     [ValidateSet('Up', 'Down', 'Status')]

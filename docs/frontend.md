@@ -9,10 +9,10 @@ The frontend is a React 19, TypeScript, Vite, React Router and Tailwind app in `
 | Width | Sidebar |
 |---|---|
 | Phones, below 768 px | Hidden. The top-bar menu button opens it as a drawer over the page; it closes with its X, the backdrop, Escape or a link. |
-| Upright tablets, 768–1023 px | Starts as a collapsed icon rail when the user has not chosen (Owner decision, spec UI-001); a saved open or collapsed choice wins. |
+| Upright tablets, 768–1023 px | Starts as a collapsed icon rail when the user has not chosen (spec UI-001); a saved open or collapsed choice wins. |
 | 1024 px and wider | Full sidebar with names; the user can collapse it to the rail. |
 
-Below 1280 px every control, card and text must stay inside its box, and columns and data formats match desktop (never merged, reordered or dropped), except for the phone blocks below (UI-001, 2026-11-03). Desktop (1280 px and wider) keeps its layout.
+Below 1280 px every control, card and text must stay inside its box, and columns and data formats match desktop (never merged, reordered or dropped), except for the phone blocks below (UI-001). Desktop (1280 px and wider) keeps its layout.
 
 The phone and desktop top bars share one `ProfileMenu` (inside `Layout.tsx`), so both show the same menu items for each role.
 
@@ -28,7 +28,7 @@ The standard look for each part of a signed-in page ([AGENTS.md](../AGENTS.md) "
 
 | Part | Standard | Copy from |
 |---|---|---|
-| Page wrapper | `space-y-6 animate-fade-in max-w-7xl mx-auto` around the whole page | `pages/faculty/RetentionMonitoring.tsx:789` |
+| Page wrapper | `space-y-6 animate-fade-in max-w-7xl mx-auto` around the whole page | `pages/faculty/RetentionMonitoring.tsx` (the outer `div` of the page) |
 | Page section tabs (switch between the main sections of a page, such as Grades / Retention / Attendance) | White card bar: bordered white card, the selected tab filled with the role colour | `<Tabs variant="section">` in `components/Tabs.tsx`; never hand-build a tab bar |
 | List switch (two or three views of one list, such as Assigned / Archived) | Grey segmented bar: grey track, the selected tab a white pill with role-colour text and a role-colour outline, count badge tinted in the role colour | `<Tabs variant="switch">` in `components/Tabs.tsx` |
 | Tab names on phones | When the full names would wrap to extra rows below `sm`, give each tab a `shortLabel` (for example "Scores" for "Student Scores Entry"). The full name stays the accessible name at every width; the short form is visual only | `components/Tabs.tsx` (`shortLabel` and `aria-label`) |
@@ -40,7 +40,7 @@ Not settled yet: the page header, notice banners (three looks today), tables and
 
 ### Filters, search and list actions
 
-Today's pages are the reference: a page's filter row stays where it is, and changes happen inside it (Owner review of 2026-11-07, [Filter Bar Standard demo](https://claude.ai/artifact/1CP17gGHrRwuEA33J7hVGK)). A new page copies the filter row of the nearest existing page that does the same job.
+Today's pages are the reference: a page's filter row stays where it is, and changes happen inside it. A new page copies the filter row of the nearest existing page that does the same job.
 
 1. **Improve inside the current layout.** Never add a separate bar or card for one or two controls.
 2. **School Year sits inside the page's existing filter row** (or at the right of a dashboard header), never in a bar of its own.
@@ -52,11 +52,11 @@ Today's pages are the reference: a page's filter row stays where it is, and chan
 
 Show only one search box per view. On phones a filter row wraps onto the next line; it never scrolls sideways.
 
-Every tab bar uses `Tabs`, which also gives screen readers the tab roles and lets arrow keys, Home and End move between tabs. A count that is a warning (Retention remedials and midterm risk) keeps its amber or rose badge with `countTone`, including when its tab is selected (Owner decisions of 2026-11-06, [Tab Bar Standard demo](https://claude.ai/artifact/EBfuzdD5bdrWAdxVw3S1fL)).
+Every tab bar uses `Tabs`, which also gives screen readers the tab roles and lets arrow keys, Home and End move between tabs. A count that is a warning (Retention remedials and midterm risk) keeps its amber or rose badge with `countTone`, including when its tab is selected.
 
 ## Phone blocks
 
-On phones (below 768 px), every Student and Secretary data table shows stacked row cards instead of horizontal scrolling; each card preserves every field and action. The same phone-block pattern applies to the Faculty and Reports lists named in `spec.md` UI-001. Fields without a visible label get a screen-reader label. Tablet and desktop layouts keep their tables. Other tables scroll sideways inside their card on phones, never the whole page. The Student and Secretary scope was approved in `spec.md` UI-001 on 2026-11-11.
+On phones (below 768 px), every Student and Secretary data table shows stacked row cards instead of horizontal scrolling; each card preserves every field and action. The same phone-block pattern applies to the Faculty and Reports lists named in `spec.md` UI-001. Fields without a visible label get a screen-reader label. Tablet and desktop layouts keep their tables. Other tables scroll sideways inside their card on phones, never the whole page.
 
 ## Authentication routes
 

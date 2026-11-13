@@ -1,6 +1,6 @@
 # Local biometric attendance demo contract
 
-This is the backend contract for the one-day local demo. It describes the
+This is the backend contract for the local biometric attendance demo. It describes the
 implemented PHP and private sidecar behavior; it does not claim that a camera,
 calibrated model, or institutional privacy review has passed. Real completion
 requires one genuine enrollment and one genuine attendance record in
@@ -88,9 +88,8 @@ the server-issued order, and encrypted SFace template generation (usable samples
 averaged into one normalized template). Each challenge action must be shown on a
 frame whose usable face matches the new template, with the MediaPipe landmarks
 on that same face; otherwise enrollment fails with `liveness_failed`. Raw frames and per-frame embeddings exist
-only in request memory and are not stored. Enrollments made before 2026-10-11
-are legacy `lbph/` references that never verify; see the migration note in
-`docs/biometric-calibration-deployment.md`.
+only in request memory and are not stored. An `lbph/` reference from the earlier pipeline
+never verifies; see the note in `docs/biometric-calibration-deployment.md`.
 
 On success the response is the profile response with `enrollmentStatus:
 "active"`, the server-selected usable count, and the term-derived expiry.

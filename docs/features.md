@@ -1,6 +1,6 @@
 # Implemented Features
 
-What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07; grading, retention, attendance-activity and Faculty notice entries updated on `lighthal8` on 2026-10-09. Behaviour is defined by [spec.md](../spec.md); open and partial work is in the [product backlog](PRODUCT_BACKLOG.md).
+What DentiSys does today. Behaviour is defined by [spec.md](../spec.md); open and partial work is in the [product backlog](PRODUCT_BACKLOG.md).
 
 - **implemented, tests passing**: the code exists and `scripts/check.ps1` and `scripts/check-postgres.ps1` ran tests covering it, and they passed.
 - **implemented in code**: the code exists, but the gates do not run a test that proves it.
@@ -9,7 +9,7 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 
 - First Dean/Admin account created by a controlled bootstrap script — REG-010 — implemented, tests passing.
 - Password sign-in with optional authenticator-app 2FA and recovery codes — AUTH-005, AUTH-006 — implemented, tests passing.
-- Password policy: 8–32 characters with the existing composition rules, shown in every set-password form; the show/hide control stays aligned to the input row — AUTH-005 amendment 2026-11-11 — implemented, tests passing.
+- Password policy: 8–32 characters with the existing composition rules, shown in every set-password form; the show/hide control stays aligned to the input row — AUTH-005 — implemented, tests passing.
 - A 401 on a non-auth request attempts one silent session refresh; the server remains authoritative for the 30-minute idle limit and the activity header only marks genuinely active requests — AUTH-007 — implemented, tests passing.
 - Google Sign-In for existing accounts, linked only after password and 2FA confirmation, bound to a stable Google ID — AUTH-003, AUTH-010 — implemented, tests passing.
 - Five-part structured names (Prefix, First, Middle, Last, Suffix) for every person and invitation, with Unicode-aware validation — ID-002 — implemented, tests passing.
@@ -18,7 +18,7 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 
 ## Invitations and roles
 
-- Faculty invitations with structured names and institutional email checked against the server's allowed domains while typing — REG-005, UI-004, AUTH-004 — implemented, tests passing.
+- Faculty invitations with structured names and institutional email (only `@bicol-u.edu.ph`) checked while typing — REG-005, UI-004, AUTH-003 — implemented, tests passing.
 - Faculty and Student invitations last 7 days — REG-001 — implemented, tests passing.
 - Faculty who are active but have no invitation record show "Active" in the Dean's list, not "Not invited" — REG-005 — implemented in code.
 - Pending Faculty invitations can be edited, revoked and reissued; editing the email revokes the old token; an invitation counts as accepted only after the account is activated — REG-005 — implemented, tests passing.
@@ -32,18 +32,18 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 ## Grading and retention
 
 - Faculty edit grading categories and weights; weights must total exactly 100% and grades stay computed — GRD-002, GRD-003 — implemented, tests passing.
-- Grades follow the official BUCDM grade sheet: plain category averages, whole-percent rounding (.5 up), the 2026-10-17 conversion table with below 75% = 5.0, and a hover showing the steps (e.g. "83.77% → 84% → 2.5"); server and screen produce the same value — UI-003, spec amendment 2026-10-26 — implemented, tests passing.
+- Grades follow the official BUCDM grade sheet: plain category averages, whole-percent rounding (.5 up), the official conversion table with below 75% = 5.0, and a hover showing the steps (e.g. "83.77% → 84% → 2.5"); server and screen produce the same value — UI-003 — implemented, tests passing.
 - Assessment categories say Lecture or Laboratory; a new max score starts empty and asks for confirmation above 500 points; a cell shows "Incomplete" with a note naming categories that have no assessments; students without a final grade show "No Grade Yet" in Dean reports, exports and the Dashboard — GRD-002 — implemented in code.
 - The assessment dialog shows inline field errors for a blank title or non-positive maximum score using the existing Create Class field-error pattern, and keeps Confirm enabled — UI-002/GRD-002 — implemented, tests passing.
 - Students see grades only; exports are .xlsx in the official layouts — GRD-002 — implemented in code.
 - Score entry (single assessment and full matrix) saves when Faculty leave a cell while Auto-save is on, keeps a visible Saving / Saved / Failed – Retry bar, asks before clearing a stored score, and saves the matrix all-or-nothing; the matrix pins student ID and name columns — UI-002 — implemented, tests passing.
-- Grade ledgers, retention lists and attendance registers export as CSV or a printable PDF of the open section — GRD-002 — implemented, tests passing for CSV and print content; the open-section-only PDF was checked manually.
-- Midterm Watchlist shows server risk once a student's midterm is complete or Faculty unlock the class; locked classes stay hidden from "At risk only" — UI-003 — implemented, tests passing.
-- Retention Monitoring uses the Faculty's real classes, enrollments and scores, the "Midterm Grade" wording and the approved High / At Risk / Low risk levels — UI-003, ACA-001 — implemented, tests passing.
+- Grade ledgers, retention lists, attendance registers and class lists export as .xlsx or as a printable PDF of the open section — GRD-002 — implemented, tests passing for the exports and print content; the open-section-only PDF was checked manually.
+- Midterm Watchlist shows server risk once a student's midterm is complete; the screen has no lock or manual unlock — UI-003 — implemented, tests passing.
+- Retention Monitoring uses the Faculty's real classes, enrollments and scores, the "Midterm Grade" wording and the single At Risk flag (no risk levels) — UI-003, ACA-001 — implemented, tests passing.
 - Remedial is a row action after Finals with Student, Course and Section locked; no separate "Schedule a Remedial" action — UI-003 — implemented, tests passing.
-- Two remedial attempts, each passing at 50% or more; the second only after a failed first; the original course grade never changes — UI-003 — implemented, tests passing.
+- Two remedial attempts, each passing at 75% or more; the second only after a failed first; the original course grade never changes — UI-003 — implemented, tests passing.
 - Students get a stored in-app notification when a remedial is assigned — UI-003, NTF-001 — implemented, tests passing.
-- Student roster import into existing classes from the official class list PDF (or the CSV template; no "Official format not confirmed" label since 2026-10-28), with total-count and wrong-class checks — IMP-001 — implemented, tests passing.
+- Student roster import into existing classes from the official class list PDF (or the CSV template; no "Official format not confirmed" label), with total-count and wrong-class checks — IMP-001 — implemented, tests passing.
 - Roster import shows persistent per-cause errors for an unsupported file, a non-class-list PDF, a scanned PDF or an unusable CSV; headerless/positional CSV still parses with an amber warning, and the same file can be retried. Grade Sheet Import shows a persistent error when a workbook has no grade-sheet records — IMP-001 — implemented, tests passing.
 - Official grade sheet workbook (.xlsx) import of raw scores, name matching, ticked create/link/remove and one all-or-nothing save — IMP-001 — implemented, tests passing.
 
@@ -73,5 +73,6 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 ## Deliberate boundaries
 
 - Email-code sign-in verification is retired; system email remains for non-authentication features.
+- The Dean/Admin class-section, course-catalog and people/accounts screens are non-authoritative previews with sample data and no server calls — CLS-003.
 - Facial biometrics are not a complete production flow (BIO-001 to BIO-010).
-- [VPS demonstration deployment](vps-deployment.md) provides manual GHCR publishing, Traefik HTTPS, app-only Watchtower updates and PostgreSQL backups (RUN-002, DEL-001); production deployment and CI/CD remain out of scope.
+- The demo and production VPS servers (RUN-002, DEL-001; see [vps-deployment.md](vps-deployment.md) and [release-guide.md](release-guide.md)) use manual GHCR publishing, Traefik HTTPS, app-only Watchtower updates and PostgreSQL backups; CI/CD remains out of scope.

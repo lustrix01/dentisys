@@ -6,7 +6,7 @@ services:
     image: ${WEB_IMAGE:-dentisys-web:local}
     environment:
       APP_ENV: single-server
-      # smtp or custom (custom also needs COMPOSE_PROFILES=mailpit).
+      # smtp or custom (the start and VPS scripts enable the mailpit profile for custom).
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
       EMAIL_TEST_ALLOWLIST: ${EMAIL_TEST_ALLOWLIST:-}
       FIRST_DEAN_EMAIL: ${FIRST_DEAN_EMAIL:-}
@@ -88,7 +88,8 @@ services:
       timeout: 5s
       retries: 12
 
-  # EML-001: only started for EMAIL_PROVIDER=custom (COMPOSE_PROFILES=mailpit).
+  # EML-001: only started for EMAIL_PROVIDER=custom (the start scripts and the VPS scripts pass
+  # --profile mailpit).
   # The UI stays on the server's loopback; it holds copies of every e-mail.
   mailpit:
     image: axllent/mailpit:v1.27
