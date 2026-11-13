@@ -4,7 +4,7 @@ Importing the Dean's "Official List of Enrolled Students" PDF no longer needs th
 
 - Contract with every rule and Owner decision: [contracts/class-from-class-list.md](contracts/class-from-class-list.md)
 - Clickable Before/After demo (approved): [New Class From the Class List](https://claude.ai/artifact/ADv8U6ptsqt8V8L9u3SYcn)
-- Specification: IMP-001, "Owner decision (2026-10-27)", in [spec.md](../spec.md)
+- Specification: IMP-001, "Owner decision (2026-10-27)", in [spec.md](../../spec.md)
 
 ## What Faculty see now
 

@@ -75,4 +75,4 @@ weights and existing risk rules; retention thresholds and manual overrides are
 unchanged. Import workflows are outside this change.
 
 The authoritative rules are [GRD-003 in spec.md](../spec.md) and
-[the approved amendment record](spec-amendments-2026-10-04.md).
+[the approved amendment record](archive/spec-amendments-2026-10-04.md).

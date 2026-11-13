@@ -18,7 +18,7 @@ before changed weights can be saved. The demo is not automatically converted or
 recomputed to show the defaults. All 27 existing demo configurations remain
 legacy combined; refresh http://localhost:5173/grades to inspect the explicit
 conversion action. The default editor was verified on an isolated test offering.
-See [the grading walkthrough](lecture-laboratory-grading.md) and
+See [the grading walkthrough](../lecture-laboratory-grading.md) and
 [final evidence](HANDOFF_2026-10-04.md).
 
 ## Earlier Lecture/Laboratory extension — 2026-10-04
@@ -27,7 +27,7 @@ The earlier Owner approval introduced separate Lecture/Laboratory grading and
 conversion back to combined period lists. The required-split amendment above
 supersedes that conversion-back approval. The preceding feature was validated; see
 [the current handoff](HANDOFF_2026-10-04.md) and
-[the grading walkthrough](lecture-laboratory-grading.md).
+[the grading walkthrough](../lecture-laboratory-grading.md).
 Additive migration 045 is applied to this existing preview. Its original
 academic rows and saved grade breakdowns still match the pre-migration snapshot.
 No existing offering was converted or recomputed during preparation.
@@ -95,7 +95,7 @@ Do not reseed, reset, delete volumes or replace this database to prepare the
 demo. Keep the stack running. The ignored local Compose override is
 `_maintenance/branch-comparison-20261003/lighthal7.compose.json`; this guide
 describes the existing setup, not a portable clean-machine installation.
-For a fresh development setup, follow [development-environment.md](development-environment.md).
+For a fresh development setup, follow [development-environment.md](../development-environment.md).
 
 The additional port is configured by the ignored local helper
 `_maintenance/grouped-demo-port5173.py`, which captures the existing container
@@ -115,7 +115,7 @@ sign-in for this rehearsal. Real Google/camera/location acceptance remains open.
 
 ## Suggested all-role sequence
 
-Passwords are local-only fictional fixture credentials in [demo-accounts.md](demo-accounts.md).
+Passwords are local-only fictional fixture credentials in [demo-accounts.md](../demo-accounts.md).
 
 | Order | Account | Walkthrough |
 | --- | --- | --- |
@@ -166,7 +166,7 @@ need a separate controlled rehearsal before claiming their manual acceptance.
 
 Existing accepted-tree validation remains applicable to unchanged runtime code:
 production build, 194 mocked browser tests, 68 unit tests, full PostgreSQL gate
-and nine live tests passed, as recorded in [the handoff](archive/HANDOFF_2026-10-03.md).
+and nine live tests passed, as recorded in [the handoff](HANDOFF_2026-10-03.md).
 Those tests do not replace this manual rehearsal or invalidate its new finding.
 
 ## Approved-fix verification
@@ -261,5 +261,5 @@ and Student Dashboard differs from Student Retention's pending wording; record
 this for a separately agreed authoritative standing contract instead of changing
 its semantics as incidental styling.
 
-See [manual-demo-readiness.md](manual-demo-readiness.md) for the complete human
+See [manual-demo-readiness.md](../manual-demo-readiness.md) for the complete human
 acceptance checklist. Its unperformed items remain Not Run.

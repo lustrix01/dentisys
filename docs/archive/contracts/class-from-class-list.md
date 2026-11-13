@@ -4,7 +4,7 @@ Status: **Grilled and confirmed by the Owner** (2026-10-27, three rounds, 14 ans
 
 Owner request (2026-10-26): importing the Dean's class list PDF must not require the class to exist already. When it does not exist, the Faculty can create it from the file in the same step.
 
-Builds on: [official imports](official-imports.md) (PDF reading rules P1–P7, unchanged) and [lecture-only courses](lecture-only-grading.md) (units decide Lecture only).
+Builds on: [official imports](../../contracts/official-imports.md) (PDF reading rules P1–P7, unchanged) and [lecture-only courses](../../contracts/lecture-only-grading.md) (units decide Lecture only).
 
 ## What exists today
 

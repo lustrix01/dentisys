@@ -2,59 +2,37 @@
 
 Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) is the authoritative source for approved product behavior; where any document disagrees with it, the specification wins.
 
+Every file in this folder describes the system as it is now. Dated records (handoffs, merge notes, reviews, change notes, amendment records, built proposals) are in the [archive](archive/README.md) and do not describe the current system.
+
+## Product
+
+- [Implemented features](features.md): what works today, with spec IDs.
+- [Product backlog](PRODUCT_BACKLOG.md): open work, standing rules and finished items.
+- [Roadmap](roadmap.md): what's next, in order.
+- [Lecture/Laboratory grading](lecture-laboratory-grading.md): how the grading editor and course grade work.
+
 ## Setup and operation
 
 - [Development environment details](development-environment.md): pgAdmin, demo data, Google Sign-In, real e-mail, phone testing, and the disposable test stack.
-- [Single-server mode](single-server.md): the unfinished private-network deployment prototype.
-- [Hosting requirements](hosting-requirements.md): what the demo and production servers need (provider, versions, hardening, addresses, accounts, backups) and the accepted risks.
-- [Deploying DentiSys from scratch](deploy-from-scratch.md): the step-by-step, one-command VPS deployment guide for developers.
-- [Release guide](release-guide.md): from an approved change to the demo and production servers, who does each step, and token renewals.
-- [VPS demonstration deployment](vps-deployment.md): the DEL-001 GHCR, HTTPS, update and backup runbook.
 - [Demo accounts](demo-accounts.md): development-only credentials.
-- [Benchmark](benchmark.md): the fixed, repeatable load and face-check benchmark for the demo server or a throwaway local stack, and how to compare runs.
 - [Manual demo readiness checklist](manual-demo-readiness.md)
-
-## Current work
-
-- [Last handoff](HANDOFF_2026-10-04.md): completed work and its validation history; the current state is in the backlog, roadmap and features below. Older handoffs are in the archive.
-- [Product backlog](PRODUCT_BACKLOG.md): open work only (Partial, Not started, Unclear), checked against the code on 2026-10-07.
-- [Roadmap](roadmap.md): what's next, in order. [Implemented features](features.md): what works today, with spec IDs.
-- [Local demo on lighthal7](local-demo-lighthal7.md) and [Lecture/Laboratory grading](lecture-laboratory-grading.md).
-- [UI polish, October 2026](ui-polish-2026-10.md): device-audit fixes 1–6 and batches 2A–2H, the Owner's layout rulings, and how they were checked.
-- [UI polish, November 2026](ui-polish-2026-11.md): polish of the rooms, overlap pop-up and Secretary Requests screens, the casing ruling (Title Case only for titles), and how it was checked.
-- [Casing rule, November 2026](casing-2026-11.md): the interface casing rule (spec.md UI-001), applied across the app, plus the Academic Terms, Archived Classes and dashboard alignment fixes.
-- [User walkthrough, October 2026](walkthrough-2026-10.md): Dean, Faculty, Secretary and Student fixes, Secretary attendance requests that need Faculty approval, the Owner's rulings, and how they were checked.
-- [Official imports, October 2026](official-imports-2026-10.md): the Dean's class list PDF and grade sheet workbook as import formats, and the grade sheet's grade math.
-- [Lecture-only courses, October 2026](lecture-only-2026-10.md): courses with no Laboratory graded as Lecture only, with a provisional one-rounding course grade.
-- [New class from the class list, October 2026](class-from-class-list-2026-10.md): Import Roster creates the class from the Dean's class list PDF when it does not exist yet.
-- [Field validation and casing, October 2026](field-validation-2026-10.md): Sex as a Male/Female choice, Philippine mobile contacts, uppercase course codes and blocks, and name and suffix rules.
-- [Start Session defaults and small fixes, October 2026](session-default-times-2026-10.md): session times from the class schedule, the geofence radius box and the authenticator setup window.
-- [Owhie's UI changes merged, October 2026](owhie-merge-2026-10.md): what was taken from Owhie's layout branch, what was changed or replaced in the merge, and the Owner's rulings.
-- [Owhie's responsive changes merged, October 2026](owhie-responsive-merge-2026-10.md): the second Owhie merge (phone layouts, Grade Computation school years), its fixes and rulings.
-- [Owhie's roster import changes merged, October 2026](owhie-roster-import-merge-2026-10.md): the roster import redesign merge, its fixes, and the Sex / middle-name rulings.
-- [Walkthrough fixes, November 2026](walkthrough-fixes-2026-11.md): batch 1 — Live class cards, student grades on every device, the Dean's Print button, the invalid-score message, the reset page without a link, and Secretary request wording.
-- [Owhie's landing pages, reports and import changes merged, November 2026](owhie-landing-reports-merge-2026-11.md): public pages, report exports, the Import Students dialog and the smart name flags for Select all.
-- [Owhie's responsive workflow merge, November 2026](owhie-responsive-workflow-merge-2026-11.md): BU-only email, sign-in limits, lecture-only draft, notice emails, the room-selector replacement and the merge fixes.
-- [Owhie's session-timeout and phone-views merge, November 2026](owhie-session-timeout-merge-2026-11.md): the 30-minute idle session timeout, Student/Secretary phone cards, the card and icon-only look, the hidden Dean preview pages, and the merge fixes.
-- [Review of the 11–13 November work, November 2026](away-review-2026-11.md): the review of DeepSeek's and Codex's commits, no grade recalculation on promotion, and the Academic Terms / Dean Reports phone fixes.
-- [Rooms and session times audit, November 2026](rooms-times-merge-2026-11.md): Dean-managed rooms, overnight sessions, the Secretary requests panel and Academic Terms layout, the audit fixes F1–F6, and the Owner's hold until prod evaluation ends.
-- Approved specification amendment records: [2026-10-01](spec-amendments-2026-10-01.md), [2026-10-03](spec-amendments-2026-10-03.md), [2026-10-04](spec-amendments-2026-10-04.md), [2026-10-09](spec-amendments-2026-10-09.md), [2026-10-09 deployment](spec-amendments-2026-10-09-deployment.md), [2026-10-10 academic terms](spec-amendments-2026-10-10-academic-terms.md); proposals in [proposals/](proposals/).
+- [Single-server mode](single-server.md): the unfinished private-network deployment prototype.
+- [Hosting requirements](hosting-requirements.md): what the demo and production servers need and the accepted risks.
+- [Deploying DentiSys from scratch](deploy-from-scratch.md): the step-by-step VPS deployment guide.
+- [VPS deployment](vps-deployment.md): the DEL-001 image registry, HTTPS, update and backup runbook.
+- [Release guide](release-guide.md): from an approved change to the demo and production servers.
+- [Benchmark](benchmark.md): the repeatable load and face-check benchmark.
 
 ## Architecture and design
 
 - [Architecture](architecture.md)
-- [Frontend overview](frontend.md)
-- [Backend contracts](contracts/): [academics and roles](contracts/demo-academics.md), [password change](contracts/demo-auth.md), [audit logging](contracts/audit-logging.md), [official imports](contracts/official-imports.md), [lecture-only courses](contracts/lecture-only-grading.md), [new class from the class list](contracts/class-from-class-list.md).
-- [BUCDM interview policy proposal](bucdm-policy-proposal.md)
+- [Frontend overview and page patterns](frontend.md)
+- Backend contracts: [academics and roles](contracts/demo-academics.md), [password change](contracts/demo-auth.md), [audit logging](contracts/audit-logging.md), [official imports](contracts/official-imports.md), [official exports](contracts/official-exports.md), [lecture-only courses](contracts/lecture-only-grading.md)
 
 ## Database
 
 - [PostgreSQL layout and migrations](../database/README.md)
-- [Integrated target ERD](database/erd-target-integrated.md)
-- [Normalization assessment](database/normalization-relation-assessment.md)
-- [UI field normalization audit](database/ui-field-normalization-audit.md)
 - [Security data dictionary](database/security-data-dictionary.md)
-- [Phase 2 migration mapping](database/phase-2-migration-mapping.md)
 
 ## Biometrics
 
@@ -65,8 +43,7 @@ Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) 
 ## Security (IAS)
 
 - [Module A: identity and access](ias/module-a-identity-access.md)
-- [Module C: API and perimeter defense](ias/module-c-perimeter-defense.md)
 
 ## Archive
 
-[Finished plans, old handoffs, and past audit evidence](archive/README.md). They are kept for history and do not describe the current system.
+[Handoffs, merge notes, reviews, change notes, amendment records and built proposals](archive/README.md), kept for history.

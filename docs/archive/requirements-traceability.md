@@ -61,15 +61,15 @@
 
 | ID | Description | Status | Phase 2 Evidence |
 |---|---|---|---|
-| IAS-C-001 | Rate limiting | Documented Future | Design in docs/ias/module-c-perimeter-defense.md; system_settings seeds |
+| IAS-C-001 | Rate limiting | Documented Future | Design in docs/archive/ias/module-c-perimeter-defense.md; system_settings seeds |
 | IAS-C-002 | JWT rotation | Documented Future | security_tokens.purpose=refresh design |
 | IAS-C-003 | JWT revocation | Documented Future | token_version invalidation design |
 | IAS-C-004 | Input validation | Documented Future | Validate allowlist strategy documented |
 | IAS-C-005 | Input sanitization | Documented Future | Sanitization rules documented |
 | IAS-C-006 | Parameterized queries | Documented Future | PDO native prepares documented; no business queries yet |
-| IAS-C-007 | Extended ACL | Confirmed | Cisco ACL artifact in docs/ias/module-c-perimeter-defense.md |
+| IAS-C-007 | Extended ACL | Confirmed | Cisco ACL artifact in docs/archive/ias/module-c-perimeter-defense.md |
 | IAS-C-008 | Wildcard masks | Confirmed | Cisco wildcard masks used in ACL (0.0.0.31, 0.0.0.0 for host) |
-| IAS-C-009 | Endpoint control table | Confirmed | Complete endpoint table in docs/ias/module-c-perimeter-defense.md |
+| IAS-C-009 | Endpoint control table | Confirmed | Complete endpoint table in docs/archive/ias/module-c-perimeter-defense.md |
 | IAS-C-010 | OWASP rationale | Confirmed | OWASP Top 10:2025 mappings documented |
 | IAS-C-011 | Network-layer restrictions | Documented Only | ACL artifact is documentation-only |
 

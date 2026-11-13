@@ -2,9 +2,9 @@
 
 Some BUCDM courses have no Laboratory. DentiSys used to force every course into Lecture + Laboratory grading, so a lecture-only course had an empty Laboratory part worth 40% and every grade stayed Incomplete. Now a course with Lecture units and 0 Laboratory units is graded as Lecture only. Approved by the Owner on 2026-10-26.
 
-- Contract with every rule and Owner decision: [contracts/lecture-only-grading.md](contracts/lecture-only-grading.md)
+- Contract with every rule and Owner decision: [contracts/lecture-only-grading.md](../contracts/lecture-only-grading.md)
 - Clickable Before/After demo (approved): [Lecture-Only Grading Demo](https://claude.ai/artifact/383CbvDr2AFiJ7iYueyks5)
-- Specification: GRD-002 and the "Owner-approved amendment (2026-10-26): Lecture-only courses" in GRD-003 of [spec.md](../spec.md)
+- Specification: GRD-002 and the "Owner-approved amendment (2026-10-26): Lecture-only courses" in GRD-003 of [spec.md](../../spec.md)
 
 ## What Faculty see now
 

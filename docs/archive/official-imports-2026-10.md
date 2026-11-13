@@ -2,9 +2,9 @@
 
 Faculty now upload the Dean's files exactly as the school gives them: the "Official List of Enrolled Students" PDF and the official grade sheet workbook (.xlsx). DentiSys also calculates grades the way that grade sheet does. Approved by the Owner on 2026-10-26.
 
-- Contract with every rule and Owner decision: [contracts/official-imports.md](contracts/official-imports.md)
+- Contract with every rule and Owner decision: [contracts/official-imports.md](../contracts/official-imports.md)
 - Clickable Before/After demo (approved): [Official Imports Demo](https://claude.ai/artifact/2qfYUM9W8C5xL5PnGWTuBm)
-- Specification: IMP-001 and the "Owner-approved amendment (2026-10-26): Official BUCDM grade sheet calculation" in [spec.md](../spec.md)
+- Specification: IMP-001 and the "Owner-approved amendment (2026-10-26): Official BUCDM grade sheet calculation" in [spec.md](../../spec.md)
 
 ## What Faculty see now
 
@@ -26,7 +26,7 @@ Screenshots: real local app with made-up data only (a generated PDF in the offic
 
 ## Release step
 
-Every current-term grade is recalculated once with the new rules: `backend/bin/recompute-current-grades.php preview|apply`. It keeps manual retention overrides and sends no student notifications (Owner, 2026-10-26). On the demo: `./scripts/demo-vps.ps1 recompute-grades preview`, Owner sees the list, then `apply`. `promote-prod.ps1` runs `apply` after its deploy. See the [release guide](release-guide.md).
+Every current-term grade is recalculated once with the new rules: `backend/bin/recompute-current-grades.php preview|apply`. It keeps manual retention overrides and sends no student notifications (Owner, 2026-10-26). On the demo: `./scripts/demo-vps.ps1 recompute-grades preview`, Owner sees the list, then `apply`. `promote-prod.ps1` runs `apply` after its deploy. See the [release guide](../release-guide.md).
 
 ## Owner rulings
 

@@ -215,7 +215,7 @@ Owner decisions (2026-10-15): both actions get the existing per-user limit used 
 
 ## 9.4 Official Registrar import/export format
 
-**Status: Not started.** Imports are done: the official class list PDF and grade sheet workbook (IMP-001, 2026-10-26; see docs/official-imports-2026-10.md). Exporting grades in the official grade sheet layout is the next feature; its contract is still to be agreed.
+**Status: Not started.** Imports are done: the official class list PDF and grade sheet workbook (IMP-001, 2026-10-26; see docs/archive/official-imports-2026-10.md). Exporting grades in the official grade sheet layout is the next feature; its contract is still to be agreed.
 
 ## 9.5 Live Google verification
 
@@ -223,7 +223,7 @@ Owner decisions (2026-10-15): both actions get the existing per-user limit used 
 
 ## 9.6 UI follow-ups from the November 2026 polish audit
 
-**Status: Done (2026-11-06, see docs/casing-2026-11.md).** The 2026-11-06 device audit found these. They predate the polish pass (see docs/ui-polish-2026-11.md):
+**Status: Done (2026-11-06, see docs/archive/casing-2026-11.md).** The 2026-11-06 device audit found these. They predate the polish pass (see docs/archive/ui-polish-2026-11.md):
 - Academic Terms: a semester without dates ("2nd Semester", "Summer") has its name dimmed to about 2.6:1 contrast, which is hard to read. Use the standard small grey text.
 - Classes, Archived Classes tab: the "Edit" button pokes out of its card on 320 px phones and at desktop 1280.
 - The audit flags controls under the sticky header ("under-bar") because it scrolls while capturing. Check whether any are real before fixing.
@@ -250,7 +250,7 @@ Owner decisions (2026-10-15): both actions get the existing per-user limit used 
 
 ## 9.9 Full Matrix follow-ups (GRA-03, 2026-11-14)
 
-- **Show computation on phones and tablets.** It is desktop-only (1280 px and wider) by the Owner's choice and comes next, after its own demo and approval. See `docs/proposals/gra-03-matrix-computation.md`.
+- **Show computation on phones and tablets.** It is desktop-only (1280 px and wider) by the Owner's choice and comes next, after its own demo and approval. See `docs/archive/proposals/gra-03-matrix-computation.md`.
 - **Slow score loading.** Full Matrix View requests scores one assessment at a time: about 100 requests for the seeded Faculty account, so the score boxes fill in over several seconds. One request per class would fix it. This is pre-existing and not caused by GRA-03.
 - **Excel export.** The matrix export does not include the new % / Transmuted steps. Add them only if Faculty ask.
 

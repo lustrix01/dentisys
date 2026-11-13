@@ -1,8 +1,8 @@
 # Lecture-only courses — contract
 
-Status: **Grilled and confirmed by the Owner** (2026-10-26, three rounds, 13 answers). Spec wording applied to `spec.md` (GRD-002, GRD-003). Demo approved by the Owner (2026-10-26, including the banner wording, the "Lecture only" line and the gradebook "Lecture" header): [Lecture-Only Grading Demo](https://claude.ai/artifact/383CbvDr2AFiJ7iYueyks5). Built and validated: [lecture-only-2026-10.md](../lecture-only-2026-10.md).
+Status: **Grilled and confirmed by the Owner** (2026-10-26, three rounds, 13 answers). Spec wording applied to `spec.md` (GRD-002, GRD-003). Demo approved by the Owner (2026-10-26, including the banner wording, the "Lecture only" line and the gradebook "Lecture" header): [Lecture-Only Grading Demo](https://claude.ai/artifact/383CbvDr2AFiJ7iYueyks5). Built and validated: [lecture-only-2026-10.md](../archive/lecture-only-2026-10.md).
 
-Owner finding (2026-10-26): some courses are Lecture only. The earlier rule "every course is Lecture + Laboratory" (GRD-002/GRD-003, [mandatory defaults](../proposals/mandatory-lecture-laboratory-defaults.md)) is wrong for them. This contract adds a Lecture-only structure; Lecture + Laboratory courses keep today's rules unchanged.
+Owner finding (2026-10-26): some courses are Lecture only. The earlier rule "every course is Lecture + Laboratory" (GRD-002/GRD-003, [mandatory defaults](../archive/proposals/mandatory-lecture-laboratory-defaults.md)) is wrong for them. This contract adds a Lecture-only structure; Lecture + Laboratory courses keep today's rules unchanged.
 
 Evidence: the only official workbook we have (`SAMPLE.xlsx`, Operative Dentistry 1) is Lecture + Laboratory. Its Lecture sheet was copied from a separate lecture-only workbook (`OA LEC.xlsx`, linked as an outside file for its grade table). That sheet's own course grade rounds once; the TFG summary for Lecture + Laboratory rounds each step. `OA LEC.xlsx` is not available yet, so the lecture-only course-grade formula is **provisional** (rule L9).
 

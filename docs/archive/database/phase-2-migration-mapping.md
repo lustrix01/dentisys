@@ -1,6 +1,6 @@
 # Phase 2 Migration Mapping
 
-> Historical Phase 2 baseline mapping. It is not the current migration inventory; use [`database/README.md`](../../database/README.md) and `database/migrations/` for active PostgreSQL state.
+> Historical Phase 2 baseline mapping. It is not the current migration inventory; use [`database/README.md`](../../../database/README.md) and `database/migrations/` for active PostgreSQL state.
 
 ## Overview
 

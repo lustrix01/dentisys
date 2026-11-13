@@ -62,7 +62,7 @@ Read-only repository inspection covered:
   `account_identity.php`, `student_auth.php`, `student_biometrics.php`,
   `attendance_sessions.php`, `auth.php`, `auth_runtime.php`, `mfa_runtime.php`,
   `audit.php`, and `notifications.php`.
-- The existing `docs/database/ui-field-normalization-audit.md`, read as prior
+- The existing `docs/archive/database/ui-field-normalization-audit.md`, read as prior
   audit context and left unmodified.
 
 A read-only `information_schema` inventory of the active database returned these

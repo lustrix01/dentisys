@@ -3,7 +3,7 @@
 An audit of every form field found that names were already checked and capitalized ("NAme" → "Name", ñ allowed), but some fields were not: a name made only of punctuation was accepted, prefix and suffix kept any casing, and contact, sex, student number and class fields took any text. Approved by the Owner on 2026-10-28.
 
 - Clickable Before/After demo (approved): [Field Validation Demo](https://claude.ai/artifact/QwpfWQsHFxkV419ZD7pAfu)
-- Specification: the "Owner decision (2026-10-28)" in ID-001 of [spec.md](../spec.md)
+- Specification: the "Owner decision (2026-10-28)" in ID-001 of [spec.md](../../spec.md)
 
 ## What users see now
 

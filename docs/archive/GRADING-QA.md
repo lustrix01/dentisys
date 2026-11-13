@@ -1,6 +1,6 @@
 # Grade Clarification — Implementation Handoff Draft
 
-**Historical handoff draft; not a specification amendment.** This document captured the code and open gaps before the 2026-11-13 implementation. Its references to current behavior and implementation gaps are a historical snapshot, not a report of the present working tree. The clarified requirements are implemented in `345b328`; `check.ps1` and `check-postgres.ps1` passed on that commit (2026-11-13). See [spec.md](../spec.md) for current approved behavior and [PRODUCT_BACKLOG.md](PRODUCT_BACKLOG.md) for delivery status. The workbook is a calculation reference, not an instruction to copy its course weights or blank-score behavior.
+**Historical handoff draft; not a specification amendment.** This document captured the code and open gaps before the 2026-11-13 implementation. Its references to current behavior and implementation gaps are a historical snapshot, not a report of the present working tree. The clarified requirements are implemented in `345b328`; `check.ps1` and `check-postgres.ps1` passed on that commit (2026-11-13). See [spec.md](../../spec.md) for current approved behavior and [PRODUCT_BACKLOG.md](../PRODUCT_BACKLOG.md) for delivery status. The workbook is a calculation reference, not an instruction to copy its course weights or blank-score behavior.
 
 ## Confirmed answers — no colleague question needed
 

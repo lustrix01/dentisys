@@ -28,7 +28,7 @@ A polish pass over the screens built in `0c69670` (room categories, the session 
 - A see-through tint changes pixels by less than the demo check's threshold. The check now warns about it ("faint change, check it by eye") instead of failing.
 - Stashing and restoring for Before shots can leave line-ending-only changes in unrelated files. Restore those before staging.
 
-Left for the backlog: see [PRODUCT_BACKLOG.md](PRODUCT_BACKLOG.md) section 9.6.
+Left for the backlog: see [PRODUCT_BACKLOG.md](../PRODUCT_BACKLOG.md) section 9.6.
 
 ## Follow-up, 2026-11-10: phone tab names, counts and warning tone
 
