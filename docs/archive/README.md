@@ -75,3 +75,10 @@ These documents are kept for history. They describe past plans, handoffs, and ev
 
 - [Integrated target ERD (Phase 2)](database/erd-target-integrated.md), [normalization assessment](database/normalization-relation-assessment.md), [UI field normalization audit](database/ui-field-normalization-audit.md), [Phase 2 migration mapping](database/phase-2-migration-mapping.md)
 - [IAS Module C: API and perimeter defense design](ias/module-c-perimeter-defense.md)
+
+## Docs sync, November 2026
+
+- [Docs sync audit](../sync-audit-2026-11.md) (moves here when the sync is finished)
+- [Changed statements in the current-reference docs](docs-sync-changes-2026-11.md)
+- [spec.md merge proposal](spec-merge-proposal-2026-11.md)
+- [Backlog items closed before 2026-11-14](backlog-done-2026-11.md)

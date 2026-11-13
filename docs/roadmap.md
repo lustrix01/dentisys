@@ -1,10 +1,10 @@
 # Roadmap
 
-What's next, in order (Owner-set 2026-10-07). Each item is one feature: agree the contract, implement, run the gates, then start the next. Details and status are in the [product backlog](PRODUCT_BACKLOG.md); behaviour is defined by [spec.md](../spec.md); what already works is in [features.md](features.md).
+What's next, in order. Each item is one feature: agree the contract, implement, run the gates, then start the next. Details and status are in the [product backlog](PRODUCT_BACKLOG.md); behaviour is defined by [spec.md](../spec.md); what already works is in [features.md](features.md).
 
-1. **Name changes with authenticator confirmation** — a read-only profile with a Change Name action for every role, including Students, and a 2FA confirmation when 2FA is enabled (ID-002; backlog 3.1, 3.2).
-2. **Test that future worksheet dates are blocked** in Attendance Monitoring (backlog 5.5).
-3. **Email History tied to the outbox** — each Email Management action linked to its delivery record (backlog 5.8).
-4. **Manual Override filtering** — date, then session on that date, then records, with status, override and Student filters (backlog 7.2).
+1. **Close the test gaps** — tests that prove the Dean, Faculty-invitation, Dean Settings, Midterm Watchlist and Secretary Dashboard rules (backlog 4.2, 4.3, 4.4, 5.3, 7.1).
+2. **Small fixes** — class archiving gaps, 2FA confirmation limits, the GoogleLinkCard reveal control, class counts, the Grade Computation phone tab strip, build warnings, the Full Matrix View export and the docs-audit defects (backlog 5.9, 8.2, 10.5, 9.1, 9.2, 9.3, 9.9, 11).
+3. **UI items, one demo at a time** — Grade Computation confirmations, remedial record details, large attendance lists, Email Management filtering, the phone-width pass, session card states, and the wording decisions (backlog 5.2, 5.4, 5.6, 5.7, 10.7, 10.8, 9.7, 10.6).
+4. **Superadmin mode** — the Dean's Superadmin toggle for grade and attendance changes, the course catalog and account deactivation (backlog 4.5–4.7); needs a spec section and a contract first.
 
-After these, the Owner picks the next items from the backlog. The [DEL-001 VPS demonstration deployment](vps-deployment.md) now has manual GHCR publishing, HTTPS, app-only Watchtower updates and backups; real Student biometric deployment remains deferred under spec BIO, and the Registrar format and live Google verification are externally blocked (backlog 9.4, 9.5).
+The BU-format grade sheet export (backlog 9.4) waits until the Owner scopes it.
