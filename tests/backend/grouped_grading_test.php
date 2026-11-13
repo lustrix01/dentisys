@@ -370,4 +370,60 @@ assert_grouped_grading(
     'Golden course: round(24.6) + round(61.6) = 25 + 62 = 87 -> 2.2; Midterm Lecture 84 -> 2.5'
 );
 
+// GRA-03: assessmentSteps expose per-assessment % / transmuted values without changing grades.
+$stepMemberships = [$membership(301, 'Quiz', 100, 'Combined')];
+$stepGroup = ['componentMode' => 'combined', 'attendanceDateRanges' => $periodGroup['attendanceDateRanges']];
+$stepResult = faculty_compute_period_result($pdo, $stepGroup + [
+    'assessments' => [
+        $assessment(2001, 301, 'Midterm', 15, 20, true, true),
+        $assessment(2002, 301, 'Midterm', 8, 10),
+        $assessment(2003, 301, 'Midterm', 12, 20, true, true, 50.0, 100.0, 'absent'),
+        $assessment(2004, 301, 'Midterm', 0, 10, false),
+        $assessment(2005, 301, 'Final', 5, 10),
+    ],
+], 'Midterm', $stepMemberships);
+$steps = [];
+foreach ($stepResult['breakdown']['assessmentSteps'] as $step) {
+    $steps[$step['assessmentId']] = $step;
+}
+assert_grouped_grading(count($steps) === 4 && !isset($steps['2005']), 'assessmentSteps lists every assessment of the period, even in an incomplete category');
+assert_grouped_grading(
+    $steps['2001']['rawPercentage'] === 75.0 && $steps['2001']['effectivePercentage'] === 87.5
+        && $steps['2001']['transmuted'] === true && $steps['2001']['attendanceStatus'] === null && $steps['2001']['categoryId'] === 301,
+    'assessmentSteps: transmuted 75% -> 87.5'
+);
+assert_grouped_grading(
+    $steps['2002']['rawPercentage'] === 80.0 && $steps['2002']['effectivePercentage'] === 80.0 && $steps['2002']['transmuted'] === false,
+    'assessmentSteps: non-transmuted repeats the %'
+);
+assert_grouped_grading(
+    $steps['2003']['rawPercentage'] === 60.0 && $steps['2003']['effectivePercentage'] === 0.0 && $steps['2003']['attendanceStatus'] === 'absent',
+    'assessmentSteps: absent linked session -> 0'
+);
+assert_grouped_grading(
+    $steps['2004']['rawPercentage'] === null && $steps['2004']['effectivePercentage'] === null,
+    'assessmentSteps: blank score -> null'
+);
+assert_grouped_grading(
+    $stepResult['status'] === 'incomplete' && $stepResult['percentage'] === null
+        && $stepResult['breakdown']['incomplete'][0]['reason'] === 'missing_assessment_score'
+        && $stepResult['breakdown']['categories'] === [],
+    'assessmentSteps do not change the incomplete breakdown'
+);
+$unresolved = faculty_compute_period_result($pdo, $stepGroup + [
+    'assessments' => [$assessment(2006, 301, 'Midterm', 10, 20, true, true, 50.0, 100.0, 'unresolved')],
+], 'Midterm', $stepMemberships);
+$us = $unresolved['breakdown']['assessmentSteps'][0];
+assert_grouped_grading(
+    $us['attendanceStatus'] === 'unresolved' && $us['effectivePercentage'] === null && $us['rawPercentage'] === 50.0,
+    'assessmentSteps: unresolved attendance -> effective null'
+);
+$okSteps = faculty_compute_period_result($pdo, $stepGroup + [
+    'assessments' => [$assessment(2007, 301, 'Midterm', 15, 20, true, true), $assessment(2008, 301, 'Midterm', 8, 10)],
+], 'Midterm', $stepMemberships);
+assert_grouped_grading(
+    $okSteps['percentage'] === 84.0 && $okSteps['breakdown']['categories'][0]['earnedPoints'] === 83.75,
+    'assessmentSteps leave the computed grade unchanged'
+);
+
 echo "ALL GROUPED GRADING TESTS PASSED.\n";

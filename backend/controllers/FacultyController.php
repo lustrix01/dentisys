@@ -3256,6 +3256,54 @@ function faculty_period_attendance_summary(
     ];
 }
 
+/**
+ * Read-only per-assessment steps (raw %, transmuted %, attendance) for the matrix.
+ * Covers every assessment of an assessment-sourced category of the period, even in
+ * incomplete categories. Never feeds a grade.
+ */
+function faculty_period_assessment_steps(array $group, string $period, array $memberships): array
+{
+    $categoryIds = [];
+    foreach ($memberships as $membership) {
+        if ((string) ($membership['source_kind'] ?? 'assessment') !== 'attendance') {
+            $categoryIds[(int) $membership['category_id']] = true;
+        }
+    }
+    $steps = [];
+    foreach ($group['assessments'] as $assessment) {
+        $categoryId = (int) ($assessment['grading_category_id'] ?? 0);
+        if (!isset($categoryIds[$categoryId]) || (string) ($assessment['grading_period'] ?? '') !== $period) {
+            continue;
+        }
+        $enabled = filter_var($assessment['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN);
+        $status = $assessment['linked_attendance_status'] !== null
+            ? strtolower((string) $assessment['linked_attendance_status']) : null;
+        $raw = null;
+        $effective = null;
+        if ($assessment['_has_score'] ?? false) {
+            $raw = round(((float) $assessment['score'] / (float) $assessment['max_score']) * 100, 4);
+            $effective = faculty_effective_assessment_percentage(
+                (float) $assessment['score'],
+                (float) $assessment['max_score'],
+                $enabled,
+                (float) $assessment['transmutation_minimum_percentage'],
+                (float) $assessment['transmutation_maximum_percentage'],
+                $status
+            );
+            $effective = $effective !== null ? round($effective, 4) : null;
+        }
+        $steps[] = [
+            'assessmentId' => (string) $assessment['assessment_id'],
+            'categoryId' => $categoryId,
+            'rawPercentage' => $raw,
+            'transmuted' => $enabled,
+            'effectivePercentage' => $effective,
+            'attendanceStatus' => $status,
+        ];
+    }
+    return $steps;
+}
+
 function faculty_compute_period_result(PDO $pdo, array $group, string $period, ?array $memberships = null, ?array $attendanceSummary = null): array
 {
     if ($memberships === null) {
@@ -3420,6 +3468,7 @@ function faculty_compute_period_result(PDO $pdo, array $group, string $period, ?
         'categories' => $categories,
         'incomplete' => $incomplete,
         'attendanceDateRange' => $range,
+        'assessmentSteps' => faculty_period_assessment_steps($group, $period, $memberships),
     ];
     if ($incomplete !== []) {
         $periodBreakdown['percentage'] = null;
@@ -3548,6 +3597,7 @@ function faculty_compute_grouped_period_result(
         'attendanceDateRange' => $range,
         'components' => $componentResults,
         'componentWeights' => $weights,
+        'assessmentSteps' => faculty_period_assessment_steps($group, $period, $memberships),
     ];
     return [
         'status' => $status,

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  FacultyAssessmentStep,
   FacultyGradeComputeResult,
   FacultyGradingCategoryItem,
   FacultyGradingConfiguration,
@@ -56,6 +57,8 @@ interface ComponentGroup {
   categories: CategoryGroup[];
 }
 
+const COMPUTATION_KEY = 'dentisys_matrix_show_computation';
+
 const PERIODS: Array<{ key: PeriodKey; label: string; totalLabel: string; name: 'Midterm' | 'Final' }> = [
   { key: 'midterm', label: 'Midterm', totalLabel: 'Total Midterm', name: 'Midterm' },
   { key: 'final', label: 'Tentative Final Grade', totalLabel: 'Tentative Final', name: 'Final' },
@@ -83,6 +86,25 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
   const [pinBoth, setPinBoth] = useState(false);
   const [periodFilter, setPeriodFilter] = useState<'all' | 'midterm' | 'final'>('all');
   const [componentFilter, setComponentFilter] = useState<'all' | 'lecture' | 'laboratory'>('all');
+  // GRA-03: computation columns are desktop-only for now (>= 1280 px) and remembered per browser.
+  const [showComputation, setShowComputation] = useState(() => {
+    try { return localStorage.getItem(COMPUTATION_KEY) === '1'; } catch { return false; }
+  });
+  const [wide, setWide] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1280px)').matches);
+  useEffect(() => {
+    const query = window.matchMedia?.('(min-width: 1280px)');
+    if (!query) return undefined;
+    const update = () => setWide(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  const flow = showComputation && wide;
+  const toggleComputation = () => {
+    const next = !showComputation;
+    setShowComputation(next);
+    try { localStorage.setItem(COMPUTATION_KEY, next ? '1' : '0'); } catch { /* storage unavailable */ }
+  };
 
   const offeringKey = offering ? `${offering.courseId}|${offering.semester}|${offering.schoolYear}` : '';
   useEffect(() => {
@@ -233,8 +255,9 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
     });
   }, [students, searchTerm]);
 
+  const categoryColSpan = (group: CategoryGroup) => group.assessments.length * (flow ? 3 : 1) + 2;
   const componentColSpan = (comp: ComponentGroup) =>
-    comp.categories.reduce((sum, g) => sum + g.assessments.length + 2, 0) + (comp.componentKey !== 'all' ? 1 : 0);
+    comp.categories.reduce((sum, g) => sum + categoryColSpan(g), 0) + (comp.componentKey !== 'all' ? 1 : 0);
 
   const componentPercentage = (studentId: string, key: PeriodKey, comp: ComponentGroup): string => {
     const pb = periodBreakdown(studentId, key);
@@ -299,6 +322,34 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
       : { total: '—', weighted: '—', title: 'Not complete yet' };
   };
 
+  const stepCells = (studentId: string, key: PeriodKey, assessment: MatrixAssessment) => {
+    const step: FacultyAssessmentStep | undefined = periodBreakdown(studentId, key)?.assessmentSteps
+      ?.find(s => String(s.assessmentId) === String(assessment.id));
+    const raw = step?.rawPercentage;
+    const effective = step?.effectivePercentage;
+    let transmuted: React.ReactNode = '—';
+    let title = step ? 'No score yet' : 'Not available yet';
+    let extra = '';
+    if (typeof raw === 'number') {
+      if (step?.transmuted && step.attendanceStatus === 'absent') {
+        transmuted = 'Absent (0)';
+        title = 'Absent from the linked session → 0%';
+        extra = ' text-rose-600 dark:text-rose-400 font-bold';
+      } else if (typeof effective === 'number') {
+        transmuted = format(effective, 2);
+        title = step?.transmuted ? 'Transmuted percentage: % × 0.5 + 50' : 'Transmutation is off: same as the %';
+      } else {
+        title = 'Waiting for attendance';
+      }
+    }
+    return (
+      <React.Fragment key={`${assessment.id}-flow`}>
+        <td className={`${computedCell} ${flowTint}`} title={typeof raw === 'number' ? 'Score ÷ maximum × 100' : title}>{format(raw, 2)}</td>
+        <td className={`${computedCell} ${flowTint}${extra}`} title={title}>{transmuted}</td>
+      </React.Fragment>
+    );
+  };
+
   const scoreInput = (student: MatrixStudent, assessment: MatrixAssessment, studentIndex: number) => {
     const value = scores[student.id]?.[assessment.id] ?? '';
     const valid = isValidScore(value, assessment.maxScore);
@@ -358,6 +409,8 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
   const pinHead = 'max-xl:z-20 max-xl:bg-slate-50 dark:max-xl:bg-slate-900';
   const pinBody = 'max-xl:z-[5] max-xl:bg-white dark:max-xl:bg-slate-900';
   const computedCell = 'px-2 py-2 text-center font-mono text-slate-600 dark:text-slate-300 bg-slate-50/70 dark:bg-slate-900/40';
+  const flowTint = 'bg-amber-50/60 dark:bg-amber-950/20';
+  const flowHead = 'bg-amber-50/70 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200';
   const totalCell = 'px-2 py-2 text-center font-mono font-bold text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-800/60';
 
   if (!configLoaded) {
@@ -500,8 +553,22 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
           )}
         </div>
 
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showComputation}
+            onClick={toggleComputation}
+            className="hidden xl:inline-flex items-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-300"
+          >
+            <span className={`relative inline-block h-4 w-7 rounded-full transition-colors ${showComputation ? 'bg-clinical-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
+              <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${showComputation ? 'left-3.5' : 'left-0.5'}`} />
+            </span>
+            Show computation
+          </button>
         <div className="text-[11px] text-slate-500 dark:text-slate-400">
           Showing <span className="font-bold text-slate-700 dark:text-slate-200">{filteredStudents.length}</span> of {students.length} students
+        </div>
         </div>
       </div>
 
@@ -596,7 +663,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                     {getVisibleComponents(period.key).map(comp => (
                       <React.Fragment key={`${period.key}-${comp.componentKey}-cats-group`}>
                         {comp.categories.map(group => (
-                          <th key={`${period.key}-${group.category.id}`} className={th} colSpan={group.assessments.length + 2}>
+                          <th key={`${period.key}-${group.category.id}`} className={th} colSpan={categoryColSpan(group)}>
                             {group.category.name} ({weightLabel(group.category.weight)})
                           </th>
                         ))}
@@ -631,12 +698,16 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                     {getVisibleComponents(period.key).map(comp => comp.categories.map(group => (
                       <React.Fragment key={`${period.key}-${group.category.id}-cols`}>
                         {group.assessments.map(assessment => (
-                          <th key={assessment.id} className={`${th} min-w-[84px]`}>
-                            <span className="normal-case">{assessment.title}</span>
-                            <div className="font-normal">({assessment.maxScore})</div>
-                          </th>
+                          <React.Fragment key={assessment.id}>
+                            <th className={`${th} min-w-[84px]`}>
+                              <span className="normal-case">{assessment.title}</span>
+                              <div className="font-normal">({assessment.maxScore})</div>
+                            </th>
+                            {flow && <th className={`${th} ${flowHead}`}>%</th>}
+                            {flow && <th className={`${th} ${flowHead}`}>Transmuted</th>}
+                          </React.Fragment>
                         ))}
-                        <th className={th}>Total</th>
+                        <th className={th}>Average %</th>
                         <th className={th}>Weighted<div className="font-normal">({weightLabel(group.category.weight)})</div></th>
                       </React.Fragment>
                     )))}
@@ -663,7 +734,12 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                             const cells = categoryCells(student.id, period.key, group.category.id);
                             return (
                               <React.Fragment key={`${period.key}-${group.category.id}`}>
-                                {group.assessments.map(assessment => scoreInput(student, assessment, studentIndex))}
+                                {group.assessments.map(assessment => (
+                                  <React.Fragment key={assessment.id}>
+                                    {scoreInput(student, assessment, studentIndex)}
+                                    {flow && stepCells(student.id, period.key, assessment)}
+                                  </React.Fragment>
+                                ))}
                                 <td className={computedCell} title={cells.title}>{cells.total}</td>
                                 <td className={computedCell}>{cells.weighted}</td>
                               </React.Fragment>

@@ -248,6 +248,12 @@ Owner decisions (2026-10-15): both actions get the existing per-user limit used 
 - U5: on phones the Student My Classes tab names split onto two lines. Moving the year out of the tab and tightening the padding keeps both tabs on one line, side by side; not yet measured below 390 px.
 - Student My Classes and Student Retention use two tab looks found nowhere else, so a student sees two different tab bars.
 
+## 9.9 Full Matrix follow-ups (GRA-03, 2026-11-14)
+
+- **Show computation on phones and tablets.** It is desktop-only (1280 px and wider) by the Owner's choice and comes next, after its own demo and approval. See `docs/proposals/gra-03-matrix-computation.md`.
+- **Slow score loading.** Full Matrix View requests scores one assessment at a time: about 100 requests for the seeded Faculty account, so the score boxes fill in over several seconds. One request per class would fix it. This is pre-existing and not caused by GRA-03.
+- **Excel export.** The matrix export does not include the new % / Transmuted steps. Add them only if Faculty ask.
+
 ---
 
 # 10. Ticket batch 1 (2026-11-11) — remaining backlog

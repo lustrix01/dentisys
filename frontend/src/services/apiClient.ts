@@ -2107,8 +2107,20 @@ export interface FacultyPeriodCategoryDetail {
   }>;
 }
 
+/** One assessment's computation steps for the Full Matrix "Show computation" columns. */
+export interface FacultyAssessmentStep {
+  assessmentId: string;
+  categoryId: number;
+  rawPercentage: number | null;
+  transmuted: boolean;
+  effectivePercentage: number | null;
+  attendanceStatus: 'present' | 'late' | 'excused' | 'absent' | 'unresolved' | null;
+}
+
 export interface FacultyPeriodBreakdown {
   period: GradingPeriodEnum;
+  /** Absent on results saved before this field existed. */
+  assessmentSteps?: FacultyAssessmentStep[];
   status: 'computed' | 'incomplete';
   percentage: number | null;
   /** Value before the whole-percent rounding, for the grade hover steps. */

@@ -77,7 +77,10 @@ test('Matrix keeps its sticky header and arrow-key input navigation', () => {
   assert.match(matrix, /pendingClearKeys\?\.has\(`\$\{student\.id\}\|\$\{assessment\.id\}`\)/);
   assert.match(matrix, /border-amber-400 bg-amber-50/);
   // The phone switch was removed on purpose (owhie8 UI, Owner-approved).
-  assert.doesNotMatch(matrix, /isPhone|onSingleActivityView|matchMedia/);
+  assert.doesNotMatch(matrix, /isPhone|onSingleActivityView/);
+  // GRA-03: matchMedia is allowed only for the desktop-only (>= 1280 px) Show computation columns.
+  assert.equal((matrix.match(/matchMedia/g) ?? []).length, 2);
+  assert.match(matrix, /\(min-width: 1280px\)/);
 });
 
 test('Matrix renders exactly one identity header and matching ID and name body cells', () => {

@@ -333,3 +333,76 @@ test('an archived newest class is listed last as view-only and never the default
   await classSelect.selectOption('9');
   await expect(page.getByText('Archived classes are view-only. Saved grade summaries can be viewed and exported, but grades and grading settings cannot be changed.')).toBeVisible();
 });
+
+// GRA-03: Show computation switch, "Average %" header and the results block on the right.
+async function mockComputationMatrix(page: import('@playwright/test').Page) {
+  const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await mockMatrixClass(page, { 'lo-1': 15, 'lo-2': 8, 'lo-3': 12, side: 5 }, { setup: async () => {
+    const quiz = (id: string, title: string, maxScore: number, gradingCategoryId: number | null) => (
+      { id, title, type: 'Quiz', subjectCode: 'CLIN401', classId: '7', gradingPeriod: 'Midterm', gradingCategoryId, maxScore, status: 'Active', dueDate: '2026-08-20', createdAt: '2026-08-10' });
+    await page.route('**/api/faculty/assessments', route => route.fulfill(json([
+      quiz('lo-1', 'LO 1', 20, 71), quiz('lo-2', 'LO 2', 10, 71), quiz('lo-3', 'LO 3', 20, 71), quiz('side', 'Side Quiz', 10, null),
+    ])));
+    await page.route('**/api/faculty/grades/compute', route => route.fulfill(json({ status: 'ok', preview: true, results: [{
+      status: 'incomplete_period', enrollmentId: '24', studentId: '24',
+      periods: {
+        midterm: { period: 'Midterm', status: 'computed', percentage: 56, incomplete: [], attendanceDateRange: { startDate: null, endDate: null },
+          categories: [{ categoryId: 71, name: 'Learning Outputs', sourceKind: 'assessment', earnedPoints: 55.8333, possiblePoints: 100, ratio: 0.558333, weight: 100, contribution: 55.8333 }],
+          assessmentSteps: [
+            { assessmentId: 'lo-1', categoryId: 71, rawPercentage: 75, transmuted: true, effectivePercentage: 87.5, attendanceStatus: null },
+            { assessmentId: 'lo-2', categoryId: 71, rawPercentage: 80, transmuted: false, effectivePercentage: 80, attendanceStatus: null },
+            { assessmentId: 'lo-3', categoryId: 71, rawPercentage: 60, transmuted: true, effectivePercentage: 0, attendanceStatus: 'absent' },
+          ] },
+        final: { period: 'Final', status: 'incomplete', percentage: null, attendanceDateRange: { startDate: null, endDate: null }, categories: [], incomplete: [] },
+      },
+      breakdown: {}, previouslyPersisted: false, previousPercentage: null, previousGwa: null,
+    }] })));
+  } });
+  await page.getByRole('tab', { name: 'Full Matrix View' }).click();
+}
+
+test('Show computation switch adds % and Transmuted steps and the period results stay inside each period', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockComputationMatrix(page);
+  const table = page.locator('table').filter({ hasText: 'Student Info' });
+  const sw = page.getByRole('switch', { name: 'Show computation' });
+  await expect(sw).toHaveAttribute('aria-checked', 'false');
+  await expect(table.getByRole('columnheader', { name: 'Average %' })).toBeVisible();
+  await expect(table.getByRole('columnheader', { name: 'Total', exact: true })).toHaveCount(0);
+  await expect(table.getByRole('columnheader', { name: 'Transmuted' })).toHaveCount(0);
+  await expect(table.getByRole('columnheader', { name: /results$/ })).toHaveCount(0);
+  // Period result columns stay inside the period: right after its categories, before the course Final Grade.
+  const x = async (name: string | RegExp) => (await table.getByRole('columnheader', { name }).first().boundingBox())!.x;
+  expect(await x(/^Total Midterm/)).toBeGreaterThan(await x('Average %'));
+  expect(await x(/^Final Midterm Grade/)).toBeGreaterThan(await x(/^Total Midterm/));
+  expect(await x(/^Final Grade \(100%\)/)).toBeGreaterThan(await x(/^Final Midterm Grade/));
+  expect(await x(/^Side Quiz/)).toBeGreaterThan(await x(/^Final Grade \(100%\)/));
+
+  await sw.click();
+  await expect(sw).toHaveAttribute('aria-checked', 'true');
+  await expect(table.getByRole('columnheader', { name: 'Transmuted' })).toHaveCount(3);
+  await expect(table.getByRole('columnheader', { name: '%', exact: true })).toHaveCount(3);
+  const row = table.getByRole('row').filter({ hasText: 'Owhie Santillan Lumbang' });
+  await expect(row.getByRole('cell', { name: '75.00', exact: true })).toBeVisible();
+  await expect(row.getByRole('cell', { name: '87.50', exact: true })).toBeVisible();
+  await expect(row.getByRole('cell', { name: '80.00', exact: true })).toHaveCount(2);
+  await expect(row.getByRole('cell', { name: 'Absent (0)', exact: true })).toBeVisible();
+  // Side Quiz is in no category: score input only, no steps.
+  expect(await x(/^Final Midterm Grade/)).toBeGreaterThan(await x(/^Total Midterm/));
+
+  await page.reload();
+  await page.getByRole('tab', { name: 'Student Scores Entry' }).click();
+  await page.getByRole('tab', { name: 'Full Matrix View' }).click();
+  await expect(page.getByRole('switch', { name: 'Show computation' })).toHaveAttribute('aria-checked', 'true');
+  await expect(table.getByRole('columnheader', { name: 'Transmuted' })).toHaveCount(3);
+});
+
+test('Show computation is desktop only: below 1280 px the switch is hidden and no steps render', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await page.addInitScript(() => localStorage.setItem('dentisys_matrix_show_computation', '1'));
+  await mockComputationMatrix(page);
+  const table = page.locator('table').filter({ hasText: 'Student Info' });
+  await expect(page.locator('button[role="switch"]', { hasText: 'Show computation' })).toBeHidden();
+  await expect(table.getByRole('columnheader', { name: 'Average %' })).toBeVisible();
+  await expect(table.getByRole('columnheader', { name: 'Transmuted' })).toHaveCount(0);
+});
