@@ -47,7 +47,7 @@ $check(str_contains($year, 'function academic_class_section_is_archived(') && st
 
 $list = $fn($faculty, 'handle_faculty_classes_get');
 $check(str_contains($list, "'archiveReason'") && str_contains($list, "'archivedAt'") && str_contains($list, "'isArchived'"), 'class list returns archive fields');
-foreach (['handle_faculty_class_update', 'handle_faculty_class_enroll_students', 'handle_faculty_class_unenroll_student', 'handle_faculty_student_create', 'handle_faculty_watchlist_unlock'] as $handler) {
+foreach (['handle_faculty_class_update', 'handle_faculty_class_enroll_students', 'handle_faculty_class_unenroll_student', 'handle_faculty_student_create'] as $handler) {
     $check(str_contains($fn($faculty, $handler), 'academic_class_section_is_archived('), "{$handler} refuses archived classes");
 }
 $check(str_contains($read('backend/controllers/StudentAuthController.php'), 'academic_class_section_is_archived('), 'Student invitations refuse archived classes');
@@ -65,3 +65,9 @@ $check(str_contains($year, 'Archived classes are view-only.') && str_contains($y
 $check(substr_count($faculty . $read('backend/controllers/SecretaryController.php') . $read('backend/app/attendance_sessions.php'), 'academic_view_only_message(') >= 20, 'view-only refusals use the helper');
 $check(str_contains($list, "'scheduledSessionCount'") && str_contains($list, "'secretaryName'"), 'class list returns scheduledSessionCount and secretaryName');
 $check(str_contains($fn($read('backend/app/class_meetings.php'), 'class_meetings_conflict'), 'archived_at IS NULL'), 'archived classes no longer block rooms or times in the schedule conflict check');
+
+// 5.9: grading setup works per offering, so it must skip assessments of cancelled/mistake classes (Finished stays).
+$check(substr_count($fn($faculty, 'faculty_grading_snapshot'), $visible) === 2 && str_contains($fn($faculty, 'faculty_grading_legacy_assessment_mappings'), $visible), 'grading snapshot and legacy mappings skip cancelled/mistake class assessments');
+$check(substr_count($fn($faculty, 'faculty_grading_save_configuration'), $visible) === 7, 'grading configuration save skips cancelled/mistake class assessments in all seven checks');
+$check(str_contains($fn($faculty, 'handle_faculty_email_send'), $visible), 'Email Management refuses Students whose only classes are cancelled/mistake');
+$check(substr_count($read('backend/controllers/AdminController.php'), "school_year IS NOT NULL AND (archive_reason IS NULL OR archive_reason = 'finished')") === 2, 'Dean school-year lists skip years with only hidden classes');

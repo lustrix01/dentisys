@@ -68,7 +68,8 @@ export const EmailManagement: React.FC = () => {
         setDbStudents(stRes as unknown as Student[]);
       }
       if (clsRes?.classes && Array.isArray(clsRes.classes)) {
-        setClasses(clsRes.classes);
+        // CLS-003: Cancelled and Created-by-mistake classes are hidden.
+        setClasses(clsRes.classes.filter((c: any) => c.archiveReason !== 'cancelled' && c.archiveReason !== 'mistake'));
       }
       const curSy = clsRes?.currentSchoolYear || '';
       if (curSy) {

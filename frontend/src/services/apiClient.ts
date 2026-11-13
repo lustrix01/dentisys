@@ -1003,10 +1003,6 @@ export function getFacultyRetentionApi(): Promise<{
   return request('GET', '/faculty/retention');
 }
 
-export function unlockFacultyWatchlistApi(classId: string): Promise<{ status: string; classId: string; watchlistUnlocked: boolean }> {
-  return request('POST', '/faculty/retention/watchlist/unlock', { classId });
-}
-
 export function getFacultyStudentsApi(): Promise<Array<{
   id: string;
   prefix?: string | null;

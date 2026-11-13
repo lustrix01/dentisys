@@ -192,7 +192,7 @@ function handle_faculty_dashboard_kpis(): void
         $yearFilter = $schoolYear === null ? '' : 'AND UPPER(cs.school_year) = UPPER(:school_year)';
         $yearParams = $schoolYear === null ? [] : [':school_year' => $schoolYear];
         $yearsStmt = $pdo->prepare(
-            'SELECT DISTINCT school_year FROM class_sections WHERE instructor_user_id = ? AND school_year IS NOT NULL'
+            "SELECT DISTINCT school_year FROM class_sections WHERE instructor_user_id = ? AND school_year IS NOT NULL AND (archive_reason IS NULL OR archive_reason = 'finished')"
         );
         $yearsStmt->execute([$authCtx['user_id']]);
         $availableSchoolYears = academic_school_year_options($yearsStmt->fetchAll(PDO::FETCH_COLUMN), $currentSchoolYear);
@@ -1751,6 +1751,7 @@ function faculty_grading_snapshot(PDO $pdo, array $offering, array $configRow): 
                            AND cs.course_id = ?
                            AND UPPER(cs.semester) = ?
                            AND UPPER(cs.school_year) = ?
+                           AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
                     ) AS in_use
                FROM grading_category_period_memberships gcp
                JOIN grading_categories gc_config ON gc_config.category_id = gcp.category_id
@@ -1777,6 +1778,7 @@ function faculty_grading_snapshot(PDO $pdo, array $offering, array $configRow): 
                            AND cs.course_id = ?
                            AND UPPER(cs.semester) = ?
                            AND UPPER(cs.school_year) = ?
+                           AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
                     ) AS in_use
                FROM grading_categories gc
               WHERE gc.config_id = ?
@@ -1880,6 +1882,7 @@ function faculty_grading_legacy_assessment_mappings(PDO $pdo, array $offering, a
             AND cs.course_id = ?
             AND UPPER(cs.semester) = ?
             AND UPPER(cs.school_year) = ?
+            AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
             AND cs.status = 'Active'
             AND a.status <> 'Archived'
             AND (a.grading_category_id IS NULL OR a.grading_period IS NULL)
@@ -2252,6 +2255,7 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                         AND cs.course_id = ?
                         AND UPPER(cs.semester) = ?
                         AND UPPER(cs.school_year) = ?
+                        AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
                       LIMIT 1"
                 );
                 $labAssessments->execute([$offering['facultyUserId'], $offering['courseId'], $offering['semester'], $offering['schoolYear']]);
@@ -2429,7 +2433,8 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                     AND cs.instructor_user_id = ?
                     AND cs.course_id = ?
                     AND UPPER(cs.semester) = ?
-                    AND UPPER(cs.school_year) = ?"
+                    AND UPPER(cs.school_year) = ?
+                    AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')"
             );
             $inUseStmt->execute(array_merge($removedCategoryIds, [
                 $offering['facultyUserId'],
@@ -2551,7 +2556,8 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                         AND cs.instructor_user_id = ?
                         AND cs.course_id = ?
                         AND UPPER(cs.semester) = ?
-                        AND UPPER(cs.school_year) = ?"
+                        AND UPPER(cs.school_year) = ?
+                        AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')"
                 );
                 $assessmentMembershipStmt->execute([
                     $offering['facultyUserId'],
@@ -2626,6 +2632,7 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                     AND cs.course_id = ?
                     AND UPPER(cs.semester) = ?
                     AND UPPER(cs.school_year) = ?
+                    AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
                   LIMIT 1"
             );
             foreach ($incomingMemberships as $membership) {
@@ -2660,6 +2667,7 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                         AND cs.course_id = ?
                         AND UPPER(cs.semester) = ?
                         AND UPPER(cs.school_year) = ?
+                        AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
                       LIMIT 1"
                 );
                 foreach ($sourceKindChanges as $sourceKindChange) {
@@ -2698,7 +2706,8 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                         AND cs.instructor_user_id = ?
                         AND cs.course_id = ?
                         AND UPPER(cs.semester) = ?
-                        AND UPPER(cs.school_year) = ?"
+                        AND UPPER(cs.school_year) = ?
+                        AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')"
                 );
                 $assessmentRefsStmt->execute([
                     $offering['facultyUserId'],
@@ -2777,7 +2786,8 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                         AND cs.instructor_user_id = ?
                         AND cs.course_id = ?
                         AND UPPER(cs.semester) = ?
-                        AND UPPER(cs.school_year) = ?"
+                        AND UPPER(cs.school_year) = ?
+                        AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')"
                 );
                 $membershipInUseStmt->execute([
                     $removedMembership['categoryId'],
@@ -6540,61 +6550,6 @@ function handle_faculty_attendance_override(): void
     }
 }
 
-function handle_faculty_watchlist_unlock(): void
-{
-    $pdo = null;
-    try {
-        $config = app_config();
-        $pdo = create_pdo($config);
-        $auth = faculty_verify_auth($pdo, $config);
-        $body = request_body();
-        $classId = faculty_attendance_positive_int($body['data']['classId'] ?? null);
-        if ($classId === null) {
-            throw new ValidationException([['field' => 'classId', 'message' => 'Select a class to unlock.']]);
-        }
-        $pdo->beginTransaction();
-        $class = $pdo->prepare('SELECT cs_id, school_year FROM class_sections WHERE cs_id = ? AND instructor_user_id = ? FOR UPDATE');
-        $class->execute([$classId, $auth['user_id']]);
-        $row = $class->fetch(PDO::FETCH_ASSOC);
-        if (!$row) {
-            $pdo->rollBack();
-            safe_error_response('Class not found in your assigned classes.', 404);
-            return;
-        }
-        if (!academic_school_year_is_current($pdo, (string) $row['school_year']) || academic_class_section_is_archived($pdo, (int) $row['cs_id'])) {
-            $pdo->rollBack();
-            safe_error_response(academic_view_only_message($pdo, (int) $row['cs_id']), 409);
-            return;
-        }
-        $insert = $pdo->prepare('INSERT INTO class_watchlist_unlocks (cs_id, unlocked_by) VALUES (?, ?) ON CONFLICT (cs_id) DO NOTHING');
-        $insert->execute([$classId, $auth['user_id']]);
-        if ($insert->rowCount() > 0) {
-            $audit = audit_begin_operation($pdo);
-            audit_finish_operation($pdo, $audit, [
-                'module_code' => 'faculty_retention', 'action_code' => 'watchlist_unlock',
-                'event_status' => 'Success', 'actor_user_id' => $auth['user_id'],
-                'actor_username' => $auth['login_email'], 'actor_role' => $auth['role'],
-                'actor_display_name' => $auth['display_name'], 'session_id' => $auth['session_id'],
-                'scope_cs_id' => $classId, 'target_type' => 'class_section', 'target_id' => (string) $classId,
-                'description' => 'Manually unlocked the Midterm Watchlist for the selected class. Grades are unchanged.',
-                'http_method' => request_method(), 'endpoint' => request_path(), 'request_id' => request_id(),
-                'ip_address' => request_ip(), 'user_agent' => request_user_agent(),
-            ], config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY'),
-                ['unlocked' => false], ['unlocked' => true, 'classId' => $classId]);
-        }
-        $pdo->commit();
-        json_response(['status' => 'ok', 'classId' => (string) $classId, 'watchlistUnlocked' => true], 200);
-    } catch (\Throwable $e) {
-        if ($pdo && $pdo->inTransaction()) $pdo->rollBack();
-        if ($e instanceof ValidationException) {
-            validation_error_response($e->getErrors());
-            return;
-        }
-        error_log('Watchlist unlock error: ' . sanitize_for_log($e));
-        safe_error_response('Unable to unlock the watchlist.', 500);
-    }
-}
-
 /**
  * Reuse class grading inputs only within the caller's current retention read.
  */
@@ -7870,6 +7825,7 @@ function handle_faculty_email_send(): void
                    JOIN enrollments e ON e.student_id = s.student_id
                    JOIN class_sections cs ON cs.cs_id = e.cs_id
                  WHERE cs.instructor_user_id = ?
+                   AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
                    AND LOWER(e.status) = 'active'
                    AND s.student_id IN ({$placeholders})"
             );

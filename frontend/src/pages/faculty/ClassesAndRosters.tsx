@@ -31,7 +31,7 @@ import {
   RotateCcw,
   ArrowLeft,
 } from 'lucide-react';
-import { isViewOnlyClass, archiveGroup, type ArchiveReason } from '../../utils/classArchiving';
+import { isViewOnlyClass, isArchivedCurrentYear, archiveGroup, type ArchiveReason } from '../../utils/classArchiving';
 import { Student } from '../../types';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
@@ -460,6 +460,8 @@ export const ClassesAndRosters: React.FC = () => {
   // The server supplies eligibility; do not infer an academic year from the clock.
   // CLS-003: archived classes are view-only exactly like past school-year classes.
   const isHistoricalClass = useCallback((classItem: FacultyClassItem | null | undefined) => isViewOnlyClass(classItem), []);
+  // The server says "Archived classes are view-only."; past-year classes keep their own wording.
+  const viewOnlyClassLabel = (classItem: FacultyClassItem | null | undefined) => isArchivedCurrentYear(classItem) ? 'Archived classes' : 'Past school-year classes';
 
   const isStudentEditable = useCallback((student: Student) => {
     const sections = student.classSections ?? [];
@@ -655,7 +657,7 @@ export const ClassesAndRosters: React.FC = () => {
   // Open the Add / Enroll Student modal
   const handleOpenAddStudent = async (cls?: FacultyClassItem) => {
     if (cls && isHistoricalClass(cls)) {
-      showFeedback('Past school-year classes are view-only. Adding students is unavailable.', 'info');
+      showFeedback(`${viewOnlyClassLabel(cls)} are view-only. Adding students is unavailable.`, 'info');
       return;
     }
     const targetId = cls
@@ -691,7 +693,7 @@ export const ClassesAndRosters: React.FC = () => {
   // Handler: Open Edit Class Section Modal
   const handleOpenEditClass = (cls: FacultyClassItem) => {
     if (isHistoricalClass(cls)) {
-      showFeedback('Past school-year classes are view-only. Editing is unavailable.', 'info');
+      showFeedback(`${viewOnlyClassLabel(cls)} are view-only. Editing is unavailable.`, 'info');
       return;
     }
     setEditingClass(cls);
@@ -739,7 +741,8 @@ export const ClassesAndRosters: React.FC = () => {
   const handleOpenEditStudent = (student: Student) => {
     if (!isStudentEditable(student)
       || (selectedClassFilterId !== 'all' && isHistoricalClass(classes.find(c => String(c.csId) === selectedClassFilterId)))) {
-      showFeedback('Past school-year rosters are view-only.', 'info');
+      const filteredClass = selectedClassFilterId === 'all' ? undefined : classes.find(c => String(c.csId) === selectedClassFilterId);
+      showFeedback(isArchivedCurrentYear(filteredClass) ? 'Archived classes are view-only.' : 'Past school-year rosters are view-only.', 'info');
       return;
     }
     setEditingStudent(student);
@@ -1256,7 +1259,7 @@ export const ClassesAndRosters: React.FC = () => {
 
     const targetClass = classes.find(c => c.csId === csId);
     if (isHistoricalClass(targetClass)) {
-      showFeedback('Past school-year classes are view-only. Students cannot be removed.', 'info');
+      showFeedback(`${viewOnlyClassLabel(targetClass)} are view-only. Students cannot be removed.`, 'info');
       return;
     }
     const className = targetClass ? `${targetClass.courseCode} (${targetClass.block})` : `Class #${csId}`;

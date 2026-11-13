@@ -142,23 +142,9 @@ ui_expect($status === 422, 'Overlong prefix returns a validation error');
 [$status, $retention] = ui_request('GET', '/faculty/retention', $token);
 $record = array_values(array_filter($retention['retention'] ?? [], fn($row) => $row['studentId'] === $studentId))[0] ?? [];
 ui_expect($status === 200 && $record['midtermComplete'] === false && $record['watchlistUnlocked'] === false, 'Incomplete midterm starts locked');
-foreach ([1, 2] as $attempt) {
-    [$status] = ui_request('POST', '/faculty/retention/watchlist/unlock', $token, ['classId' => $classId]);
-    ui_expect($status === 200, 'Class-wide manual unlock is idempotent, attempt ' . $attempt);
-}
-$stmt = $pdo->prepare("SELECT count(*) FROM audit_events WHERE action_code = 'watchlist_unlock' AND scope_cs_id = ?");
-$stmt->execute([$classId]);
-ui_expect((int) $stmt->fetchColumn() === 1, 'Unlock is audited exactly once');
-[$status, $retention] = ui_request('GET', '/faculty/retention', $token);
-$record = array_values(array_filter($retention['retention'] ?? [], fn($row) => $row['studentId'] === $studentId))[0] ?? [];
-ui_expect($record['watchlistUnlocked'] === true && $record['midtermComplete'] === false && $record['midtermPercentage'] === null, 'Unlock survives reload without fabricating grades');
-[$status] = ui_request('POST', '/faculty/retention/watchlist/unlock', $token, ['classId' => 2147483000]);
-ui_expect($status === 404, 'Unowned class cannot be unlocked');
 $pdo->prepare("UPDATE class_sections SET school_year = '2025-2026' WHERE cs_id = ?")->execute([$classId]);
 [$status] = ui_request('POST', '/faculty/students', $token, array_merge($studentPayload, ['studentId' => 'UI2-' . $tag]));
 ui_expect($status === 409, 'Historical roster rejects new Students');
 [$status] = ui_request('PUT', '/faculty/students/' . $studentId, $token, ['firstName' => 'Changed']);
 ui_expect($status === 403, 'Historical-only roster cannot edit canonical Student');
-[$status] = ui_request('POST', '/faculty/retention/watchlist/unlock', $token, ['classId' => $classId]);
-ui_expect($status === 409, 'Historical class cannot be unlocked');
 echo "PASS: UI migration database/API checks completed.\n";

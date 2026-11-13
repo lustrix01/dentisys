@@ -310,7 +310,7 @@ On Windows: `Copy-Item .env.single-server.example .env.single-server`.
 
 ### B3. Fill in `.env.single-server`
 
-The start script checks only eight settings and refuses to run while any is empty or still starts with `replace_with_`: `APP_BASE_URL`, `DB_PASS`, `DB_ADMIN_PASS`, `JWT_SIGNING_KEY_B64`, `MFA_ENCRYPTION_KEY_B64`, `AUDIT_MAC_KEY_B64`, `SMTP_HOST`, `SMTP_FROM`. Replace every other `replace_...` value too: Compose refuses to start unless every `BIOMETRIC_*` value, model path and model hash below is set.
+The start script refuses to run while any of eight settings is empty or still starts with `replace_with_`: `APP_BASE_URL`, `DB_PASS`, `DB_ADMIN_PASS`, `JWT_SIGNING_KEY_B64`, `MFA_ENCRYPTION_KEY_B64`, `AUDIT_MAC_KEY_B64`, `SMTP_HOST`, `SMTP_FROM`. It also refuses while any biometric sidecar value that Compose requires (the shared secret, storage key, seven `BIOMETRIC_*` calibration values, three model paths and three model hashes) is empty or still contains `replace_`.
 
 | Setting | What to put there |
 | --- | --- |

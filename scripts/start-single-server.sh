@@ -14,10 +14,14 @@ set -a
 . "$env_file"
 set +a
 
-# Only these keys are checked here; docker-compose.web.yml additionally requires every BIOMETRIC_* value, model path and model hash.
+# Checked here: the eight core settings, then every key docker-compose.web.yml requires for the biometric sidecar (its `:?` values).
 for key in APP_BASE_URL DB_PASS DB_ADMIN_PASS JWT_SIGNING_KEY_B64 MFA_ENCRYPTION_KEY_B64 AUDIT_MAC_KEY_B64 SMTP_HOST SMTP_FROM; do
   eval "value=\${$key:-}"
   case "$value" in ''|replace_with_*) echo "Set $key before starting." >&2; exit 1;; esac
+done
+for key in BIOMETRIC_SIDECAR_SHARED_SECRET BIOMETRIC_STORAGE_KEY_B64 BIOMETRIC_YUNET_SCORE_THRESHOLD BIOMETRIC_MIN_FACE_PX BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE BIOMETRIC_SFACE_COSINE_THRESHOLD BIOMETRIC_MATCH_COUNT BIOMETRIC_BLINK_THRESHOLD BIOMETRIC_HEAD_TURN_RATIO MEDIAPIPE_FACE_LANDMARKER_MODEL_HOST_PATH MEDIAPIPE_FACE_LANDMARKER_SHA256 BIOMETRIC_YUNET_MODEL_HOST_PATH BIOMETRIC_YUNET_SHA256 BIOMETRIC_SFACE_MODEL_HOST_PATH BIOMETRIC_SFACE_SHA256; do
+  eval "value=\${$key:-}"
+  case "$value" in ''|*replace_*) echo "Set $key before starting." >&2; exit 1;; esac
 done
 
 if ! printf '%s' "$APP_BASE_URL" | grep -Eq '^https?://[^/?#[:space:]]+(/[^?#[:space:]]*)?$'; then

@@ -43,6 +43,11 @@ services:
       AUDIT_MAC_KEY_B64: ${AUDIT_MAC_KEY_B64}
       BIOMETRIC_SIDECAR_URL: http://biometric:8000
       BIOMETRIC_SIDECAR_SHARED_SECRET: ${BIOMETRIC_SIDECAR_SHARED_SECRET:?Set BIOMETRIC_SIDECAR_SHARED_SECRET for the biometric sidecar.}
+      # Empty means the backend default (Asia/Manila, none, 20, 120).
+      APP_TIMEZONE: ${APP_TIMEZONE:-}
+      SMTP_CA_FILE: ${SMTP_CA_FILE:-}
+      BIOMETRIC_SIDECAR_TIMEOUT_SECONDS: ${BIOMETRIC_SIDECAR_TIMEOUT_SECONDS:-}
+      BIOMETRIC_CHALLENGE_TTL_SECONDS: ${BIOMETRIC_CHALLENGE_TTL_SECONDS:-}
     depends_on:
       biometric:
         condition: service_healthy

@@ -353,7 +353,7 @@ function attendance_session_timing_from_request(array $data): array
 
 /**
  * ATT-001: required class end time (HH:MM, Asia/Manila), at or after the Late cutoff. Times
- * earlier than the opening time are on the next day; the session must last under 24 hours.
+ * earlier than the opening time are on the next day; the session lasts at most 12 hours.
  * A session for today cannot end in the past.
  */
 function attendance_session_class_end_time_from_request(

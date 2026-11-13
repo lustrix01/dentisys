@@ -69,6 +69,14 @@ function mfa_require_step_up(PDO $pdo, array $config, int $userId, string $code)
     }
 }
 
+// Same per-user budget as name-change confirmation (10 attempts / 5 minutes).
+function mfa_settings_confirm_rate_limit(array $config, int $userId): void
+{
+    $rateStorage = ['dir' => $config['rate_limit']['storage_dir']];
+    $userScope = bin2hex(hash('sha256', 'user:' . $userId, true));
+    rate_limit_check($rateStorage, $userScope, 'post_mfa_settings_confirm', 300, 10);
+}
+
 function handle_mfa_settings_status(): void
 {
     try {
@@ -108,6 +116,7 @@ function handle_mfa_settings_recovery_codes(): void
         $authCtx = mfa_authenticated_context($pdo, $config);
         $body = request_body();
         $code = $body['has_body'] ? (string) ($body['data']['code'] ?? '') : '';
+        mfa_settings_confirm_rate_limit($config, (int) $authCtx['user_id']);
         $recovery = mfa_generate_recovery_codes(8);
         $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
 
@@ -161,6 +170,8 @@ function handle_mfa_settings_recovery_codes(): void
         auth_controller_emit(auth_build_no_store_message_response('Authentication required.', 401));
     } catch (MfaException $e) {
         auth_controller_emit(auth_build_no_store_message_response($e->getMessage(), 422));
+    } catch (RateLimitException $e) {
+        auth_controller_emit(auth_build_no_store_message_response('Too many requests.', 429));
     } catch (\Throwable $e) {
         error_log('MFA recovery regeneration error: ' . sanitize_for_log($e));
         auth_controller_emit(auth_build_no_store_message_response('Internal server error.', 500));
@@ -175,6 +186,7 @@ function handle_mfa_settings_revoke(): void
         $authCtx = mfa_authenticated_context($pdo, $config);
         $body = request_body();
         $code = $body['has_body'] ? (string) ($body['data']['code'] ?? '') : '';
+        mfa_settings_confirm_rate_limit($config, (int) $authCtx['user_id']);
         $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
 
         $pdo->beginTransaction();
@@ -212,6 +224,8 @@ function handle_mfa_settings_revoke(): void
         auth_controller_emit(auth_build_no_store_message_response('Authentication required.', 401));
     } catch (MfaException $e) {
         auth_controller_emit(auth_build_no_store_message_response($e->getMessage(), 422));
+    } catch (RateLimitException $e) {
+        auth_controller_emit(auth_build_no_store_message_response('Too many requests.', 429));
     } catch (\Throwable $e) {
         error_log('MFA revoke error: ' . sanitize_for_log($e));
         auth_controller_emit(auth_build_no_store_message_response('Internal server error.', 500));

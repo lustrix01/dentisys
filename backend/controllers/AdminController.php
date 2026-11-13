@@ -81,7 +81,7 @@ function handle_admin_dashboard_kpis(): void
         $facultyYearJoin = $schoolYear === null ? '' : 'AND UPPER(cs.school_year) = UPPER(:school_year)';
         $attendanceYearAnd = $schoolYear === null ? '' : 'AND UPPER(cs.school_year) = UPPER(:school_year)';
         $availableSchoolYears = academic_school_year_options(
-            $pdo->query('SELECT DISTINCT school_year FROM class_sections WHERE school_year IS NOT NULL')->fetchAll(PDO::FETCH_COLUMN),
+            $pdo->query("SELECT DISTINCT school_year FROM class_sections WHERE school_year IS NOT NULL AND (archive_reason IS NULL OR archive_reason = 'finished')")->fetchAll(PDO::FETCH_COLUMN),
             $currentSchoolYear
         );
 
@@ -644,7 +644,7 @@ function handle_admin_reports_summary(): void
         $yearParams = $schoolYear === null ? [] : [':school_year' => $schoolYear];
         $yearWhere = $schoolYear === null ? '' : 'WHERE UPPER(cs.school_year) = UPPER(:school_year)';
         $availableSchoolYears = academic_school_year_options(
-            $pdo->query('SELECT DISTINCT school_year FROM class_sections WHERE school_year IS NOT NULL')->fetchAll(PDO::FETCH_COLUMN),
+            $pdo->query("SELECT DISTINCT school_year FROM class_sections WHERE school_year IS NOT NULL AND (archive_reason IS NULL OR archive_reason = 'finished')")->fetchAll(PDO::FETCH_COLUMN),
             $currentSchoolYear
         );
 

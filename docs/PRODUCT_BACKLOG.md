@@ -65,15 +65,6 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 **Status: Partial.** Search and roster filtering exist; filtering by Course, then Class Section, then Student is not established.
 
-## 5.9 Class archiving follow-ups (CLS-003)
-
-**Status: Not started.** Small gaps left after class archiving shipped:
-
-- **Email Management:** Faculty can still email Students of a Cancelled or Created-by-mistake class.
-- **Dean school-year dropdown:** can list a school year whose only classes are hidden (Cancelled or Created by mistake).
-- **Grading setup:** the grading-configuration save and the grading snapshot work per course offering (course and school year), not per class, so they still include assessments of a Cancelled or Created-by-mistake class of the same offering.
-- **Wording:** four client-side messages in Classes & Rosters (add student, edit class, remove student, edit roster student) still say "Past school-year classes are view-only." for archived classes. Archived cards disable those buttons and the server answers "Archived classes are view-only.", so this is wording only.
-
 ---
 
 # 8. Login usability
@@ -82,11 +73,9 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 **Status: Partial.** Activation, reset and login have validation, password visibility toggles and requirements that mirror the backend policy. The remaining data-entry fields have not been checked one by one.
 
-## 8.2 2FA settings confirmation hardening
+## 8.2 Audit event for recovery-code regeneration
 
-**Status: Not started.** Regenerating recovery codes and turning 2FA off confirm with an authenticator code but have no handler-level attempt limit, and recovery-code regeneration writes no audit event.
-
-Both actions get the existing per-user limit used for name-change confirmation, 10 attempts per 5 minutes. Whether to audit recovery-code regeneration is on hold for the Owner.
+**Status: On hold for the Owner.** Regenerating recovery codes writes no audit event. Whether to add one is the Owner's decision.
 
 ---
 
@@ -147,13 +136,9 @@ Both actions get the existing per-user limit used for name-change confirmation, 
 
 # 11. Configuration and code defects found by the docs audit
 
-**Status: Not started.** Found while syncing the docs to the code (record: [docs sync changes](archive/docs-sync-changes-2026-11.md)).
+**Status: Needs an Owner decision.** Found while syncing the docs to the code (record: [docs sync changes](archive/docs-sync-changes-2026-11.md)).
 
-- **11.1** `SHOW_DEV_RESET_LINK` and `SHOW_DEV_INVITATION_LINK` are read by the backend (`backend/app/config.php`) but no Compose file forwards them, so setting them in `.env` does nothing.
-- **11.2** `docker-compose.web.yml` requires every biometric value, model path and hash even when biometrics are off; the single-server start scripts check only 8 keys, so placeholders pass the script and fail later in Compose.
-- **11.3** `APP_TIMEZONE`, `SMTP_CA_FILE` and the biometric timeout values cannot be set on single-server or VPS (not forwarded by `docker-compose.web.yml`).
-- **11.4** The unused route `/api/faculty/retention/watchlist/unlock` and `unlockFacultyWatchlistApi` remain although the screen has no unlock.
-- **11.5** `backend/app/attendance_sessions.php` still checks "under 24 hours" beside the 12-hour session cap.
+- **11.5** `backend/app/attendance_sessions.php` checks "under 24 hours" beside the 12-hour session cap. The 24-hour check is not redundant: it is what rejects a session whose class end equals its opening time (zero length), which the 12-hour check does not catch. Decide whether a zero-length session is rejected by its own rule (then the 24-hour wording can go) or the check stays as it is.
 
 ---
 
@@ -169,9 +154,11 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **5.3** Midterm Watchlist offers no remedial action; the server refuses remedial without a final grade (tested).
 - **5.5** Future worksheet dates: sessions can be scheduled or viewed, not recorded.
 - **5.8** Email History built from the outbox, one row per send action.
+- **5.9** Class archiving gaps: Cancelled and Created-by-mistake classes are excluded from Email Management, school-year lists and offering-wide grading; archived-class messages match the server.
 - **5.11** Client requests: cost-recovery remedials implemented; the remove-student error was not reproduced.
 - **7.1** Secretary Dashboard: no Quick Actions; status, alerts and pending work remain (tested).
 - **7.2** Manual Override filtering: date, then session, then records; revoked sessions view-only.
+- **8.2 (part)** Recovery-code regeneration and turning 2FA off are limited to 10 attempts per 5 minutes per user.
 - **9.6** November 2026 polish-audit UI follow-ups.
 - **9.8** Shared tab bar standard (white card bar and grey list switch).
 - **9.9 (part)** Full Matrix View loads all scores in one request per class; Show computation at every width.
@@ -179,3 +166,4 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **10.2** T4 Full Matrix View unsaved scores kept in the tab and offered back after a forced sign-out.
 - **10.4** T8 + T11 grading clarification: course-level remedial, two attempts at 75%, cost recovery.
 - **10.9** T9 session restored after closing the browser: intended behaviour.
+- **11.1–11.4** Docs-audit defects: development show-link flags forwarded, single-server start scripts check every required biometric key, timezone/CA/biometric timeouts settable on single-server and VPS, unused watchlist-unlock route removed.
