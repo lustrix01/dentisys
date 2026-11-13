@@ -273,35 +273,32 @@ test('matrix keeps and saves a cell typed while another save is in flight', asyn
 
 // The gate's Vite server runs without Tailwind, so this checks the keep-visible toggle state and pinning classes;
 // the pinned layout itself was verified on screenshots at 412/768 and desktop (1280+) stays unchanged.
-test('Keep-visible toggle switches which student columns are pinned from sm to below xl and is hidden on desktop', async ({ page }) => {
-  await page.setViewportSize({ width: 768, height: 1024 });
-  await mockMatrixClass(page, {}, { wide: true });
-  await page.getByRole('tab', { name: 'Full Matrix View' }).click();
-  const pin = page.getByRole('group', { name: 'Keep visible while scrolling' });
-  await expect(pin).toBeVisible();
-  await expect(pin.locator('..')).toHaveClass(/(^|\s)xl:hidden(\s|$)/);
-  await expect(pin.locator('..')).toHaveClass(/(^|\s)max-sm:hidden(\s|$)/);
-  const nameOnly = pin.getByRole('button', { name: 'Name', exact: true });
-  const both = pin.getByRole('button', { name: 'ID and name' });
-  await expect(nameOnly).toHaveAttribute('aria-pressed', 'true');
-  await expect(both).toHaveAttribute('aria-pressed', 'false');
-  const box = page.locator('div.overflow-x-auto.overflow-y-auto');
-  const idCell = box.getByRole('cell', { name: '2023-5510', exact: true });
-  const nameCell = box.getByRole('cell', { name: 'Owhie Santillan Lumbang', exact: true });
-  const sticky = /(^|\s)max-xl:sticky(\s|$)/;
-  await expect(nameCell).toHaveClass(sticky);
-  await expect(nameCell).toHaveClass(/max-xl:left-0/);
-  await expect(idCell).not.toHaveClass(sticky);
-  await both.click();
-  await expect(both).toHaveAttribute('aria-pressed', 'true');
-  await expect(nameOnly).toHaveAttribute('aria-pressed', 'false');
-  await expect(idCell).toHaveClass(/(^|\s)sm:max-xl:sticky(\s|$)/);
-  await expect(idCell).toHaveClass(/sm:max-xl:left-0/);
-  await expect(nameCell).toHaveClass(/sm:max-xl:left-\[104px\]/);
-  // Both columns keep their own cells: ID Number and Full Name are never merged.
-  await expect(idCell).toHaveText('2023-5510');
-  await expect(nameCell).toHaveText('Owhie Santillan Lumbang');
-});
+for (const width of [768, 1440]) {
+  test(`Keep-visible toggle pins the name, or ID and name, at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1024 });
+    await mockMatrixClass(page, {}, { wide: true });
+    await page.getByRole('tab', { name: 'Full Matrix View' }).click();
+    const pin = page.getByRole('group', { name: 'Keep visible while scrolling' });
+    await expect(pin).toBeVisible();
+    const nameOnly = pin.getByRole('button', { name: 'Name', exact: true });
+    const both = pin.getByRole('button', { name: 'ID and name' });
+    await expect(nameOnly).toHaveAttribute('aria-pressed', 'true');
+    const box = page.locator('div.overflow-x-auto.overflow-y-auto');
+    const idCell = box.getByRole('cell', { name: '2023-5510', exact: true });
+    const nameCell = box.getByRole('cell', { name: 'Owhie Santillan Lumbang', exact: true });
+    const position = (cell: typeof idCell) => cell.evaluate(el => getComputedStyle(el).position);
+    expect(await position(nameCell)).toBe('sticky');
+    expect(await position(idCell)).not.toBe('sticky');
+    await both.click();
+    await expect(both).toHaveAttribute('aria-pressed', 'true');
+    expect(await position(idCell)).toBe('sticky');
+    const idWidth = await idCell.evaluate(el => el.getBoundingClientRect().width);
+    expect(await nameCell.evaluate(el => parseFloat(getComputedStyle(el).left))).toBeCloseTo(idWidth, 0);
+    // Both columns keep their own cells: ID Number and Full Name are never merged.
+    await expect(idCell).toHaveText('2023-5510');
+    await expect(nameCell).toHaveText('Owhie Santillan Lumbang');
+  });
+}
 
 test('single-list config shows an Assessments group, no Lecture weight and no Component filter', async ({ page }) => {
   await mockMatrixClass(page, {});
