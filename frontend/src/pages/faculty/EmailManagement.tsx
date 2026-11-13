@@ -32,7 +32,7 @@ import {
 } from '../../services/authService';
 import { createStudentInvitation, removeSecretaryAppointmentApi, getFacultyRetentionApi, saveFacultyRemedialApi, sendFacultyEmailApi, type FacultyRetentionRecord } from '../../services/apiClient';
 import { Student } from '../../types';
-import { getFacultyStudentsApi, getFacultyClassesApi } from '../../services/apiClient';
+import { getFacultyStudentsApi, getFacultyClassesApi, getFacultyEmailLogsApi } from '../../services/apiClient';
 
 type Tab = 'student_invites' | 'secretary' | 'midterm_advisory' | 'remedial' | 'history';
 
@@ -174,7 +174,7 @@ export const EmailManagement: React.FC = () => {
   const fetchEmailLogs = useCallback(async () => {
     setLoadingLogs(true);
     try {
-      const res = await import('../../services/apiClient').then(m => m.getFacultyEmailLogsApi());
+      const res = await getFacultyEmailLogsApi();
         if (Array.isArray(res.actions)) {
           setLogs(res.actions);
           const latestByEmail: Record<string, { status: 'Sent' | 'Failed' | 'Pending' | 'Suppressed'; sentAt: string }> = {};

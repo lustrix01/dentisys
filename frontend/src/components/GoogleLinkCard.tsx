@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, Link2, ShieldCheck } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Eye, EyeOff, Link2, ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './Card';
 import { useAuth } from '../context/AuthContext';
 import { useRuntimeConfig } from '../context/RuntimeConfigContext';
@@ -37,6 +37,7 @@ export const GoogleLinkCard: React.FC = () => {
   const [linked, setLinked] = useState<boolean | null>(null);
   const [credential, setCredential] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [working, setWorking] = useState(false);
   const [error, setError] = useState('');
@@ -177,15 +178,33 @@ export const GoogleLinkCard: React.FC = () => {
             </div>
             {credential && <form onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
               <p className="flex items-center gap-2 text-xs font-bold"><ShieldCheck className="h-4 w-4 text-accent-500" />Confirm with your DentiSys password</p>
-              <input
-                type="password"
-                value={password}
-                onChange={event => setPassword(event.target.value)}
-                placeholder="DentiSys password"
-                autoComplete="current-password"
-                required
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none dark:border-slate-700 dark:bg-slate-950"
-              />
+              <div>
+                <label htmlFor="google-link-password" className="sr-only">
+                  DentiSys password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    id="google-link-password"
+                    value={password}
+                    onChange={event => setPassword(event.target.value)}
+                    placeholder="DentiSys password"
+                    autoComplete="current-password"
+                    required
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pr-12 text-xs outline-none dark:border-slate-700 dark:bg-slate-950"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                    aria-controls="google-link-password"
+                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
               <button type="submit" disabled={working || !password} className="w-full rounded-xl bg-accent-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">
                 {working ? 'Linking…' : 'Confirm and link Google'}
               </button>

@@ -83,15 +83,11 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 ## 9.1 Faculty class counts
 
-**Status: Unclear.** Not reproduced. Reported: Classes & Rosters current-school-year count/filter mismatch, and Dashboard versus Classes & Rosters class-count mismatch. Decide by comparing both counts against the database for one Faculty account.
+**Status: Cause found; needs an Owner decision.** The Dashboard counts current-year classes archived as Finished (`handle_faculty_dashboard_kpis` keeps `archive_reason = 'finished'`), while Classes & Rosters moves them to its Archived tab and counts only classes with no archive reason. The Dashboard also requires status Active, which Classes & Rosters does not (no code path sets another status today). Classes & Rosters has no school-year selector, so its Assigned tab is always the current year. Decide which count is right before aligning them.
 
-## 9.2 Grade Computation tab strip on phones
+## 9.3 Main bundle size
 
-**Status: Unclear.** Reported as needing horizontal scrolling; no automated phone-width check exists. Decide with a mobile-width browser check.
-
-## 9.3 Build warnings
-
-**Status: Unclear (non-blocking).** The frontend build warns about an ineffective dynamic import of `frontend/src/services/apiClient.ts` and a chunk larger than 500 kB. The Owner decides whether these need work.
+**Status: Needs an Owner decision (non-blocking).** The frontend build warns that the main chunk is about 2.3 MB (565 kB gzipped): every page, recharts and the spreadsheet library ship in it. Splitting it means loading pages on demand (`React.lazy` per route in `App.tsx`), a new pattern for this app.
 
 ## 9.4 Official grade sheet export in the BU format
 
@@ -115,10 +111,6 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 ---
 
 # 10. Ticket batch 1 — remaining items
-
-## 10.5 Password reveal control in GoogleLinkCard
-
-**Status: Not started.** `GoogleLinkCard`'s confirm-password field lacks a reveal control and its label. The login fields intentionally have no maximum length so existing passwords keep working.
 
 ## 10.6 Import wording and fixture
 
@@ -159,11 +151,14 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **7.1** Secretary Dashboard: no Quick Actions; status, alerts and pending work remain (tested).
 - **7.2** Manual Override filtering: date, then session, then records; revoked sessions view-only.
 - **8.2 (part)** Recovery-code regeneration and turning 2FA off are limited to 10 attempts per 5 minutes per user.
+- **9.2** Grade Computation tab strip on phones: no horizontal scrolling at 320–390 px; the shared section tabs wrap with short names.
+- **9.3 (part)** The ineffective dynamic import of `apiClient` is gone.
 - **9.6** November 2026 polish-audit UI follow-ups.
 - **9.8** Shared tab bar standard (white card bar and grey list switch).
 - **9.9 (part)** Full Matrix View loads all scores in one request per class; Show computation at every width.
 - **10.1** T1 transmutation: fixed formula, optional per assessment, new assessments start with it on.
 - **10.2** T4 Full Matrix View unsaved scores kept in the tab and offered back after a forced sign-out.
 - **10.4** T8 + T11 grading clarification: course-level remedial, two attempts at 75%, cost recovery.
+- **10.5** GoogleLinkCard confirm-password field has the standard show/hide control and a screen-reader label.
 - **10.9** T9 session restored after closing the browser: intended behaviour.
 - **11.1–11.4** Docs-audit defects: development show-link flags forwarded, single-server start scripts check every required biometric key, timezone/CA/biometric timeouts settable on single-server and VPS, unused watchlist-unlock route removed.
