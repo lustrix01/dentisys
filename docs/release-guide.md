@@ -73,7 +73,8 @@ git checkout lighthal9-responsive
   2. Copy of the exact demo images to `-prod:prod`, with no rebuild.
   3. Fingerprint (digest) check.
   4. Wait until production runs the new version.
-  5. Recalculate current-term grades once with the new grading rules (one audited batch, actor System). Safe to repeat: a second run changes nothing. If it fails, the message says the deploy itself succeeded; tell Claude.
+
+  Promotion never recalculates saved grades (spec, 2026-11-13 amendment). Grades update when Faculty next save scores or weights.
   
   The last line reads `Production now runs sha-<sha>`.
 - A failure before step 2 leaves production untouched. Fix the cause the message names and rerun.
