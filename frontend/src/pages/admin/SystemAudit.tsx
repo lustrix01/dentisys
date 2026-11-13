@@ -612,7 +612,7 @@ export const DeanReports: React.FC = () => {
         {activeTab === 'students' && selectedClassId !== null && (
           <div className="space-y-4">
             {/* Drill-down Header & Filters */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 rounded-2xl shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 rounded-2xl shadow-sm">
               <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3 w-full sm:w-auto">
                 <button
                   type="button"
@@ -642,7 +642,7 @@ export const DeanReports: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <div className="relative w-full sm:w-auto">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
@@ -654,7 +654,7 @@ export const DeanReports: React.FC = () => {
                     className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full sm:w-44"
                   />
                 </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
                   <select
                     aria-label="Filter by status"
                     value={statusFilter}
@@ -937,7 +937,7 @@ export const DeanReports: React.FC = () => {
         {activeTab === 'retention' && selectedClassId !== null && (
           <div className="space-y-4">
             {/* Drill-down Header & Filters */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 rounded-2xl shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 rounded-2xl shadow-sm">
               <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3 w-full sm:w-auto">
                 <button
                   type="button"
@@ -967,7 +967,7 @@ export const DeanReports: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <div className="relative w-full sm:w-auto">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
@@ -979,7 +979,7 @@ export const DeanReports: React.FC = () => {
                     className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full sm:w-44"
                   />
                 </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
                   <select
                     aria-label="Filter by status"
                     value={statusFilter}
@@ -1271,7 +1271,7 @@ export const DeanReports: React.FC = () => {
         {activeTab === 'attendance' && selectedClassId !== null && (
           <div className="space-y-4">
             {/* Drill-down Header & Filters */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 rounded-2xl shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 rounded-2xl shadow-sm">
               <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3 w-full sm:w-auto">
                 <button
                   type="button"
@@ -1301,7 +1301,7 @@ export const DeanReports: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <div className="relative w-full sm:w-auto">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
@@ -1313,7 +1313,7 @@ export const DeanReports: React.FC = () => {
                     className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-500 w-full sm:w-44"
                   />
                 </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
                   <select
                     aria-label="Filter by status"
                     value={statusFilter}

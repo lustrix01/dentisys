@@ -264,18 +264,18 @@ export const AcademicTermsSettings: React.FC = () => {
                   type="button"
                   aria-expanded={isOpen}
                   data-testid={`year-${year}`}
-                  className="flex w-full flex-wrap items-center gap-3 bg-slate-50/70 px-4 py-3.5 text-left cursor-pointer dark:bg-slate-950/30 sm:px-5"
+                  className="flex w-full flex-wrap items-center gap-3 bg-slate-50/70 px-4 py-3.5 text-left cursor-pointer dark:bg-slate-950/30 sm:px-5 max-[359px]:gap-1.5 max-[359px]:px-3"
                   onClick={() => setExpanded({ ...expanded, [year]: !isOpen })}
                 >
                   <ChevronRight className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} aria-hidden="true" />
-                  <span className="text-sm font-extrabold tracking-tight text-slate-800 dark:text-slate-100">{year}</span>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-700">
+                  <span className="whitespace-nowrap text-sm font-extrabold tracking-tight text-slate-800 dark:text-slate-100">{year}</span>
+                  <span className="whitespace-nowrap rounded-full bg-white px-2.5 max-[359px]:px-2 py-1 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-700">
                     {yearSet.length === 0 && past
                       ? 'No dates set'
                       : `${yearSet.length} ${yearSet.length === 1 ? 'term' : 'terms'}${past ? ' · ended' : ' set'}`}
                   </span>
                   {isCurrentYear && (
-                    <span className="ml-auto whitespace-nowrap rounded-full border border-accent-200/60 bg-white px-2.5 py-1 text-[10px] font-extrabold text-accent-700 dark:border-accent-900/60 dark:bg-slate-900 dark:text-accent-300">
+                    <span className="ml-auto whitespace-nowrap rounded-full border border-accent-200/60 bg-white px-2.5 max-[359px]:px-2 py-1 text-[10px] font-extrabold text-accent-700 dark:border-accent-900/60 dark:bg-slate-900 dark:text-accent-300">
                       Current S.Y.
                     </span>
                   )}
