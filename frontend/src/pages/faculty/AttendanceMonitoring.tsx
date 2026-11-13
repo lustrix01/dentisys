@@ -1340,12 +1340,12 @@ export const AttendanceMonitoring: React.FC = () => {
 
               <div className="flex flex-col gap-1.5 sm:shrink-0 sm:items-end">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 sm:text-right">Actions</span>
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                <div className="flex flex-wrap gap-2 sm:items-center sm:justify-end">
                   {selectedClass && !isArchivedCurrentYear(selectedClass) && (
                     <button
                       type="button"
                       onClick={() => handleOpenClassSessionModal(selectedClass)}
-                      className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-2xl bg-slate-100 px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 cursor-pointer sm:w-auto"
+                      className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-slate-100 px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 cursor-pointer sm:flex-none"
                     >
                       <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                       <span>Sessions</span>
@@ -1360,7 +1360,7 @@ export const AttendanceMonitoring: React.FC = () => {
                     }}
                     disabled={loadingWorksheet || attendanceWritePending}
                     aria-label="Refresh attendance worksheet"
-                    className="inline-flex min-h-11 min-w-11 w-full items-center justify-center rounded-xl bg-slate-100 p-2 text-slate-600 transition-all hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer sm:w-auto"
+                    className="inline-flex min-h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 p-2 text-slate-600 transition-all hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer"
                     title="Refresh worksheet"
                   >
                     <RefreshCw className={`w-4 h-4 ${loadingWorksheet ? 'animate-spin' : ''}`} />

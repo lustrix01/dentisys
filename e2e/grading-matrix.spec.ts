@@ -34,6 +34,11 @@ test('grading matrix groups assessments by period and category and shows server 
   await page.route('**/api/faculty/scores**', async (route) => {
     const assessmentId = new URL(route.request().url()).searchParams.get('assessmentId') || '';
     const scores: Record<string, number> = { 'lo-1': 47, 'lo-2': 46.5, 'mid-exam': 91 };
+    if (!new URL(route.request().url()).searchParams.has('assessmentId')) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', scores: Object.entries(scores)
+        .map(([id, score]) => ({ id: `s-${id}`, assessmentId: id, studentId: '24', score, remarks: '', submittedAt: '2026-09-15T00:00:00Z' })) }) });
+      return;
+    }
     const body = scores[assessmentId] !== undefined
       ? [{ id: `s-${assessmentId}`, studentId: '24', score: scores[assessmentId], remarks: '', submittedAt: '2026-09-15T00:00:00Z' }]
       : [];
@@ -129,6 +134,11 @@ async function mockMatrixClass(page: import('@playwright/test').Page, scores: Re
       await route.fulfill(json({ status: 'ok', savedCount: batches.length }));
       return;
     }
+    if (!new URL(route.request().url()).searchParams.has('assessmentId')) {
+      await route.fulfill(json({ status: 'ok', scores: Object.entries(scores)
+        .map(([id, score]) => ({ id: `s-${id}`, assessmentId: id, studentId: '24', score, remarks: '', submittedAt: '2026-09-15T00:00:00Z' })) }));
+      return;
+    }
     const assessmentId = new URL(route.request().url()).searchParams.get('assessmentId') || '';
     await route.fulfill(json({ status: 'ok', assessmentId, scores: assessmentId in scores
       ? [{ id: `s-${assessmentId}`, studentId: '24', score: scores[assessmentId], remarks: '', submittedAt: '2026-09-15T00:00:00Z' }] : [] }));
@@ -203,6 +213,13 @@ async function mockTwoStudentsSlowSave(page: import('@playwright/test').Page) {
         await new Promise(resolve => setTimeout(resolve, 1500));
         batches.forEach(b => b.scores.forEach(e => { if (e.score !== null) server[`${b.assessmentId}|${e.studentId}`] = e.score; }));
         await route.fulfill(json({ status: 'ok', savedCount: batches.length }));
+        return;
+      }
+      if (!new URL(route.request().url()).searchParams.has('assessmentId')) {
+        await route.fulfill(json({ status: 'ok', scores: Object.entries(server).map(([key, score]) => {
+          const [aid, sid] = key.split('|');
+          return { id: `s-${aid}-${sid}`, assessmentId: aid, studentId: sid, score, remarks: '', submittedAt: '2026-09-15T00:00:00Z' };
+        }) }));
         return;
       }
       const assessmentId = new URL(route.request().url()).searchParams.get('assessmentId') || '';
@@ -397,12 +414,12 @@ test('Show computation switch adds % and Transmuted steps and the period results
   await expect(table.getByRole('columnheader', { name: 'Transmuted' })).toHaveCount(3);
 });
 
-test('Show computation is desktop only: below 1280 px the switch is hidden and no steps render', async ({ page }) => {
+test('Show computation also works below 1280 px', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 800 });
   await page.addInitScript(() => localStorage.setItem('dentisys_matrix_show_computation', '1'));
   await mockComputationMatrix(page);
   const table = page.locator('table').filter({ hasText: 'Student Info' });
-  await expect(page.locator('button[role="switch"]', { hasText: 'Show computation' })).toBeHidden();
+  await expect(page.locator('button[role="switch"]', { hasText: 'Show computation' })).toHaveAttribute('aria-checked', 'true');
   await expect(table.getByRole('columnheader', { name: 'Average %' })).toBeVisible();
-  await expect(table.getByRole('columnheader', { name: 'Transmuted' })).toHaveCount(0);
+  await expect(table.getByRole('columnheader', { name: 'Transmuted' })).toHaveCount(3);
 });

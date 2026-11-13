@@ -36,6 +36,7 @@ import { flushSync } from 'react-dom';
 import { PrintStyle, PrintHeader, PrintLegend, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { matrixDraftCellKey, matrixDraftKey, pruneSavedMatrixDraft, setMatrixDraftCell, sameMatrixScore } from '../../utils/matrixDraft';
 import { Student, EnrolledSubject, GradeComponents, Assessment, AssessmentScore } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { GradebookMatrix } from '../../components/GradebookMatrix';
@@ -539,7 +540,7 @@ export const GradeComputation: React.FC = () => {
   const [assInstructions, setAssInstructions] = useState('');
   const [assRemarks, setAssRemarks] = useState('');
   const [assStatus, setAssStatus] = useState<'Active' | 'Closed'>('Active');
-  const [assTransmutationEnabled, setAssTransmutationEnabled] = useState(false);
+  const [assTransmutationEnabled, setAssTransmutationEnabled] = useState(true);
   const [assAttendanceDate, setAssAttendanceDate] = useState('');
   const [assAttendanceCode, setAssAttendanceCode] = useState('');
   const [isTransmutationSectionOpen, setIsTransmutationSectionOpen] = useState(false);
@@ -898,7 +899,7 @@ export const GradeComputation: React.FC = () => {
     setAssInstructions('');
     setAssRemarks('');
     setAssStatus('Active');
-    setAssTransmutationEnabled(false);
+    setAssTransmutationEnabled(true);
     setAssAttendanceDate('');
     setAssAttendanceCode('');
     setIsTransmutationSectionOpen(false);
@@ -1431,6 +1432,8 @@ export const GradeComputation: React.FC = () => {
   const [matrixScoresState, setMatrixScoresState] = useState<Record<string, Record<string, string>>>({});
   const [isMatrixSavedAlert, setIsMatrixSavedAlert] = useState(false);
   const [matrixRefreshKey, setMatrixRefreshKey] = useState(0);
+  // Tab-only copy of unsaved matrix cells (kept if the session is ended by force).
+  const matrixDraftStoreKey = user && selectedClassId ? matrixDraftKey(user.user_id, selectedClassId) : null;
 
   // Initialize Matrix Scores State whenever activeAssessments, activeStudents, or assessmentScores change
   useEffect(() => {
@@ -1458,6 +1461,12 @@ export const GradeComputation: React.FC = () => {
       });
     });
     matrixBaselineRef.current = server;
+    // Prune only once scores have loaded; an empty list would wrongly confirm drafts that clear a score.
+    if (matrixDraftStoreKey && assessmentScores.length > 0) {
+      const saved: Record<string, string> = {};
+      Object.entries(server).forEach(([studentId, row]) => Object.entries(row).forEach(([assessmentId, value]) => { saved[matrixDraftCellKey(assessmentId, studentId)] = value; }));
+      pruneSavedMatrixDraft(matrixDraftStoreKey, saved);
+    }
     matrixPendingClearRef.current = keep;
     setMatrixScoresState(matrix);
     matrixScoresRef.current = matrix;
@@ -1592,6 +1601,10 @@ export const GradeComputation: React.FC = () => {
 
   const handleMatrixScoreChange = (studentId: string, assessmentId: string, value: string) => {
     matrixDirtyRef.current = true;
+    if (matrixDraftStoreKey) {
+      const savedValue = matrixBaselineRef.current[studentId]?.[assessmentId] ?? '';
+      setMatrixDraftCell(matrixDraftStoreKey, matrixDraftCellKey(assessmentId, studentId), sameMatrixScore(value, savedValue) ? null : value);
+    }
     scheduleMatrixAutoSave();
     setMatrixScoresState(prev => {
       const next = {
@@ -3387,6 +3400,7 @@ export const GradeComputation: React.FC = () => {
                 return (
                   <GradebookMatrix
                     classId={selectedClassId}
+                    draftUserId={user?.user_id}
                     offering={matrixOffering}
                     students={filteredScoreStudents.map(student => ({ id: student.id, studentId: String(student.studentId ?? ''), name: student.name, lastName: student.lastName }))}
                     assessments={activeAssessments}

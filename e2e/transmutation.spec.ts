@@ -99,6 +99,14 @@ test.describe('Assessment transmutation UI coverage', () => {
       if (route.request().method() !== 'POST') {
         const assessmentId = new URL(route.request().url()).searchParams.get('assessmentId') || '';
         scoreGetAssessmentIds.push(assessmentId);
+        if (!new URL(route.request().url()).searchParams.has('assessmentId')) {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ status: 'ok', scores: Object.entries(persistedScores).flatMap(([id, rows]) => rows.map(row => ({ ...row, assessmentId: id }))) }),
+          });
+          return;
+        }
         if (assessmentId === 'assessment-2') {
           await route.fulfill({
             status: 500,
@@ -173,8 +181,8 @@ test.describe('Assessment transmutation UI coverage', () => {
     const ungradedStudentScoreInput = page.getByRole('spinbutton').nth(1);
     await expect(reloadedScoreInput).toHaveValue('25');
     await expect(ungradedStudentScoreInput).toHaveValue('');
-    expect(scoreGetAssessmentIds).toContain('assessment-1');
-    expect(scoreGetAssessmentIds).toContain('assessment-2');
+    // Scores load in one all-assessments request (no assessmentId).
+    expect(scoreGetAssessmentIds).toContain('');
 
     failScoreSave = true;
     await page.getByLabel('Enable Auto-Save').uncheck();
@@ -186,7 +194,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     expect(computeRequestCount).toBe(0);
   });
 
-  test('admin ignores legacy transmutation defaults and saves only appearance settings', async ({ page }) => {
+  test('admin ignores legacy transmutation defaults and has no separate save button', async ({ page }) => {
     await login(page, 'admin');
 
     let postedSettings: Record<string, any> | null = null;
@@ -217,12 +225,10 @@ test.describe('Assessment transmutation UI coverage', () => {
     await expect(page).toHaveURL('/admin/settings');
     await expect(page.getByText('Minimum Percentage')).toHaveCount(0);
     await expect(page.getByText('Maximum Percentage')).toHaveCount(0);
-    await page.getByRole('button', { name: /Save appearance setting/i }).click();
-    await expect.poll(() => postedSettings).not.toBeNull();
-    expect(postedSettings).not.toHaveProperty('transmutationDefaults');
+    // Appearance saves on click (account theme); the page never posts admin settings.
+    await expect(page.getByRole('button', { name: /Save appearance setting/i })).toHaveCount(0);
+    expect(postedSettings).toBeNull();
     // Retention trigger and course component ratios are no longer Admin settings.
-    expect(postedSettings).not.toHaveProperty('retentionThreshold');
-    expect(postedSettings).not.toHaveProperty('weights');
     await expect(page.getByText('Course component ratios')).toHaveCount(0);
     await expect(page.getByText('Retention trigger grade')).toHaveCount(0);
     await expect(page.getByTestId('grading-policy-card')).toContainText('Retention trigger: Grade 2.5.');

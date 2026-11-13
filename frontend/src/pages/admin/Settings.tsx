@@ -3,12 +3,10 @@ import {
   CheckCircle2,
   Moon,
   RotateCcw,
-  Save,
   ShieldAlert,
   SlidersHorizontal,
   Sun,
 } from "lucide-react";
-import { useApp } from "../../context/AppContext";
 import {
   Card,
   CardContent,
@@ -17,34 +15,13 @@ import {
 } from "../../components/Card";
 import { Modal } from "../../components/Modal";
 import { useThemePreference } from "../../hooks/useThemePreference";
-import {
-  updateAdminSettingsApi,
-} from "../../services/apiClient";
 
 export const Settings: React.FC = () => {
-  const { settings, updateSettings } = useApp();
-  // Appearance applies immediately; Save provides an explicit server sync.
+  // Appearance applies immediately and is saved to the account by changeTheme.
   const { theme, changeTheme } = useThemePreference();
   const [themeError, setThemeError] = useState("");
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
 
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError("");
-    try {
-      await updateAdminSettingsApi({ theme });
-      updateSettings({ ...settings, theme });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      console.error("Failed to sync settings with backend", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to save system settings.",
-      );
-    }
-  };
   const reset = () => {
     ["dentisys_students", "dentisys_attendance", "dentisys_settings"].forEach(
       (key) => localStorage.removeItem(key),
@@ -60,15 +37,7 @@ export const Settings: React.FC = () => {
           System administration
         </div>
       </div>
-      {error && (
-        <div
-          role="alert"
-          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300"
-        >
-          {error}
-        </div>
-      )}
-      <form onSubmit={save} className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <div className="lg:col-span-4 space-y-5">
           <Card>
             <CardHeader>
@@ -165,17 +134,9 @@ export const Settings: React.FC = () => {
               <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Enabled assessments use (score ÷ maximum score) × 50 + 50.</p>
               <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">Present, Late and Excused use the formula; Absent is 0%. Unresolved linked attendance and missing scores remain incomplete.</p>
             </div>
-            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-              <button
-                className="flex items-center gap-2 whitespace-nowrap px-5 py-2.5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white text-xs font-bold shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Save className="w-4 h-4" />
-                {saved ? "Settings saved" : "Save appearance setting"}
-              </button>
-            </div>
           </CardContent>
         </Card>
-      </form>
+      </div>
       <Modal
         isOpen={showResetConfirmation}
         onClose={() => setShowResetConfirmation(false)}

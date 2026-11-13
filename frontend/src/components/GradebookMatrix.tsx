@@ -11,6 +11,7 @@ import {
 import { Search, X } from 'lucide-react';
 import { percentageToGWA } from '../utils/gradeHelper';
 import GradeValue from './GradeValue';
+import { clearMatrixDraft, matrixDraftKey, matrixDraftRestoreCells, readMatrixDraft } from '../utils/matrixDraft';
 
 interface MatrixStudent {
   id: string;
@@ -30,6 +31,8 @@ interface MatrixAssessment {
 
 interface GradebookMatrixProps {
   classId: string;
+  /** Signed-in user id; the tab draft of unsaved scores is kept per user and class. */
+  draftUserId?: string | number;
   offering: { courseId: number; semester: string; schoolYear: string } | null;
   students: MatrixStudent[];
   assessments: MatrixAssessment[];
@@ -74,7 +77,7 @@ const weightLabel = (weight: number | string) => `${Number(weight)}%`;
  * grouped by component (Lecture / Laboratory) and saved Grade Weights categories.
  */
 export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
-  classId, offering, students, assessments, scores, pendingClearKeys, onScoreChange, onScoreBlur, isValidScore, refreshKey,
+  classId, draftUserId, offering, students, assessments, scores, pendingClearKeys, onScoreChange, onScoreBlur, isValidScore, refreshKey,
 }) => {
   const [config, setConfig] = useState<FacultyGradingConfiguration | null>(null);
   const [configLoaded, setConfigLoaded] = useState(false);
@@ -86,24 +89,35 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
   const [pinBoth, setPinBoth] = useState(false);
   const [periodFilter, setPeriodFilter] = useState<'all' | 'midterm' | 'final'>('all');
   const [componentFilter, setComponentFilter] = useState<'all' | 'lecture' | 'laboratory'>('all');
-  // GRA-03: computation columns are desktop-only for now (>= 1280 px) and remembered per browser.
+  // GRA-03: computation columns at every width, remembered per browser.
   const [showComputation, setShowComputation] = useState(() => {
     try { return localStorage.getItem(COMPUTATION_KEY) === '1'; } catch { return false; }
   });
-  const [wide, setWide] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1280px)').matches);
-  useEffect(() => {
-    const query = window.matchMedia?.('(min-width: 1280px)');
-    if (!query) return undefined;
-    const update = () => setWide(query.matches);
-    update();
-    query.addEventListener('change', update);
-    return () => query.removeEventListener('change', update);
-  }, []);
-  const flow = showComputation && wide;
+  const flow = showComputation;
   const toggleComputation = () => {
     const next = !showComputation;
     setShowComputation(next);
     try { localStorage.setItem(COMPUTATION_KEY, next ? '1' : '0'); } catch { /* storage unavailable */ }
+  };
+
+  // Unsaved scores kept in this tab from an earlier session. The draft is read once when the matrix
+  // opens (before new typing); the offer is recomputed as scores arrive, so late-loading scores count.
+  const draftKey = draftUserId !== undefined && classId ? matrixDraftKey(draftUserId, classId) : null;
+  const [draftSnapshot, setDraftSnapshot] = useState<Record<string, string>>({});
+  useEffect(() => { setDraftSnapshot(draftKey ? readMatrixDraft(draftKey) : {}); }, [draftKey]);
+  const draftOffer = useMemo(
+    () => (Object.keys(draftSnapshot).length === 0 || !students.some(student => scores[student.id])
+      ? []
+      : matrixDraftRestoreCells(draftSnapshot, scores, assessments.map(a => a.id))),
+    [draftSnapshot, students, assessments, scores],
+  );
+  const restoreDraft = () => {
+    draftOffer.forEach(cell => onScoreChange(cell.studentId, cell.assessmentId, cell.value));
+    setDraftSnapshot({});
+  };
+  const discardDraft = () => {
+    if (draftKey) clearMatrixDraft(draftKey);
+    setDraftSnapshot({});
   };
 
   const offeringKey = offering ? `${offering.courseId}|${offering.semester}|${offering.schoolYear}` : '';
@@ -553,20 +567,20 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <button
             type="button"
             role="switch"
             aria-checked={showComputation}
             onClick={toggleComputation}
-            className="hidden xl:inline-flex items-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-300"
+            className="inline-flex items-center gap-2 whitespace-nowrap text-[11px] font-bold text-slate-600 dark:text-slate-300"
           >
             <span className={`relative inline-block h-4 w-7 rounded-full transition-colors ${showComputation ? 'bg-clinical-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
               <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${showComputation ? 'left-3.5' : 'left-0.5'}`} />
             </span>
             Show computation
           </button>
-        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+        <div className="whitespace-nowrap text-[11px] text-slate-500 dark:text-slate-400">
           Showing <span className="font-bold text-slate-700 dark:text-slate-200">{filteredStudents.length}</span> of {students.length} students
         </div>
         </div>
@@ -579,6 +593,16 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
       )}
       {computeNotice && <p className="px-5 pt-1 text-[11px] text-slate-500">Calculated columns: {computeNotice}</p>}
       <p className="px-5 text-[10px] text-slate-500 dark:text-slate-400">Calculated columns use the server's grade computation of the saved scores; they update after “Save all matrix scores”.</p>
+
+      {draftOffer.length > 0 && (
+        <div className="px-5">
+          <div role="status" className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+            <span>{draftOffer.length} unsaved {draftOffer.length === 1 ? 'score' : 'scores'} from your last session {draftOffer.length === 1 ? 'was' : 'were'} kept in this tab.</span>
+            <button type="button" onClick={restoreDraft} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40 border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40">Restore</button>
+            <button type="button" onClick={discardDraft} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40 border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40">Discard</button>
+          </div>
+        </div>
+      )}
 
       <div className="overflow-x-auto max-h-[600px] max-xl:max-h-[max(600px,calc(100dvh-6rem))] overflow-y-auto">
         <table className="min-w-full border-collapse text-xs">

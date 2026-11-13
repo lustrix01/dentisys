@@ -436,6 +436,8 @@ Integrity. A read-only chain check runs in the PostgreSQL gate and after each de
 
 Assessments may optionally enable grade transmutation. The fixed transformation is `(score ÷ maximum score) × 50 + 50`. There are no editable institution or assessment bounds. Legacy database bound columns remain for compatibility and are ignored by calculations; compatibility API responses return 50% and 100%.
 
+Owner-approved amendment (2026-11-14), T1: a new assessment created in the Faculty assessment dialog starts with transmutation enabled; Faculty may turn it off. Existing assessments keep their stored setting.
+
 Raw assessment points remain authoritative historical scores and are never replaced by a transmuted result. Linking an enabled assessment to an attendance session is optional. A link identifies one attendance session of the assessment's class by session date and a nonblank session code. Without a link, the fixed transformation applies to the raw score and attendance is not considered. With a link, attendance is considered as described below. If the linked session is revoked, the assessment is treated as unlinked.
 
 For an enabled assessment, present, late, and excused attendance apply the fixed transformation:
@@ -1162,6 +1164,10 @@ Owner decision (2026-10-13): Below 1280 px wide, Full Matrix View shows a Pin sw
 Owner decision (2026-11-03): Below 640 px wide only the Full Name column stays pinned, in a narrower column that wraps, and the Pin switch is hidden. From 640 px to 1279 px the switch reads "Keep visible while scrolling: Name / ID and name" (default Name). Below 1280 px the matrix grows to the screen height (at least its former 600 px). ID Number and Full Name stay separate columns, and at 1280 px and wider nothing changes. This supersedes the 2026-10-13 decision's phone behaviour and switch wording.
 
 Owner-approved amendment (2026-11-14), GRA-03: Full Matrix View has a "Show computation" switch, off by default and remembered per browser, shown at 1280 px and wider (other widths may follow by amendment). When it is on, each categorised assessment shows Score, % (score ÷ maximum × 100) and Transmuted. Transmuted is the value used in the category average: the transmuted percentage, the same % when transmutation is off, or "Absent (0)" when an absence on the linked session zeroes it. Each category shows "Average %" (formerly "Total") and its Weighted contribution. No points total is shown. Period results stay at the end of each period. Assessments not in a category show scores only. The values are the server's computation of saved scores; the switch changes no grade.
+
+Owner-approved amendment (2026-11-14), GRA-03 phones and tablets: the "Show computation" switch is shown at every width, with the same columns; this supersedes "shown at 1280 px and wider" above.
+
+Owner-approved amendment (2026-11-14), T4: Full Matrix View keeps a tab-only copy (browser session storage, per user and class) of scores typed but not yet saved. If the session ends by force, then after signing back in in the same tab the matrix offers "Restore" or "Discard" for the kept scores that still differ from the saved ones. Restored scores are ordinary unsaved edits. The user's own Sign out and closing the tab discard the copy.
 
 Allow a blank due date for activities without a deadline. The Owner clarified on 2026-09-24 that activity due dates MAY overlap, including multiple activities in one class and activities across classes, Faculty, and courses. This corrects the PDF's no-overlap instruction; no collision restriction or uniqueness constraint applies to due dates. A blank due date is allowed; GRD-001's optional attendance link is unaffected.
 

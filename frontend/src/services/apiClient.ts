@@ -1341,6 +1341,17 @@ export function saveFacultyRemedialApi(data: {
   return request('POST', '/faculty/retention/remedial', data);
 }
 
+export function getFacultyAllScoresApi(): Promise<{ status: string; scores: Array<{
+  id: string;
+  assessmentId: string;
+  studentId: string;
+  score: number;
+  remarks?: string;
+  submittedAt: string;
+}> }> {
+  return request('GET', '/faculty/scores');
+}
+
 export function getFacultyAssessmentScoresApi(assessmentId: string): Promise<{ status: string; assessmentId: string; scores: Array<{
   id: string;
   studentId: string;

@@ -4,6 +4,7 @@ import type { AuthPhase, SafeUser } from '../types/auth';
 import * as apiClient from '../services/apiClient';
 import * as auditService from '../services/auditService';
 import { clearCurrentSecretaryUser } from '../pages/secretary/utils';
+import { clearAllMatrixDrafts } from '../utils/matrixDraft';
 
 const LEGACY_CREDENTIAL_KEYS = [
   'dentisys_user',
@@ -198,7 +199,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ ...initialState, phase: 'unauthenticated' });
   }, []);
 
-  const logout = useCallback(async () => {
+  // Ends the session without touching the tab's unsaved-score drafts (idle expiry, expired token, other tab).
+  const forceLogout = useCallback(async () => {
     if (logoutInFlightRef.current) return;
     logoutInFlightRef.current = true;
     authOperationRef.current += 1;
@@ -217,6 +219,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // The user's own Sign out: unsaved-score drafts of this tab are discarded too.
+  const logout = useCallback(async () => {
+    clearAllMatrixDrafts();
+    await forceLogout();
+  }, [forceLogout]);
+
   useEffect(() => {
     if (state.phase !== 'authenticated') return undefined;
     const expireIfIdle = () => {
@@ -226,7 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (Date.now() - lastActivity < IDLE_TIMEOUT_MS) return false;
       if (!idleLogoutStartedRef.current) {
         idleLogoutStartedRef.current = true;
-        void logout();
+        void forceLogout();
       }
       return true;
     };
@@ -246,7 +254,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (event.key === LOGOUT_MARKER_KEY && event.newValue) {
         if (!idleLogoutStartedRef.current) {
           idleLogoutStartedRef.current = true;
-          void logout();
+          void forceLogout();
         }
         return;
       }
@@ -279,10 +287,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('storage', onStorage);
       document.removeEventListener('visibilitychange', checkAndHeartbeat);
     };
-  }, [state.phase, logout]);
+  }, [state.phase, forceLogout]);
 
   useEffect(() => {
-    const onExpired = () => { void logout(); };
+    const onExpired = () => { void forceLogout(); };
     const onTokenRefreshed = (event: Event) => {
       const token = (event as CustomEvent<string>).detail;
       if (!token) return;
@@ -294,7 +302,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('dentisys:auth-expired', onExpired);
       window.removeEventListener('dentisys:access-token-refreshed', onTokenRefreshed);
     };
-  }, [logout]);
+  }, [forceLogout]);
 
   const value: AuthContextValue = {
     ...state,

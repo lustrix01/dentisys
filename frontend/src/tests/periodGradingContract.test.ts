@@ -78,9 +78,8 @@ test('Matrix keeps its sticky header and arrow-key input navigation', () => {
   assert.match(matrix, /border-amber-400 bg-amber-50/);
   // The phone switch was removed on purpose (owhie8 UI, Owner-approved).
   assert.doesNotMatch(matrix, /isPhone|onSingleActivityView/);
-  // GRA-03: matchMedia is allowed only for the desktop-only (>= 1280 px) Show computation columns.
-  assert.equal((matrix.match(/matchMedia/g) ?? []).length, 2);
-  assert.match(matrix, /\(min-width: 1280px\)/);
+  // GRA-03: Show computation works at every width, so the matrix needs no width checks.
+  assert.doesNotMatch(matrix, /matchMedia/);
 });
 
 test('Matrix renders exactly one identity header and matching ID and name body cells', () => {
@@ -1139,6 +1138,7 @@ function scoreSaveHarness(mode: 'single' | 'matrix' = 'single', autoSaveEnabled 
     setMatrixScoresState: (update: (previous: typeof matrixState) => typeof matrixState) => { matrixState = update(matrixState); },
     setMatrixRefreshKey: () => {},
     setIsMatrixSavedAlert: () => {},
+    matrixDraftStoreKey: null,
     saveFacultyScoreBatchesApi: async (batches: Array<{ scores: Array<{ studentId: string; score: number | null }> }>) => { calls.push(batches.flatMap(batch => batch.scores)); return save(); },
     selectedAssessmentId: 'assessment',
     activeAssessment: { classId: 'class', maxScore: 100, title: 'Quiz', type: 'Quiz', gradingPeriod: 'Midterm' },

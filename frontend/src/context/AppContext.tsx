@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Student, AttendanceRecord, SystemSettings, Assessment, AssessmentScore } from '../types';
 import { recordAudit } from '../services/auditService';
-import { getFacultyAssessmentScoresApi, getFacultyAssessmentsApi, getFacultyAttendanceApi, getFacultyStudentsApi } from '../services/apiClient';
+import { getFacultyAllScoresApi, getFacultyAssessmentsApi, getFacultyAttendanceApi, getFacultyStudentsApi } from '../services/apiClient';
 import { useAuth } from './AuthContext';
 
 /**
@@ -131,37 +131,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAssessments(loadedAssessments);
         setAttendanceRecords(attendanceData.records as AttendanceRecord[]);
 
-        // Bounded concurrency: fast enough for dozens of assessments without
-        // flooding the API with one burst of parallel requests that starves
-        // the route-specific API calls.
-        const SCORE_FETCH_CONCURRENCY = 4;
-        const scoreCollections: AssessmentScore[][] = loadedAssessments.map(() => []);
-        let nextAssessmentIndex = 0;
-        const loadScores = async (): Promise<void> => {
-          while (!ignore && nextAssessmentIndex < loadedAssessments.length) {
-            const index = nextAssessmentIndex;
-            nextAssessmentIndex += 1;
-            const assessment = loadedAssessments[index];
-            try {
-              const response = await getFacultyAssessmentScoresApi(assessment.id);
-              scoreCollections[index] = response.scores.map(score => ({
-                id: score.id,
-                assessmentId: assessment.id,
-                studentId: score.studentId,
-                score: Number(score.score),
-                remarks: score.remarks,
-                submittedAt: score.submittedAt,
-              }));
-            } catch (err) {
-              console.warn(`Backend score sync warning for assessment ${assessment.id}:`, err);
-            }
-          }
-        };
-        await Promise.all(
-          Array.from({ length: Math.min(SCORE_FETCH_CONCURRENCY, loadedAssessments.length) }, () => loadScores()),
-        );
+        let loadedScores: AssessmentScore[] = [];
+        try {
+          const response = await getFacultyAllScoresApi();
+          loadedScores = response.scores.map(score => ({
+            id: score.id,
+            assessmentId: score.assessmentId,
+            studentId: score.studentId,
+            score: Number(score.score),
+            remarks: score.remarks,
+            submittedAt: score.submittedAt,
+          }));
+        } catch (err) {
+          console.warn('Backend score sync warning:', err);
+        }
         if (ignore) return;
-        setAssessmentScores(scoreCollections.flat());
+        setAssessmentScores(loadedScores);
       } catch (err) {
         if (!ignore) console.warn('Backend student sync warning:', err);
       }

@@ -7445,6 +7445,33 @@ $foreignAssessmentId = (int) $pdo->query(
 expect_true($foreignAssessmentId > 0, 'Another Faculty member owns an assessment');
 [$foreignScoresStatus] = integration_http_get_json('/api/faculty/scores?assessmentId=' . $foreignAssessmentId, $seedFacultyAccessToken);
 expect_same(404, $foreignScoresStatus, 'Scores of another Faculty member\'s assessment stay hidden');
+[$allScoresStatus, $allScoresBody] = integration_http_get_json('/api/faculty/scores', $seedFacultyAccessToken);
+expect_same(200, $allScoresStatus, 'Faculty can read all own scores in one request');
+$ownScoreRows = $pdo->query(
+    "SELECT sc.assessment_id, sc.student_id FROM assessment_scores sc
+       JOIN assessments a ON a.assessment_id = sc.assessment_id
+       JOIN class_sections cs ON cs.cs_id = a.cs_id
+       JOIN user_accounts ua ON ua.user_id = cs.instructor_user_id
+      WHERE ua.login_email = 'faculty@bicol-u.edu.ph'
+      ORDER BY sc.assessment_id, sc.student_id"
+)->fetchAll(PDO::FETCH_NUM);
+$allScoreKeys = array_map(static fn(array $s): string => $s['assessmentId'] . '|' . $s['studentId'], $allScoresBody['scores'] ?? []);
+expect_same(
+    array_map(static fn(array $r): string => $r[0] . '|' . $r[1], $ownScoreRows),
+    $allScoreKeys,
+    'All-scores response is exactly the own scores, ordered by assessment then student'
+);
+expect_true(
+    count(array_unique(array_map(static fn(array $s): string => $s['assessmentId'], $allScoresBody['scores'] ?? []))) >= 2,
+    'All-scores response spans more than one assessment'
+);
+$foreignScoreCount = (int) $pdo->query(
+    "SELECT COUNT(*) FROM assessment_scores WHERE assessment_id = " . $foreignAssessmentId
+)->fetchColumn();
+expect_true(
+    !in_array($foreignAssessmentId, array_map(static fn(array $s): int => (int) $s['assessmentId'], $allScoresBody['scores'] ?? []), true),
+    'All-scores response excludes another Faculty member\'s scores (foreign assessment had ' . $foreignScoreCount . ')'
+);
 $auditDeleteEventStmt = $pdo->prepare("SELECT COUNT(*) FROM audit_events WHERE action_code = 'assessment_deleted' AND target_id = ?");
 $auditDeleteEventStmt->execute([(string) $auditDeleteAssessmentId]);
 expect_same(1, (int) $auditDeleteEventStmt->fetchColumn(), 'Deleting the assessment appends one audit event');

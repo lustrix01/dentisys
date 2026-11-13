@@ -3988,6 +3988,31 @@ function handle_faculty_scores_get(): void
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
 
+        if (!isset($_GET['assessmentId'])) {
+            // No assessment given: every score of the signed-in Faculty's assessments, in one response.
+            $all = $pdo->prepare(
+                "SELECT sc.score_id, sc.assessment_id, sc.student_id, sc.score, sc.remarks, sc.submitted_at
+                 FROM assessment_scores sc
+                 JOIN assessments a ON a.assessment_id = sc.assessment_id
+                 JOIN class_sections cs ON cs.cs_id = a.cs_id
+                 WHERE cs.instructor_user_id = ?
+                 ORDER BY sc.assessment_id, sc.student_id"
+            );
+            $all->execute([$authCtx['user_id']]);
+            json_response([
+                'status' => 'ok',
+                'scores' => array_map(static fn(array $row): array => [
+                    'id' => (string) $row['score_id'],
+                    'assessmentId' => (string) $row['assessment_id'],
+                    'studentId' => (string) $row['student_id'],
+                    'score' => (float) $row['score'],
+                    'remarks' => $row['remarks'],
+                    'submittedAt' => $row['submitted_at'],
+                ], $all->fetchAll(PDO::FETCH_ASSOC)),
+            ], 200);
+            return;
+        }
+
         $assessmentId = (int) ($_GET['assessmentId'] ?? 0);
         $owner = $pdo->prepare(
             "SELECT cs.instructor_user_id FROM assessments a JOIN class_sections cs ON cs.cs_id = a.cs_id
