@@ -23,21 +23,9 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 # 4. Dean
 
-## 4.2 Dean Dashboard
-
-**Status: Partial.** Metrics are server-backed; no test checks that the redundant items are gone.
-
-Keep meaningful at-a-glance information; remove Quick Action buttons that only repeat the sidebar.
-
 ## 4.3 Faculty invitation row actions
 
-**Status: Partial.** The invitation lifecycle is implemented. No test shows that View/Eye is the primary row action instead of Reissue, or that no token material reaches the browser.
-
-## 4.4 Dean Settings cleanup
-
-**Status: Partial.** No test shows that both settings are gone.
-
-Remove **Course Component Ratios** and **Retention Standard**. Do not add replacement settings; the page may stay sparse.
+**Status: Partial.** No token material reaches the browser (tested). The row actions are Edit, Revoke and Reissue; there is no View action, so Reissue is the main non-destructive action. Add a View/Eye action as the primary row action (a visible change: demo first).
 
 ## 4.5–4.7 Superadmin mode
 
@@ -63,12 +51,6 @@ Remove Quick Actions that repeat the sidebar and duplicate Assigned/Total Classe
 
 Rule: confirm mutations, not interactions.
 
-## 5.3 Midterm Watchlist cannot assign remedial
-
-**Status: Partial.** The server only allows remedial from final-grade eligibility. No test shows that the Midterm Watchlist itself offers no remedial action.
-
-During Midterm, students may appear as **At Risk**; no remedial can be offered or assigned.
-
 ## 5.4 Remedial record details
 
 **Status: Partial.** Attempts and notes are stored. A complete record (Student, Course, Section, original course grade, date, score, pass/fail, status, Faculty notes, completion date) is not shown to be returned or displayed together.
@@ -91,16 +73,6 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 - **Dean school-year dropdown:** can list a school year whose only classes are hidden (Cancelled or Created by mistake).
 - **Grading setup:** the grading-configuration save and the grading snapshot work per course offering (course and school year), not per class, so they still include assessments of a Cancelled or Created-by-mistake class of the same offering.
 - **Wording:** four client-side messages in Classes & Rosters (add student, edit class, remove student, edit roster student) still say "Past school-year classes are view-only." for archived classes. Archived cards disable those buttons and the server answers "Archived classes are view-only.", so this is wording only.
-
----
-
-# 7. Secretary
-
-## 7.1 Secretary Dashboard
-
-**Status: Partial.** Server-backed status exists; no test checks that the redundant items are gone.
-
-Remove redundant information and Quick Actions that repeat the sidebar; keep operational status, attendance information, alerts and pending work.
 
 ---
 
@@ -192,9 +164,13 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **3.1** Read-only profiles with a Change Name action for every role.
 - **3.2** Authenticator confirmation for name changes.
 - **4.1** Dean My Activity: dropped; the Audit Trail role filter covers it.
+- **4.2** Dean Dashboard: server-backed metrics, no Quick Actions block (tested).
+- **4.4** Dean Settings: no Course Component Ratios or Retention Standard setting (tested).
+- **5.3** Midterm Watchlist offers no remedial action; the server refuses remedial without a final grade (tested).
 - **5.5** Future worksheet dates: sessions can be scheduled or viewed, not recorded.
 - **5.8** Email History built from the outbox, one row per send action.
 - **5.11** Client requests: cost-recovery remedials implemented; the remove-student error was not reproduced.
+- **7.1** Secretary Dashboard: no Quick Actions; status, alerts and pending work remain (tested).
 - **7.2** Manual Override filtering: date, then session, then records; revoked sessions view-only.
 - **9.6** November 2026 polish-audit UI follow-ups.
 - **9.8** Shared tab bar standard (white card bar and grey list switch).
