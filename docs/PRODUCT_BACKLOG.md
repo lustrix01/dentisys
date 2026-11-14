@@ -25,7 +25,7 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 ## 4.3 Faculty invitation row actions
 
-**Status: Partial.** No token material reaches the browser (tested). The row actions are Edit, Revoke and Reissue; there is no View action, so Reissue is the main non-destructive action. Add a View/Eye action as the primary row action (a visible change: demo first).
+**Status: Partial.** No token material reaches the browser (tested). The row actions are Edit, Revoke and Reissue; there is no View action, so Reissue is the main non-destructive action. Add a View/Eye action as the primary row action (a visible change: demo first). Decided: a read-only View dialog (name, email, status, sent and expiry dates, and that invitation's email history), no token or link, as the primary row action.
 
 ## 4.5–4.7 Superadmin mode
 
@@ -75,7 +75,7 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 ## 8.2 Audit event for recovery-code regeneration
 
-**Status: On hold for the Owner.** Regenerating recovery codes writes no audit event. Whether to add one is the Owner's decision.
+**Status: Decided; not built.** Regenerating recovery codes writes an audit event "Regenerated recovery codes" (no codes stored), like the other MFA events.
 
 ---
 
@@ -83,11 +83,7 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 ## 9.1 Faculty class counts
 
-**Status: Cause found; needs an Owner decision.** The Dashboard counts current-year classes archived as Finished (`handle_faculty_dashboard_kpis` keeps `archive_reason = 'finished'`), while Classes & Rosters moves them to its Archived tab and counts only classes with no archive reason. The Dashboard also requires status Active, which Classes & Rosters does not (no code path sets another status today). Classes & Rosters has no school-year selector, so its Assigned tab is always the current year. Decide which count is right before aligning them.
-
-## 9.3 Main bundle size
-
-**Status: Needs an Owner decision (non-blocking).** The frontend build warns that the main chunk is about 2.3 MB (565 kB gzipped): every page, recharts and the spreadsheet library ship in it. Splitting it means loading pages on demand (`React.lazy` per route in `App.tsx`), a new pattern for this app.
+**Status: Decided; not built.** The Dashboard counts current-year Finished-archived classes, which Classes & Rosters moves to its Archived tab. Decided: for the current school year the Dashboard counts only classes still running (no archive reason), and its student and at-risk counts follow the same classes; past-year views are unchanged.
 
 ## 9.4 Official grade sheet export in the BU format
 
@@ -97,18 +93,16 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 **Status: Decided; not built.** The Owner's choices:
 
-- **Product name:** "DentiSYS" in the interface (sidebar, page-title fallback, sign-in pages, email sender "via DentiSYS Portal", About links).
-- **Student number:** "Student Number" on desktop; "Student No." only in tight columns. "Student ID" labels for the same field change to match.
+- **Product name:** "DentiSYS" in everything users see: screens, emails, PDF and Excel exports, landing page. Developer docs, spec.md, code and the repository keep "DentiSys".
+- **Student number:** "Student No." in table column headers and phone cards; "Student Number" in forms, dialogs, detail views and messages. "Student ID" is not used for this field.
 - **Student column:** "Student Details" ("Student Info" in `GradebookMatrix.tsx` changes).
 - **Top role:** "Dean" ("The Admin invitation" in `FacultyInvitation.tsx` and other "Admin" labels change).
 - **Teacher role:** "Faculty" ("Course Instructor" on the About page and "Instructor" on Student class cards change).
 - Not decided: only 6 of 41 tables show their column headers in small capitals; the rest use normal text.
 
-## 9.9 Full Matrix View Excel export
+## 9.9 Full Matrix View export (Excel and PDF)
 
-**Status: Not started.** The matrix export does not include the Show computation steps (% and Transmuted per assessment, category Average % and Weighted). The export must match what the matrix computes today.
-
----
+**Status: Decided; Excel built, not committed.** The Reports Assessment Scores sheet and its PDF print match Full Matrix View with Show computation on: per assessment Score, % (raw) and Transmuted (the value used in the grade); per category Average % and Weighted.
 
 # 10. Ticket batch 1 — remaining items
 
@@ -124,13 +118,17 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 **Status: Not started (visual verification only).** The three-zone session card ("Sessions", "Start session", "Schedule session") is implemented. Verify the Scheduled and View-only pill variants with seeded states and review the desktop spacing.
 
+## 10.10 Attendance category transmutation default
+
+**Status: Decided; not built.** A new assessment in a category named Attendance starts with transmutation off; Faculty may switch it on. Saved automatic (attendance-record) Attendance categories keep working.
+
 ---
 
 # 11. Configuration and code defects found by the docs audit
 
-**Status: Needs an Owner decision.** Found while syncing the docs to the code (record: [docs sync changes](archive/docs-sync-changes-2026-11.md)).
+**Status: Decided; not built.** Found while syncing the docs to the code (record: [docs sync changes](archive/docs-sync-changes-2026-11.md)).
 
-- **11.5** `backend/app/attendance_sessions.php` checks "under 24 hours" beside the 12-hour session cap. The 24-hour check is not redundant: it is what rejects a session whose class end equals its opening time (zero length), which the 12-hour check does not catch. Decide whether a zero-length session is rejected by its own rule (then the 24-hour wording can go) or the check stays as it is.
+- **11.5** Decided: a session whose class end equals its opening time is rejected by its own rule, "Class end must be after the opening time.", replacing the "under 24 hours" check in `backend/app/attendance_sessions.php`.
 
 ---
 
@@ -152,7 +150,7 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **7.2** Manual Override filtering: date, then session, then records; revoked sessions view-only.
 - **8.2 (part)** Recovery-code regeneration and turning 2FA off are limited to 10 attempts per 5 minutes per user.
 - **9.2** Grade Computation tab strip on phones: no horizontal scrolling at 320–390 px; the shared section tabs wrap with short names.
-- **9.3 (part)** The ineffective dynamic import of `apiClient` is gone.
+- **9.3** Main bundle size (2.3 MB, 565 kB gzipped): the ineffective dynamic import of `apiClient` is fixed; the size is left as is by the Owner; reopen if first load on phones feels slow.
 - **9.6** November 2026 polish-audit UI follow-ups.
 - **9.8** Shared tab bar standard (white card bar and grey list switch).
 - **9.9 (part)** Full Matrix View loads all scores in one request per class; Show computation at every width.

@@ -52,11 +52,18 @@ These rules apply to everyone who changes this repository — people working by 
 - **Presentation-only work** — visual JSX/CSS, layout, styles, presentational labels, contrast, and other non-authoritative visual polish — must not change anything in the functional list above. A presentation contributor who finds a needed functional change reports it instead of making it.
 - Keep one person responsible for the shared disposable test environment at a time. Reuse a running stack when safe and avoid unnecessary rebuilds; never delete the development database or volume. Use the separate disposable integration project for destructive validation.
 
+## Documentation
+
+- Current-reference docs (README.md, everything in `docs/` outside `docs/archive/`, `spec.md`, the `.env` examples and the scripts' help text) describe the system as it is now. A change that alters behaviour, setup, env vars, scripts or screens updates the affected current-reference docs in the same commit, and the change is not done until they match. Edit them in place; no "as of", "Update:" or other dated add-ons.
+- Dated records (handoffs, merge notes, reviews, audits, changelogs, proposals) go straight to `docs/archive/` and are never edited afterwards, except to fix links.
+- This applies to every contributor. When merging someone else's work, missing doc updates are a merge finding, fixed in the merge commit.
+- `./scripts/check.ps1` enforces part of this: its documentation contract fails on an env var the code reads that no `.env` example documents, on a broken link in a current doc, and on a dated file outside `docs/archive/`.
+
 ## Validation
 
 - While iterating, run syntax/type checks and focused tests for changed behavior. Verify fixture correctness with a cheap check before expensive suites. If a check fails, isolate a minimal reproducer and classify the failure as infrastructure, fixture, or product before rerunning a broad gate.
 - Batch coherent work before the aggregate gates. Review one frozen batch once; after fixes, rerun the focused checks and only the evidence the fixes invalidated; do not repeat unchanged passing checks.
-- Documentation or instruction changes: run `git diff --check` and targeted reference checks; run the documentation contract when its covered files or migration naming change.
+- Documentation or instruction changes: run `git diff --check` and the documentation contract in `./scripts/check.ps1`.
 - Ordinary frontend or backend runtime changes: use targeted checks while iterating, then run `./scripts/check.ps1` before handoff. Do not repeat checks already included in that script.
 - Dockerfiles, dependency locks, or Compose build changes: run `docker compose config --quiet` and build the affected service. Database, authentication, runtime-integration-sensitive, milestone, or final changes also require `./scripts/check-postgres.ps1`.
 - Run `./scripts/migrate.ps1` only when applying or verifying migrations against an existing development database, and `./scripts/smoke.ps1` only when checking a running stack.
