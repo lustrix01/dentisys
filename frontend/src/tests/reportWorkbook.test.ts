@@ -90,3 +90,22 @@ test('assessment scores sheet: Show computation columns carry the server values'
   assert.deepEqual(rowValues(d[6]).slice(2), [16, 0.8, 0.9, 10, 0.5, 'Absent (0)', 45, 18, 15, 0.75]);
   assert.deepEqual(rowValues(d[7]).slice(2), Array(10).fill(null));
 });
+
+test('iBU look: only the report-name row is navy with white text, other title lines plain, header row light blue with blue text', () => {
+  const sheet = buildReportSheet({
+    sheet: 'X', title: 'REPORT', filter: 'f', term: 't', by: 'b', now: NOW,
+    columns: [{ header: 'A', width: 10 }], rows: [['v']],
+  });
+  const style = (c: unknown) => c as { backgroundColor?: string; textColor?: string; fontWeight?: string };
+  sheet.data.slice(0, 7).forEach((row: any[], i: number) => {
+    if (i === 3) assert.deepEqual([style(row[0]).backgroundColor, style(row[0]).textColor, style(row[0]).fontWeight], ['#0E436C', '#FFFFFF', 'bold']);
+    else assert.equal(style(row[0]).backgroundColor, undefined);
+  });
+  assert.deepEqual([style(sheet.data[1][0]).textColor, style(sheet.data[1][0]).fontWeight, style(sheet.data[4][0]).textColor], ['#0E436C', 'bold', '#1E2939']);
+  assert.deepEqual([style(sheet.data[HEADER_ROW_INDEX][0]).backgroundColor, style(sheet.data[HEADER_ROW_INDEX][0]).textColor, style(sheet.data[HEADER_ROW_INDEX][0]).fontWeight], ['#E1F0FD', '#075F9D', 'bold']);
+  assert.equal(style(sheet.data[HEADER_ROW_INDEX + 1][0]).backgroundColor, undefined);
+  const { sheet: list } = buildClassList(classInput);
+  assert.equal(style(list.data[0][0]).backgroundColor, undefined);
+  assert.equal(style(list.data[3][0]).backgroundColor, '#0E436C');
+  assert.equal(style(list.data.find((r: any[]) => cellValue(r[0]) === '#')![0]).backgroundColor, '#E1F0FD');
+});

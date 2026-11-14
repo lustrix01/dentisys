@@ -5,7 +5,7 @@ import {
   type OfficialGradeResult, type OfficialGradeSheetInput, type OfficialSheetAssessment,
 } from '../utils/officialGradeSheetExport.ts';
 import { buildPreview, emptyDecisions, parseWorkbook, type ImportContext, type SavedAssessment, type SavedCategory } from '../utils/gradeSheetImport.ts';
-import { roundPercent } from '../utils/gradeHelper.ts';
+import { percentageToGWAExact, roundPercent } from '../utils/gradeHelper.ts';
 
 // ---------- made-up class ----------
 type Comp = 'Lecture' | 'Laboratory';
@@ -231,4 +231,41 @@ test('classes without the official layout get the plain Grade Summary', () => {
   assert.equal(sheet.sheet, 'Grade Summary');
   assert.deepEqual(v[8], ['Student Number', 'Student Name', 'Quizzes', 'Practicum', 'Exams', 'Attendance', 'Overall Grade', 'Remarks']);
   assert.deepEqual(v[9], ['DENT-1', 'Bea Aquino', 81.25, '—', '—', '—', 2.5, 'PASS']);
+});
+
+test('Reports Grade Summary uses the iBU columns: grades, status, completion and notes', async () => {
+  const { IBU_SUMMARY_COLUMNS, ibuGradeSummaryRow } = await import('../utils/officialGradeSheetExport.ts');
+  assert.deepEqual(IBU_SUMMARY_COLUMNS.map(c => c.header), ['Student Number', 'Full Name', 'Status', 'Midterm', 'Tentative', 'Final', 'Completion', 'Notes']);
+  const evaluation = (o: Record<string, unknown>) => ({ midtermStatus: 'computed', midtermPercentage: 88, finalStatus: 'computed', finalPercentage: 92, overallGwa: 2, midtermReasons: [], finalReasons: [], ...o }) as any;
+  const student = { studentId: '2024-0001', name: 'Dana Lim Cruz', firstName: 'Dana', middleName: 'Lim', lastName: 'Cruz' };
+  const row = (e: Record<string, unknown>, progression?: any) => ibuGradeSummaryRow({ student, evaluation: evaluation(e), progression });
+  const passed = row({});
+  assert.deepEqual([passed.fullName, passed.status, passed.final, passed.completion, passed.notes], ['CRUZ, Dana Lim', 'Passed', 2, '', '']);
+  assert.equal(passed.midterm, percentageToGWAExact(88));
+  assert.equal(passed.tentative, percentageToGWAExact(92));
+  const midTerm = row({ finalStatus: 'incomplete', finalPercentage: null, finalReasons: ['No assessments yet in some categories'], overallGwa: null });
+  assert.deepEqual([midTerm.status, midTerm.midterm === percentageToGWAExact(88), midTerm.tentative, midTerm.final, midTerm.notes], ['', true, null, null, '']);
+  const inc = row({ finalStatus: 'incomplete', finalPercentage: null, finalReasons: ['Missing Assessment Score'], overallGwa: null });
+  assert.deepEqual([inc.status, inc.tentative, inc.final, inc.notes], ['INC', 'INC', 'INC', 'Missing Finals scores']);
+  const pending = row({ midtermStatus: 'pending', midtermPercentage: null, finalStatus: 'pending', finalPercentage: null, overallGwa: null });
+  assert.deepEqual([pending.status, pending.midterm, pending.final, pending.notes], ['', null, null, '']);
+  const failedThenRemedial = row({ overallGwa: 5 }, { stage: 'passed', passedAttempt: 2, attempts: [], legacyUnclassified: false });
+  assert.deepEqual([failedThenRemedial.status, failedThenRemedial.final, failedThenRemedial.completion, failedThenRemedial.notes], ['Passed', 5, 'Remedial passed', 'Remedial attempt 2 passed']);
+  // Remedial: final 2.5-4.9 with no recorded pass; a recorded pass or passed cost recovery clears it; 5.0 and failed cost recovery fail.
+  const due = row({ overallGwa: 2.75 });
+  assert.deepEqual([due.status, due.final], ['Remedial', 2.75]);
+  assert.equal(row({ overallGwa: 2.75 }, { stage: 'attempt_2_available', passedAttempt: null, attempts: [], legacyUnclassified: false }).status, 'Remedial');
+  const clearedByRemedial = row({ overallGwa: 3 }, { stage: 'passed', passedAttempt: 1, attempts: [], legacyUnclassified: false });
+  assert.deepEqual([clearedByRemedial.status, clearedByRemedial.final, clearedByRemedial.completion], ['Passed', 3, 'Remedial passed']);
+  assert.equal(row({ overallGwa: 5 }).status, 'Failed');
+  assert.equal(row({ overallGwa: 2.25 }).status, 'Passed');
+  assert.equal(row({ overallGwa: 5 }, { stage: 'cost_recovery_failed', passedAttempt: null, attempts: [], legacyUnclassified: false, costRecovery: { finalGrade: 5, outcome: 'failed', recordedAt: '' } }).status, 'Failed');
+  const cost = row({ overallGwa: 5 }, { stage: 'cost_recovery_passed', passedAttempt: null, attempts: [], legacyUnclassified: false, costRecovery: { finalGrade: 2, outcome: 'passed', recordedAt: '' } });
+  assert.deepEqual([cost.completion, cost.notes], ['2.0', 'Cost recovery passed']);
+});
+
+test('Reports names are LAST, First Middle (sheetName) with the plain name as fallback', async () => {
+  const { sheetName } = await import('../utils/officialGradeSheetExport.ts');
+  assert.equal(sheetName({ name: 'Dana Lim Cruz', firstName: 'Dana', middleName: 'Lim', lastName: 'Cruz' }), 'CRUZ, Dana Lim');
+  assert.equal(sheetName({ name: 'Alice Reyes' }), 'Alice Reyes');
 });

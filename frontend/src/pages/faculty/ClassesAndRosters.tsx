@@ -1628,14 +1628,14 @@ const handleSendAllStudentInvites = async () => {
       : `Credit ${cls.units.toFixed(1)}`;
 
     return (
-      <main className="hidden print-only print-area bg-white text-slate-900">
+      <main className="hidden print-only print-area bg-white text-[#1E2939]">
         <style>{'@page { size: A4 landscape; margin: 12mm; }'}</style>
         <div className="mx-auto max-w-6xl px-6 py-5">
-          <header className="mb-5 border-b-2 border-slate-800 pb-4 text-center">
+          <header className="mb-5 border-b-[3px] border-[#0E436C] pb-4 text-center">
             <p className="text-xs">Republic of the Philippines</p>
-            <p className="text-sm font-bold tracking-wide">BICOL UNIVERSITY</p>
-            <p className="text-sm font-bold tracking-wide">COLLEGE OF DENTAL MEDICINE</p>
-            <h1 className="mt-3 text-lg font-extrabold">OFFICIAL LIST OF ENROLLED STUDENTS</h1>
+            <p className="text-sm font-bold tracking-wide text-[#0E436C]">BICOL UNIVERSITY</p>
+            <p className="text-sm font-bold tracking-wide text-[#0E436C]">COLLEGE OF DENTAL MEDICINE</p>
+            <h1 className="mt-3 text-lg font-extrabold text-[#0E436C]" style={{ fontFamily: 'Sora, Poppins, Inter, -apple-system, "Segoe UI", Roboto, Arial, sans-serif' }}>OFFICIAL LIST OF ENROLLED STUDENTS</h1>
             <p className="mt-1 text-sm font-semibold">{termLine(cls.semester, cls.schoolYear)}</p>
           </header>
 
@@ -1650,8 +1650,8 @@ const handleSendAllStudentInvites = async () => {
           </section>
 
           <table className="w-full border-collapse text-xs">
-            <thead className="bg-slate-100">
-              <tr className="border-y border-slate-700 text-left">
+            <thead className="bg-[#E1F0FD] text-[#075F9D]">
+              <tr className="border-y-2 border-[#0776C2] text-left">
                 {['#', 'Student No.', 'Program', 'Name', 'Gender', 'Year Level', 'Contact #'].map(label => (
                   <th key={label} className="px-2.5 py-2 font-bold">{label}</th>
                 ))}
@@ -1664,7 +1664,7 @@ const handleSendAllStudentInvites = async () => {
                   ? `${student.lastName}, ${[student.firstName, student.middleName].filter(Boolean).join(' ')}`.trim()
                   : student.name;
                 return (
-                  <tr key={student.id} className="border-b border-slate-300 align-top">
+                  <tr key={student.id} className="border-b border-[#F5F5F5] align-top">
                     <td className="px-2.5 py-1.5">{index + 1}</td>
                     <td className="px-2.5 py-1.5">{student.studentId}</td>
                     <td className="px-2.5 py-1.5">{program}</td>

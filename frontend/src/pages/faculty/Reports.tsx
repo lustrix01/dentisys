@@ -59,7 +59,7 @@ import Tabs from '../../components/Tabs';
 import { downloadXlsx, type Cell as XlsxCell, type XlsxSheet } from '../../utils/xlsxDownload';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { assessmentMatrixCells, assessmentMatrixGroups, buildAssessmentScoresSheet, buildReportSheet, dayToDate, termLine } from '../../utils/reportWorkbook';
-import { savedGradeResult } from '../../utils/officialGradeSheetExport';
+import { IBU_SUMMARY_COLUMNS, ibuGradeSummaryRow, savedGradeResult, sheetName } from '../../utils/officialGradeSheetExport';
 
 type ReportsBundleSnapshot = {
   retention: FacultyRetentionRecord[];
@@ -763,7 +763,7 @@ export const Reports: React.FC = () => {
       });
     const scoreByStudentAndAssessment = new Map(assessmentScores.map(score => [`${score.studentId}|${score.assessmentId}`, score.score]));
     const revokedSessions = new Set(snapshot.revokedAttendanceSessions);
-    const classStudents = ([...studentsInSelectedSubject] as Student[]).sort((a, b) => a.name.localeCompare(b.name));
+    const classStudents = ([...studentsInSelectedSubject] as Student[]).sort((a, b) => sheetName(a).localeCompare(sheetName(b)));
     const assessmentColumns = classAssessments.map(assessment => {
       const category = categories.find(item => String(item.id ?? '') === String(assessment.gradingCategoryId ?? '')
         && (!item.gradingPeriod || item.gradingPeriod === assessment.gradingPeriod));
@@ -781,6 +781,11 @@ export const Reports: React.FC = () => {
         attendanceSessionCode: assessment.attendanceSessionCode ?? null,
       };
     });
+    // `LAST, First Middle` on every sheet and print section (X11/X28).
+    const nameOf = (match: (s: Student) => boolean, fallback: string) => {
+      const found = classStudents.find(match);
+      return found ? sheetName(found) : fallback;
+    };
     const assessmentMatrixRows = classStudents.map(student => {
       const subject = (student.enrolledSubjects || []).find(sub => sub.code === selectedClass.courseCode
         && String(sub.classId ?? student.classId ?? classId) === classId);
@@ -805,7 +810,7 @@ export const Reports: React.FC = () => {
       });
       return {
         studentNumber: student.studentId,
-        studentName: student.name,
+        studentName: sheetName(student),
         scores,
         effectivePercentages,
         periods,
@@ -815,35 +820,32 @@ export const Reports: React.FC = () => {
       const subject = (student.enrolledSubjects || []).find(sub => sub.code === selectedClass.courseCode
         && String(sub.classId ?? student.classId ?? classId) === classId) ?? null;
       const evaluation = courseEvaluation(subject);
-      return {
-        studentNumber: student.studentId,
-        studentName: student.name,
-        midterm: evaluation.midtermPercentage,
-        finals: evaluation.finalPercentage,
-        finalCourseGrade: evaluation.overallGwa,
-        remarks: courseRemark(student, subject),
-      };
+      // Completion and Notes come from the enrollment's remedial progression in the retention records.
+      const retention = snapshot.retention.find(record => String(record.studentId) === String(student.id)
+        && String(record.classId) === classId && record.subjectCode === selectedClass.courseCode
+        && (!record.schoolYear || record.schoolYear === selectedClass.schoolYear));
+      return ibuGradeSummaryRow({ student, evaluation, progression: retention?.remedialProgression });
     });
     const watchlistRows = snapshot.retention
       .filter(record => String(record.classId) === classId
         && record.subjectCode === selectedClass.courseCode
         && record.midtermAtRisk === true
         && (!record.schoolYear || record.schoolYear === selectedClass.schoolYear))
-      .sort((a, b) => (a.studentName ?? '').localeCompare(b.studentName ?? ''))
       .map(record => ({
         studentNumber: record.studentNumber ?? '',
-        studentName: record.studentName ?? 'Student name unavailable',
+        studentName: nameOf(s => String(s.id) === String(record.studentId), record.studentName ?? 'Student name unavailable'),
         className: record.className ?? `${selectedClass.courseCode} · ${selectedClass.csName}`,
         midtermPercentage: record.midtermPercentage,
         midtermGrade: typeof record.midtermPercentage === 'number' ? percentageToGWA(record.midtermPercentage, 'Midterm') : null,
         riskStanding: 'At Risk',
         status: 'Computed · Ready',
-      }));
+      }))
+      .sort((a, b) => a.studentName.localeCompare(b.studentName));
     const attendanceRows = snapshot.attendance.map(record => ({
       date: record.date,
       session: record.sessionCode ?? '',
       studentNumber: record.studentNumber,
-      studentName: record.studentName,
+      studentName: nameOf(s => s.studentId === record.studentNumber, record.studentName),
       courseCode: selectedClass.courseCode,
       status: record.status ?? 'Not recorded',
     }));
@@ -891,12 +893,7 @@ export const Reports: React.FC = () => {
     });
     const sheets = [
       assessmentSheet,
-      titleInput('Grade Summary', 'MIDTERM, FINALS & COURSE GRADE SUMMARY', [
-        { header: 'Student Number', width: 16 }, { header: 'Student Name', width: 30 },
-        { header: 'Midterm Period', width: 16, format: '0.00%' }, { header: 'Finals Period', width: 16, format: '0.00%' },
-        { header: 'Final Course Grade', width: 18, format: '0.00' }, { header: 'Remarks', width: 24 },
-      ], gradeRows.map(row => [row.studentNumber, row.studentName, row.midterm === null ? null : row.midterm / 100,
-        row.finals === null ? null : row.finals / 100, row.finalCourseGrade, row.remarks])),
+      titleInput('Grade Summary', 'MIDTERM, FINALS & COURSE GRADE SUMMARY', IBU_SUMMARY_COLUMNS, gradeRows.map(row => [row.studentNumber, row.fullName, row.status, row.midterm, row.tentative, row.final, row.completion, row.notes])),
       titleInput('Midterm Watchlist', 'MIDTERM WATCHLIST', [
         { header: 'Student Number', width: 16 }, { header: 'Student Name', width: 30 }, { header: 'Class', width: 24 },
         { header: 'Midterm %', width: 14, format: '0.00%' }, { header: 'Midterm Grade', width: 16, format: '0.0' },
@@ -1595,9 +1592,8 @@ export const Reports: React.FC = () => {
             </section>,
             <section key="grades" className="report-bundle-section" style={{ breakBefore: 'page' }}>
               <PrintCaption>2. Grade Summary</PrintCaption>
-              {renderTable(['Student Number', 'Student Name', 'Midterm Period', 'Finals Period', 'Final Course Grade', 'Remarks'],
-                bundle.gradeRows.map(row => [row.studentNumber, row.studentName, formatPercent(row.midterm), formatPercent(row.finals),
-                  row.finalCourseGrade === null ? 'Pending' : formatGrade(row.finalCourseGrade), row.remarks]))}
+              {renderTable(IBU_SUMMARY_COLUMNS.map(column => column.header),
+                bundle.gradeRows.map(row => [row.studentNumber, row.fullName, row.status, ...[row.midterm, row.tentative, row.final].map(g => (typeof g === 'number' ? formatGrade(g) : g)), row.completion, row.notes]))}
             </section>,
             <section key="watchlist" className="report-bundle-section" style={{ breakBefore: 'page' }}>
               <PrintCaption>3. Midterm Watchlist</PrintCaption>

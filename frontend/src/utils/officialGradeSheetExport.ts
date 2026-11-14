@@ -1,12 +1,14 @@
 // Official grade sheet (.xlsx) export: pure builder (contract docs/contracts/official-exports.md, X1-X13, X23-X26).
 // Every grade cell holds a value DentiSys already computed on the server (X6); this file only lays them out.
 import type { Assessment, AttendanceStatus, Student } from '../types/index.ts';
-import type { FacultyGradeComputeResult, FacultyGradingCategoryItem, FacultyGradingConfiguration, FacultyPeriodBreakdown } from '../services/apiClient.ts';
+import type { FacultyGradeComputeResult, FacultyGradingCategoryItem, FacultyGradingConfiguration, FacultyPeriodBreakdown, FacultyRemedialProgression } from '../services/apiClient.ts';
 import { extractPeriodEvaluation } from './periodGradingHelper.ts';
+import type { StudentPeriodEvaluation } from './periodGradingHelper.ts';
 import { buildReportSheet, termLine } from './reportWorkbook.ts';
-import { effectiveAssessmentPercentage, percentageToGWAExact, roundPercent } from './gradeHelper.ts';
+import type { ReportColumn } from './reportWorkbook.ts';
+import { effectiveAssessmentPercentage, formatGrade, percentageToGWAExact, roundPercent } from './gradeHelper.ts';
 import { parseSemester } from './gradeSheetImport.ts';
-import { downloadXlsx } from './xlsxDownload.ts';
+import { downloadXlsx, ibuHeader, ibuTitleRow } from './xlsxDownload.ts';
 import type { Cell, CellObject, XlsxSheet } from './xlsxDownload.ts';
 
 type Period = 'Midterm' | 'Final';
@@ -40,12 +42,11 @@ export interface OfficialGradeSheetInput {
   attendanceStatus?: (studentId: string, assessment: OfficialSheetAssessment) => AttendanceStatus | null | undefined;
 }
 
-const LILAC = '#E1BEE8';
 const INC: CellObject = { value: 'INC', fontWeight: 'bold', textColor: '#B42318', align: 'center' };
 const UNIVERSITY_LINES = ['Republic of the Philippines', 'BICOL UNIVERSITY', 'COLLEGE OF DENTAL MEDICINE'];
 
 const head = (value: string | number, extra: Partial<CellObject> = {}): CellObject =>
-  ({ value, fontWeight: 'bold', backgroundColor: LILAC, align: 'center', alignVertical: 'center', wrap: true, ...extra });
+  ibuHeader({ value, align: 'center', alignVertical: 'center', wrap: true, ...extra });
 const numCell = (value: number | null | undefined, format?: string): Cell =>
   typeof value !== 'number' || !Number.isFinite(value) ? INC : format ? { value, format } : { value };
 const equiv = (percent: number | null | undefined, gwa?: number | null): Cell =>
@@ -56,7 +57,7 @@ const fileToken = (text: string) => text.replace(/[\\/:*?"<>|\s]+/g, '-').replac
 
 const lastNameOf = (s: OfficialSheetStudent) => s.lastName?.trim() || s.name.trim().split(/\s+/).pop() || s.name;
 /** `LAST, First Middle` (X11). */
-const sheetName = (s: OfficialSheetStudent) =>
+export const sheetName = (s: Pick<OfficialSheetStudent, 'name' | 'firstName' | 'middleName' | 'lastName'>) =>
   s.lastName?.trim() && s.firstName?.trim()
     ? `${s.lastName.trim().toUpperCase()}, ${[s.firstName.trim(), s.middleName?.trim()].filter(Boolean).join(' ')}`
     : s.name.trim();
@@ -67,6 +68,61 @@ export function officialGradeSheetFileName(c: { code: string; section: string; s
   const semToken = sem === 'SUMMER' ? 'Summer' : sem ? sem.toLowerCase() : fileToken(c.semester);
   return [c.code.replace(/\s+/g, ''), fileToken(c.section), 'Grade_Sheet', fileToken(c.schoolYear), semToken]
     .filter(Boolean).join('_').replace(/_(Grade_Sheet)_/, '_$1_') + '.xlsx';
+}
+
+/** Reports -> Grades & Assessments "Grade Summary" in iBU's columns (contract X28). */
+export const IBU_SUMMARY_COLUMNS: ReportColumn[] = [
+  { header: 'Student Number', width: 16 }, { header: 'Full Name', width: 32 }, { header: 'Status', width: 12 },
+  { header: 'Midterm', width: 11, format: '0.0#' }, { header: 'Tentative', width: 11, format: '0.0#' }, { header: 'Final', width: 11, format: '0.0#' },
+  { header: 'Completion', width: 18 }, { header: 'Notes', width: 32 },
+];
+
+export interface IbuGradeSummaryRow {
+  studentNumber: string;
+  fullName: string;
+  status: 'Passed' | 'Failed' | 'Remedial' | 'INC' | '';
+  /** Grades (MG, TFG and FG equivalents as on the official TFG sheet); 'INC' when incomplete, null while pending. */
+  midterm: number | 'INC' | null;
+  tentative: number | 'INC' | null;
+  final: number | 'INC' | null;
+  completion: string;
+  notes: string;
+}
+
+/** One Grade Summary row from the server-backed evaluation and the enrollment's remedial progression; nothing is recomputed differently from the TFG sheet. */
+export function ibuGradeSummaryRow(a: {
+  student: Pick<OfficialSheetStudent, 'name' | 'firstName' | 'middleName' | 'lastName'> & { studentId: string };
+  evaluation: StudentPeriodEvaluation;
+  progression?: FacultyRemedialProgression | null;
+}): IbuGradeSummaryRow {
+  const e = a.evaluation;
+  // Same split as Reports.tsx courseRemark (~line 511): no overall grade yet is PENDING (blank), never INC.
+  // INC only where a score was entered but another is missing (the server's "Missing Assessment Score" reason, X8).
+  const missing = (reasons: string[]) => reasons.includes('Missing Assessment Score');
+  const period = (status: string, pct: number | null, reasons: string[]): number | 'INC' | null =>
+    status === 'computed' && pct !== null ? percentageToGWAExact(pct) : status === 'incomplete' && missing(reasons) ? 'INC' : null;
+  const midterm = period(e.midtermStatus, e.midtermPercentage, e.midtermReasons);
+  const tentative = period(e.finalStatus, e.finalPercentage, e.finalReasons);
+  const final = e.overallGwa !== null ? e.overallGwa : midterm === 'INC' || tentative === 'INC' ? 'INC' : null;
+  const p = a.progression;
+  // A recorded remedial pass or passed cost recovery clears the course; Final stays the original grade.
+  const status = (grade: number): IbuGradeSummaryRow['status'] =>
+    p?.stage === 'passed' || p?.stage === 'cost_recovery_passed' ? 'Passed'
+      : p?.stage === 'cost_recovery_failed' || grade === 5 ? 'Failed' : grade >= 2.5 ? 'Remedial' : 'Passed';
+  const completion = p?.stage === 'passed' ? 'Remedial passed'
+    : p?.costRecovery && (p.stage === 'cost_recovery_passed' || p.stage === 'cost_recovery_failed') ? formatGrade(p.costRecovery.finalGrade) : '';
+  const remedialNote: Partial<Record<FacultyRemedialProgression['stage'], string>> = {
+    attempt_1_pending: 'Remedial attempt 1 scheduled', attempt_2_available: 'Remedial attempt 1 failed', attempt_2_pending: 'Remedial attempt 2 scheduled',
+    cost_recovery_required: 'Cost recovery required', cost_recovery_passed: 'Cost recovery passed', cost_recovery_failed: 'Cost recovery failed',
+    passed: `Remedial attempt ${p?.passedAttempt ?? ''} passed`.replace('  ', ' '),
+  };
+  const notes = (p && remedialNote[p.stage])
+    || (tentative === 'INC' ? 'Missing Finals scores' : midterm === 'INC' ? 'Missing Midterm scores' : '');
+  return {
+    studentNumber: a.student.studentId, fullName: sheetName(a.student),
+    status: final === 'INC' ? 'INC' : final === null ? '' : status(final),
+    midterm, tentative, final, completion, notes,
+  };
 }
 
 /** Plain values of a sheet (merged-cell fillers are null): what the importer reads back, and what tests compare. */
@@ -224,7 +280,7 @@ export function buildOfficialGradeSheet(input: OfficialGradeSheetInput): XlsxShe
     const titles = [...UNIVERSITY_LINES, `${course.title.toUpperCase()} (${comp === 'lecture' ? 'LEC' : 'LAB'})`, term];
     const data: Cell[][] = titles.map((t, i) => {
       const row = blank();
-      row[0] = { value: t, columnSpan: width, align: 'center', ...(i > 0 ? { fontWeight: 'bold' as const } : {}) };
+      row[0] = ibuTitleRow({ value: t, columnSpan: width, align: 'center' }, i) as Cell;
       return row;
     });
     const sectionRow = blank();

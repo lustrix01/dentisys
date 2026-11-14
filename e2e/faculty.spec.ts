@@ -4820,9 +4820,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       expect(download.suggestedFilename()).toMatch(/^CLIN401_.*_Grades_Assessments_2026-2027_1st_Semester\.xlsx$/);
       const xlsx = await readDownloadedXlsxText(download);
       for (const name of ['Alice Reyes', 'Bea Santos', 'Caleb Reyes', 'GRADES & ASSESSMENT SCORES', 'MIDTERM, FINALS & COURSE GRADE SUMMARY']) expect(xlsx).toContain(name);
-      // The summary sheet stores periods as fractions: Alice Midterm 87% / Final 89%, grade 2.1; Bea (older combined result) 72% / 84%, grade 2.8.
-      // The workbook no longer carries Lecture/Laboratory columns (the redesigned export has one summary sheet), so the split is checked in the table above.
-      for (const value of ['0.87', '0.89', '2.1', '0.72', '0.84', '2.8']) expect(xlsx).toContain(`<v>${value}</v>`);
+      // Grade Summary uses iBU's columns with grades (percentageToGWAExact): Alice Midterm 87% = 2.2, Tentative 89% = 2.0, Final 2.1; Bea (older combined result) 72% = 5.0, 84% = 2.5, Final 2.8.
+      // The workbook no longer carries Lecture/Laboratory columns, so the split is checked in the table above.
+      for (const header of ['Full Name', 'Status', 'Midterm', 'Tentative', 'Final', 'Completion', 'Notes']) expect(xlsx).toContain(header);
+      for (const value of ['2.2', '2', '2.1', '5', '2.5', '2.8']) expect(xlsx).toContain(`<v>${value}</v>`);
     });
   });
 });

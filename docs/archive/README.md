@@ -86,3 +86,5 @@ These documents are kept for history. They describe past plans, handoffs, and ev
 - [UI items, 2026-11-14 (docs-sync step 8)](ui-step8-2026-11-14.md)
 - [Owner decisions, 2026-11-14 (second session)](owner-decisions-2026-11-14-second.md)
 - [Batch 2, 2026-11-14](ui-batch2-2026-11-14.md)
+- [Owner decisions, 2026-11-15 (iBU look)](owner-decisions-2026-11-15.md)
+- [Exports before and after (iBU look), 2026-11-15](https://claude.ai/artifact/57XHGw1rDTSLwHgX6hrvoq) (demo)

@@ -25,8 +25,13 @@ export const PrintStyle: React.FC<{ title: string; running: string; generated: s
   @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8.5px; color: #64748b; }
 }
 @page :first { @top-left { content: none; } @top-right { content: none; } }
-.ps { --ps-fs-xs: 8.5px; --ps-fs-sm: 9px; --ps-fs-base: 9.5px; --ps-fs-md: 10.5px; --ps-fs-title: 19px; font-size: var(--ps-fs-base); color: #0f172a; }
-.ps .ps-head { margin-bottom: 12px; }
+.ps { --ps-fs-xs: 8.5px; --ps-fs-sm: 9px; --ps-fs-base: 9.5px; --ps-fs-md: 10.5px; --ps-fs-title: 19px; font-size: var(--ps-fs-base); color: #1E2939; font-family: Inter, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+/* iBU look (contract X29): white header with navy text and a navy rule, light-blue header row, Sora headings */
+.ps .ps-title, .ps .ps-caption, .ps h2, .ps h3 { font-family: Sora, Poppins, Inter, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+.ps .ps-head { margin-bottom: 12px; color: #1E2939; padding-bottom: 8px; border-bottom: 3px solid #0E436C; }
+.ps .ps-head .ps-eyebrow, .ps .ps-head .ps-title { color: #0E436C; }
+.ps .ps-head .ps-sub, .ps .ps-head dt, .ps .ps-head dd { color: #1E2939; }
+.ps .ps-caption { color: #075F9D; }
 /* collapses with .ps-head margin: 32px = 12px + caption (14px line + 6px) */
 .ps .ps-head + table { margin-top: 32px; }
 .ps .ps-caption { font-size: var(--ps-fs-base); line-height: 14px; margin: 0 0 6px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -39,10 +44,10 @@ export const PrintStyle: React.FC<{ title: string; running: string; generated: s
 .ps .ps-sig { font-size: var(--ps-fs-md); }
 .ps .ps-sig-role { font-size: var(--ps-fs-xs); }
 .ps table { table-layout: fixed; width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-.ps th { background: #e2e8f0; border: 1px solid #94a3b8; padding: 4px 6px; font-size: var(--ps-fs-xs); font-weight: 700; text-transform: uppercase; text-align: center; overflow-wrap: break-word; }
-.ps th.band { background: #cbd5e1; }
+.ps th { background: #E1F0FD; color: #075F9D; border: 1px solid #E1F0FD; border-bottom: 2px solid #0776C2; padding: 4px 6px; font-size: var(--ps-fs-xs); font-weight: 700; text-transform: uppercase; text-align: center; overflow-wrap: break-word; }
+.ps th.band { background: #C9E3F8; }
 .ps th.l { text-align: left; }
-.ps td { border: 1px solid #cbd5e1; padding: 4px 6px; text-align: center; overflow-wrap: break-word; }
+.ps td { border: 1px solid #F5F5F5; padding: 4px 6px; text-align: center; overflow-wrap: break-word; }
 .ps tbody tr:nth-child(even) { background: #f8fafc; }
 .ps td.l { text-align: left; }
 .ps td.id { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: var(--ps-fs-sm); white-space: nowrap; text-align: left; }
@@ -52,7 +57,7 @@ export const PrintStyle: React.FC<{ title: string; running: string; generated: s
 .ps td.bad { font-weight: 800; color: #9f1239; }
 .ps td.cap { text-transform: capitalize; }
 .ps .assessment-matrix { table-layout: auto; font-size: 7px; }
-.ps .assessment-matrix th { background: #e1bee8; }
+.ps .assessment-matrix th { background: #E1F0FD; }
 .ps .assessment-matrix th, .ps .assessment-matrix td { padding: 2px 3px; font-size: 7px; }
 .ps .report-analytics-group { margin: 0 0 14px; break-inside: avoid; }
 .ps .report-analytics-group h3, .ps .analytics-data-heading { margin: 0 0 6px; font-size: var(--ps-fs-md); font-weight: 700; }

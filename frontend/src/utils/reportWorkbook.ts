@@ -1,10 +1,9 @@
 // Tidy-table and class-list workbooks (contract docs/contracts/official-exports.md, X15-X19).
-import type { Cell, CellObject, Row, XlsxSheet } from './xlsxDownload';
+import { ibuHeader, ibuTitleRow } from './xlsxDownload.ts';
+import type { Cell, CellObject, Row, XlsxSheet } from './xlsxDownload.ts';
 import type { FacultyPeriodBreakdown } from '../services/apiClient';
 
 const UNIVERSITY = ['Republic of the Philippines', 'BICOL UNIVERSITY', 'COLLEGE OF DENTAL MEDICINE'];
-const LILAC = '#E1BEE8';
-const GREY = '#EEF1F4';
 /** Rows above the header row in a tidy table: 3 university lines, report, filter, term, exported-by, blank. */
 export const HEADER_ROW_INDEX = 8;
 
@@ -42,7 +41,7 @@ const toCell = (value: ReportValue, format?: string): Cell => {
 };
 
 const titleRows = (width: number, lines: string[]): Row[] =>
-  lines.map((value, i) => [{ value, columnSpan: width, align: 'center', fontWeight: i === 1 || i === 2 ? 'bold' : undefined } as Cell]);
+  lines.map((value, i) => [ibuTitleRow({ value, columnSpan: width, align: 'center' }, i) as Cell]);
 
 export interface ReportInput {
   sheet: string;
@@ -59,15 +58,15 @@ export interface ReportInput {
 /** One tidy table: title block, one bold header row (frozen), then the data. */
 export function buildReportSheet(input: ReportInput): XlsxSheet {
   const width = input.columns.length;
-  const line = (value: string, bold = false): Row => [{ value, columnSpan: width, align: 'left', fontWeight: bold ? 'bold' : undefined } as Cell];
+  const line = (value: string, i: number): Row => [ibuTitleRow({ value, columnSpan: width, align: 'left' }, i) as Cell];
   const data: Row[] = [
     ...titleRows(width, UNIVERSITY),
-    line(input.title, true),
-    line(input.filter),
-    line(input.term),
-    line(exportedLine(input.by, input.now)),
+    line(input.title, 3),
+    line(input.filter, 4),
+    line(input.term, 5),
+    line(exportedLine(input.by, input.now), 6),
     [],
-    input.columns.map(c => ({ value: c.header, fontWeight: 'bold', backgroundColor: GREY, align: 'left' }) as Cell),
+    input.columns.map(c => ibuHeader({ value: c.header, align: 'left' }) as Cell),
     ...input.rows.map(r => input.columns.map((c, i) => toCell(r[i], c.format))),
   ];
   return {
@@ -145,7 +144,7 @@ export function buildClassList(input: ClassListInput): { fileName: string; sheet
     [],
     ...info.map(([key, value]): Row => [{ value: key, columnSpan: 2, fontWeight: 'bold', align: 'left' } as Cell, null, { value, columnSpan: 5, align: 'left' } as Cell]),
     [],
-    head.map(h => ({ value: h, fontWeight: 'bold', backgroundColor: LILAC, align: 'center' }) as Cell),
+    head.map(h => ibuHeader({ value: h, align: 'center' }) as Cell),
     ...students.map((s, i): Row => [
       { value: i + 1, type: Number, align: 'right' },
       toCell(s.studentId),
@@ -230,12 +229,12 @@ export function buildAssessmentScoresSheet(a: { columns: AssessmentMatrixColumn[
   const width = (g: AssessmentGroup) => g.indexes.length * perAssessment(g) + (g.categoryId === null ? 0 : 2);
   const total = 2 + groups.reduce((sum, g) => sum + width(g), 0);
   const head = (value: string | number, extra: Partial<CellObject> = {}): CellObject =>
-    ({ value, fontWeight: 'bold', backgroundColor: LILAC, align: 'center', alignVertical: 'center', wrap: true, ...extra });
+    ibuHeader({ value, align: 'center', alignVertical: 'center', wrap: true, ...extra });
   const blank = (): Cell[] => Array.from({ length: total }, () => null);
 
   const rows: Cell[][] = a.titleLines.map((value, index) => {
     const row = blank();
-    row[0] = { value, columnSpan: total, align: 'center', fontWeight: index >= 1 && index <= 3 ? 'bold' : undefined };
+    row[0] = ibuTitleRow({ value, columnSpan: total, align: 'center' }, index) as Cell;
     return row;
   });
   const [periodRow, componentRow, categoryRow, assessmentRow, subRow] = [blank(), blank(), blank(), blank(), blank()];

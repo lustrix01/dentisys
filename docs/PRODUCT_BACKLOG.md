@@ -23,9 +23,14 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 # 9. Known issues
 
-## 9.4 Official grade sheet export in the BU format
+## 9.13 Export wording found in the iBU review
 
-**Status: Not started (Owner will scope it).** Official imports (class list PDF, grade sheet workbook) and the official grade sheet export ([contract](contracts/official-exports.md)) exist. The export must be made compatible with the BU format; the Owner defines the format when this work starts.
+**Status: Not started.** Found while reviewing every export with mock data:
+
+- Dean Reports → Retention prints a bare "h" in Clinic Hrs when a student has no clinic hours; show "—".
+- Faculty Reports → Assessment Scores (Excel and PDF) shows "?" for a student with no scores yet; show a blank or "—".
+- The Midterm Watchlist status column says "Computed · Ready", internal wording that means nothing to Faculty.
+- Dean Reports, Grade Computation and the plain Reports tab prints still print names first-name-first; the Faculty Reports export uses LAST, First.
 
 ---
 
@@ -58,6 +63,7 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **9.1** Faculty Dashboard counts only classes still running in the current school year, like the Classes & Rosters Assigned tab.
 - **9.2** Grade Computation tab strip on phones: no horizontal scrolling at 320–390 px; the shared section tabs wrap with short names.
 - **9.3** Main bundle size (2.3 MB, 565 kB gzipped): the ineffective dynamic import of `apiClient` is fixed; the size is left as is by the Owner; reopen if first load on phones feels slow.
+- **9.4** iBU look on every export (navy report-name row, light-blue header rows, white PDF header with a navy rule); the Faculty Reports Grade Summary uses iBU's columns (Student Number, Full Name, Status, Midterm, Tentative, Final, Completion, Notes) with LAST, First names.
 - **9.6** November 2026 polish-audit UI follow-ups.
 - **9.7** Wording: DentiSYS in everything users see; Student No. in table headers and phone cards, Student Number elsewhere; Student Details; Dean; Faculty. Full Matrix switch reads "Name / Student No. and name". The authenticator app entry keeps "DentiSys".
 - **9.8** Shared tab bar standard (white card bar and grey list switch).
