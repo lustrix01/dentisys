@@ -58,7 +58,7 @@ import GradeValue from '../../components/GradeValue';
 import Tabs from '../../components/Tabs';
 import { downloadXlsx, type Cell as XlsxCell, type XlsxSheet } from '../../utils/xlsxDownload';
 import { showFeedback } from '../../components/FeedbackCenter';
-import { assessmentMatrixCells, assessmentMatrixGroups, buildAssessmentScoresSheet, buildReportSheet, dayToDate, termLine } from '../../utils/reportWorkbook';
+import { assessmentMatrixCells, assessmentMatrixGroups, buildAssessmentScoresSheet, buildReportSheet, dayToDate, termLine, watchlistStatusText } from '../../utils/reportWorkbook';
 import { IBU_SUMMARY_COLUMNS, ibuGradeSummaryRow, savedGradeResult, sheetName } from '../../utils/officialGradeSheetExport';
 
 type ReportsBundleSnapshot = {
@@ -586,6 +586,14 @@ export const Reports: React.FC = () => {
 
   // Academic exports the five-sheet Reports bundle; Retention and Attendance keep their focused .xlsx exports.
   const [isExportingAcademic, setIsExportingAcademic] = useState(false);
+  // Plain exports and prints name students `LAST, First Middle`, ordered by last name.
+  const byLastName = <T extends Student>(list: T[]) => [...list].sort((a, b) => sheetName(a).localeCompare(sheetName(b)));
+  const nameByNumber = (studentNumber: string | undefined, fallback: string) => {
+    const found = students.find(s => s.studentId === studentNumber);
+    return found ? sheetName(found) : fallback;
+  };
+  const attendanceByName = <T extends { studentNumber?: string; studentName?: string }>(list: T[]) =>
+    [...list].sort((a, b) => nameByNumber(a.studentNumber, a.studentName ?? '').localeCompare(nameByNumber(b.studentNumber, b.studentName ?? '')));
   const handleExportExcel = async (type: 'academic' | 'retention' | 'attendance') => {
     if (type === 'academic') {
       setIsExportingAcademic(true);
@@ -601,14 +609,14 @@ export const Reports: React.FC = () => {
     const by = user?.display_name ?? '';
     const term = selectedClass?.semester && selectedClass.schoolYear ? termLine(String(selectedClass.semester), String(selectedClass.schoolYear)) : '';
     if (type === 'retention') {
-      const rows = facultyStudents.map((student: any) => {
+      const rows = byLastName(facultyStudents).map((student: any) => {
         const atRiskCourses = retentionUnavailable ? null : (student.enrolledSubjects || []).filter((sub: any) =>
           assignedSubjects.includes(sub.code)
           && retentionIsAtRisk(retentionForStudentSubject(student, sub))
         ).length;
         const riskLevel = retentionUnavailable ? 'UNAVAILABLE' : atRiskCourses && atRiskCourses > 0 ? 'At Risk' : '';
         const gwa = standingGwa(student);
-        return [student.studentId, student.name, gwa !== null ? gwa : 'N/A', atRiskCourses ?? 'UNAVAILABLE', riskLevel, remedialStatusFor(student)];
+        return [student.studentId, sheetName(student), gwa !== null ? gwa : 'N/A', atRiskCourses ?? 'UNAVAILABLE', riskLevel, remedialStatusFor(student)];
       });
       await downloadXlsx('Retention_Report.xlsx', [buildReportSheet({
         sheet: 'Retention', title: 'RETENTION REPORT', filter: 'All assigned classes', term: selectedSchoolYear === 'all' ? 'All school years' : `AY ${selectedSchoolYear}`, by,
@@ -618,10 +626,10 @@ export const Reports: React.FC = () => {
       })]);
       return;
     }
-    const rows = attendanceRecords.map(record => [
+    const rows = attendanceByName(attendanceRecords).map(record => [
       dayToDate(String(record.date)) ?? record.date,
       record.studentNumber || '',
-      record.studentName || '',
+      nameByNumber(record.studentNumber, record.studentName || ''),
       selectedClass?.courseCode || '',
       String(record.status || 'not recorded').toUpperCase(),
     ]);
@@ -838,7 +846,7 @@ export const Reports: React.FC = () => {
         midtermPercentage: record.midtermPercentage,
         midtermGrade: typeof record.midtermPercentage === 'number' ? percentageToGWA(record.midtermPercentage, 'Midterm') : null,
         riskStanding: 'At Risk',
-        status: 'Computed · Ready',
+        status: watchlistStatusText(record),
       }))
       .sort((a, b) => a.studentName.localeCompare(b.studentName));
     const attendanceRows = snapshot.attendance.map(record => ({
@@ -1539,8 +1547,8 @@ export const Reports: React.FC = () => {
             }
             return headers;
           };
-          const printPercent = (value: number | null) => (value === null ? '?' : `${value.toFixed(2)}%`);
-          const printNumber = (value: number | null) => (value === null ? '?' : value.toFixed(2));
+          const printPercent = (value: number | null) => (value === null ? '—' : `${value.toFixed(2)}%`);
+          const printNumber = (value: number | null) => (value === null ? '—' : value.toFixed(2));
           const analyticsGroups = [
             { title: 'Retention standing', key: 'Retention Watch Standings', color: '#15803d' },
             { title: 'Grade distribution', key: 'Grade Distribution', color: '#2563eb' },
@@ -1576,11 +1584,11 @@ export const Reports: React.FC = () => {
                         const score = row.scores[i];
                         if (group.categoryId === null) {
                           const effective = row.effectivePercentages[i];
-                          return [<td key={`${i}-score`}>{score === null ? '?' : score}</td>,
-                            <td key={`${i}-percent`}>{effective === null || bundle.assessmentColumns[i].maxScore <= 0 ? '?' : printPercent(effective)}</td>];
+                          return [<td key={`${i}-score`}>{score === null ? '—' : score}</td>,
+                            <td key={`${i}-percent`}>{effective === null || bundle.assessmentColumns[i].maxScore <= 0 ? '—' : printPercent(effective)}</td>];
                         }
                         const transmuted = server.transmuted(i);
-                        return [<td key={`${i}-score`}>{score === null ? '?' : score}</td>,
+                        return [<td key={`${i}-score`}>{score === null ? '—' : score}</td>,
                           <td key={`${i}-percent`}>{printPercent(server.percent(i))}</td>,
                           <td key={`${i}-transmuted`}>{typeof transmuted === 'string' ? transmuted : printPercent(transmuted)}</td>];
                       }),
@@ -1652,7 +1660,7 @@ export const Reports: React.FC = () => {
           : schoolYear ? `S.Y. ${schoolYear}` : 'School Year';
         const generated = formatPrintedAt(printedAt ?? new Date());
         const rowCount = reportTab === 'academic' ? studentsInSelectedSubject.length : reportTab === 'retention' ? facultyStudents.length : attendanceRecords.length;
-        const academicRows = reportTab === 'academic' ? studentsInSelectedSubject.map((student: any) => {
+        const academicRows = reportTab === 'academic' ? byLastName(studentsInSelectedSubject).map((student: any) => {
           const subj = subjectForSelection(student);
           const evaluation = courseEvaluation(subj);
           return {
@@ -1742,7 +1750,7 @@ export const Reports: React.FC = () => {
             {reportTab === 'academic' && academicRows.map(r => (
               <tr key={r.student.id}>
                 <td className="id">{r.student.studentId}</td>
-                <td className="nm">{r.student.name}</td>
+                <td className="nm">{sheetName(r.student)}</td>
                 {isLectureLaboratoryMode && <td className={printCellClass(r.midLec)}>{r.midLec}</td>}
                 {isLectureLaboratoryMode && <td className={printCellClass(r.midLab)}>{r.midLab}</td>}
                 <td className={printCellClass(r.mid)}>{r.mid}</td>
@@ -1753,7 +1761,7 @@ export const Reports: React.FC = () => {
                 <td className={`l ${printCellClass(r.remark)}`}>{r.remark}</td>
               </tr>
             ))}
-            {reportTab === 'retention' && facultyStudents.map((student: any) => {
+            {reportTab === 'retention' && byLastName(facultyStudents).map((student: any) => {
               const gwa = standingGwa(student);
               const gwaText = gwa !== null ? gwa.toFixed(2) : '—';
               const status = retentionUnavailable ? 'Unavailable'
@@ -1762,18 +1770,18 @@ export const Reports: React.FC = () => {
               return (
                 <tr key={student.id}>
                   <td className="id">{student.studentId}</td>
-                  <td className="nm">{student.name}</td>
+                  <td className="nm">{sheetName(student)}</td>
                   <td className={printCellClass(gwaText)}>{gwaText}</td>
                   <td className={`cap ${printCellClass(status)}`}>{status}</td>
                   <td className={`l ${printCellClass(remedial)}`}>{remedial}</td>
                 </tr>
               );
             })}
-            {reportTab === 'attendance' && attendanceRecords.map(record => (
+            {reportTab === 'attendance' && attendanceByName(attendanceRecords).map(record => (
               <tr key={record.enrollmentId}>
                 <td className="id">{record.date}</td>
                 <td className="id">{record.studentNumber || '—'}</td>
-                <td className="nm">{record.studentName || 'Student name unavailable'}</td>
+                <td className="nm">{nameByNumber(record.studentNumber, record.studentName || 'Student name unavailable')}</td>
                 <td className="id">{selectedClass?.courseCode || '—'}</td>
                 <td className="l cap">{record.status || 'Not recorded'}</td>
               </tr>

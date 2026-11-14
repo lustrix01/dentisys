@@ -269,3 +269,16 @@ test('Reports names are LAST, First Middle (sheetName) with the plain name as fa
   assert.equal(sheetName({ name: 'Dana Lim Cruz', firstName: 'Dana', middleName: 'Lim', lastName: 'Cruz' }), 'CRUZ, Dana Lim');
   assert.equal(sheetName({ name: 'Alice Reyes' }), 'Alice Reyes');
 });
+
+test('9.13: the plain Grade Summary names students LAST, First Middle in last-name order', () => {
+  const sheet = buildGradeSummarySheet({
+    students: [
+      { id: 's2', studentId: 'DENT-2', name: 'Dana Lim Cruz', firstName: 'Dana', middleName: 'Lim', lastName: 'Cruz', enrolledSubjects: [] },
+      { id: 's1', studentId: 'DENT-1', name: 'Bea Aquino', firstName: 'Bea', lastName: 'Aquino', enrolledSubjects: [] },
+    ] as any,
+    subjectCode: 'DM116', periodMode: false, results: {},
+    course: { code: 'DM 116', title: 'Operative Dentistry 1', section: 'DMD-3A', semester: '1ST', schoolYear: '2026-2027' }, by: 'Dr. Reyes',
+  });
+  const v = sheetValues(sheet);
+  assert.deepEqual([v[9][1], v[10][1]], ['AQUINO, Bea', 'CRUZ, Dana Lim']);
+});

@@ -397,7 +397,8 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
 
     // The former Academic Reports tab no longer exists; Retention lists every student on the sheet.
     await page.getByRole('tab', { name: 'Retention Reports' }).click();
-    const row = sheet.locator('tbody tr').first();
+    // Rows sort by last name (9.13), so find a bulk student's row by Student No.
+    const row = sheet.locator('tbody tr', { hasText: '2023-0300' });
     await expect(sheet.locator('tbody tr')).toHaveCount(16);
     await expect(row.locator('td').nth(2)).toHaveText('CLINIC-4A');
     await openClassCard(page, 'CLINIC-4A');

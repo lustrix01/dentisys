@@ -86,6 +86,7 @@ import {
 } from '../../utils/periodGradingHelper';
 import { formatGrade, percentageToGWAExact, matchesActivityFilters, saveStatusBadge, defaultTransmutationEnabled } from '../../utils/gradeHelper';
 import { exportGradeWorkbook } from '../../utils/gradeSheetExportFlow';
+import { sheetName } from '../../utils/officialGradeSheetExport';
 import { GradeSheetImportPanel } from '../../components/GradeSheetImportPanel';
 import type { GradeSheetImportPlan } from '../../utils/gradeSheetImport';
 import type {
@@ -5560,7 +5561,7 @@ export const GradeComputation: React.FC = () => {
                 return (
                   <tr key={student.id}>
                     <td className="id">{student.studentId}</td>
-                    <td className="nm">{student.name}</td>
+                    <td className="nm">{sheetName(student)}</td>
                     {isLectureLaboratoryMode && (
                       <>
                         <td className={printCellClass(formatComponentResultCell(evalResult.midtermComponents?.lecture, evalResult.midtermStatus))}>{formatComponentResultCell(evalResult.midtermComponents?.lecture, evalResult.midtermStatus)}</td>
@@ -5594,7 +5595,7 @@ export const GradeComputation: React.FC = () => {
               return (
                 <tr key={student.id}>
                   <td className="id">{student.studentId}</td>
-                  <td className="nm">{student.name}</td>
+                  <td className="nm">{sheetName(student)}</td>
                   <td>{subj && typeof subj.components?.quizzes === 'number' ? `${subj.components.quizzes.toFixed(1)}%` : '—'}</td>
                   <td>{subj && typeof subj.components?.practicum === 'number' ? `${subj.components.practicum.toFixed(1)}%` : '—'}</td>
                   <td>{subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—'}</td>

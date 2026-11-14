@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAssessmentScoresSheet, buildClassList, buildReportSheet, dayToDate, exportedLine, HEADER_ROW_INDEX } from '../utils/reportWorkbook.ts';
+import { readFileSync } from 'node:fs';
+import { buildAssessmentScoresSheet, clinicHoursText, watchlistStatusText, buildClassList, buildReportSheet, dayToDate, exportedLine, HEADER_ROW_INDEX } from '../utils/reportWorkbook.ts';
 
 const cellValue = (c: unknown) => (c && typeof c === 'object' ? (c as { value?: unknown }).value : c);
 const rowValues = (row: unknown[]) => row.map(cellValue);
@@ -108,4 +109,24 @@ test('iBU look: only the report-name row is navy with white text, other title li
   assert.equal(style(list.data[0][0]).backgroundColor, undefined);
   assert.equal(style(list.data[3][0]).backgroundColor, '#0E436C');
   assert.equal(style(list.data.find((r: any[]) => cellValue(r[0]) === '#')![0]).backgroundColor, '#E1F0FD');
+});
+
+test('9.13: clinic hours show a dash when none, the watchlist status uses plain words', () => {
+  assert.equal(clinicHoursText(12), '12h');
+  assert.equal(clinicHoursText(0), '0h');
+  assert.equal(clinicHoursText(undefined), '—');
+  assert.equal(clinicHoursText(null), '—');
+  assert.equal(watchlistStatusText({ midtermComplete: true, midtermPercentage: 72 }), 'Graded');
+  assert.equal(watchlistStatusText({ midtermComplete: false, midtermPercentage: null }), 'Missing scores');
+  assert.equal(watchlistStatusText({}), 'Pending');
+});
+
+test('9.13: Reports PDF prints a dash, not "?", for a score that is not there yet; exports name students LAST, First', () => {
+  const read = (p: string) => readFileSync(new URL(p, import.meta.url), 'utf8');
+  const reports = read('../pages/faculty/Reports.tsx');
+  assert.ok(!reports.includes("'?'"));
+  assert.ok(!reports.includes('Computed · Ready') && !read('../pages/faculty/RetentionMonitoring.tsx').includes('Computed · Ready'));
+  for (const file of ['../pages/admin/SystemAudit.tsx', '../pages/faculty/Reports.tsx', '../pages/faculty/GradeComputation.tsx']) {
+    assert.ok(!/className="nm">\{(s|st\??|student|r\.student|record)\.(name|studentName)/.test(read(file)), file);
+  }
 });

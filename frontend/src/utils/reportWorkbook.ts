@@ -305,3 +305,12 @@ export function buildAssessmentScoresSheet(a: { columns: AssessmentMatrixColumn[
     orientation: 'landscape',
   };
 }
+
+/** Clinic hours as "12h"; the empty-value dash when the student has none recorded. */
+export const clinicHoursText = (hours: number | null | undefined) => (typeof hours === 'number' && Number.isFinite(hours) ? `${hours}h` : '—');
+
+/** Midterm Watchlist status in plain words: complete midterm = Graded, scores still missing = Missing scores, no midterm yet = Pending. */
+export function watchlistStatusText(record: { midtermComplete?: boolean; midtermPercentage?: number | null }) {
+  if (record.midtermComplete === true && typeof record.midtermPercentage === 'number') return 'Graded';
+  return record.midtermComplete === false ? 'Missing scores' : 'Pending';
+}

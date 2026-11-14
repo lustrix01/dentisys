@@ -17,7 +17,9 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card'
 import { recordAudit } from '../../services/auditService';
 import { formatGrade } from '../../utils/gradeHelper';
 import { downloadXlsx } from '../../utils/xlsxDownload';
-import { buildReportSheet, dayToDate } from '../../utils/reportWorkbook';
+import { buildReportSheet, clinicHoursText, dayToDate } from '../../utils/reportWorkbook';
+import { sheetName } from '../../utils/officialGradeSheetExport';
+
 import { STANDING_LABELS, classStanding, pageStanding } from './deanStanding';
 
 type ReportTab = 'students' | 'retention' | 'attendance';
@@ -32,6 +34,14 @@ import { flushSync } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { apiFieldErrors } from '../../utils/apiFieldErrors';
 import { PrintStyle, PrintHeader, PrintCaption, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
+
+// Export names are LAST, First Middle, ordered by last name (attendance keeps the newest date first).
+const nameKey = (s?: { name: string; lastName?: string }) => (s?.lastName?.trim() || s?.name || '').toLowerCase();
+const byLastName = <T extends { name: string; lastName?: string }>(list: T[]) => [...list].sort((a, b) => nameKey(a).localeCompare(nameKey(b)));
+const attendanceByName = <R extends { studentId: string; date: string }>(rows: R[], people: Array<{ id: string; name: string; lastName?: string }>) =>
+  [...rows].sort((a, b) => String(b.date).localeCompare(String(a.date))
+    || nameKey(people.find(p => p.id === a.studentId)).localeCompare(nameKey(people.find(p => p.id === b.studentId))));
+
 
 export const DeanReports: React.FC = () => {
   const { user } = useAuth();
@@ -299,7 +309,7 @@ export const DeanReports: React.FC = () => {
         ...base, sheet: 'Students', title: 'STUDENT SUMMARY',
         columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 }, { header: 'Year Level', width: 11 },
           { header: 'Grade', width: 9 }, { header: 'Status', width: 12 }, { header: 'Face Enrolled', width: 14 }],
-        rows: filtered.map(s => [s.studentId, s.name, s.className || '—', s.yearLevel, gradeOf(s), STANDING_LABELS[s.status] ?? s.status, s.faceEnrolled ? 'Yes' : 'No']),
+        rows: byLastName(filtered).map(s => [s.studentId, sheetName(s), s.className || '—', s.yearLevel, gradeOf(s), STANDING_LABELS[s.status] ?? s.status, s.faceEnrolled ? 'Yes' : 'No']),
       });
     } else if (activeTab === 'retention') {
       fileName = `Retention_Report_${ts}.xlsx`;
@@ -307,7 +317,7 @@ export const DeanReports: React.FC = () => {
         ...base, sheet: 'Retention', title: 'RETENTION REPORT',
         columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 },
           { header: 'Grade', width: 9 }, { header: 'Status', width: 12 }, { header: 'Pending Remedials', width: 18 }],
-        rows: filtered.map((s: any) => [s.studentId, s.name, s.className || '—', gradeOf(s), STANDING_LABELS[s.status] ?? s.status,
+        rows: byLastName(filtered).map((s: any) => [s.studentId, sheetName(s), s.className || '—', gradeOf(s), STANDING_LABELS[s.status] ?? s.status,
           Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0]),
       });
     } else {
@@ -317,9 +327,9 @@ export const DeanReports: React.FC = () => {
         ...base, sheet: 'Attendance', title: 'ATTENDANCE REPORT',
         columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 },
           { header: 'Course Code', width: 14 }, { header: 'Date', width: 14 }, { header: 'Status', width: 12 }],
-        rows: relevantRows.map(r => {
+        rows: attendanceByName(relevantRows, students).map(r => {
           const s = students.find(st => st.id === r.studentId);
-          return [s?.studentId || '-', s?.name || '-', r.className || currentSelectedClass?.name || '—', r.subjectCode, dayToDate(String(r.date)) ?? r.date, r.status];
+          return [s?.studentId || '-', s ? sheetName(s) : '-', r.className || currentSelectedClass?.name || '—', r.subjectCode, dayToDate(String(r.date)) ?? r.date, r.status];
         }),
       });
     }
@@ -1053,7 +1063,7 @@ export const DeanReports: React.FC = () => {
                             )}
                           </td>
                           <td className="py-3 px-3"><StatusBadge status={s.status} /></td>
-                          <td className="py-3 px-3 text-slate-500">{s.clinicHoursCompleted}h</td>
+                          <td className="py-3 px-3 text-slate-500">{clinicHoursText(s.clinicHoursCompleted)}</td>
                           <td className="py-3 px-3">
                             {pendingRem > 0
                               ? <span className="text-[9px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/20 px-2 py-0.5 rounded-md">{pendingRem} Pending</span>
@@ -1516,14 +1526,14 @@ export const DeanReports: React.FC = () => {
                 )}
               </thead>
               <tbody>
-                {activeTab === 'students' && filtered.map((s: any) => {
+                {activeTab === 'students' && byLastName(filtered).map((s: any) => {
                   const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
                   const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
                   const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? formatGrade(Number(gradeVal)) : '—';
                   return (
                     <tr key={s.id}>
                       <td className="id">{s.studentId}</td>
-                      <td className="nm">{s.name}</td>
+                      <td className="nm">{sheetName(s)}</td>
                       <td className={`l ${printCellClass(s.className || '—')}`}>{s.className || '—'}</td>
                       <td>Year {s.yearLevel}</td>
                       <td className={`grade ${printCellClass(gradeStr)}`}>{gradeStr}</td>
@@ -1533,7 +1543,7 @@ export const DeanReports: React.FC = () => {
                     </tr>
                   );
                 })}
-                {activeTab === 'retention' && filtered.map((s: any) => {
+                {activeTab === 'retention' && byLastName(filtered).map((s: any) => {
                   const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
                   const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
                   const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? formatGrade(Number(gradeVal)) : '—';
@@ -1542,23 +1552,23 @@ export const DeanReports: React.FC = () => {
                   return (
                     <tr key={s.id}>
                       <td className="id">{s.studentId}</td>
-                      <td className="nm">{s.name}</td>
+                      <td className="nm">{sheetName(s)}</td>
                       <td className={`l ${printCellClass(s.className || '—')}`}>{s.className || '—'}</td>
                       <td className={`grade ${standingBad(s) ? 'bad' : printCellClass(gradeStr)}`}>{gradeStr}</td>
                       <td className={`${STANDING_LABELS[s.status] ? '' : 'cap'} ${standingBad(s) ? 'bad' : ''}`}>{STANDING_LABELS[s.status] ?? s.status}</td>
-                      <td>{s.clinicHoursCompleted}h</td>
+                      <td>{clinicHoursText(s.clinicHoursCompleted)}</td>
                       <td className={pend > 0 ? 'bad' : ''}>{pend > 0 ? `${pend} Pending` : 'None'}</td>
                       <td className={flagged > 0 ? 'bad' : ''}>{flagged > 0 ? `${flagged} Subject${flagged > 1 ? 's' : ''}` : 'Clear'}</td>
                     </tr>
                   );
                 })}
-                {activeTab === 'attendance' && (selectedClassId ? filteredAttendanceRows : historyRows).map((r, i) => {
+                {activeTab === 'attendance' && attendanceByName(selectedClassId ? filteredAttendanceRows : historyRows, students).map((r, i) => {
                   const st = students.find(x => x.id === r.studentId);
                   return (
                     <tr key={i}>
                       <td className="id">{r.date}</td>
                       <td className="id">{st?.studentId || '—'}</td>
-                      <td className="nm">{st?.name || '—'}</td>
+                      <td className="nm">{st ? sheetName(st) : '—'}</td>
                       <td className={`l ${printCellClass(r.className || currentSelectedClass?.name || '—')}`}>{r.className || currentSelectedClass?.name || '—'}</td>
                       <td className="id">{r.subjectCode}</td>
                       <td className={`cap ${r.status === 'absent' ? 'bad' : ''}`}>{r.status}</td>

@@ -384,12 +384,12 @@ export function buildGradeSummarySheet(a: {
       const e = extractPeriodEvaluation(subj, a.results[student.id], true);
       const grade = e.overallGwa !== null ? e.overallGwa
         : e.historicalGwa !== null ? `Prior: ${e.historicalGwa} (Historical)` : e.statusText === 'PENDING' ? 'Pending' : 'Incomplete';
-      return [student.studentId, student.name, pct(e.midtermPercentage, e.midtermStatus, e.midtermReasons), pct(e.finalPercentage, e.finalStatus, e.finalReasons), grade, e.statusText];
+      return [student.studentId, sheetName(student), pct(e.midtermPercentage, e.midtermStatus, e.midtermReasons), pct(e.finalPercentage, e.finalStatus, e.finalReasons), grade, e.statusText];
     }
     const c = subj?.components as Record<string, unknown> | undefined;
     const part = (k: string) => (typeof c?.[k] === 'number' ? (c[k] as number) : '—');
     const graded = subj && typeof subj.grade === 'number' && subj.grade > 0;
-    return [student.studentId, student.name, part('quizzes'), part('practicum'), part('exams'), part('attendance'), graded ? subj!.grade : '—', graded ? (subj!.grade === 5 ? 'FAILED' : 'PASS') : 'UNCOMPUTED'];
+    return [student.studentId, sheetName(student), part('quizzes'), part('practicum'), part('exams'), part('attendance'), graded ? subj!.grade : '—', graded ? (subj!.grade === 5 ? 'FAILED' : 'PASS') : 'UNCOMPUTED'];
   });
   const columns = a.periodMode
     ? [{ header: 'Student Number', width: 18 }, { header: 'Student Name', width: 32 }, { header: 'Midterm %', width: 16, format: '0.00' }, { header: 'Final %', width: 16, format: '0.00' }, { header: 'Overall Grade', width: 16, format: '0.0#' }, { header: 'Status', width: 14 }]

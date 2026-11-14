@@ -18,6 +18,7 @@ import type {
   FacultyRetentionState,
 } from '../../services/apiClient';
 import GradeValue from '../../components/GradeValue';
+import { watchlistStatusText } from '../../utils/reportWorkbook';
 
 type RemedialStage =
   | 'none'
@@ -989,7 +990,7 @@ export const RetentionMonitoring: React.FC = () => {
                       <td className="p-3 max-md:order-5 max-md:ml-auto max-md:p-0">
                         <span className="sr-only md:hidden">Status: </span>
                         <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60">
-                          Computed · Ready
+                          {watchlistStatusText(record)}
                         </span>
                       </td>
                     </tr>

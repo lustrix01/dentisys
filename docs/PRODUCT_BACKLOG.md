@@ -23,14 +23,7 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 # 9. Known issues
 
-## 9.13 Export wording found in the iBU review
-
-**Status: Not started.** Found while reviewing every export with mock data:
-
-- Dean Reports → Retention prints a bare "h" in Clinic Hrs when a student has no clinic hours; show "—".
-- Faculty Reports → Assessment Scores (Excel and PDF) shows "?" for a student with no scores yet; show a blank or "—".
-- The Midterm Watchlist status column says "Computed · Ready", internal wording that means nothing to Faculty.
-- Dean Reports, Grade Computation and the plain Reports tab prints still print names first-name-first; the Faculty Reports export uses LAST, First.
+No open items.
 
 ---
 
@@ -71,6 +64,7 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **9.10** One small-capitals header style on every table (docs/frontend.md Page patterns; tested).
 - **9.11** The shared Email history table becomes stacked cards below 768 px.
 - **9.12** Profile security cards use a 16 px inset on phones.
+- **9.13** Export wording: a dash for no clinic hours or no score yet (PDF), Midterm Watchlist status Graded / Missing scores / Pending, names LAST, First in every remaining export.
 - **10.1** T1 transmutation: fixed formula, optional per assessment, new assessments start with it on.
 - **10.2** T4 Full Matrix View unsaved scores kept in the tab and offered back after a forced sign-out.
 - **10.4** T8 + T11 grading clarification: course-level remedial, two attempts at 75%, cost recovery.
