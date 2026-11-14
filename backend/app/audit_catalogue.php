@@ -16,6 +16,7 @@ const AUDIT_AREA_GRADING = 'Grading';
 const AUDIT_AREA_ATTENDANCE = 'Attendance';
 const AUDIT_AREA_RETENTION = 'Retention';
 const AUDIT_AREA_BIOMETRICS = 'Biometrics';
+const AUDIT_CLASS_WORK_AREAS = [AUDIT_AREA_GRADING, AUDIT_AREA_ATTENDANCE, AUDIT_AREA_RETENTION];
 const AUDIT_PAGE_SIZE = 50;
 // Dean attention cards: each card counts, and filters to, exactly these codes.
 const AUDIT_ATTENTION_CARDS = [
@@ -89,6 +90,8 @@ function audit_catalogue(): array
         'class_schedule_overlap_confirmed' => ['Class schedule booked over an overlap', $P, true, false],
         'class_archive' => ['Class archived', $P, true, false],
         'class_restore' => ['Class restored', $P, true, false],
+        'account_deactivated' => ['Account deactivated', $P, true, false],
+        'account_reactivated' => ['Account reactivated', $P, true, false],
         // 5.3 Settings and terms
         'system_settings_updated' => ['System settings changed', $T, true, false],
         'academic_term_created' => ['Term added', $T, true, false],
@@ -105,6 +108,9 @@ function audit_catalogue(): array
         'room_category_retired' => ['Room category retired', $T, true, false],
         'room_category_restored' => ['Room category restored', $T, true, false],
         'room_category_deleted' => ['Room category deleted', $T, true, false],
+        'course_updated' => ['Course changed', $T, true, false],
+        'course_retired' => ['Course retired', $T, true, false],
+        'course_restored' => ['Course restored', $T, true, false],
         // 5.4 Grading (own view only)
         'grading_config_update' => ['Grade weights changed', $G, false, false],
         'assessment_created' => ['Assessment added', $G, false, false],
@@ -213,8 +219,23 @@ function audit_read_params(array $get, string $role): array
     if (mb_strlen($q) > 100) {
         $errors[] = ['field' => 'q', 'message' => 'Search must be 100 characters or fewer.'];
     }
+    // ADM-001 Superadmin mode: the Dean may ask for class work (a filter, not a permission, SA5).
+    $scope = trim((string) ($get['scope'] ?? ''));
+    if ($scope !== '' && !in_array($scope, ['overview', 'class_work'], true)) {
+        $errors[] = ['field' => 'scope', 'message' => 'Scope must be overview or class_work.'];
+    }
+    $classWork = $role === 'admin' && $scope === 'class_work';
+    $ids = [];
+    foreach (['facultyId', 'classId', 'studentId'] as $key) {
+        $v = trim((string) ($get[$key] ?? ''));
+        if ($v !== '' && preg_match('/^[1-9]\d{0,9}$/', $v) !== 1) {
+            $errors[] = ['field' => $key, 'message' => 'Must be an id.'];
+            $v = '';
+        }
+        $ids[$key] = $classWork ? $v : '';
+    }
     $area = trim((string) ($get['area'] ?? ''));
-    if ($area !== '' && !in_array($area, audit_areas_for($role), true)) {
+    if ($area !== '' && !in_array($area, $classWork ? AUDIT_CLASS_WORK_AREAS : audit_areas_for($role), true)) {
         $errors[] = ['field' => 'area', 'message' => 'Unknown area.'];
     }
     $status = trim((string) ($get['status'] ?? ''));
@@ -252,7 +273,8 @@ function audit_read_params(array $get, string $role): array
     return [
         'q' => $q, 'area' => $area, 'from' => $from, 'to' => $to, 'status' => $status,
         'role' => $role === 'admin' ? $filterRole : '', 'cls' => $role === 'faculty' ? $cls : '',
-        'card' => $role === 'admin' ? $card : '',
+        'card' => $role === 'admin' ? $card : '', 'scope' => $classWork ? 'class_work' : 'overview',
+        'facultyId' => $ids['facultyId'], 'classId' => $ids['classId'], 'studentId' => $ids['studentId'],
         'signins' => $signins === '1', 'sort' => $sort === 'oldest' ? 'ASC' : 'DESC', 'page' => (int) $page,
         'pageSize' => AUDIT_PAGE_SIZE,
     ];
@@ -292,7 +314,10 @@ function audit_read_entries(PDO $pdo, array $viewer, array $p): array
     $signinCodes = audit_sql_codes(static fn(array $c): bool => $c[3]);
     $where = ["e.action_code NOT IN ({$hidden})"];
     $params = [];
-    if ($role === 'admin') {
+    $classWorkCodes = audit_sql_codes(static fn(array $c): bool => in_array($c[1], AUDIT_CLASS_WORK_AREAS, true) && !$c[2]);
+    if ($role === 'admin' && $p['scope'] === 'class_work') {
+        $where[] = "e.action_code IN ({$classWorkCodes})"; // read-only list of class work, nothing else
+    } elseif ($role === 'admin') {
         // Overview codes always (failures and alerts included); anything else only the Dean's own, sign-ins behind the chip.
         $deanCodes = audit_sql_codes(static fn(array $c): bool => $c[2]);
         $ownSql = 'e.actor_user_id = ?' . ($p['signins'] ? '' : " AND e.action_code NOT IN ({$signinCodes})");
@@ -334,6 +359,24 @@ function audit_read_entries(PDO $pdo, array $viewer, array $p): array
     if ($p['cls'] !== '') {
         $where[] = 'e.scope_cs_id = ?';
         $params[] = (int) $p['cls'];
+    }
+    if ($p['scope'] === 'class_work') {
+        if ($p['classId'] !== '') {
+            $where[] = 'e.scope_cs_id = ' . (int) $p['classId'];
+        }
+        if ($p['facultyId'] !== '') { // SA9: work in the Faculty member's classes, whoever did it
+            $fid = (int) $p['facultyId'];
+            $where[] = "(e.actor_user_id = {$fid} OR e.scope_cs_id IN (SELECT cs_id FROM class_sections WHERE instructor_user_id = {$fid}))";
+        }
+        if ($p['studentId'] !== '') { // the student is in the target (enrolment, attendance record, request) or in the stored state
+            $sid = (int) $p['studentId'];
+            $mine = "SELECT en.enrollment_id FROM enrollments en WHERE en.student_id = {$sid}";
+            $where[] = "(e.target_type = 'student' AND e.target_id = '{$sid}'
+                OR e.target_type = 'enrollment' AND e.target_id IN (SELECT enrollment_id::text FROM ({$mine}) m)
+                OR e.target_type = 'attendance_record' AND e.target_id IN (SELECT r.record_id::text FROM attendance_records r WHERE r.enrollment_id IN ({$mine}))
+                OR e.target_type = 'attendance_excused_request' AND e.target_id IN (SELECT x.request_id::text FROM attendance_excused_requests x WHERE x.enrollment_id IN ({$mine}))
+                OR e.after_state_json ~ '\"studentId\": ?\"?{$sid}[\",}]' OR e.before_state_json ~ '\"studentId\": ?\"?{$sid}[\",}]')";
+        }
     }
     $whereSql = implode(' AND ', $where);
     $gkey = 'COALESCE(e.operation_uuid::text, e.event_id::text)';
@@ -393,8 +436,16 @@ function audit_read_entries(PDO $pdo, array $viewer, array $p): array
 
     $result = [
         'entries' => $entries, 'total' => $total, 'page' => (int) $p['page'], 'pageSize' => $pageSize,
-        'areas' => audit_areas_for($role),
+        'areas' => $p['scope'] === 'class_work' ? AUDIT_CLASS_WORK_AREAS : audit_areas_for($role), 'scope' => $p['scope'],
     ];
+    if ($p['scope'] === 'class_work') { // filter choices: only Faculty and classes that have class-work rows
+        $used = "SELECT DISTINCT e.scope_cs_id FROM audit_events e WHERE e.scope_cs_id IS NOT NULL AND e.action_code IN ({$classWorkCodes})";
+        $result['classOptions'] = array_map(static fn(array $c): array => ['id' => (int) $c['cs_id'], 'label' => $c['cs_name'] . ' · SY ' . $c['school_year']],
+            $pdo->query("SELECT cs_id, cs_name, school_year FROM class_sections WHERE cs_id IN ({$used}) ORDER BY school_year DESC, cs_name")->fetchAll(PDO::FETCH_ASSOC));
+        $result['facultyOptions'] = array_map(static fn(array $f): array => ['id' => (int) $f['user_id'], 'name' => $f['display_name']],
+            $pdo->query("SELECT DISTINCT ua.user_id, ua.display_name FROM user_accounts ua JOIN class_sections cs ON cs.instructor_user_id = ua.user_id
+                          WHERE cs.cs_id IN ({$used}) ORDER BY ua.display_name")->fetchAll(PDO::FETCH_ASSOC));
+    }
     if ($role === 'admin') {
         // Attention cards: same date range, every Dean-visible failure/alert (not narrowed by the other filters).
         $attWhere = array_merge(["e.action_code IN ('login_failed','google_login_denied','refresh_reuse_detected','mfa_verification_failed','mfa_revoked')"], $dateWhere);
@@ -680,7 +731,10 @@ function audit_row_record(array $r, array $lk, ?array $before, ?array $after): s
             $name = $en !== null ? preg_replace('/ \([^()]*\)$/', '', $lk['student'][(int) $en['student_id']] ?? '') : '';
             return $en !== null && $name !== '' ? $join($name, $class((int) $en['cs_id'])) : $fallback();
         case 'user_account':
-            return $lk['user'][$key] ?? $fallback();
+            return isset($lk['user'][$key]) ? $join($lk['user'][$key], $after['kind'] ?? $before['kind'] ?? null) : $fallback();
+        case 'course':
+            $c = $after ?? $before;
+            return isset($c['courseCode']) ? $join($c['courseCode'], $c['name'] ?? null) : $fallback();
         case 'grading_config':
             $c = $after['course']['code'] ?? null;
             return $c !== null ? $join($c, trim(($after['semester'] ?? '') . ' ' . ($after['schoolYear'] ?? ''))) : $fallback();
@@ -793,5 +847,28 @@ function audit_build_entry(array $rows, int $count, array $lk, bool $isDean): ar
         'who' => $who, 'whoText' => $whoText,
         'what' => $what, 'area' => $info['area'], 'record' => $record, 'change' => $change,
         'status' => $status, 'isSignIn' => $info['isSignIn'], 'batch' => $batch, 'details' => $details,
+        'classLabel' => $head['scope_cs_id'] !== null ? ($lk['class'][(int) $head['scope_cs_id']] ?? null) : null,
     ];
+}
+
+/** Up to 20 students whose name or number matches (the Superadmin Student filter); fewer than 2 characters returns none. */
+function audit_student_lookup(PDO $pdo, string $q): array
+{
+    if (mb_strlen($q) < 2) {
+        return [];
+    }
+    $like = '%' . addcslashes(mb_substr($q, 0, 100), '\%_') . '%';
+    $stmt = $pdo->prepare(
+        "SELECT s.student_id, s.student_number,
+                COALESCE(pi.name_prefix, s.name_prefix) AS name_prefix, COALESCE(pi.first_name, s.first_name) AS first_name,
+                COALESCE(pi.middle_name, s.middle_name) AS middle_name, COALESCE(pi.last_name, s.last_name) AS last_name,
+                COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix
+           FROM students s LEFT JOIN person_identities pi ON pi.person_id = s.person_id
+          WHERE s.student_number ILIKE ? OR COALESCE(pi.first_name, s.first_name) || ' ' || COALESCE(pi.last_name, s.last_name) ILIKE ?
+             OR COALESCE(pi.last_name, s.last_name) || ' ' || COALESCE(pi.first_name, s.first_name) ILIKE ?
+          ORDER BY 6, 4, s.student_id LIMIT 20"
+    );
+    $stmt->execute([$like, $like, $like]);
+    return array_map(static fn(array $s): array => ['id' => (int) $s['student_id'], 'label' => account_identity_display_name($s) . ' (' . $s['student_number'] . ')'],
+        $stmt->fetchAll(PDO::FETCH_ASSOC));
 }

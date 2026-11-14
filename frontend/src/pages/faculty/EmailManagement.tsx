@@ -988,7 +988,7 @@ export const EmailManagement: React.FC = () => {
           ) : tab === 'midterm_advisory' ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse max-md:block">
-                <thead className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 max-md:block">
+                <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 max-md:block">
                   <tr className="max-md:block">
                     <th className="w-24 border-b border-slate-200 px-4 py-4 dark:border-slate-800 max-md:hidden">Select</th>
                     <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Student details</th>
@@ -1049,7 +1049,7 @@ export const EmailManagement: React.FC = () => {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse max-md:block">
-                <thead className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 max-md:block">
+                <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 max-md:block">
                   <tr className="max-md:block">
                     <th className="w-24 border-b border-slate-200 px-4 py-4 dark:border-slate-800 max-md:hidden">Select</th>
                     <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Student details</th>

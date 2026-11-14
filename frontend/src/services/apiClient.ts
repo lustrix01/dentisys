@@ -782,6 +782,10 @@ export function getAdminAuditLogsApi(params?: AuditQuery): Promise<AuditListResp
   return request('GET', `/admin/audit-logs${auditQueryString(params)}`);
 }
 
+export function getAdminAuditStudentsApi(q: string): Promise<{ status: string; students: Array<{ id: number; label: string }> }> {
+  return request('GET', `/admin/audit-logs?lookup=students&q=${encodeURIComponent(q)}`);
+}
+
 export function getFacultyActivityApi(params?: AuditQuery): Promise<AuditListResponse> {
   return request('GET', `/faculty/activity${auditQueryString(params)}`);
 }
@@ -2557,6 +2561,42 @@ export function restoreRoomCategoryApi(categoryId: number): Promise<{ category: 
 export function deleteRoomCategoryApi(categoryId: number): Promise<{ status: string }> {
   return request('POST', '/admin/room-categories/delete', { categoryId });
 }
+// ADM-001 Superadmin mode: Course Catalog and People & Accounts (Dean only).
+export type CatalogCourse = {
+  id: number; courseCode: string; name: string; units: number; lectureUnits: number | null; labUnits: number | null;
+  status: 'active' | 'retired'; retiredAt: string | null; classCount: number; currentClassCount: number;
+};
+export type CourseUpdateInput = { id: number; courseCode: string; name: string; lectureUnits: number; labUnits: number; reason?: string };
+export function getAdminCoursesApi(status: 'active' | 'retired' | 'all' = 'all', q = ''): Promise<{ status: string; courses: CatalogCourse[] }> {
+  return request('GET', `/admin/courses?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ''}`);
+}
+export function updateCourseApi(data: CourseUpdateInput): Promise<{ course: CatalogCourse }> {
+  return request('POST', '/admin/courses/update', data);
+}
+export function retireCourseApi(id: number, reason?: string): Promise<{ course: CatalogCourse }> {
+  return request('POST', '/admin/courses/retire', { id, reason });
+}
+export function restoreCourseApi(id: number): Promise<{ course: CatalogCourse }> {
+  return request('POST', '/admin/courses/restore', { id });
+}
+export type PersonClass = { csId: number; label: string; schoolYear: string; current: boolean };
+export type AdminPerson = {
+  userId: number; name: string; email: string; kind: 'faculty' | 'student'; status: 'active' | 'deactivated';
+  disabledAt: string | null; twoFactor: boolean; lastActivityAt: string | null;
+  classes?: PersonClass[]; studentNo?: string; enrolledClasses?: PersonClass[];
+};
+export function getAdminPeopleApi(params: { kind: 'faculty' | 'student'; status?: 'active' | 'deactivated' | 'all'; q?: string; page?: number }): Promise<{ status: string; people: AdminPerson[]; total: number; page: number; pageSize: number }> {
+  const search = new URLSearchParams({ kind: params.kind, status: params.status ?? 'all', page: String(params.page ?? 1) });
+  if (params.q) search.set('q', params.q);
+  return request('GET', `/admin/people?${search.toString()}`);
+}
+export function deactivatePersonApi(userId: number, reason?: string): Promise<{ person: AdminPerson }> {
+  return request('POST', '/admin/people/deactivate', { userId, reason });
+}
+export function reactivatePersonApi(userId: number): Promise<{ person: AdminPerson }> {
+  return request('POST', '/admin/people/reactivate', { userId });
+}
+
 export function getRoomsApi(): Promise<{ status: string; rooms: RoomOption[] }> {
   return request('GET', '/rooms');
 }

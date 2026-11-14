@@ -196,7 +196,7 @@ export function FeaturesPage() {
                     {/* Table */}
                     <div className="overflow-x-auto rounded-xl border border-slate-200">
                       <table className="w-full min-w-[520px] text-left text-xs lg:min-w-0">
-                        <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
+                        <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                           <tr>
                             <th className="px-3.5 py-2.5">Student No.</th>
                             <th className="px-3.5 py-2.5">Student Name</th>
@@ -396,7 +396,7 @@ export function FeaturesPage() {
                     {/* MATRIX COMPUTATION TABLE */}
                     <div className="overflow-x-auto rounded-xl border border-slate-200">
                       <table className="w-full min-w-[760px] text-left text-xs lg:min-w-0">
-                        <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
+                        <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                           <tr>
                             <th className="px-3 py-2">Student Name</th>
                             <th className="px-3 py-2 text-center">Term Exam (50%)</th>

@@ -40,11 +40,12 @@ It is not usage analytics, debugging output, or a click history. An event that s
 | Secretary | My Activity | Only rows their own account did. Same Sign-ins filter. |
 | Student | none (not now) | If added later: only rows their own account did. |
 | Dean | Audit Trail | **Overview**: people and accounts, roles, settings, terms, security events, biometric consent and deletion, plus everything the Dean's own account did. **Not** class work: scores, assessments, grade weights, recompute, attendance records and sessions, Excused requests, retention entries, other people's successful sign-ins. |
+| Dean in Superadmin mode | Audit Trail, Class work view (`scope=class_work`) | **Only** class-work rows (Grading, Attendance, Retention areas), read-only, with Faculty, class, Student and date filters ([superadmin.md](superadmin.md) Part A). Never in the overview or the Dashboard. |
 | Dean | Dashboard "Latest audit events" | Newest 20 rows of the same overview. |
 
 Rows are written whether or not any screen shows them. Hidden class-work rows stay sealed in the database as evidence.
 
-**O1 — Investigations.** The Dean has no screen access to class-work rows. For a grade dispute or a suspected stolen Faculty account, the system administrator reads the rows from the database on the Dean's request. Accepted trade-off: within the app, only the Faculty member can see their own class-work history.
+**O1 — Investigations.** In the normal Dean view the Dean has no access to class-work rows. In Superadmin mode the Dean reads them read-only on the Audit Trail ([superadmin.md](superadmin.md) Part A); opening them is not itself audited. Faculty still see only their own class-work history in My Activity.
 
 **O2 — Class Attendance Activity.** Stays as a class-records screen, not the personal audit trail: Faculty see attendance changes made by anyone (including Secretaries) in their own classes. It stays **unchanged** (Student, Section, Session, Change, Reason, By; Manila time); it reads attendance records, not audit rows.
 
@@ -143,6 +144,7 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | Secretary appointed / appointment ended | secretary_appointed, secretary_appointment_ended | Faculty | student, class, role before → after | yes | yes | KEEP |
 | Class created / changed | class_create, class_update | Faculty | changed fields before → after | yes | yes | KEEP |
 | Class schedule saved over an overlap | class_schedule_overlap_confirmed | Faculty | who confirmed, other classes | yes | yes | KEEP |
+| Account deactivated / reactivated | account_deactivated, account_reactivated | Dean (Superadmin mode) | status Active ↔ Disabled, kind (Faculty or Student), reason on deactivation; a Student who is a Class Secretary is the same account, so one row | yes | — | **NEW** |
 
 ### 5.3 Settings and terms (actor: Dean)
 
@@ -153,6 +155,7 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | Terms copied to next year | academic_terms_copied | year, terms created | yes | KEEP |
 | Room added / changed / retired / restored / deleted | room_created, room_updated, room_retired, room_restored, room_deleted | room before → after (rename counts) | yes | KEEP |
 | Room category added / changed / retired / restored / deleted | room_category_created, room_category_updated, room_category_retired, room_category_restored, room_category_deleted | category before/after | yes | KEEP |
+| Course changed / retired / restored | course_updated, course_retired, course_restored | course before → after (code, title, units, status), reason on retire; **no row if nothing changed or the status already matched** | yes | **NEW** |
 
 ### 5.4 Grading (actor: Faculty) — own view only
 

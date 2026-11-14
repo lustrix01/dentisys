@@ -66,6 +66,8 @@ export interface AuditEntry {
   status: AuditStatus;
   isSignIn: boolean;
   batch: null | { count: number; members: Array<{ record: string; change: string }> };
+  /** Class name of the row's class, when the row belongs to one. */
+  classLabel?: string | null;
   details: {
     fromWhere: { ip: string | null; device: string | null };
     reason: string | null;
@@ -82,6 +84,10 @@ export interface AuditListResponse {
   pageSize: number;
   areas: string[];
   attention?: { failedSignIns: number; securityAlerts: number; mfaTurnedOff: number };
+  scope?: 'overview' | 'class_work';
+  /** Class work only: Faculty and classes that have at least one class-work row. */
+  facultyOptions?: Array<{ id: number; name: string }>;
+  classOptions?: Array<{ id: number; label: string }>;
 }
 
 export interface AuditQuery {
@@ -89,6 +95,9 @@ export interface AuditQuery {
   cls?: string; signins?: boolean; sort?: 'newest' | 'oldest'; page?: number;
   /** Dean attention card: failedSignIns | securityAlerts | mfaTurnedOff. */
   card?: string;
+  /** Dean in Superadmin mode (ADM-001): 'class_work' lists grades, attendance and retention rows, read-only. */
+  scope?: 'overview' | 'class_work';
+  facultyId?: string; classId?: string; studentId?: string;
 }
 
 /** Only non-empty filters are sent; the server defaults the rest. */

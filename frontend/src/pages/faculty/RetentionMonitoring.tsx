@@ -950,7 +950,7 @@ export const RetentionMonitoring: React.FC = () => {
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs max-md:block">
-              <thead className="text-[10px] uppercase text-slate-500 dark:text-slate-400 max-md:hidden">
+              <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 max-md:hidden">
                 <tr>
                   <th className="p-3">Student</th>
                   <th className="p-3">Class</th>

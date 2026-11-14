@@ -314,7 +314,7 @@ export const RetentionMonitoring: React.FC = () => {
           </div>
           <div className="overflow-x-auto">
             <table className="hidden w-full min-w-[520px] text-left text-xs md:table">
-              <thead><tr><th className="p-2">Course</th><th className="p-2">Sample Grade</th><th className="p-2">Sample Standing</th></tr></thead>
+              <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400"><tr><th className="p-2">Course</th><th className="p-2">Sample Grade</th><th className="p-2">Sample Standing</th></tr></thead>
               <tbody>{sampleSubjects.length === 0 && <tr><td colSpan={3} className="p-2">No sample courses available.</td></tr>}{sampleSubjects.map(subject => <tr key={subject.code}>
                 <td className="p-2">{subject.code} · {subject.name}</td>
                 <td className="p-2 font-mono">{formatGrade(subject.grade)}</td>

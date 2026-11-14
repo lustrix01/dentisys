@@ -325,7 +325,7 @@ export const RealStudentDashboard: React.FC = () => {
             <>
             <div className="hidden overflow-x-auto md:block lg:hidden xl:block">
               <table className="w-full min-w-[700px] text-xs text-left">
-                <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 uppercase text-[10px] font-bold border-b border-slate-100 dark:border-slate-800">
+                <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px] font-bold border-b border-slate-100 dark:border-slate-800">
                   <tr>
                     <th className="py-3 px-4">Subject</th>
                     <th className="py-3 px-4">Section</th>

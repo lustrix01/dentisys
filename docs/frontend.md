@@ -31,12 +31,14 @@ The standard look for each part of a signed-in page ([AGENTS.md](../AGENTS.md) "
 | Page wrapper | `space-y-6 animate-fade-in max-w-7xl mx-auto` around the whole page | `pages/faculty/RetentionMonitoring.tsx` (the outer `div` of the page) |
 | Page section tabs (switch between the main sections of a page, such as Grades / Retention / Attendance) | White card bar: bordered white card, the selected tab filled with the role colour | `<Tabs variant="section">` in `components/Tabs.tsx`; never hand-build a tab bar |
 | List switch (two or three views of one list, such as Assigned / Archived) | Grey segmented bar: grey track, the selected tab a white pill with role-colour text and a role-colour outline, count badge tinted in the role colour | `<Tabs variant="switch">` in `components/Tabs.tsx` |
+| Account view switch (Secretary / Student, Dean / Superadmin) | Two-segment grey control at the top of the sidebar, `aria-pressed` on each segment; the view is the route, never stored | "Role Switcher" blocks in `components/Layout.tsx` |
 | Tab names on phones | When the full names would wrap to extra rows below `sm`, give each tab a `shortLabel` (for example "Scores" for "Student Scores Entry"). The full name stays the accessible name at every width; the short form is visual only | `components/Tabs.tsx` (`shortLabel` and `aria-label`) |
 | Selected colour | The role's colour, as in the sidebar (`getRoleColors` in `components/Layout.tsx`): Dean purple (`accent`), Faculty green (`clinical`; Classes and Attendance use `emerald`), Student and Secretary blue | `components/Layout.tsx` |
 | Attendance session status and actions | A read-only "Session status" panel with one pill (Live session + code + start time, Scheduled session, No session running, View only, Checking) separated from an actions row of buttons (Sessions, Start session when idle, Schedule session while live); the hide-while-live rule stays | `pages/faculty/AttendanceMonitoring.tsx`, `pages/secretary/AttendanceList.tsx` |
+| Table header cells | Small capitals: `text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400` on the `<thead>` (or its `<tr>`), with the label text kept in Title Case in code (CSS does the capitals; `spec.md` UI-001). Keep column widths, alignment, sticky and `max-md:` classes on the cells themselves. Printed and exported report tables follow their own print stylesheet and are exempt. `tests/tableHeaderContract.test.ts` enforces it | `<thead>` in `components/GradebookMatrix.tsx` (Full Matrix) and `pages/admin/PeopleAndAccounts.tsx` |
 | Dialogs, panels, school-year filter | The shared components above | `Modal.tsx`, `Card.tsx`, `SchoolYearFilter.tsx` |
 
-Not settled yet: the page header, notice banners (three looks today), tables and empty states. Until each has a standard here, copy the nearest page that does the same job.
+Not settled yet: the page header, notice banners (three looks today), table bodies and empty states. Until each has a standard here, copy the nearest page that does the same job.
 
 ### Filters, search and list actions
 

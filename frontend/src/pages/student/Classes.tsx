@@ -573,7 +573,7 @@ export const Classes: React.FC = () => {
           ))}
         </div>
         <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[620px] text-left text-xs">
-          <thead><tr><th className="p-2">Course</th><th className="p-2">School Year</th><th className="p-2">Grade</th><th className="p-2">Score %</th><th className="p-2">Clinical Hours</th><th className="p-2">Retention</th></tr></thead>
+          <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400"><tr><th className="p-2">Course</th><th className="p-2">School Year</th><th className="p-2">Grade</th><th className="p-2">Score %</th><th className="p-2">Clinical Hours</th><th className="p-2">Retention</th></tr></thead>
           <tbody>{otherClasses.map(cls => <tr key={cls.enrollmentId}>
             <td className="p-2">{cls.courseCode} · {cls.courseName} · {cls.className}</td>
             <td className="p-2">{cls.schoolYear || 'Unavailable'}</td>

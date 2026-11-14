@@ -4160,7 +4160,7 @@ export const GradeComputation: React.FC = () => {
                 <div className="overflow-x-auto rounded-xl border border-amber-500/20 bg-white/60 dark:bg-slate-900/60">
                   <table className="min-w-full divide-y divide-amber-500/20 text-xs">
                     <thead>
-                      <tr className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-left">
+                      <tr className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">
                         <th className="px-3 py-2">Assessment ID</th>
                         <th className="px-3 py-2">Title</th>
                         <th className="px-3 py-2">Required Legacy Type</th>
@@ -4217,7 +4217,7 @@ export const GradeComputation: React.FC = () => {
                 <div className="overflow-x-auto rounded-xl border border-amber-500/20 bg-white/60 dark:bg-slate-900/60">
                   <table className="min-w-full divide-y divide-amber-500/20 text-xs">
                     <thead>
-                      <tr className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-left">
+                      <tr className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">
                         <th className="px-3 py-2">Assessment ID</th>
                         <th className="px-3 py-2">Category ID</th>
                         <th className="px-3 py-2">Grading Period</th>
@@ -5727,6 +5727,7 @@ export const GradeComputation: React.FC = () => {
               id="assessment-title"
               type="text"
               required
+              maxLength={255}
               {...assessmentFieldAria('title')}
               placeholder="e.g. Molar Crown Prep quiz"
               value={assTitle}

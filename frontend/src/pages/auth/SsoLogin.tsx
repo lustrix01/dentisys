@@ -364,7 +364,7 @@ export function SsoLogin() {
                 <div className="flex">
                   <input
                     type="text"
-                    id="login-email"
+                    id="login-email" maxLength={254}
                     autoComplete="username"
                     inputMode="email"
                     required

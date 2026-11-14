@@ -606,7 +606,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
 
       <div className="overflow-x-auto max-h-[600px] max-xl:max-h-[max(600px,calc(100dvh-6rem))] overflow-y-auto">
         <table className="min-w-full border-collapse text-xs">
-          <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             {/* ROW 1: Period Headers */}
             <tr>
               <th className={th} colSpan={2}>Student Details</th>

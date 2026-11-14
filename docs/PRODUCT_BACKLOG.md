@@ -21,57 +21,11 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 ---
 
-# 4. Dean
-
-## 4.5–4.7 Superadmin mode
-
-**Status: Not started (planned; needs a spec section and a contract).** The Dean will get a Superadmin toggle, like the existing Secretary / Student view toggle, that switches the Dean into superadmin mode. Superadmin features:
-
-- **4.5 Grade and attendance changes:** see and filter grade and attendance changes (for example to check grade tampering). The Dean's Audit Trail today hides class work ("Class work (grades, attendance, retention) is not shown here; it stays recorded").
-- **4.6 Course catalog:** manage the course catalog. Today any Faculty member can add a course code when creating a class, no one can retire one, and test courses stay visible to the Dean.
-- **4.7 Account deactivation (leaning, not decided):** deactivate or reactivate a Faculty or Student account (someone leaves, or an account is misused), with a list of all students and of each Faculty member's classes.
-
----
-
-# 5. Faculty
-
-## 5.1 Faculty Dashboard
-
-**Status: Partial.** Server-backed, and its class count matches Classes & Rosters (9.1). No test shows that the Quick Actions and duplicate figures below are gone.
-
-Remove Quick Actions that repeat the sidebar and duplicate Assigned/Total Classes figures; keep warnings, operational status and at-a-glance information.
-
----
-
-# 8. Login usability
-
-## 8.1 Field validation and password controls
-
-**Status: Partial.** Activation, reset and login have validation, password visibility toggles and requirements that mirror the backend policy. The remaining data-entry fields have not been checked one by one.
-
----
-
 # 9. Known issues
 
 ## 9.4 Official grade sheet export in the BU format
 
 **Status: Not started (Owner will scope it).** Official imports (class list PDF, grade sheet workbook) and the official grade sheet export ([contract](contracts/official-exports.md)) exist. The export must be made compatible with the BU format; the Owner defines the format when this work starts.
-
-## 9.10 Table header small capitals
-
-**Status: Not decided.** Only 6 of 41 tables show their column headers in small capitals; the rest use normal text. Decide one look for column headers.
-
-## 9.12 Profile security cards on phones
-
-**Status: Not started (Owner-approved recommendation).** The shared Two-Factor, Google Sign-In and Change Password cards (`MfaSettingsCard.tsx`, `GoogleLinkCard.tsx`, `PasswordChangeCard.tsx`, on every role's profile) are heavily inset on phones and the password placeholder is clipped. Give them the phone padding the other cards use.
-
----
-
-# 10. Ticket batch 1 — remaining items
-
-## 10.6 Partially readable grade-sheet fixture
-
-**Status: Not started.** The "partially readable grade-sheet workbook" case (found + zero counts) has no crafted official-layout fixture in the test suite; add one when touching this area. Never use real class lists or the Owner's workbook for fixtures.
 
 ---
 
@@ -85,7 +39,9 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **4.2** Dean Dashboard: server-backed metrics, no Quick Actions block (tested).
 - **4.3** Faculty invitation rows start with a read-only View action; the Invitation Details dialog shows name, email, status, sent and expiry dates and the invitation's email history, with no token or link.
 - **4.4** Dean Settings: no Course Component Ratios or Retention Standard setting (tested).
+- **4.5–4.7** Superadmin mode (spec ADM-001, [contract](contracts/superadmin.md)): Dean / Superadmin switch; Audit Trail class work; Course Catalog edit, retire and restore (migration 060); People & Accounts deactivate and reactivate.
 - **4.8** Invitation Details matches email history by invitation id (migration 059 stores it on each invitation email), falling back to the address for older emails.
+- **5.1** Faculty Dashboard: no repeated Quick Actions or duplicate class figures (tested).
 - **5.2** Grade Computation confirms mutations, not interactions: a Save that deletes saved scores asks first, the grade-sheet import asks once with a summary, and leaving the page through an in-app link (or closing the tab) warns only when unsaved scores or grade weights would be lost. Browser Back/Forward is not guarded (needs a data router).
 - **5.3** Midterm Watchlist offers no remedial action; the server refuses remedial without a final grade (tested).
 - **5.4** Faculty Remedial Record dialog: Student Number, both attempts with Faculty notes and a completion date (set once when the result is recorded, migration 058; older records show Last updated), and the cost-recovery grade, result and date.
@@ -97,6 +53,7 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **5.11** Client requests: cost-recovery remedials implemented; the remove-student error was not reproduced.
 - **7.1** Secretary Dashboard: no Quick Actions; status, alerts and pending work remain (tested).
 - **7.2** Manual Override filtering: date, then session, then records; revoked sessions view-only.
+- **8.1** Field validation: form inputs carry the server limits; assessment title ≤ 255, Student Number 3–50; the server counts characters; server field errors show under the field.
 - **8.2** 2FA settings: recovery-code regeneration and turning 2FA off are limited to 10 attempts per 5 minutes per user; regeneration is audited ("Regenerated recovery codes.").
 - **9.1** Faculty Dashboard counts only classes still running in the current school year, like the Classes & Rosters Assigned tab.
 - **9.2** Grade Computation tab strip on phones: no horizontal scrolling at 320–390 px; the shared section tabs wrap with short names.
@@ -105,12 +62,14 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **9.7** Wording: DentiSYS in everything users see; Student No. in table headers and phone cards, Student Number elsewhere; Student Details; Dean; Faculty. Full Matrix switch reads "Name / Student No. and name". The authenticator app entry keeps "DentiSys".
 - **9.8** Shared tab bar standard (white card bar and grey list switch).
 - **9.9** Full Matrix View loads all scores in one request per class; Show computation at every width; the Reports Assessment Scores sheet and PDF print show Score, %, Transmuted, Average % and Weighted.
+- **9.10** One small-capitals header style on every table (docs/frontend.md Page patterns; tested).
 - **9.11** The shared Email history table becomes stacked cards below 768 px.
+- **9.12** Profile security cards use a 16 px inset on phones.
 - **10.1** T1 transmutation: fixed formula, optional per assessment, new assessments start with it on.
 - **10.2** T4 Full Matrix View unsaved scores kept in the tab and offered back after a forced sign-out.
 - **10.4** T8 + T11 grading clarification: course-level remedial, two attempts at 75%, cost recovery.
 - **10.5** GoogleLinkCard confirm-password field has the standard show/hide control and a screen-reader label.
-- **10.6 (part)** The Features page badge reads "PDF / CSV Roster · Excel Grades".
+- **10.6** The Features page badge reads "PDF / CSV Roster · Excel Grades"; a synthetic partially readable grade-sheet fixture is tested.
 - **10.7** Phone pass: Student Retention cards full width; Face Registration "Back to terms" never splits and its ID line is readable in dark mode.
 - **10.8** Session cards: the Scheduled date line aligns with its title; View-only checked and correct.
 - **10.9** T9 session restored after closing the browser: intended behaviour.

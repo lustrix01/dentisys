@@ -17,6 +17,7 @@ require_once dirname(__DIR__) . '/controllers/StudentAcademicController.php';
 require_once dirname(__DIR__) . '/controllers/NotificationController.php';
 require_once dirname(__DIR__) . '/controllers/AdminController.php';
 require_once dirname(__DIR__) . '/controllers/RoomController.php';
+require_once dirname(__DIR__) . '/controllers/SuperadminController.php';
 require_once dirname(__DIR__) . '/controllers/FacultyController.php';
 
 return [
@@ -25,6 +26,13 @@ return [
     ['method' => 'POST', 'path' => '/api/admin/academic-terms/preview', 'handler' => 'handle_admin_academic_terms'],
     ['method' => 'POST', 'path' => '/api/admin/academic-terms/delete', 'handler' => 'handle_admin_academic_terms'],
     ['method' => 'POST', 'path' => '/api/admin/academic-terms/copy', 'handler' => 'handle_admin_academic_terms'],
+    ['method' => 'GET', 'path' => '/api/admin/courses', 'handler' => 'handle_admin_courses'],
+    ['method' => 'POST', 'path' => '/api/admin/courses/update', 'handler' => 'handle_admin_courses'],
+    ['method' => 'POST', 'path' => '/api/admin/courses/retire', 'handler' => 'handle_admin_courses'],
+    ['method' => 'POST', 'path' => '/api/admin/courses/restore', 'handler' => 'handle_admin_courses'],
+    ['method' => 'GET', 'path' => '/api/admin/people', 'handler' => 'handle_admin_people'],
+    ['method' => 'POST', 'path' => '/api/admin/people/deactivate', 'handler' => 'handle_admin_people'],
+    ['method' => 'POST', 'path' => '/api/admin/people/reactivate', 'handler' => 'handle_admin_people'],
     ['method' => 'GET', 'path' => '/api/rooms', 'handler' => 'handle_rooms_list'],
     ['method' => 'GET', 'path' => '/api/admin/rooms', 'handler' => 'handle_admin_rooms'],
     ['method' => 'POST', 'path' => '/api/admin/rooms', 'handler' => 'handle_admin_rooms'],

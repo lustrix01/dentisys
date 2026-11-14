@@ -33,6 +33,7 @@ import { RevokedSessionsSwitch } from '../../components/RevokedSessionsSwitch';
 import { meetingVenueLines } from '../../utils/scheduleHelper';
 import { isNextDay, sessionEndOffsetMs } from '../../utils/sessionTimes';
 import { formatVisibleTime } from '../../utils/timeDisplay';
+import { apiFieldErrors } from '../../utils/apiFieldErrors';
 import {
   REVOKED_SESSION_VIEW_ONLY_NOTE, countRevokedSessions, matchesRollCallFilters, revokedHiddenText, visibleSessions,
   type OverriddenFilter, type RecordedByFilter,
@@ -217,6 +218,7 @@ export const AttendanceList: React.FC = () => {
   const [isRevokeModalOpen, setIsRevokeModalOpen] = useState(false);
   const [sessionTargetToRevoke, setSessionTargetToRevoke] = useState<SessionItem | null>(null);
   const [revokeReason, setRevokeReason] = useState('');
+  const [reasonError, setReasonError] = useState<string | null>(null); // shown under the Reason field
   const [submittingRevoke, setSubmittingRevoke] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
 
@@ -357,6 +359,7 @@ export const AttendanceList: React.FC = () => {
     const validStatuses = ['present', 'late', 'absent', 'excused'];
     setOverrideStatus((validStatuses.includes(record.status) ? record.status : 'present') as 'present' | 'late' | 'absent' | 'excused');
     setReason('');
+    setReasonError(null);
     setFeedback(null);
   };
 
@@ -382,7 +385,7 @@ export const AttendanceList: React.FC = () => {
     if (!selectedRecord || saving.current || loading || sessionLoading) return;
     const trimmedReason = reason.trim().replace(/\s+/g, ' ');
     if ((reasonRequired || trimmedReason) && (trimmedReason.length < 8 || trimmedReason.length > 500)) {
-      setFeedback({ type: 'error', text: 'Provide a reason of 8–500 characters.' });
+      setReasonError('Provide a reason of 8–500 characters.');
       return;
     }
     if (overrideStatus === selectedRecord.status) {
@@ -395,6 +398,7 @@ export const AttendanceList: React.FC = () => {
     ++sessionRequest.current;
     setSubmitting(true);
     setFeedback(null);
+    setReasonError(null);
     try {
       const targetSessionId = selectedRecord.attendanceSessionId ? Number(selectedRecord.attendanceSessionId) : undefined;
       if (overrideStatus === 'excused') {
@@ -426,7 +430,9 @@ export const AttendanceList: React.FC = () => {
       setReason('');
       setRefreshVersion(version => version + 1);
     } catch (err) {
-      setFeedback({
+      const fieldError = apiFieldErrors(err).reason;
+      if (fieldError) setReasonError(fieldError);
+      else setFeedback({
         type: 'error',
         text: err instanceof Error ? err.message : 'Unable to send the request.',
       });
@@ -1310,7 +1316,7 @@ export const AttendanceList: React.FC = () => {
             ) : (
               <div className="max-h-[560px] overflow-y-auto overflow-x-auto">
                 <table className="w-full min-w-[640px] text-left text-xs border-collapse">
-                  <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
+                  <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
                     <tr>
                       <th className="py-3 px-4 sm:py-4 sm:px-6">Student Details</th>
                       <th className="py-3 px-4 sm:py-4 sm:px-6">Check-In Time</th>
@@ -1852,6 +1858,7 @@ export const AttendanceList: React.FC = () => {
               <textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
+                {...(reasonError ? { 'aria-invalid': true, 'aria-describedby': 'err-override-reason' } : {})}
                 placeholder="Why is this change needed? (e.g., medical certificate verified, technical camera delay, authorized official business)"
                 rows={3}
                 maxLength={500}
@@ -1860,6 +1867,7 @@ export const AttendanceList: React.FC = () => {
               <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 text-right">
                 {reason.length}/500
               </span>
+              {reasonError && <p id="err-override-reason" role="alert" className="mt-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400">{reasonError}</p>}
             </div>
 
             {/* Actions */}

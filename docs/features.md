@@ -77,9 +77,16 @@ What DentiSys does today. Behaviour is defined by [spec.md](../spec.md); open an
 - Student dashboard, classes and retention pages read server data; prototype paths that have no server data yet stay switched off — ACA-001 — implemented, tests passing.
 - Schema changes are ordered, additive migrations — DATA-001 — implemented, tests passing.
 
+## Superadmin mode
+
+- Every Dean account has a Dean / Superadmin switch in the sidebar (same markup as the Secretary / Student switch). The mode is the route (`/superadmin/...`), so a refresh keeps it; the server does not know the mode and the Dean role authorises every call — ADM-001 (spec text proposed) — implemented, tests passing.
+- Superadmin Audit Trail: an Activity / Class work switch; Class work lists grades, attendance and retention rows read-only with Faculty, class, Student, area and date filters and before/after values; the normal Dean overview and the Dashboard never show them — ADM-001, SEC-005 — implemented, tests passing.
+- Superadmin Course Catalog: the Dean edits a course's code, title and lecture/laboratory units and retires or restores it. A retired course leaves Faculty's course list and cannot be typed again (Faculty are told to ask the Dean); existing classes keep it. Courses are never deleted — ADM-001 — implemented, tests passing.
+- Superadmin People & Accounts: the Dean lists Faculty (with their classes) and Students and deactivates or reactivates an account. Deactivation ends every session and blocks every sign-in ("Contact the Dean."), keeps all records, and also blocks a Student's Class Secretary sign-in; a Faculty member with a class this school year cannot be deactivated, and the classes are listed; a Dean cannot be deactivated — ADM-001 — implemented, tests passing.
+
 ## Deliberate boundaries
 
 - Email-code sign-in verification is retired; system email remains for non-authentication features.
-- The Dean/Admin class-section, course-catalog and people/accounts screens are non-authoritative previews with sample data and no server calls — CLS-003.
+- The Dean/Admin class-section screen is a non-authoritative preview with sample data and no server calls — CLS-003.
 - Facial biometrics are not a complete production flow (BIO-001 to BIO-010).
 - The demo and production VPS servers (RUN-002, DEL-001; see [vps-deployment.md](vps-deployment.md) and [release-guide.md](release-guide.md)) use manual GHCR publishing, Traefik HTTPS, app-only Watchtower updates and PostgreSQL backups; CI/CD remains out of scope.

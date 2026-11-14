@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Download, Eye, FileText, Filter, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldOff, SlidersHorizontal, UserX } from 'lucide-react';
+import { AlertCircle, Download, Eye, FileText, Filter, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldOff, SlidersHorizontal, UserX, X } from 'lucide-react';
 import type { AuditEntry, AuditListResponse, AuditQuery, AuditStatus, DatePreset } from '../services/auditService';
 import {
   AUDIT_EXPORT_HEADER, auditCsvRows, auditDateRange, auditWho, currentTerm, formatManilaWhen, groupByDay,
 } from '../services/auditService';
-import { getAcademicTermsApi, getAdminAuditLogsApi, getFacultyActivityApi, getFacultyClassesApi, getSecretaryActivityApi } from '../services/apiClient';
+import { getAcademicTermsApi, getAdminAuditLogsApi, getAdminAuditStudentsApi, getFacultyActivityApi, getFacultyClassesApi, getSecretaryActivityApi } from '../services/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from './Card';
 import { Modal } from './Modal';
+import Tabs from './Tabs';
 import { flushSync } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { downloadXlsx } from '../utils/xlsxDownload';
@@ -14,7 +15,8 @@ import { buildReportSheet } from '../utils/reportWorkbook';
 import { PrintStyle, PrintHeader, PrintCaption, formatPrintedAt } from './PrintSheet';
 
 type Role = 'admin' | 'faculty' | 'secretary';
-type Props = { role: Role; title: string; subtitle: string; allLogs?: boolean; accent: 'accent' | 'clinical' | 'blue' };
+// superadmin: the Dean in Superadmin mode (ADM-001) gets the Activity / Class work list switch.
+type Props = { role: Role; title: string; subtitle: string; allLogs?: boolean; superadmin?: boolean; accent: 'accent' | 'clinical' | 'blue' };
 type Term = { startDate: string | null; endDate: string | null };
 
 const themes = {
@@ -89,7 +91,7 @@ const ChangesTable: React.FC<{ changes: AuditEntry['details']['changes']; phoneC
       )}
       <div className={`overflow-x-auto rounded-lg bg-slate-50 dark:bg-slate-900 ${phoneCards ? 'hidden md:block' : ''}`}>
         <table className="w-full min-w-[420px] text-left text-[11px]">
-          <thead className="text-[9px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
+          <thead className="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
             <tr><th className="px-3 py-2">Field</th><th className="px-3 py-2">Before</th><th className="px-3 py-2">After</th></tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -120,7 +122,7 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, 
   </div>
 );
 
-export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
+export const AuditTrailPage: React.FC<Props> = ({ role, title, accent, superadmin = false }) => {
   const theme = themes[accent];
   const { user } = useAuth();
   const [printRows, setPrintRows] = useState<string[][] | null>(null);
@@ -133,6 +135,13 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
   const [roleFilter, setRoleFilter] = useState('');
   const [card, setCard] = useState('');
   const [cls, setCls] = useState('');
+  const [view, setView] = useState<'activity' | 'class_work'>('activity');
+  const classWork = superadmin && view === 'class_work';
+  const [facultyId, setFacultyId] = useState('');
+  const [classId, setClassId] = useState('');
+  const [student, setStudent] = useState<{ id: number; label: string } | null>(null);
+  const [studentText, setStudentText] = useState('');
+  const [studentHits, setStudentHits] = useState<Array<{ id: number; label: string }>>([]);
   const [signins, setSignins] = useState(false);
   const [sort, setSort] = useState<'newest' | 'oldest'>('newest');
   const [preset, setPreset] = useState<DatePreset>('all');
@@ -170,10 +179,17 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
     }
   }, [role]);
 
+  useEffect(() => {
+    if (!classWork || student || studentText.trim().length < 2) { setStudentHits([]); return undefined; }
+    const t = setTimeout(() => { getAdminAuditStudentsApi(studentText.trim()).then(r => setStudentHits(r.students)).catch(() => setStudentHits([])); }, 300);
+    return () => clearTimeout(t);
+  }, [studentText, student, classWork]);
+
   const range = auditDateRange(preset, custom, term);
   const params = (pageNumber: number): AuditQuery => ({
-    q, area, status, from: range.from, to: range.to, signins, sort, page: pageNumber,
-    ...(role === 'admin' ? { role: roleFilter, card } : {}),
+    q, area, status, from: range.from, to: range.to, signins: classWork ? false : signins, sort, page: pageNumber,
+    ...(role === 'admin' && !classWork ? { role: roleFilter, card } : {}),
+    ...(classWork ? { scope: 'class_work' as const, facultyId, classId, studentId: student ? String(student.id) : '' } : {}),
     ...(role === 'faculty' ? { cls } : {}),
   });
   const fetchPage = (pageNumber: number): Promise<AuditListResponse> => {
@@ -199,7 +215,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
   const pageSize = data?.pageSize || 50;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const groups = useMemo(() => groupByDay(entries), [entries]);
-  const filtersActive = Boolean(q || area || status || roleFilter || card || cls || signins || preset !== 'all' || sort !== 'newest');
+  const filtersActive = Boolean(q || area || status || roleFilter || card || cls || signins || facultyId || classId || student || preset !== 'all' || sort !== 'newest');
   const emptyText = filtersActive ? 'No audit records match the selected filters.' : 'No activity recorded yet.';
   const moreFilterCount = [area, status, role === 'admin' ? roleFilter : '', role === 'faculty' ? cls : '', signins ? 'signins' : '', preset === 'custom' ? 'custom' : ''].filter(Boolean).length;
 
@@ -207,6 +223,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
   const clearFilters = () => {
     setQInput(''); setQ(''); setArea(''); setStatus(''); setRoleFilter(''); setCard(''); setCls(''); setSignins(false);
     setSort('newest'); setPreset('all'); setCustom({ from: '', to: '' }); setPage(1);
+    setFacultyId(''); setClassId(''); setStudent(null); setStudentText('');
   };
   // A card shows exactly the rows it counts; other filters except the date are reset.
   const applyCard = (key: string) => {
@@ -253,7 +270,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
   };
 
   const toggle = (id: string) => setExpanded(prev => { const n = new Set(prev); if (!n.delete(id)) n.add(id); return n; });
-  const att = data?.attention;
+  const att = classWork ? undefined : data?.attention;
   const cards = att ? [
     { label: 'Failed sign-ins', count: att.failedSignIns, icon: UserX, tone: 'rose', apply: () => applyCard('failedSignIns') },
     { label: 'Security alerts', count: att.securityAlerts, icon: ShieldAlert, tone: 'amber', apply: () => applyCard('securityAlerts') },
@@ -266,6 +283,9 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
     area && `Area: ${area}`, status && `Status: ${status}`,
     role === 'admin' && roleFilter && `Role: ${roleFilter}`,
     cls && `Class: ${classes.find(c => c.id === cls)?.label ?? cls}`,
+    classWork && facultyId && `Faculty: ${data?.facultyOptions?.find(f => String(f.id) === facultyId)?.name ?? facultyId}`,
+    classWork && classId && `Class: ${data?.classOptions?.find(c => String(c.id) === classId)?.label ?? classId}`,
+    classWork && student && `Student: ${student.label}`,
     (range.from || range.to) && `Date: ${range.from || '…'} to ${range.to || '…'}`,
     q && `Search: "${q}"`, signins && 'Sign-ins shown',
   ].filter(Boolean).join(' · ') || 'None';
@@ -281,6 +301,13 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
             This view lists actions made with your own account, including grades, attendance and retention. Your sign-ins are hidden unless you turn on Sign-ins. Attendance changes made by anyone in your classes are under <strong>Class Attendance Activity</strong>, and email dispatch activity is tracked under <strong>Email Management</strong>.
           </p>
         </div>
+      )}
+
+      {superadmin && (
+        <Tabs variant="switch" color="accent" label="Audit views" value={view} onChange={next => { setView(next); clearFilters(); }} tabs={[
+          { id: 'activity', label: 'Activity' },
+          { id: 'class_work', label: 'Class work' },
+        ]} />
       )}
 
       {error && (
@@ -353,6 +380,46 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
             <span className="ml-auto whitespace-nowrap text-[10px] font-semibold text-slate-500 dark:text-slate-400">{total} logs</span>
           </div>
 
+          {classWork && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+              <select aria-label="Faculty" value={facultyId} onChange={e => change(() => setFacultyId(e.target.value))} className={`${control} w-full sm:w-48`}>
+                <option value="">All Faculty</option>
+                {(data?.facultyOptions ?? []).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+              <select aria-label="Class" value={classId} onChange={e => change(() => setClassId(e.target.value))} className={`${control} w-full sm:w-56`}>
+                <option value="">All classes</option>
+                {(data?.classOptions ?? []).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </select>
+              <div className="relative w-full sm:w-56">
+                {student ? (
+                  <button type="button" onClick={() => change(() => setStudent(null))} aria-label={`Student: ${student.label}. Clear`} className={`${control} flex w-full items-center justify-between gap-2 text-left`}>
+                    <span className="truncate">{student.label}</span><X className="h-3.5 w-3.5 shrink-0" />
+                  </button>
+                ) : (
+                  <input type="search" value={studentText} onChange={e => setStudentText(e.target.value)} maxLength={100} aria-label="Student" placeholder="Student name or number" className={`${control} w-full`} />
+                )}
+                {studentHits.length > 0 && (
+                  <ul className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-slate-200 bg-white text-xs shadow-xl dark:border-slate-800 dark:bg-slate-900">
+                    {studentHits.map(h => (
+                      <li key={h.id}>
+                        <button type="button" onClick={() => change(() => { setStudent(h); setStudentText(''); setStudentHits([]); })} className="min-h-[44px] w-full px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800 xl:min-h-0">{h.label}</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div role="group" aria-label="Area" className="flex flex-wrap items-center gap-2">
+                {['', ...(data?.areas ?? ['Grading', 'Attendance', 'Retention'])].map(a => (
+                  <button key={a || 'all'} type="button" aria-pressed={area === a} onClick={() => change(() => setArea(a))}
+                    className={`min-h-[44px] rounded-xl border px-3 py-2 text-xs font-bold xl:min-h-0 ${area === a ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300' : 'border-slate-200 text-slate-600 dark:border-slate-800 dark:text-slate-300'}`}>
+                    {a || 'All areas'}
+                  </button>
+                ))}
+              </div>
+              {filtersActive && <button type="button" onClick={clearFilters} className="flex min-h-[44px] items-center justify-center gap-1 px-2 text-xs font-bold underline hover:opacity-80">Clear filters</button>}
+            </div>
+          )}
+
           {showMoreFilters && (
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
               {preset === 'custom' && (
@@ -361,15 +428,17 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
                   <input type="date" aria-label="To date" value={custom.to} min={custom.from || undefined} onChange={e => change(() => setCustom(c => ({ ...c, to: e.target.value })))} className={`${control} w-full sm:w-36`} />
                 </>
               )}
-              <select aria-label="Area" value={area} onChange={e => change(() => setArea(e.target.value))} className={`${control} w-full sm:w-auto`}>
-                <option value="">All areas</option>
-                {(data?.areas ?? []).map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
+              {!classWork && (
+                <select aria-label="Area" value={area} onChange={e => change(() => setArea(e.target.value))} className={`${control} w-full sm:w-auto`}>
+                  <option value="">All areas</option>
+                  {(data?.areas ?? []).map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              )}
               <select aria-label="Status" value={status} onChange={e => change(() => setStatus(e.target.value))} className={`${control} w-full sm:w-auto`}>
                 <option value="">All statuses</option>
                 {['Success', 'Warning', 'Failed'].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
-              {role === 'admin' && (
+              {role === 'admin' && !classWork && (
                 <select aria-label="Role" value={roleFilter} onChange={e => change(() => setRoleFilter(e.target.value))} className={`${control} w-full sm:w-auto`}>
                   {ROLE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
@@ -380,23 +449,29 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
                   {classes.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </select>
               )}
-              <button type="button" aria-pressed={signins} onClick={() => change(() => setSignins(value => !value))}
-                className={`flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold sm:w-auto ${signins ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300' : 'border-slate-200 text-slate-600 dark:border-slate-800 dark:text-slate-300'}`}>
-                Sign-ins
-              </button>
+              {!classWork && (
+                <button type="button" aria-pressed={signins} onClick={() => change(() => setSignins(value => !value))}
+                  className={`flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold sm:w-auto ${signins ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300' : 'border-slate-200 text-slate-600 dark:border-slate-800 dark:text-slate-300'}`}>
+                  Sign-ins
+                </button>
+              )}
               {filtersActive && <button type="button" onClick={clearFilters} className="flex min-h-[44px] items-center justify-center gap-1 px-2 text-xs font-bold underline hover:opacity-80">Clear filters</button>}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {role === 'admin' && <p className="text-xs text-slate-500 dark:text-slate-400 no-print">Class work (grades, attendance, retention) is not shown here; it stays recorded.</p>}
+      {role === 'admin' && (
+        <p className="text-xs text-slate-500 dark:text-slate-400 no-print">
+          {classWork ? 'Class work (grades, attendance, retention) as recorded. This list is read-only.' : 'Class work (grades, attendance, retention) is not shown here; it stays recorded.'}
+        </p>
+      )}
 
       <Card className="p-0 overflow-hidden no-print">
         <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">
           <CardTitle className="flex items-center gap-2 text-sm">
             <ShieldCheck className={`w-4.5 h-4.5 ${theme.icon}`} />
-            Activity Records
+            {classWork ? 'Class Work Records' : 'Activity Records'}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0 md:overflow-x-auto md:max-h-[500px] md:overflow-y-auto">
@@ -408,7 +483,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
           ) : (<>
             <table className="hidden md:table w-full min-w-[900px] text-left text-xs">
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-20 shadow-sm">
-                <tr className="text-[9px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
+                <tr className="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
                   <th className="px-5 py-3 sticky left-0 z-30 bg-slate-50 dark:bg-slate-900 w-36 min-w-[9rem]">When</th>
                   <th className="px-5 py-3">Who</th>
                   <th className="px-5 py-3">What</th>
@@ -420,7 +495,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent }) => {
               {groups.map(group => (
                 <tbody key={group.key} className="divide-y divide-slate-100 dark:divide-slate-800/60">
                   <tr className="bg-slate-50 dark:bg-slate-900">
-                    <th colSpan={6} scope="colgroup" className="px-5 py-1.5 text-left text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <th colSpan={6} scope="colgroup" className="px-5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       <span className="sticky left-5">{group.label}</span>
                     </th>
                   </tr>

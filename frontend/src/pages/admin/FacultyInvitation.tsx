@@ -394,7 +394,7 @@ export const FacultyInvitation: React.FC = () => {
               <label htmlFor="admin-faculty-create-first" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-3">
                 First Name *
                 <input
-                  id="admin-faculty-create-first"
+                  id="admin-faculty-create-first" maxLength={100}
                   required
                   value={firstName}
                   onChange={event => setFirstName(filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setFirstName(filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)}
@@ -407,7 +407,7 @@ export const FacultyInvitation: React.FC = () => {
               <label htmlFor="admin-faculty-create-middle" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-2">
                 Middle Name
                 <input
-                  id="admin-faculty-create-middle"
+                  id="admin-faculty-create-middle" maxLength={100}
                   value={middleName}
                   onChange={event => setMiddleName(filterPersonNameInput('middleName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setMiddleName(filterPersonNameInput('middleName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('middleName', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
@@ -419,7 +419,7 @@ export const FacultyInvitation: React.FC = () => {
               <label htmlFor="admin-faculty-create-last" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-3">
                 Last Name *
                 <input
-                  id="admin-faculty-create-last"
+                  id="admin-faculty-create-last" maxLength={100}
                   required
                   value={lastName}
                   onChange={event => setLastName(filterPersonNameInput('lastName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setLastName(filterPersonNameInput('lastName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('lastName', event)}
@@ -432,7 +432,7 @@ export const FacultyInvitation: React.FC = () => {
               <label htmlFor="admin-faculty-create-suffix" className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-2">
                 Suffix
                 <input
-                  id="admin-faculty-create-suffix"
+                  id="admin-faculty-create-suffix" maxLength={50}
                   value={suffix}
                   onChange={event => setSuffix(filterPersonNameInput('suffix', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setSuffix(filterPersonNameInput('suffix', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('suffix', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
@@ -448,7 +448,7 @@ export const FacultyInvitation: React.FC = () => {
               </label>
               <div className="flex">
                 <input
-                  id="admin-faculty-create-email"
+                  id="admin-faculty-create-email" maxLength={254}
                   required
                   type="text"
                   inputMode="email"
@@ -645,7 +645,7 @@ export const FacultyInvitation: React.FC = () => {
                 First Name *
                 <input
                   required
-                  value={editFirstName}
+                  maxLength={100} value={editFirstName}
                   onChange={event => setEditFirstName(filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditFirstName(filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                 />
@@ -655,7 +655,7 @@ export const FacultyInvitation: React.FC = () => {
               <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-5">
                 Middle Name
                 <input
-                  value={editMiddleName}
+                  maxLength={100} value={editMiddleName}
                   onChange={event => setEditMiddleName(filterPersonNameInput('middleName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditMiddleName(filterPersonNameInput('middleName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('middleName', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                 />
@@ -666,7 +666,7 @@ export const FacultyInvitation: React.FC = () => {
                 Last Name *
                 <input
                   required
-                  value={editLastName}
+                  maxLength={100} value={editLastName}
                   onChange={event => setEditLastName(filterPersonNameInput('lastName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditLastName(filterPersonNameInput('lastName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('lastName', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                 />
@@ -676,7 +676,7 @@ export const FacultyInvitation: React.FC = () => {
               <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-4">
                 Suffix
                 <input
-                  value={editSuffix}
+                  maxLength={50} value={editSuffix}
                   onChange={event => setEditSuffix(filterPersonNameInput('suffix', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditSuffix(filterPersonNameInput('suffix', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('suffix', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                   placeholder="DMD, Jr."
@@ -693,7 +693,7 @@ export const FacultyInvitation: React.FC = () => {
                   type="text"
                   inputMode="email"
                   list="admin-faculty-edit-email-domains"
-                  value={editEmail}
+                  maxLength={254} value={editEmail}
                   onChange={e => setEditEmail(e.target.value)}
                   className={`min-w-0 flex-1 border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-xs font-medium dark:border-slate-700 dark:bg-slate-900 ${editEmail.includes('@') ? 'rounded-xl' : 'rounded-l-xl'}`}
                   placeholder={editEmail.includes('@') ? `faculty@${DEFAULT_EMAIL_DOMAIN}` : 'username'}

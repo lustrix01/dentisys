@@ -118,9 +118,9 @@ function validate_person_name(array $data, string $field, int $minBytes = 2, int
         throw new ValidationException([['field' => $field, 'message' => 'Use letters, spaces, hyphens, apostrophes, or periods only; remove other characters and try again.']]);
     }
 
-    $length = strlen($name);
+    $length = mb_strlen($name, 'UTF-8'); // characters, not bytes
     if ($length < $minBytes || $length > $maxBytes) {
-        throw new ValidationException([['field' => $field, 'message' => "Use a name between {$minBytes} and {$maxBytes} bytes; shorten or complete the name, then try again."]]);
+        throw new ValidationException([['field' => $field, 'message' => "Use a name between {$minBytes} and {$maxBytes} characters; shorten or complete the name, then try again."]]);
     }
 
     return $name;
@@ -330,7 +330,7 @@ function validate_required_string(array $data, string $field, int $minBytes, int
 
     $cleaned = trim($value);
 
-    $len = strlen($cleaned);
+    $len = mb_strlen($cleaned, 'UTF-8'); // characters, not bytes
 
     if ($len < $minBytes) {
         throw new ValidationException([['field' => $field, 'message' => validation_field_label($field) . " must be at least $minBytes characters. Add more characters and try again."]]);
@@ -367,7 +367,7 @@ function validate_optional_string(array $data, string $field, int $minBytes, int
 
     $cleaned = trim($value);
 
-    $len = strlen($cleaned);
+    $len = mb_strlen($cleaned, 'UTF-8'); // characters, not bytes
 
     if ($len < $minBytes) {
         throw new ValidationException([['field' => $field, 'message' => validation_field_label($field) . " must be at least $minBytes characters. Add more characters and try again."]]);

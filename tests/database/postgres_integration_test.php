@@ -298,6 +298,7 @@ $expectedMigrations = [
     '057_room_categories.sql',
     '058_remedial_completed_at.sql',
     '059_email_outbox_invitation.sql',
+    '060_course_retire.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -7744,6 +7745,7 @@ expect_true((int) $endedAuditStmt->fetchColumn() >= 4, 'Appointments and their e
 require __DIR__ . '/grouped_grading_integration.php';
 require __DIR__ . '/lecture_only_grading_integration.php';
 require __DIR__ . '/audit_read_integration.php';
+require __DIR__ . '/superadmin_integration.php';
 require __DIR__ . '/audit_chain_integration.php';
 
 echo "ALL POSTGRESQL INTEGRATION TESTS PASSED.\n";

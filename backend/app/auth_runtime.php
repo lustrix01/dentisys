@@ -10,7 +10,7 @@ class InactiveAccountException extends \RuntimeException
     public function __construct(string $status, string $message = '')
     {
         $this->accountStatus = $status;
-        parent::__construct($message ?: "Account status: $status", 403);
+        parent::__construct($message ?: "Account status: $status" . ($status === 'Disabled' ? '. Contact the Dean.' : ''), 403);
     }
 }
 class ChallengeException extends \RuntimeException {}

@@ -559,8 +559,10 @@ function handle_faculty_student_create(): void
             return;
         }
 
-        if (strlen($studentNumber) < 3) {
+        if (mb_strlen($studentNumber, 'UTF-8') < 3) {
             $errors['studentId'] = 'Student Number must be at least 3 characters.';
+        } elseif (mb_strlen($studentNumber, 'UTF-8') > 50) {
+            $errors['studentId'] = 'Student Number must be no more than 50 characters.';
         } elseif (preg_match('/[\x00-\x1F\x7F]/', $studentNumber)) {
             $errors['studentId'] = 'Student number cannot contain line breaks or control characters.';
         }
@@ -3737,6 +3739,11 @@ function handle_faculty_assessments_save(): void
                 safe_error_response('Assessment title, valid period, and positive maximum score are required.', 422);
                 return;
             }
+            if (mb_strlen($title, 'UTF-8') > 255) {
+                $pdo->rollBack();
+                validation_error_response(['title' => 'Assessment title must be no more than 255 characters. Shorten it and try again.']);
+                return;
+            }
             $assessmentId = ctype_digit((string) ($item['id'] ?? '')) ? (int) $item['id'] : 0;
             $existing = null;
             if ($assessmentId > 0) {
@@ -4450,6 +4457,10 @@ function handle_faculty_grade_sheet_import(): void
             if ($action === 'create') {
                 if ($title === '' || !is_numeric($maxScore) || !is_finite((float) $maxScore) || (float) $maxScore <= 0) {
                     $fail('Assessment title, valid period, and positive maximum score are required.');
+                }
+                if (mb_strlen($title, 'UTF-8') > 255) {
+                    $message = 'Assessment title must be no more than 255 characters. Shorten it and try again.';
+                    throw new FacultyGradingConfigurationException($message, 422, 'GRADE_SHEET_IMPORT_INVALID', ['errors' => ['title' => $message]]);
                 }
                 $categoryId = faculty_grading_category_id($item['categoryId'] ?? null);
                 $categoryRow = null;
@@ -8203,7 +8214,7 @@ function handle_faculty_courses_get(): void
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
 
-        $stmt = $pdo->query("SELECT course_id, course_code, name, units, lecture_units, lab_units, year_level, semester, is_clinical FROM courses ORDER BY course_code ASC");
+        $stmt = $pdo->query("SELECT course_id, course_code, name, units, lecture_units, lab_units, year_level, semester, is_clinical FROM courses WHERE status = 'active' ORDER BY course_code ASC");
         $courses = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
         $mapped = array_map(function ($c) {
@@ -8270,9 +8281,12 @@ function faculty_resolve_catalog_course(
     string $semester,
     int $userId
 ): array {
-    $find = $pdo->prepare('SELECT course_id, name, lecture_units, lab_units FROM courses WHERE LOWER(course_code) = LOWER(?)');
+    $find = $pdo->prepare('SELECT course_id, name, lecture_units, lab_units, status FROM courses WHERE LOWER(course_code) = LOWER(?)');
     $find->execute([$courseCode]);
     $existing = $find->fetch(PDO::FETCH_ASSOC);
+    if (is_array($existing) && $existing['status'] === 'retired') { // ADM-001 SA16: a retired code cannot be typed again
+        throw new AttendanceSessionException('This course was retired by the Dean. Ask the Dean to restore it.', 409, 'course_retired');
+    }
     if (is_array($existing)) {
         // Record the lecture/lab split once for older courses that never had it.
         if ($existing['lecture_units'] === null && $existing['lab_units'] === null
@@ -8408,13 +8422,15 @@ function handle_faculty_class_create(): void
             $courseId = $course['courseId'];
             $courseTitle = faculty_class_course_title($courseName, $course['catalogName']);
         } elseif ($courseId > 0) {
-            $catalogStmt = $pdo->prepare('SELECT name FROM courses WHERE course_id = ?');
+            $catalogStmt = $pdo->prepare('SELECT name, status FROM courses WHERE course_id = ?');
             $catalogStmt->execute([$courseId]);
-            $catalogName = $catalogStmt->fetchColumn();
-            if ($catalogName === false) {
+            $catalog = $catalogStmt->fetch(PDO::FETCH_ASSOC);
+            if ($catalog === false) {
                 $courseId = 0;
+            } elseif ($catalog['status'] === 'retired') {
+                throw new AttendanceSessionException('This course was retired by the Dean. Ask the Dean to restore it.', 409, 'course_retired');
             } else {
-                $courseTitle = faculty_class_course_title($courseName, (string) $catalogName);
+                $courseTitle = faculty_class_course_title($courseName, (string) $catalog['name']);
             }
         }
 

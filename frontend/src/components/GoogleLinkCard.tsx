@@ -152,14 +152,14 @@ export const GoogleLinkCard: React.FC = () => {
   if (!enabled) return null;
 
   return (
-    <Card className="p-0 overflow-hidden">
+    <Card className="p-0 max-md:!p-4 overflow-hidden">
       <CardHeader className="border-b border-slate-100 dark:border-slate-800">
         <CardTitle className="flex items-center gap-2 text-sm">
           <Link2 className="h-4 w-4 text-accent-500" />
           Google Sign-In
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4 p-5">
+      <CardContent className="space-y-4 p-5 max-md:p-0">
         {error && <div role="alert" className="flex gap-2 rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700"><AlertCircle className="h-4 w-4 shrink-0" />{error}</div>}
         {success && <div role="status" className="flex gap-2 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-700"><CheckCircle2 className="h-4 w-4 shrink-0" />{success}</div>}
 

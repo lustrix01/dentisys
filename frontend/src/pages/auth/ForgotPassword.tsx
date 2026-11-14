@@ -138,7 +138,7 @@ export function ForgotPassword() {
                         id="email"
                         name="email"
                         autoComplete="email"
-                        inputMode="email"
+                        inputMode="email" maxLength={254}
                         required
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}

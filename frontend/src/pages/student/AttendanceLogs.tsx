@@ -353,7 +353,7 @@ export const AttendanceLogs: React.FC = () => {
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[680px] text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   <th className="pb-3">Date</th>
                   <th className="pb-3">Class Subject</th>
                   <th className="pb-3">Check-In Time</th>

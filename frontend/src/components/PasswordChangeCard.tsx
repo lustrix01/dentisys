@@ -104,14 +104,14 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
   };
 
   return (
-    <Card className="p-0 overflow-hidden">
+    <Card className="p-0 max-md:!p-4 overflow-hidden">
       <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">
         <CardTitle className="flex items-center gap-2 text-sm">
           <KeyRound className="w-4.5 h-4.5 text-accent-500" />
           <span>Security: Change Password</span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-5">
+      <CardContent className="p-5 max-md:p-0">
         <form onSubmit={handleSubmit} className="space-y-4" autoComplete="on">
           {error && (
             <div

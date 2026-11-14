@@ -100,10 +100,10 @@ export function MfaVerify() {
                 <input
                   type="text"
                   inputMode={mode === 'totp' ? 'numeric' : 'text'}
-                  maxLength={mode === 'totp' ? 6 : undefined}
+                  maxLength={mode === 'totp' ? 6 : 39}
                   value={code}
                   onChange={e => setCode(mode === 'totp' ? e.target.value.replace(/\D/g, '') : e.target.value)}
-                  placeholder={mode === 'totp' ? '000000' : 'XXXX-XXXX-XXXX-XXXX'}
+                  placeholder={mode === 'totp' ? '000000' : 'XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX'}
                   disabled={loading}
                   className="w-full text-center text-xl tracking-wider font-mono px-4 py-3 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-accent-500 focus:border-accent-500 transition-all outline-none placeholder-slate-300 dark:placeholder-slate-600 dark:text-slate-200 disabled:opacity-50"
                   autoFocus

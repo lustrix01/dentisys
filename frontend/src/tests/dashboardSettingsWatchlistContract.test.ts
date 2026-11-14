@@ -9,6 +9,7 @@ const read = (rel: string): string => fs.readFileSync(path.join(here, rel), 'utf
 const deanDashboard = read('../pages/admin/Dashboard.tsx');
 const deanSettings = read('../pages/admin/Settings.tsx');
 const secretaryDashboard = read('../pages/secretary/Dashboard.tsx');
+const facultyDashboard = read('../pages/faculty/Dashboard.tsx');
 const retention = read('../pages/faculty/RetentionMonitoring.tsx');
 const apiClient = read('../services/apiClient.ts');
 
@@ -45,4 +46,14 @@ test('7.1 Secretary Dashboard: no Quick Actions; status, alerts and pending work
   assert.match(secretaryDashboard, /getSecretaryActiveAttendanceSessionApi/);
   assert.match(secretaryDashboard, /getSecretaryExcusedRequestsApi/);
   assert.match(secretaryDashboard, /role="alert"|role="status"/);
+});
+
+test('5.1 Faculty Dashboard: no Quick Actions, one class-count figure; warnings and at-a-glance info remain', () => {
+  assert.doesNotMatch(facultyDashboard, /quick\s*actions?/i);
+  assert.equal((facultyDashboard.match(/Assigned Classes/g) ?? []).length, 3); // one tile label: three year variants
+  assert.doesNotMatch(facultyDashboard, /Total Classes/i);
+  assert.match(facultyDashboard, /At-Risk Watchlist/);
+  assert.match(facultyDashboard, /Attendance Rate/);
+  assert.match(facultyDashboard, /getFacultyDashboardKpisApi/);
+  assert.match(facultyDashboard, /getFacultyRetentionApi/);
 });

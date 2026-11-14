@@ -394,6 +394,10 @@ function handle_admin_audit_logs(): void
             return;
         }
 
+        if (($_GET['lookup'] ?? '') === 'students') { // Superadmin class-work Student filter (search by name or number)
+            json_response(['status' => 'ok', 'students' => audit_student_lookup($pdo, trim((string) ($_GET['q'] ?? '')))], 200);
+            return;
+        }
         $result = audit_read_entries(
             $pdo,
             ['user_id' => (int) $authCtx['user_id'], 'role' => 'admin'],

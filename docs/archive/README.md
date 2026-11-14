@@ -84,3 +84,5 @@ These documents are kept for history. They describe past plans, handoffs, and ev
 - [Backlog items closed before 2026-11-14](backlog-done-2026-11.md)
 - [Owner decisions, 2026-11-14 (docs sync grill)](owner-decisions-2026-11-14.md)
 - [UI items, 2026-11-14 (docs-sync step 8)](ui-step8-2026-11-14.md)
+- [Owner decisions, 2026-11-14 (second session)](owner-decisions-2026-11-14-second.md)
+- [Batch 2, 2026-11-14](ui-batch2-2026-11-14.md)

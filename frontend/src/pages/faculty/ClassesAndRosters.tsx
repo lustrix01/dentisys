@@ -76,6 +76,7 @@ import { recordAudit } from '../../services/auditService';
 import { createSecretaryInvitation, fetchSecretaryInvitations, validateBicolUEmail, type SecretaryInvitation } from '../../services/authService';
 import { useAuth } from '../../context/AuthContext';
 import { downloadXlsx } from '../../utils/xlsxDownload';
+import { apiFieldErrors } from '../../utils/apiFieldErrors';
 import { buildClassList, termLine } from '../../utils/reportWorkbook';
 
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
@@ -312,6 +313,11 @@ export const ClassesAndRosters: React.FC = () => {
   const [editStudentEmail, setEditStudentEmail] = useState('');
   const [editStudentYearLevel, setEditStudentYearLevel] = useState(4);
   const [editStudentError, setEditStudentError] = useState<string | null>(null);
+  // Server field errors shown under the Add / Edit Student fields.
+  const [addStudentFieldErrors, setAddStudentFieldErrors] = useState<Record<string, string>>({});
+  const [editStudentFieldErrors, setEditStudentFieldErrors] = useState<Record<string, string>>({});
+  const serverFieldError = (errors: Record<string, string>, key: string, id: string) =>
+    errors[key] ? <p id={id} role="alert" className="mt-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400">{errors[key]}</p> : null;
   const [isUpdatingStudent, setIsUpdatingStudent] = useState(false);
 
   // Form States: Add Student Manually (C4 Split-Name Interface)
@@ -340,6 +346,9 @@ export const ClassesAndRosters: React.FC = () => {
     return studentsList.some(st => (st.studentId || '').trim().toLowerCase() === wanted
       && (st.classSections || []).some(section => String(section.classId) === String(targetEnrollCsId)));
   }, [studentsList, studentIdInput, existingStudentMatch, targetEnrollCsId]);
+
+  useEffect(() => { setAddStudentFieldErrors({}); }, [isAddStudentOpen]);
+  useEffect(() => { setEditStudentFieldErrors({}); }, [editingStudent]);
 
   useEffect(() => {
     if (existingStudentMatch) {
@@ -785,6 +794,7 @@ export const ClassesAndRosters: React.FC = () => {
 
     setIsUpdatingStudent(true);
     setEditStudentError(null);
+    setEditStudentFieldErrors({});
     try {
       await updateFacultyStudentApi(editingStudent.id, {
         prefix: editStudentPrefix.trim(),
@@ -799,6 +809,7 @@ export const ClassesAndRosters: React.FC = () => {
       showFeedback(`Updated ${firstName}${middleName ? ` ${middleName}` : ''} ${lastName}.`, 'success');
       await fetchData();
     } catch (error) {
+      setEditStudentFieldErrors(apiFieldErrors(error));
       setEditStudentError(error instanceof Error ? error.message : 'Unable to save Student roster changes.');
     } finally {
       setIsUpdatingStudent(false);
@@ -1202,6 +1213,7 @@ export const ClassesAndRosters: React.FC = () => {
     }
 
     setIsSubmittingNewStudent(true);
+    setAddStudentFieldErrors({});
     try {
       const res = await createStudentApi({
         studentId: studentIdInput.trim(),
@@ -1226,6 +1238,7 @@ export const ClassesAndRosters: React.FC = () => {
       setStudentEmailInput('');
       await fetchData();
     } catch (err: any) {
+      setAddStudentFieldErrors(apiFieldErrors(err));
       showFeedback(err.message || 'Failed to register student.', 'error');
     } finally {
       setIsSubmittingNewStudent(false);
@@ -2265,6 +2278,8 @@ const handleSendAllStudentInvites = async () => {
                   id="add-student-id"
                   type="text"
                   required
+                  minLength={3}
+                  maxLength={50}
                   value={studentIdInput}
                   onChange={(e) => setStudentIdInput(e.target.value)}
                   placeholder="e.g. 2024-DENT-0012"
@@ -2282,6 +2297,7 @@ const handleSendAllStudentInvites = async () => {
                         ? <span className="text-amber-600 dark:text-amber-400">This student is already enrolled in the selected class.</span>
                         : <span className="text-slate-500 dark:text-slate-400">Enter an existing student's Student Number to fill in their details automatically.</span>}
                 </p>
+                {serverFieldError(addStudentFieldErrors, 'studentId', 'err-add-student-id')}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -2303,6 +2319,7 @@ const handleSendAllStudentInvites = async () => {
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
                   />
                   {nameFieldError('firstName', studentFirstName) && <span role="alert" className="mt-1 block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('firstName', studentFirstName)}</span>}
+                  {serverFieldError(addStudentFieldErrors, 'firstName', 'err-add-firstName')}
                 </div>
                 <div>
                   <label htmlFor="add-student-middle" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Middle Name</label>
@@ -2316,6 +2333,7 @@ const handleSendAllStudentInvites = async () => {
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
                   />
                   {nameFieldError('middleName', studentMiddleName) && <span role="alert" className="mt-1 block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('middleName', studentMiddleName)}</span>}
+                  {serverFieldError(addStudentFieldErrors, 'middleName', 'err-add-middleName')}
                 </div>
                 <div>
                   <label htmlFor="add-student-last" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Last Name *</label>
@@ -2330,6 +2348,7 @@ const handleSendAllStudentInvites = async () => {
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
                   />
                   {nameFieldError('lastName', studentLastName) && <span role="alert" className="mt-1 block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('lastName', studentLastName)}</span>}
+                  {serverFieldError(addStudentFieldErrors, 'lastName', 'err-add-lastName')}
                 </div>
               </div>
 
@@ -2361,6 +2380,7 @@ const handleSendAllStudentInvites = async () => {
                 />
                 {!studentEmailInput.includes('@') && <span className="text-xs font-bold text-accent-600 whitespace-nowrap">@bicol-u.edu.ph</span>}
                 </div>
+                {serverFieldError(addStudentFieldErrors, 'email', 'err-add-email')}
               </div>
               {studentEmailInput.includes('@') && !isOfficialBicolEmail(studentEmailInput) && <p role="alert" className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300">This Student cannot be added until the roster email is corrected to @bicol-u.edu.ph.</p>}
 
@@ -2380,6 +2400,7 @@ const handleSendAllStudentInvites = async () => {
                   <option value={5}>Year 5</option>
                   <option value={6}>Year 6</option>
                 </select>
+                {serverFieldError(addStudentFieldErrors, 'yearLevel', 'err-add-yearLevel')}
               </div>
 
               <div className="pt-2 flex justify-end gap-2">
@@ -2429,6 +2450,7 @@ const handleSendAllStudentInvites = async () => {
                   id="create-code"
                   type="text"
                   required
+                  maxLength={50}
                   {...fieldAria('code')}
                   list="course-catalog-codes"
                   value={newCourseCode}
@@ -2567,6 +2589,7 @@ const handleSendAllStudentInvites = async () => {
                   id="create-block"
                   type="text"
                   required
+                  maxLength={50}
                   {...fieldAria('block')}
                   value={newBlock}
                   onChange={(e) => setNewBlock(e.target.value.toUpperCase())}
@@ -2791,6 +2814,7 @@ const handleSendAllStudentInvites = async () => {
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
                 {nameFieldError('firstName', editStudentFirstName) && <span role="alert" className="block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('firstName', editStudentFirstName)}</span>}
+                {serverFieldError(editStudentFieldErrors, 'firstName', 'err-edit-firstName')}
               </label>
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
                 Last Name *
@@ -2801,6 +2825,7 @@ const handleSendAllStudentInvites = async () => {
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
                 {nameFieldError('lastName', editStudentLastName) && <span role="alert" className="block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('lastName', editStudentLastName)}</span>}
+                {serverFieldError(editStudentFieldErrors, 'lastName', 'err-edit-lastName')}
               </label>
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">
                 Middle Name
@@ -2810,6 +2835,7 @@ const handleSendAllStudentInvites = async () => {
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
                 {nameFieldError('middleName', editStudentMiddleName) && <span role="alert" className="block text-[10px] font-medium text-rose-600 dark:text-rose-300">{nameFieldError('middleName', editStudentMiddleName)}</span>}
+                {serverFieldError(editStudentFieldErrors, 'middleName', 'err-edit-middleName')}
               </label>
               </fieldset>
               {editingStudent.accountActivated && (
@@ -2830,6 +2856,7 @@ const handleSendAllStudentInvites = async () => {
                 />
                 {!editStudentEmail.includes('@') && <span className="text-xs font-bold text-accent-600 whitespace-nowrap">@bicol-u.edu.ph</span>}
                 </span>
+                {serverFieldError(editStudentFieldErrors, 'email', 'err-edit-email')}
               </label>
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
                 Year Level *
@@ -2845,6 +2872,7 @@ const handleSendAllStudentInvites = async () => {
                   <option value={5}>Year 5</option>
                   <option value={6}>Year 6</option>
                 </select>
+                {serverFieldError(editStudentFieldErrors, 'yearLevel', 'err-edit-yearLevel')}
               </label>
             </div>
 
@@ -2896,7 +2924,7 @@ const handleSendAllStudentInvites = async () => {
                 <input
                   type="text"
                   required
-                  list="course-catalog-codes-edit"
+                  list="course-catalog-codes-edit" maxLength={50}
                   readOnly={editTermLocked}
                   value={editCourseCode}
                   onChange={(e) => {
@@ -2925,7 +2953,7 @@ const handleSendAllStudentInvites = async () => {
                   type="text"
                   required
                   value={editCourseName}
-                  onChange={(e) => setEditCourseName(e.target.value)}
+                  onChange={(e) => setEditCourseName(e.target.value)} maxLength={255}
                   placeholder="e.g. Dental Subject 1"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
@@ -2938,7 +2966,7 @@ const handleSendAllStudentInvites = async () => {
                 <input
                   type="text"
                   required
-                  value={editBlock}
+                  maxLength={50} value={editBlock}
                   onChange={(e) => setEditBlock(e.target.value.toUpperCase())}
                   placeholder="Section 4-A"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"

@@ -30,6 +30,7 @@ import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import GradeValue from '../../components/GradeValue';
 import { flushSync } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
+import { apiFieldErrors } from '../../utils/apiFieldErrors';
 import { PrintStyle, PrintHeader, PrintCaption, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
 
 export const DeanReports: React.FC = () => {
@@ -414,7 +415,7 @@ export const DeanReports: React.FC = () => {
               setRevokeTarget(null);
               fetchReportData();
             } catch (err) {
-              setRevokeError(err instanceof Error ? err.message : 'Unable to revoke the biometric enrollment.');
+              setRevokeError(apiFieldErrors(err).reason ?? (err instanceof Error ? err.message : 'Unable to revoke the biometric enrollment.'));
             } finally {
               setRevoking(false);
             }
@@ -425,7 +426,7 @@ export const DeanReports: React.FC = () => {
           </p>
           <label className="block font-bold text-slate-700 dark:text-slate-300">
             Reason
-            <textarea value={revokeReason} onChange={(event) => setRevokeReason(event.target.value)} maxLength={240} rows={3} required
+            <textarea value={revokeReason} onChange={(event) => setRevokeReason(event.target.value)} maxLength={240} rows={3} required aria-invalid={revokeError ? true : undefined}
               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-normal dark:border-slate-700 dark:bg-slate-900" />
           </label>
           {revokeError && <p role="alert" className="text-rose-600">{revokeError}</p>}
@@ -685,7 +686,7 @@ export const DeanReports: React.FC = () => {
               <CardContent className="overflow-x-auto max-h-[480px] overflow-y-auto">
                 <table className="w-full text-left text-xs min-w-[640px]">
                   <thead className="sticky top-0 bg-white dark:bg-slate-950 z-10">
-                    <tr className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                    <tr className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                       <th className="py-2.5 px-3">Student No.</th>
                       <th className="py-2.5 px-3">Name</th>
                       <th className="py-2.5 px-3">Class</th>
@@ -1024,7 +1025,7 @@ export const DeanReports: React.FC = () => {
               <CardContent className="overflow-x-auto max-h-[480px] overflow-y-auto">
                 <table className="w-full text-left text-xs min-w-[640px]">
                   <thead className="sticky top-0 bg-white dark:bg-slate-950 z-10">
-                    <tr className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                    <tr className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                       <th className="py-2.5 px-3">Student</th>
                       <th className="py-2.5 px-3">Class</th>
                       <th className="py-2.5 px-3">Grade</th>
@@ -1378,7 +1379,7 @@ export const DeanReports: React.FC = () => {
               <CardContent className="overflow-x-auto max-h-[480px] overflow-y-auto">
                 <table className="w-full text-left text-xs min-w-[560px]">
                   <thead className="sticky top-0 bg-white dark:bg-slate-950 z-10">
-                    <tr className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                    <tr className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                       <th className="py-2.5 px-3">Date</th>
                       <th className="py-2.5 px-3">Student No.</th>
                       <th className="py-2.5 px-3">Student Name</th>

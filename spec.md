@@ -84,6 +84,8 @@ DentiSys has four application roles:
 * Secretary
 * Student
 
+Every Admin (Dean) account may use Superadmin mode (ADM-001); it is not a fifth role.
+
 Roles, permissions, approval, eligibility, and authorization are controlled by DentiSys.
 
 External identity providers MUST NOT assign or elevate DentiSys roles.
@@ -215,7 +217,7 @@ Existing session behavior includes:
 * refresh rotation/revocation;
 * persisted authentication sessions;
 * logout/revocation;
-* account/token invalidation behavior.
+* account/token invalidation behavior; a deactivated account's sessions are ended and its sign-in refused until reactivation (ADM-001).
 
 The browser's session-refresh request MUST be allowed to complete when the page reloads, navigates or closes (e.g. `fetch` `keepalive`), so a rotation the server committed is not lost by the client. Presenting an already-used refresh token is treated as reuse and revokes the session, except within the existing short concurrent-refresh window (409 `REFRESH_IN_PROGRESS`).
 
@@ -416,7 +418,7 @@ Grading. A score save writes one row listing each changed score and remark with 
 
 Batches. When one click or one system job changes many records (roster import, invite all, Secretary invitations, mark all Present, end-of-term biometric deletion), each record gets its own sealed row and all of them share one batch ID; every screen shows the batch as one expandable row.
 
-Visibility. Faculty and Secretaries see only rows their own account did (My Activity). Students have no audit screen. The Dean sees an overview: people and accounts, roles, settings and terms, security events (failed sign-ins, 2FA and password changes, token reuse), biometric consent and deletions, and everything the Dean's own account did. The Dean does not see class work (scores, assessments, grade weights, recomputes, attendance records and sessions, Excused requests, retention entries) or other people's successful sign-ins; those rows stay recorded, and an investigation reads them from the database through the system administrator at the Dean's request. Sign-in, sign-out and 2FA rows of the viewer's own account are behind a Sign-ins filter, off by default. These rules apply to rows already stored as well; old rows get readable labels and are not grouped. Class Attendance Activity is a class-records screen and is unchanged.
+Visibility. Faculty and Secretaries see only rows their own account did (My Activity). Students have no audit screen. The Dean sees an overview: people and accounts, roles, settings and terms, security events (failed sign-ins, 2FA and password changes, token reuse), biometric consent and deletions, and everything the Dean's own account did. The Dean does not see class work (scores, assessments, grade weights, recomputes, attendance records and sessions, Excused requests, retention entries) or other people's successful sign-ins, except in Superadmin mode (ADM-001), where the Audit Trail lists class work read-only; those rows stay recorded, and an investigation reads them from the database through the system administrator at the Dean's request. Sign-in, sign-out and 2FA rows of the viewer's own account are behind a Sign-ins filter, off by default. These rules apply to rows already stored as well; old rows get readable labels and are not grouped. Class Attendance Activity is a class-records screen and is unchanged.
 
 Display. Every audit screen shows When (Asia/Manila), Who, What, Record, Change and a status badge, grouped under day headers. The details panel, the same for every role on rows they may see, shows when, who, what, record, from where, status, reason and a Field / Before / After table. Filtering, sorting and paging run on the server over all rows the viewer may see, 50 per page, with search (including inside batches), area, date presets and range, status, role (Dean), class (Faculty), the Sign-ins filter and Clear filters. The Dean view shows attention cards for failed sign-ins, security alerts and 2FA turned off. Export and print follow the same columns, filters and visibility. Below 768 px each entry is a block showing When, Who, What, Record, Change and the status badge in that order under the day headers, with its Details button. From 768 px to 1279 px the UI-001 responsive rule applies: same columns, the table scrolls inside its own box with When pinned. Owner decision (2026-11-03).
 
@@ -1139,7 +1141,25 @@ Faculty Classes & Rosters separates Active and Archived class sections. The Arch
 
 Owner decisions (2026-10-22, CLS-003 contract): Remedial and cost recovery results remain recordable for a class section archived as Finished. Archiving revokes the class section's scheduled attendance sessions and ends its Class Secretary appointment; restoring brings back neither. Enrolled Students are notified when a class section is archived as Cancelled and when such a class section is restored. Finished may be chosen at any time in the current school year. Cancelled and Created-by-mistake class sections appear to Faculty only in the Archived view and the audit log.
 
-Owner-approved amendment (2026-11-10): The Dean/Admin class-section, course-catalog and people/accounts screens are non-authoritative UI previews built with sample data. These capabilities are planned and require a backend contract before implementation. All other CLS-003 rules stay as they are.
+Owner-approved amendment (2026-11-10): The Dean/Admin class-section screen is a non-authoritative UI preview built with sample data; the course-catalog and people/accounts screens are real in Superadmin mode (ADM-001). All other CLS-003 rules stay as they are.
+
+## ADM-001 - Superadmin mode
+
+**Status: CURRENT**
+
+Every Dean account may switch into Superadmin mode with a toggle like the Secretary's Student view. There is no separate role, flag or account. The mode is a view only: the Dean role authorises every administrative action, and the server does not track the mode.
+
+In Superadmin mode the Dean has three pages that the normal Dean view does not show: Audit Trail with class work, Course Catalog and People & Accounts.
+
+Class-work audit. The Audit Trail also lists class work (scores, assessments, grade weights, recomputes, attendance records and sessions, Excused requests, retention entries) with Faculty, class, Student and date filters and before/after values. It is read-only, and opening it is not itself audited. The normal Dean overview and the Dashboard never show class work.
+
+Course Catalog. The Dean edits a course's code, title and units and may retire and restore a course. Retired courses leave Faculty's course pickers and cannot be typed again when creating a class; Faculty who try are told to ask the Dean to restore the course. Retired courses stay on every existing class section. Faculty still add new course codes when creating a class. Removing Laboratory units follows GRD-003 (blocked while a current class has Laboratory assessments). Courses are never deleted. Changes are audited.
+
+People & Accounts. The Dean sees Faculty (with each member's class sections) and Students and may deactivate or reactivate a Faculty or Student account. Deactivation blocks every sign-in (the sign-in screen says "Contact the Dean."), ends all sessions, keeps every record and is audited with a reason. Deactivating a Student who is a Class Secretary also blocks the Secretary sign-in, and reactivating the Student restores both. A Faculty member who has a class section in the current school year cannot be deactivated; the Dean sees the classes that block it. Reactivation restores sign-in with the existing password and 2FA. The Dean cannot deactivate a Dean account.
+
+The Class Sections screen remains a non-authoritative preview, shown in the normal Dean view only. Details: `docs/contracts/superadmin.md`.
+
+History: 2026-10-28 Dean grade-change view, catalog control and deactivation backlogged; 2026-11-14 Superadmin mode decided and built. Records: docs/archive/.
 
 ## ID-002 - Structured names and 3NF
 

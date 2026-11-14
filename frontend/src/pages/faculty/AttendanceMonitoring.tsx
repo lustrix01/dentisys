@@ -54,6 +54,7 @@ import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../../utils/ge
 import { SessionTimeFields } from '../../components/SessionTimeFields';
 import { checkTimes, isNextDay, sessionEndOffsetMs, type TimeSet } from '../../utils/sessionTimes';
 import { formatVisibleTime } from '../../utils/timeDisplay';
+import { apiFieldErrors } from '../../utils/apiFieldErrors';
 const RADIUS_HINT = 'Indoors, use 150 m or more; phone GPS is often off by 50–100 m inside buildings.';
 
 type SupportedStatus = 'present' | 'absent' | 'late' | 'excused';
@@ -222,6 +223,7 @@ export const AttendanceMonitoring: React.FC = () => {
   const [targetStatus, setTargetStatus] = useState<SupportedStatus>('present');
   const [correctionReason, setCorrectionReason] = useState('');
   const [correctionError, setCorrectionError] = useState<string | null>(null);
+  const [correctionReasonError, setCorrectionReasonError] = useState<string | null>(null); // shown under the reason field
   const [submittingCorrection, setSubmittingCorrection] = useState(false);
 
   // Bulk "mark all unrecorded as Present"
@@ -518,6 +520,7 @@ export const AttendanceMonitoring: React.FC = () => {
     setTargetStatus((item.status && validStatuses.includes(item.status as SupportedStatus) ? item.status : 'present') as SupportedStatus);
     setCorrectionReason('');
     setCorrectionError(null);
+    setCorrectionReasonError(null);
     setIsCorrectionModalOpen(true);
   };
 
@@ -572,13 +575,14 @@ export const AttendanceMonitoring: React.FC = () => {
       return;
     }
     if (correctionTarget.id && !trimmedReason) {
-      setCorrectionError('A justification reason is required when overriding attendance.');
+      setCorrectionReasonError('A justification reason is required when overriding attendance.');
       return;
     }
 
     setSubmittingCorrection(true);
     const writeScope = beginWorksheetMutation();
     setCorrectionError(null);
+    setCorrectionReasonError(null);
     try {
       if (correctionTarget.id) {
         const res = await correctFacultyAttendanceApi({
@@ -647,7 +651,9 @@ export const AttendanceMonitoring: React.FC = () => {
           : `Attendance updated for ${correctionTarget.studentName} (${targetStatus}).`,
       });
     } catch (err) {
-      setCorrectionError(err instanceof Error ? err.message : 'Failed to save attendance change.');
+      const reasonError = apiFieldErrors(err).reason;
+      if (reasonError) setCorrectionReasonError(reasonError);
+      else setCorrectionError(err instanceof Error ? err.message : 'Failed to save attendance change.');
     } finally {
       setSubmittingCorrection(false);
       finishWorksheetMutation(writeScope);
@@ -1708,7 +1714,7 @@ export const AttendanceMonitoring: React.FC = () => {
           /* Roster Table: Bounded Scroll Container with Sticky Header */
           <div className="max-h-[560px] overflow-y-auto overflow-x-auto border border-slate-200/80 dark:border-slate-800 rounded-xl">
             <table className="w-full min-w-[640px] text-left text-xs border-collapse">
-              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
+              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
                 <tr>
                   <th className="py-3 px-4 sm:py-4 sm:px-6">Student Details</th>
                   <th className="py-3 px-4 sm:py-4 sm:px-6">Check-In Time</th>
@@ -1904,9 +1910,15 @@ export const AttendanceMonitoring: React.FC = () => {
                 rows={3}
                 value={correctionReason}
                 onChange={(e) => setCorrectionReason(e.target.value)}
+                maxLength={500}
+                {...(correctionReasonError ? { 'aria-invalid': true, 'aria-describedby': 'err-correction-reason' } : {})}
                 placeholder="Enter justification for attendance override..."
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:border-emerald-500"
               />
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 text-right">
+                {correctionReason.length}/500
+              </span>
+              {correctionReasonError && <p id="err-correction-reason" role="alert" className="mt-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400">{correctionReasonError}</p>}
               <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1">
                 Reason is audited and recorded with your Faculty credentials.
               </span>
