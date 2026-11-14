@@ -64,7 +64,7 @@ export function ActivateFaculty() {
     <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
       <form onSubmit={submit} className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-lg dark:border-slate-800 dark:bg-slate-900">
         <p className="text-xs font-bold uppercase tracking-wider text-accent-600">{invitation?.role === 'admin' ? 'Dean invitation' : 'Faculty invitation'}</p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">Set your DentiSys password</h1>
+        <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">Set your DentiSYS password</h1>
         {loading && <p className="mt-4 text-sm text-slate-500">Checking invitation…</p>}
         {error && <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{error}</p>}
         {invitation && !loading && (
@@ -72,7 +72,7 @@ export function ActivateFaculty() {
             <div className="mt-5 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800">
               <p className="font-semibold text-slate-800 dark:text-slate-100">{invitation.name}</p>
               <p className="mt-1 text-slate-600 dark:text-slate-300">{invitation.email}</p>
-              <p className="mt-2 text-xs text-slate-500">The Admin invitation is your approval. Your account becomes active when setup is complete.</p>
+              <p className="mt-2 text-xs text-slate-500">The Dean invitation is your approval. Your account becomes active when setup is complete.</p>
             </div>
             <label htmlFor="faculty-password" className="mt-5 block text-sm font-semibold text-slate-700 dark:text-slate-200">
               Password

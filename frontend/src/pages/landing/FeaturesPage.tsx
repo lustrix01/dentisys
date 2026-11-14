@@ -21,7 +21,7 @@ export function FeaturesPage() {
       id: '01',
       icon: Users,
       title: 'Classes & Official Rosters',
-      description: 'Import official PDF or Excel class lists, maintain student directories, and appoint class secretaries.'
+      description: 'Import official PDF or CSV class lists, maintain student directories, and appoint class secretaries.'
     },
     {
       id: '02',
@@ -181,7 +181,7 @@ export function FeaturesPage() {
                     <div className="flex flex-wrap items-center gap-2 mb-3">
                       <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
                         <CheckCircle2 className="h-3.5 w-3.5 text-purple-600" />
-                        <span>PDF / Excel Roster Import</span>
+                        <span>PDF / CSV Roster · Excel Grades</span>
                       </span>
                       <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
                         <CheckCircle2 className="h-3.5 w-3.5 text-purple-600" />

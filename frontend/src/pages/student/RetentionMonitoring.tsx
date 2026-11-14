@@ -556,7 +556,7 @@ export const RetentionMonitoring: React.FC = () => {
                       <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-tight">
                         {cls.courseName}
                       </h4>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Instructor: {cls.instructorName || 'Faculty'}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Faculty: {cls.instructorName || 'Faculty'}</p>
                     </div>
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
                       Grade: {cls.grade !== null ? <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue> : '—'}
@@ -637,7 +637,7 @@ export const RetentionMonitoring: React.FC = () => {
             </p>
           ))}
           <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 text-amber-900 dark:text-amber-200 text-xs">
-            <strong>Advisory Reminder:</strong> Remedial exams are not held at midterm. This is an early notification to consult your instructors before final exams.
+            <strong>Advisory Reminder:</strong> Remedial exams are not held at midterm. This is an early notification to consult your Faculty before final exams.
           </div>
 
           <Card className="overflow-hidden border border-slate-200 dark:border-slate-800">
@@ -647,11 +647,11 @@ export const RetentionMonitoring: React.FC = () => {
               ) : midtermRiskRecords.map(cls => (
                 <article key={cls.enrollmentId} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs dark:border-slate-800 dark:bg-slate-950/40">
                   <h3 className="font-bold text-slate-800 dark:text-slate-100"><span className="font-mono text-blue-600 dark:text-blue-400">{cls.courseCode}</span> · {cls.courseName}</h3>
-                  <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">Instructor: {cls.instructorName || 'Faculty'}</p>
+                  <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">Faculty: {cls.instructorName || 'Faculty'}</p>
                   <dl className="mt-3 grid grid-cols-2 gap-2">
                     <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Midterm Score</dt><dd className="mt-0.5 font-mono font-bold">{typeof cls.midtermEvaluation?.percentage === 'number' ? `${cls.midtermEvaluation.percentage.toFixed(1)}%` : 'Pending'}</dd></div>
                     <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Midterm Grade</dt><dd className="mt-0.5 font-mono font-extrabold text-amber-600 dark:text-amber-400">{typeof cls.midtermEvaluation?.grade === 'number' ? <GradeValue percentage={cls.midtermEvaluation.percentage} raw={cls.midtermEvaluation.rawPercentage} period="Midterm" grade={cls.midtermEvaluation.grade}>{formatGrade(cls.midtermEvaluation.grade)}</GradeValue> : 'Pending'}</dd></div>
-                    <div className="col-span-2"><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Recommendation</dt><dd className="mt-0.5 text-slate-600 dark:text-slate-300"><span className="block font-bold">At risk · Midterm</span>Review lessons and consult instructor before finals.</dd></div>
+                    <div className="col-span-2"><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Recommendation</dt><dd className="mt-0.5 text-slate-600 dark:text-slate-300"><span className="block font-bold">At risk · Midterm</span>Review lessons and consult your Faculty before finals.</dd></div>
                   </dl>
                 </article>
               ))}
@@ -685,7 +685,7 @@ export const RetentionMonitoring: React.FC = () => {
                             {cls.courseName}
                           </span>
                           <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                            Instructor: {cls.instructorName || 'Faculty'}
+                            Faculty: {cls.instructorName || 'Faculty'}
                           </div>
                         </td>
                         <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-800 dark:text-slate-100">
@@ -696,7 +696,7 @@ export const RetentionMonitoring: React.FC = () => {
                         </td>
                         <td className="py-3.5 px-4 text-slate-500">
                           <span className="block font-bold">At risk · Midterm</span>
-                          Review lessons and consult instructor before finals.
+                          Review lessons and consult your Faculty before finals.
                         </td>
                       </tr>
                     ))

@@ -169,7 +169,7 @@ const UPCOMING_PILL_CLASSES: Record<'open' | 'late' | 'soon' | 'done' | 'idle', 
   idle: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
 };
 
-const LOCATION_REQUIRED_MESSAGE = 'Location is required for this session. Allow location for this site, or ask your Class Secretary or course instructor to record your attendance.';
+const LOCATION_REQUIRED_MESSAGE = 'Location is required for this session. Allow location for this site, or ask your Class Secretary or Faculty to record your attendance.';
 
 type LocationReading = { latitude: number; longitude: number; accuracy: number };
 
@@ -519,7 +519,7 @@ export const Attendance: React.FC = () => {
         if (check.result === 'imprecise') {
           impreciseRef.current.count += 1;
           setLocationProblem(impreciseRef.current.count >= 2
-            ? "Your phone can't get a precise enough location here. Ask your Class Secretary or course instructor to record your attendance."
+            ? "Your phone can't get a precise enough location here. Ask your Class Secretary or Faculty to record your attendance."
             : reading.accuracy > 1000
               ? 'Precise location seems to be off. Turn on Precise Location for your browser (iPhone: Settings > Privacy > Location Services; Android: Location > Google Location Accuracy), then retry.'
               : `Your location is too imprecise (±${formatMeters(reading.accuracy)} m). Turn on Wi-Fi (you don't need to connect), move near a window or doorway, then retry.`);
@@ -710,7 +710,7 @@ export const Attendance: React.FC = () => {
         setPendingAttendancePayload(payload);
         setCanRetryUpload(true);
         const msg = err instanceof Error ? err.message : 'Biometric service or network connection is temporarily unavailable.';
-        setFailureNotice(`${msg} Your verification frames and server challenge have been preserved. You can click "Retry submission" to resubmit with the existing idempotency key, or report to your Class Secretary or course instructor for authorized manual check-in.`);
+        setFailureNotice(`${msg} Your verification frames and server challenge have been preserved. You can click "Retry submission" to resubmit with the existing idempotency key, or report to your Class Secretary or Faculty for authorized manual check-in.`);
         setCheckInStage('camera');
       } else {
         // Semantic rejection: consume challenge and return to idle
@@ -718,7 +718,7 @@ export const Attendance: React.FC = () => {
         setPendingAttendancePayload(null);
         setCanRetryUpload(false);
         const msg = err instanceof Error ? err.message : 'Biometric verification failed.';
-        setFailureNotice(`${msg} Your attendance was not recorded. Please report to your Class Secretary or course instructor for authorized manual check-in.`);
+        setFailureNotice(`${msg} Your attendance was not recorded. Please report to your Class Secretary or Faculty for authorized manual check-in.`);
         setCheckInStage('idle');
       }
     } finally {
@@ -1344,7 +1344,7 @@ export const Attendance: React.FC = () => {
                       No active attendance sessions open
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-                      There are no active attendance sessions open for your enrolled courses right now. Your course instructor or Class Secretary must open a session before check-in begins.
+                      There are no active attendance sessions open for your enrolled courses right now. Your Faculty or Class Secretary must open a session before check-in begins.
                     </p>
                   </div>
                 ) : (

@@ -136,12 +136,12 @@ const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
     'Too many requests.': 'Too many attempts. Please wait and try again.',
   },
   404: {
-    'No existing DentiSys account was found.': 'No existing DentiSys account was found.',
+    'No existing DentiSYS account was found.': 'No existing DentiSYS account was found.',
     'Biometric profile not found.': 'Face registration profile not found. Please complete enrollment first.',
     'Attendance session not found.': 'Attendance session not found or has ended.',
   },
   409: {
-    'This DentiSys account is linked to another Google identity.': 'This account is already linked to another Google identity.',
+    'This DentiSYS account is linked to another Google identity.': 'This account is already linked to another Google identity.',
     'Google identity does not match the invited Faculty email.': 'Google identity does not match the invited Faculty email.',
     'Google identity does not match the invited Student email.': 'Google identity does not match the invited Student email.',
     'Attendance already recorded.': 'Attendance has already been recorded for this session.',
@@ -155,7 +155,7 @@ const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
 function validationFieldLabel(field: string): string {
   const known: Record<string, string> = {
     firstName: 'First name', middleName: 'Middle name', lastName: 'Last name',
-    studentId: 'Student ID', studentNumber: 'Student number', yearLevel: 'Year level',
+    studentId: 'Student Number', studentNumber: 'Student Number', yearLevel: 'Year level',
     email: 'University email', classId: 'Class section', csId: 'Class section',
     sessionDate: 'Session date', meetingDay: 'Class meeting', classEndTime: 'Class end time',
     openingTime: 'Opening time', presentCutoff: 'Present cutoff', lateCutoff: 'Late cutoff',
@@ -217,9 +217,9 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
       const codeMessages: Record<string, string> = {
         GOOGLE_NOT_CONFIGURED: 'Google Sign-In is not configured in this environment.',
         GOOGLE_DOMAIN_NOT_ALLOWED: 'This Google account is outside the approved institutional domains.',
-        GOOGLE_EMAIL_MISMATCH: 'Choose the Google account that uses this DentiSys institutional email.',
-        GOOGLE_LINK_CONFLICT: 'This DentiSys account or Google identity is already linked elsewhere.',
-        GOOGLE_LINK_PASSWORD_INVALID: 'Incorrect DentiSys password.',
+        GOOGLE_EMAIL_MISMATCH: 'Choose the Google account that uses this DentiSYS institutional email.',
+        GOOGLE_LINK_CONFLICT: 'This DentiSYS account or Google identity is already linked elsewhere.',
+        GOOGLE_LINK_PASSWORD_INVALID: 'Incorrect DentiSYS password.',
         INVALID_GOOGLE_IDENTITY: 'Google identity could not be verified. Choose Google again and retry.',
         GOOGLE_LINK_CHALLENGE_EXPIRED: 'The Google linking session expired. Choose Google again and retry.',
         INVALID_LINK_CHALLENGE: 'The Google linking session expired. Choose Google again and retry.',
@@ -269,7 +269,7 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
   if (status === 404) return backendMessage || 'The requested record was not found.';
   if (status === 409) return backendMessage || 'This request conflicts with the current account state.';
   if (status === 401) return 'Authentication failed. Please log in again.';
-  if (status === 403) return 'Access denied. Contact the administrator.';
+  if (status === 403) return 'Access denied. Contact the Dean.';
   if (status === 429 && backendMessage) return backendMessage;
   if (status === 429) return 'Too many sign-in attempts. Please wait before trying again.';
   if (status === 503) return 'Service is temporarily unavailable. Please try again later.';

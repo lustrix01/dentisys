@@ -160,11 +160,11 @@ function handle_google_login(): void
         $matching = google_auth_user_by_email($pdo, $claims['email']);
         if ($matching === null) {
             google_auth_audit($pdo, $config, $context, 'google_login_denied', 'Failed', null, 'No existing DentiSys account matched the verified Google identity.');
-            google_auth_error('NO_EXISTING_ACCOUNT', 'No existing DentiSys account was found.', 404);
+            google_auth_error('NO_EXISTING_ACCOUNT', 'No existing DentiSYS account was found.', 404);
             return;
         }
         if (!empty($matching['google_subject'])) {
-            google_auth_error('GOOGLE_LINK_CONFLICT', 'This DentiSys account is linked to another Google identity.', 409);
+            google_auth_error('GOOGLE_LINK_CONFLICT', 'This DentiSYS account is linked to another Google identity.', 409);
             return;
         }
 
@@ -235,7 +235,7 @@ function handle_google_link(): void
                 throw new InvalidCredentialsException('Invalid ownership password.');
             }
             if (!empty($user['google_subject'])) {
-                throw new GoogleIdentityException('This DentiSys account is linked to another Google identity.', 'link_conflict');
+                throw new GoogleIdentityException('This DentiSYS account is linked to another Google identity.', 'link_conflict');
             }
 
             challenge_state_consume($rateStorage, (string) $claims['jti'], 'google_link_challenge', 'complete_link');
@@ -346,7 +346,7 @@ function handle_google_profile_link(): void
 
             if (strcasecmp((string) $user['login_email'], (string) $claims['email']) !== 0) {
                 throw new GoogleIdentityException(
-                    'The Google account must use the same institutional email as this DentiSys account.',
+                    'The Google account must use the same institutional email as this DentiSYS account.',
                     'email_mismatch'
                 );
             }
@@ -362,7 +362,7 @@ function handle_google_profile_link(): void
                     return;
                 }
                 throw new GoogleIdentityException(
-                    'This DentiSys account is linked to another Google identity.',
+                    'This DentiSYS account is linked to another Google identity.',
                     'link_conflict'
                 );
             }
@@ -373,7 +373,7 @@ function handle_google_profile_link(): void
             $subjectOwner->execute([(string) $claims['sub'], (int) $user['user_id']]);
             if ($subjectOwner->fetchColumn() !== false) {
                 throw new GoogleIdentityException(
-                    'This Google identity is already linked to another DentiSys account.',
+                    'This Google identity is already linked to another DentiSYS account.',
                     'link_conflict'
                 );
             }
@@ -406,7 +406,7 @@ function handle_google_profile_link(): void
             $bind->execute([(string) $claims['sub'], (int) $user['user_id']]);
             if ($bind->rowCount() !== 1) {
                 throw new GoogleIdentityException(
-                    'This DentiSys account is linked to another Google identity.',
+                    'This DentiSYS account is linked to another Google identity.',
                     'link_conflict'
                 );
             }

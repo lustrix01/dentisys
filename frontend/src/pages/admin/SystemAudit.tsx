@@ -686,7 +686,7 @@ export const DeanReports: React.FC = () => {
                 <table className="w-full text-left text-xs min-w-[640px]">
                   <thead className="sticky top-0 bg-white dark:bg-slate-950 z-10">
                     <tr className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
-                      <th className="py-2.5 px-3">Student ID</th>
+                      <th className="py-2.5 px-3">Student No.</th>
                       <th className="py-2.5 px-3">Name</th>
                       <th className="py-2.5 px-3">Class</th>
                       <th className="py-2.5 px-3">Year</th>

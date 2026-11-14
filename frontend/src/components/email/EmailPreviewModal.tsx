@@ -71,7 +71,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
       case 'consent':
         return {
           title: 'Class Invitation & Student Account Activation',
-          subject: 'DentiSys Student Invitation',
+          subject: 'DentiSYS Student Invitation',
           sender: `${facultyName} via DentiSYS Portal`,
           senderEmail: 'notifications@dentisys.bicol-u.edu.ph',
           icon: GraduationCap,
@@ -89,7 +89,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
       case 'faculty_approval':
         return {
           title: 'Faculty Registration Approved',
-          subject: 'Account Approved: Welcome to DentiSys Faculty Portal',
+          subject: 'Account Approved: Welcome to DentiSYS Faculty Portal',
           sender: 'Office of the Dean, BU College of Dental Medicine',
           senderEmail: 'dean.dental@bicol-u.edu.ph',
           icon: CheckCircle2,
@@ -98,7 +98,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
       case 'faculty_rejection':
         return {
           title: 'Faculty Registration Update',
-          subject: 'Registration Update: DentiSys Faculty Account',
+          subject: 'Registration Update: DentiSYS Faculty Account',
           sender: 'Office of the Dean, BU College of Dental Medicine',
           senderEmail: 'dean.dental@bicol-u.edu.ph',
           icon: XCircle,
@@ -191,7 +191,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
                     Hello {recipientName},
                   </p>
                   <p className="leading-relaxed">
-                    <strong>{facultyName}</strong> invited you to join <strong>{className || 'Clinical Dentistry'}</strong> on DentiSys.
+                    <strong>{facultyName}</strong> invited you to join <strong>{className || 'Clinical Dentistry'}</strong> on DentiSYS.
                   </p>
                 </div>
 
@@ -278,7 +278,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
                 <div className="flex items-start gap-2.5 p-3 border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 text-sm">
                   <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                   <p>
-                    This invitation link is for your institutional email address and expires in <strong>7 days</strong>. If you were not expecting it, contact your Faculty instructor.
+                    This invitation link is for your institutional email address and expires in <strong>7 days</strong>. If you were not expecting it, contact your Faculty.
                   </p>
                 </div>
               </>
@@ -313,7 +313,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
                 </p>
                 <p>
                   <strong>Specific Subjects / Procedures of Concern:</strong><br />
-                  {subjectsOfConcern || 'Please consult your faculty instructor for details regarding clinical case backlogs.'}
+                  {subjectsOfConcern || 'Please consult your Faculty for details regarding clinical case backlogs.'}
                 </p>
                 <p>
                   Please contact {facultyName} to discuss next steps and available advising.

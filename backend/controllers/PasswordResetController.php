@@ -127,16 +127,16 @@ function handle_password_reset_request(): void
         $resetLink = $user !== false ? app_url($config, '/reset-password', ['token' => $resetToken]) : null;
 
         if ($user !== false && $resetLink !== null) {
-            $subject = 'DentiSys Password Reset Request';
+            $subject = 'DentiSYS Password Reset Request';
             $body = email_password_reset_html((string) $user['display_name'], $email, $resetLink);
 
             send_email($email, $subject, $body, $config);
         } else {
             log_to_outbox(
                 $email,
-                'DentiSys Password Reset Request (Account Not Found)',
+                'DentiSYS Password Reset Request (Account Not Found)',
                 '<p>Password reset was requested for this email, but no matching user account was found.</p>',
-                ['From' => $config['smtp']['from'] ?? 'noreply@dentisys.local', 'To' => $email, 'Subject' => 'DentiSys Password Reset Request (Account Not Found)'],
+                ['From' => $config['smtp']['from'] ?? 'noreply@dentisys.local', 'To' => $email, 'Subject' => 'DentiSYS Password Reset Request (Account Not Found)'],
                 false,
                 'Account not found'
             );

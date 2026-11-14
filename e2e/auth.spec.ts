@@ -122,7 +122,7 @@ test.describe('Auth Module E2E Tests', () => {
       }) });
     });
     await page.goto('/activate-faculty?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
-    await expect(page.getByText('Dean invitation')).toBeVisible();
+    await expect(page.getByText('Dean invitation', { exact: true })).toBeVisible();
     await expect(page.getByText('Faculty invitation')).toHaveCount(0);
     await expect(page.getByText('first.dean@bicol-u.edu.ph')).toBeVisible();
   });
@@ -419,8 +419,8 @@ test('mocked Google direct login completes normal authentication', async ({ page
 
     await page.goto('/login');
     await page.getByRole('button', { name: 'Continue with Google' }).click();
-    await expect(page.getByText('Confirm your DentiSys password to link this Google account.')).toBeVisible();
-    await page.getByPlaceholder('DentiSys password').fill('Faculty123!');
+    await expect(page.getByText('Confirm your DentiSYS password to link this Google account.')).toBeVisible();
+    await page.getByPlaceholder('DentiSYS password').fill('Faculty123!');
     await page.getByRole('button', { name: 'Confirm and link Google' }).click();
     await expect(page).toHaveURL('/');
   });

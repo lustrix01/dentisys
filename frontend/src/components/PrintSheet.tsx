@@ -21,7 +21,7 @@ export const PrintStyle: React.FC<{ title: string; running: string; generated: s
   /* = --ps-fs-xs; @page boxes can't use vars */
   @top-left { content: ${cssString(running)}; font-size: 8.5px; color: #64748b; }
   @top-right { content: "continued"; font-size: 8.5px; color: #64748b; }
-  @bottom-left { content: ${cssString(`DentiSys · ${title} · ${generated}${note ? ` · ${note}` : ''}`)}; font-size: 8.5px; color: #64748b; }
+  @bottom-left { content: ${cssString(`DentiSYS · ${title} · ${generated}${note ? ` · ${note}` : ''}`)}; font-size: 8.5px; color: #64748b; }
   @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8.5px; color: #64748b; }
 }
 @page :first { @top-left { content: none; } @top-right { content: none; } }

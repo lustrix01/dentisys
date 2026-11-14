@@ -1849,7 +1849,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 <span className="font-bold text-slate-900 dark:text-slate-100">{correctionTarget.studentName}</span>
               </div>
               <div className="flex justify-between items-center text-slate-500">
-                <span>Student ID:</span>
+                <span>Student Number:</span>
                 <span className="font-mono">{correctionTarget.studentNumber}</span>
               </div>
               <div className="flex justify-between items-center pt-1 border-t border-slate-200 dark:border-slate-800">
@@ -2033,7 +2033,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 maxLength={500}
                 value={revokeReason}
                 onChange={(e) => setRevokeReason(e.target.value)}
-                placeholder="e.g. Schedule adjustment, instructor requested cancellation, or incorrect session parameters..."
+                placeholder="e.g. Schedule adjustment, Faculty requested cancellation, or incorrect session parameters..."
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:border-rose-500"
               />
               <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1 text-right">

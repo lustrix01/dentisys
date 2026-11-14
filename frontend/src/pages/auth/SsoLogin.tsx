@@ -294,7 +294,7 @@ export function SsoLogin() {
 
           {invitationRequired && (
             <div className="rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs font-semibold text-blue-800">
-              DentiSys accounts are created through invitations. Open the invitation link sent to your university email.
+              DentiSYS accounts are created through invitations. Open the invitation link sent to your university email.
             </div>
           )}
 
@@ -315,7 +315,7 @@ export function SsoLogin() {
           {linkChallengeToken && (
             <form onSubmit={handleGoogleLink} className="rounded-xl border border-purple-200 bg-purple-50 p-4">
               <p className="text-xs font-semibold text-purple-900">
-                Confirm your DentiSys password to link this Google account.
+                Confirm your DentiSYS password to link this Google account.
               </p>
               <div className="relative mt-3">
                 <input
@@ -323,10 +323,10 @@ export function SsoLogin() {
                   type={showLinkPassword ? 'text' : 'password'}
                   required
                   autoComplete="current-password"
-                  aria-label="DentiSys password"
+                  aria-label="DentiSYS password"
                   value={linkPassword}
                   onChange={(event) => setLinkPassword(event.target.value)}
-                  placeholder="DentiSys password"
+                  placeholder="DentiSYS password"
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pr-12 text-xs text-slate-800 outline-none focus:border-purple-600"
                 />
                 <button

@@ -308,7 +308,7 @@ test('new class decisions: own matching class, Dean term, past year, DentiSys un
   assert.deepEqual(termForHeader(header, '2026-2027', terms), { termId: '7' });
   assert.equal(termForHeader({ ...header, semester: '2ND' }, '2026-2027', terms).noTerm, 'No Dean-defined term matches AY 2026-2027 2nd Semester. Choose a term from the list or ask the Dean to add it.');
   assert.equal(termForHeader({ ...header, schoolYear: '2025-2026' }, '2026-2027', terms).noTerm, 'This file is for AY 2025-2026. Choose a 2026-2027 term to create the class here.');
-  assert.equal(catalogUnitsNote('DM 100', header, { lectureUnits: 2, labUnits: 2 }), "This file says Lecture 2 · Laboratory 0; DentiSys has Lecture 2 · Laboratory 2 for DM 100. Ask the course's creator to change them in Classes & Rosters.");
+  assert.equal(catalogUnitsNote('DM 100', header, { lectureUnits: 2, labUnits: 2 }), "This file says Lecture 2 · Laboratory 0; DentiSYS has Lecture 2 · Laboratory 2 for DM 100. Ask the course's creator to change them in Classes & Rosters.");
   assert.equal(catalogUnitsNote('DM 100', header, { lectureUnits: 2, labUnits: 0 }), null);
   assert.equal(catalogUnitsNote('DM 100', header, { lectureUnits: null, labUnits: null }), null);
   assert.equal(catalogUnitsNote('DM 100', header, undefined), null);

@@ -258,7 +258,7 @@ function handle_student_profile_update(): void
         error_log('Student profile update database error: ' . get_class($e));
         $sqlState = (string) $e->getCode();
         if ($sqlState === '23514' || $sqlState === 'P0001') {
-            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the administrator.', 409);
+            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the Dean.', 409);
         } else {
             safe_error_response('Unable to save Student profile.', 500);
         }

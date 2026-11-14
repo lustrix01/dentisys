@@ -45,7 +45,7 @@ export const Profile: React.FC = () => {
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
       <div className="flex justify-end pb-2">
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-accent-700 dark:text-accent-400 bg-accent-50 dark:bg-accent-950/30 px-3 py-2 rounded-xl">
-          <CheckCircle2 className="w-3.5 h-3.5" />Administrator access
+          <CheckCircle2 className="w-3.5 h-3.5" />Dean access
         </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
@@ -80,7 +80,7 @@ export const Profile: React.FC = () => {
               <ReadOnlyEmail value={email} />
             </CardContent>
           </Card>
-          <MfaSettingsCard userEmail={email || 'dean@bicol-u.edu.ph'} roleName="Administrator" onAuthenticatorStatusChange={setAuthenticatorEnabled} />
+          <MfaSettingsCard userEmail={email || 'dean@bicol-u.edu.ph'} roleName="Dean" onAuthenticatorStatusChange={setAuthenticatorEnabled} />
           <GoogleLinkCard />
           <PasswordChangeCard />
         </div>

@@ -378,7 +378,7 @@ export const Classes: React.FC = () => {
                         {/* Instructor */}
                         <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
                           <User className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                          <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">Instructor:</span>
+                          <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">Faculty:</span>
                           <span className="font-semibold text-slate-700 dark:text-slate-200">{cls.instructorName || 'Faculty Member'}</span>
                         </div>
 
@@ -493,7 +493,7 @@ export const Classes: React.FC = () => {
                       <div className="p-3 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5 text-xs">
                         <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                           <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">Instructor:</span>
+                          <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">Faculty:</span>
                           <span className="font-semibold text-slate-700 dark:text-slate-200">{cls.instructorName || 'Faculty Member'}</span>
                         </div>
 

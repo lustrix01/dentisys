@@ -90,7 +90,7 @@ export const Settings: React.FC = () => {
                 <strong className="text-slate-700 dark:text-slate-200">Retention trigger: Grade 2.5.</strong>{" "}
                 A completed final course grade from 2.5 through 4.9 (1.0 is highest) is eligible for
                 remedial attempts in every course. A 5.0 follows the in-person irregular
-                reenrollment path outside DentiSys.
+                reenrollment path outside DentiSYS.
               </p>
               <p>
                 <strong className="text-slate-700 dark:text-slate-200">Grade weights</strong> are set
@@ -117,7 +117,7 @@ export const Settings: React.FC = () => {
                 Clear local cache
               </button>
               <p className="mt-2 text-[10px] text-center text-slate-500 dark:text-slate-400">
-                Clears data this browser saved for DentiSys. Your records are not affected.
+                Clears data this browser saved for DentiSYS. Your records are not affected.
               </p>
             </CardContent>
           </Card>

@@ -597,7 +597,7 @@ export const EmailManagement: React.FC = () => {
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search student ID, name..."
+              placeholder="Search Student Number, name..."
               aria-label="Search students by ID, name or email"
               value={search}
               onChange={(e) => setSearch(e.target.value)}

@@ -108,7 +108,7 @@ test('a lecture-only course is graded as Lecture only, end to end', async ({ pag
   await page.goto('/grades?tab=scores');
   await page.getByRole('main').getByLabel(/^Class:/).selectOption(csId);
   await page.getByRole('tab', { name: /Full Matrix View/ }).first().click();
-  const table = page.locator('table').filter({ hasText: 'Student Info' }).first();
+  const table = page.locator('table').filter({ hasText: 'Student Details' }).first();
   await expect(table.locator('thead')).toContainText(/Lecture/i);
   await expect(table.locator('thead')).not.toContainText(/Laboratory/i);
   const finalGrade = table.locator('tbody tr').first().locator('td').last().locator('span').first();

@@ -53,7 +53,7 @@ function validation_field_label(string $field): string
 {
     $known = [
         'firstName' => 'First name', 'middleName' => 'Middle name', 'lastName' => 'Last name',
-        'studentId' => 'Student ID', 'studentNumber' => 'Student number', 'yearLevel' => 'Year level',
+        'studentId' => 'Student Number', 'studentNumber' => 'Student Number', 'yearLevel' => 'Year level',
         'email' => 'University email', 'classId' => 'Class section', 'csId' => 'Class section',
         'sessionDate' => 'Session date', 'meetingDay' => 'Class meeting', 'classEndTime' => 'Class end time',
         'openingTime' => 'Opening time', 'presentCutoff' => 'Present cutoff', 'lateCutoff' => 'Late cutoff',

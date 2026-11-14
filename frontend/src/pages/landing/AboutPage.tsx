@@ -106,7 +106,7 @@ export function AboutPage() {
                         Administration
                       </span>
                       <h3 className="mt-1 text-sm font-bold text-slate-900 font-heading">
-                        Dean & Admin Staff
+                        Dean & Office Staff
                       </h3>
                       <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
                         Reviews college-wide grade reports, monitors student retention and remedial cases, and oversees academic terms.
@@ -121,7 +121,7 @@ export function AboutPage() {
                         Teaching Faculty
                       </span>
                       <h3 className="mt-1 text-sm font-bold text-slate-900 font-heading">
-                        Course Instructors
+                        Faculty
                       </h3>
                       <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
                         Imports official section lists, verifies lecture and laboratory attendance, computes scores, and exports grade sheets.
@@ -139,7 +139,7 @@ export function AboutPage() {
                         Class Secretaries
                       </h3>
                       <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
-                        Helps instructors by recording roll call entries during class hours and submitting them for instructor approval.
+                        Helps Faculty by recording roll call entries during class hours and submitting them for Faculty approval.
                       </p>
                     </div>
                   </div>

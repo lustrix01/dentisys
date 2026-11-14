@@ -76,7 +76,7 @@ export function ActivateStudent() {
     <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
       <form onSubmit={submit} className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-lg dark:border-slate-800 dark:bg-slate-900">
         <p className="text-xs font-bold uppercase tracking-wider text-accent-600">Student invitation</p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">Set your DentiSys password</h1>
+        <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">Set your DentiSYS password</h1>
         {loading && <p className="mt-4 text-sm text-slate-500">Checking invitation…</p>}
         {error && <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{error}</p>}
         {invitation && !loading && (

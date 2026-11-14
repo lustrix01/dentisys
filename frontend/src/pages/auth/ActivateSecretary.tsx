@@ -164,7 +164,7 @@ export function ActivateSecretary() {
                 {!useFallbackSvg ? (
                   <img
                     src="/tooth-logo.png"
-                    alt="DentiSys tooth"
+                    alt="DentiSYS tooth"
                     className="max-w-full max-h-full object-contain hover:scale-105 transition-transform duration-300"
                     onError={() => setUseFallbackSvg(true)}
                   />

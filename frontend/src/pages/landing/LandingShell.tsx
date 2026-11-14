@@ -80,7 +80,7 @@ export function LandingShell({ children }: { children?: React.ReactNode }) {
             to="/#home"
             onClick={(e) => handleNavClick(e, 'home')}
             className="flex min-w-0 flex-col"
-            aria-label="DentiSys home"
+            aria-label="DentiSYS home"
           >
               <span className="flex items-center gap-1.5 text-sm font-extrabold tracking-tight sm:text-lg md:text-xl">
               <span className="text-slate-900">BUCDM</span><span className="text-purple-600">DentiSYS</span>

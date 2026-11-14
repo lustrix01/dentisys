@@ -14,7 +14,7 @@ export function describeCameraError(error: unknown): string {
   switch (mediaDeviceErrorName(error)) {
     case 'NotAllowedError':
     case 'SecurityError':
-      return 'Camera access was blocked. Allow camera access for this local DentiSys site, then choose Retry camera access.';
+      return 'Camera access was blocked. Allow camera access for this local DentiSYS site, then choose Retry camera access.';
     case 'NotReadableError':
       return 'The camera could not be opened. Close other apps or browser tabs using the camera, then choose Retry camera access or select another camera.';
     case 'OverconstrainedError':

@@ -168,7 +168,7 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
         <div className="min-w-0 text-xs font-bold text-slate-800 dark:text-slate-100">
           {v.item.title} <span className="font-normal text-slate-500 dark:text-slate-400">· {where(v)} · max {v.item.maxScore}{v.item.kind === 'percent' ? ' (percentage)' : ''}</span>
           <small className={subtle}>
-            {v.noScores ? 'No scores yet in the sheet. ' : `Not in DentiSys yet. Its ${scoreCount(v)} ${scoreCount(v) === 1 ? 'score is' : 'scores are'} imported only if you create it. `}
+            {v.noScores ? 'No scores yet in the sheet. ' : `Not in DentiSYS yet. Its ${scoreCount(v)} ${scoreCount(v) === 1 ? 'score is' : 'scores are'} imported only if you create it. `}
             {v.item.kind === 'percent' ? 'Created with max 100, transmutation off.' : ''}
           </small>
         </div>
@@ -204,7 +204,7 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
       <div key={k} className={v.blockers.length ? rowBlocked : rowCls}>
         <div className="min-w-0 text-xs font-bold text-slate-800 dark:text-slate-100">
           {v.assessment!.title} <span className="font-normal text-slate-500 dark:text-slate-400">· {where(v)}</span>
-          <small className={subtle}>DentiSys max <b>{v.maxDiff!.saved}</b> → sheet max <b>{v.maxDiff!.sheet}</b>. Choose one before importing.</small>
+          <small className={subtle}>DentiSYS max <b>{v.maxDiff!.saved}</b> → sheet max <b>{v.maxDiff!.sheet}</b>. Choose one before importing.</small>
           {v.maxError && <small className="block text-[11px] text-rose-700 dark:text-rose-400 font-semibold mt-0.5">{v.maxError}</small>}
         </div>
         <select aria-label={`Max for ${v.assessment!.title}`} className={selectCls} value={dec.maxChoice[k] ?? ''} onChange={e => setIn('maxChoice', k, e.target.value as 'keep' | 'change')}>
@@ -245,7 +245,7 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
               <tr className="text-left font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400 tracking-wider">
                 <th className="px-3 py-2">Row</th>
                 <th className="px-3 py-2">Name in Sheet</th>
-                <th className="px-3 py-2">DentiSys Student</th>
+                <th className="px-3 py-2">DentiSYS Student</th>
                 {used.map(v => (
                   <th key={v.item.key} className="px-3 py-2 whitespace-nowrap">{periodLabel(v.item.period)} {v.item.title}{v.item.kind === 'percent' ? ' %' : ` /${v.effMax}`}</th>
                 ))}
@@ -311,7 +311,7 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
               <span>Import grade sheets</span>
             </CardTitle>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Upload the official grade sheet workbook (.xlsx) exactly as the school gives it. Only raw scores are imported; DentiSys calculates the grades.
+              Upload the official grade sheet workbook (.xlsx) exactly as the school gives it. Only raw scores are imported; DentiSYS calculates the grades.
             </p>
           </div>
           <span className="shrink-0 text-[10px] font-bold px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 self-start">
@@ -416,7 +416,7 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
                   <div key={n.assessment.id} className={rowCls}>
                     <div className="min-w-0 text-xs font-bold text-slate-800 dark:text-slate-100">
                       {n.assessment.title} <span className="font-normal text-slate-500 dark:text-slate-400">· {periodLabel(n.assessment.period)}{n.component ? ` · ${n.component}` : ''} · max {n.assessment.maxScore}</span>
-                      <small className={subtle}>In DentiSys with {n.savedScores} saved scores. Kept unless you tick Remove.</small>
+                      <small className={subtle}>In DentiSYS with {n.savedScores} saved scores. Kept unless you tick Remove.</small>
                     </div>
                     <label className="flex items-center gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-400 cursor-pointer">
                       <input type="checkbox" checked={n.removing} onChange={e => void askRemove(n.assessment, n.component, n.savedScores, e.target.checked)} />

@@ -98,7 +98,7 @@ function health_payload(): array
             $payload['status'] = 'error';
             $payload['database'] = 'up';
             $payload['error_code'] = 'schema_outdated';
-            $payload['message'] = 'Database migrations are pending. Run .\\scripts\\migrate.ps1 before starting DentiSys.';
+            $payload['message'] = 'Database migrations are pending. Run .\\scripts\\migrate.ps1 before starting DentiSYS.';
 
             return [
                 'statusCode' => 503,

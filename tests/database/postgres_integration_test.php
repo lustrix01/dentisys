@@ -1512,7 +1512,7 @@ expect_same(null, $resetRequestBody['reset_link'] ?? null, 'Test environment doe
 $mailpitMessages = integration_mailpit_json('/api/v1/messages');
 $resetMessageId = null;
 foreach (($mailpitMessages['messages'] ?? []) as $message) {
-    if (!is_array($message) || ($message['Subject'] ?? null) !== 'DentiSys Password Reset Request') {
+    if (!is_array($message) || ($message['Subject'] ?? null) !== 'DentiSYS Password Reset Request') {
         continue;
     }
     foreach (($message['To'] ?? []) as $recipient) {
@@ -2454,7 +2454,7 @@ expect_true(count($multiAuditRows) === 2 && $multiAuditRows[0]['operation_uuid']
     'password' => 'SecretaryInvite123!',
 ]);
 expect_same(409, $multiAgainStatus, 'An already accepted Secretary invitation is refused with 409');
-expect_same('This invitation was already accepted. Sign in with your DentiSys account.', $multiAgainBody['message'] ?? $multiAgainBody['error'] ?? null, 'Already accepted invitation names the next step');
+expect_same('This invitation was already accepted. Sign in with your DentiSYS account.', $multiAgainBody['message'] ?? $multiAgainBody['error'] ?? null, 'Already accepted invitation names the next step');
 [$multiRevokedStatus] = integration_http_json('/api/secretary/activate', '', ['token' => $multiKnown3, 'password' => 'SecretaryInvite123!']);
 expect_same(400, $multiRevokedStatus, 'A freed (revoked) Secretary invitation stays invalid');
 integration_retire_fixture_classes($pdo, [$multiSecIdB, $multiSecIdC], []);
@@ -2492,7 +2492,7 @@ $roleConflictStudent = static function (string $email) use ($facultyAccessToken,
 };
 [$deanAsStudentStatus, $deanAsStudentBody] = $roleConflictStudent('admin@bicol-u.edu.ph');
 expect_same(409, $deanAsStudentStatus, 'Faculty cannot register the Dean as a Student');
-expect_true(str_contains((string) ($deanAsStudentBody['message'] ?? ''), 'Dean (Administrator)'), 'The Dean-as-Student rejection names the Dean account');
+expect_true(str_contains((string) ($deanAsStudentBody['message'] ?? ''), 'Dean'), 'The Dean-as-Student rejection names the Dean account');
 [$facultyAsStudentStatus, $facultyAsStudentBody] = $roleConflictStudent('faculty@bicol-u.edu.ph');
 expect_same(409, $facultyAsStudentStatus, 'Faculty cannot register a Faculty member as a Student');
 expect_true(str_contains((string) ($facultyAsStudentBody['message'] ?? ''), 'Faculty account'), 'The Faculty-as-Student rejection names the Faculty account');

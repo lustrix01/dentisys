@@ -412,7 +412,7 @@ function update_account_identity(PDO $pdo, int $userId, string $displayName, ?st
 function account_identity_role_label(string $role): string
 {
     return match ($role) {
-        'admin' => 'Dean (Administrator)',
+        'admin' => 'Dean',
         'faculty' => 'Faculty',
         'secretary' => 'Class Secretary',
         'student' => 'Student',

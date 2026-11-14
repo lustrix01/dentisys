@@ -115,7 +115,7 @@ export const PeopleAndAccounts: React.FC = () => {
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent-600 dark:text-accent-400" />
           <p>{tab === 'students'
             ? 'Student invitations are sent by Faculty from an assigned class roster so each invitation stays connected to the Student record.'
-            : 'Dean access is configured for the initial administrator during deployment. Additional Dean invitations are not available in the current workflow.'}</p>
+            : 'Dean access is configured for the initial Dean during deployment. Additional Dean invitations are not available in the current workflow.'}</p>
         </div>
       )}
 
@@ -226,6 +226,6 @@ function AccountOptions({ account, tab }: { account: PreviewAccount; tab: RoleTa
     <div className="space-y-2">
       {[statusAction, 'Reset 2FA', 'Sign out all devices'].map(label => <button key={label} type="button" disabled title={unavailable} className="flex min-h-11 w-full cursor-not-allowed items-center justify-between gap-3 rounded-xl border border-slate-200 px-3.5 text-left text-xs font-bold text-slate-400 opacity-75 dark:border-slate-700 dark:text-slate-500" aria-label={`${label} for ${account.name} unavailable`}><span>{label}</span><span className="text-[9px] font-bold uppercase tracking-wide">Unavailable</span></button>)}
     </div>
-    {tab === 'deans' && <p className="text-[11px] text-slate-500 dark:text-slate-400">Administrator accounts require additional protection.</p>}
+    {tab === 'deans' && <p className="text-[11px] text-slate-500 dark:text-slate-400">Dean accounts require additional protection.</p>}
   </div>;
 }

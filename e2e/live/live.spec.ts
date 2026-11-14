@@ -330,7 +330,7 @@ test('Faculty-issued Student invitation, Mailpit acceptance, password login, and
   const mailpitMessages = await page.request.get(`${mailpitBaseUrl}/api/v1/messages`);
   const mailpitPayload = await jsonResponse(mailpitMessages);
   const activationMessage = (mailpitPayload.messages as Array<{ ID: string; Subject: string; To?: Array<{ Address?: string }> }>).find(message =>
-    message.Subject === 'DentiSys Student Invitation'
+    message.Subject === 'DentiSYS Student Invitation'
     && message.To?.some(recipient => recipient.Address?.toLowerCase() === email.toLowerCase())
   );
   expect(activationMessage).toBeTruthy();

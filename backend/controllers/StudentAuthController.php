@@ -271,7 +271,7 @@ function handle_student_invitation_create(): void
             $tokenId = (int) $tokenStmt->fetchColumn();
 
             $invitationLink = app_url($config, '/activate-student', ['token' => $rawToken]);
-            $subject = 'DentiSys Student Invitation';
+            $subject = 'DentiSYS Student Invitation';
             $messageBody = student_auth_activation_email($student, $invitationLink, (string) ($authCtx['display_name'] ?? ''));
             $outbox = $pdo->prepare(
                 "INSERT INTO email_outbox

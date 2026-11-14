@@ -219,7 +219,7 @@ function handle_secretary_invite(): void
         }
 
         $invitationLink = app_url($config, '/activate-secretary', ['token' => $invToken]);
-        $subject = 'DentiSys Class Secretary Invitation';
+        $subject = 'DentiSYS Class Secretary Invitation';
         $body = email_secretary_invitation_html(
             (string) $studentName,
             (string) $actorDisplayName,
@@ -429,7 +429,7 @@ function handle_secretary_get_invitation(): void
                 'studentNumber' => $meta['student_number'] ?? '',
                 'email' => $meta['email'] ?? '',
                 'className' => $meta['class_name'] ?? 'Class Section',
-                'facultyName' => $meta['faculty_name'] ?? 'Faculty Instructor',
+                'facultyName' => $meta['faculty_name'] ?? 'Faculty',
                 'expiresAt' => $row['expires_at'],
             ],
         ], 200);
@@ -483,7 +483,7 @@ function handle_secretary_activate(): void
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($row !== false && $row['revoked_at'] === null && $row['used_at'] !== null) {
-            safe_error_response('This invitation was already accepted. Sign in with your DentiSys account.', 409);
+            safe_error_response('This invitation was already accepted. Sign in with your DentiSYS account.', 409);
             return;
         }
         if ($row === false || $row['revoked_at'] !== null) {
@@ -522,7 +522,7 @@ function handle_secretary_activate(): void
             $tokenLock->execute([(int) $row['token_id']]);
             $lockedToken = $tokenLock->fetch(PDO::FETCH_ASSOC);
             if ($lockedToken !== false && $lockedToken['revoked_at'] === null && $lockedToken['used_at'] !== null) {
-                throw new DomainException('This invitation was already accepted. Sign in with your DentiSys account.');
+                throw new DomainException('This invitation was already accepted. Sign in with your DentiSYS account.');
             }
             if ($lockedToken === false
                 || $lockedToken['revoked_at'] !== null
@@ -2375,7 +2375,7 @@ function handle_secretary_profile_update(): void
         if ($sqlState === '23505') {
             safe_error_response('That email address is already used by another account.', 409);
         } elseif ($sqlState === '23514' || $sqlState === 'P0001') {
-            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the administrator.', 409);
+            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the Dean.', 409);
         } else {
             safe_error_response('Internal server error.', 500);
         }

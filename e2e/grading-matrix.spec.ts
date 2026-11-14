@@ -86,8 +86,8 @@ test('grading matrix groups assessments by period and category and shows server 
   await page.getByRole('tab', { name: 'Student Scores Entry' }).click();
   await page.getByRole('tab', { name: 'Full Matrix View' }).click();
 
-  const table = page.locator('table').filter({ hasText: 'Student Info' });
-  await expect(table.getByRole('columnheader', { name: 'Student Info' })).toBeVisible();
+  const table = page.locator('table').filter({ hasText: 'Student Details' });
+  await expect(table.getByRole('columnheader', { name: 'Student Details' })).toBeVisible();
   await expect(table.getByRole('columnheader', { name: 'Full Name' })).toBeVisible();
   await expect(table.getByRole('columnheader', { name: 'Midterm', exact: true })).toBeVisible();
   await expect(table.getByRole('columnheader', { name: 'Tentative Final grade' })).toBeVisible();
@@ -281,7 +281,7 @@ for (const width of [768, 1440]) {
     const pin = page.getByRole('group', { name: 'Keep visible while scrolling' });
     await expect(pin).toBeVisible();
     const nameOnly = pin.getByRole('button', { name: 'Name', exact: true });
-    const both = pin.getByRole('button', { name: 'ID and name' });
+    const both = pin.getByRole('button', { name: 'Student No. and name' });
     await expect(nameOnly).toHaveAttribute('aria-pressed', 'true');
     const box = page.locator('div.overflow-x-auto.overflow-y-auto');
     const idCell = box.getByRole('cell', { name: '2023-5510', exact: true });
@@ -294,7 +294,7 @@ for (const width of [768, 1440]) {
     expect(await position(idCell)).toBe('sticky');
     const idWidth = await idCell.evaluate(el => el.getBoundingClientRect().width);
     expect(await nameCell.evaluate(el => parseFloat(getComputedStyle(el).left))).toBeCloseTo(idWidth, 0);
-    // Both columns keep their own cells: ID Number and Full Name are never merged.
+    // Both columns keep their own cells: Student No. and Full Name are never merged.
     await expect(idCell).toHaveText('2023-5510');
     await expect(nameCell).toHaveText('Owhie Santillan Lumbang');
   });
@@ -303,7 +303,7 @@ for (const width of [768, 1440]) {
 test('single-list config shows an Assessments group, no Lecture weight and no Component filter', async ({ page }) => {
   await mockMatrixClass(page, {});
   await page.getByRole('tab', { name: 'Full Matrix View' }).click();
-  const table = page.locator('table').filter({ hasText: 'Student Info' });
+  const table = page.locator('table').filter({ hasText: 'Student Details' });
   await expect(table.getByRole('columnheader', { name: 'Assessments' })).toBeVisible();
   await expect(table.getByRole('columnheader', { name: /Lecture/i })).toHaveCount(0);
   await expect(page.getByText('Component:')).toHaveCount(0);
@@ -323,7 +323,7 @@ test('lecture/laboratory config still shows weighted component headers and the C
     } }) }));
   } });
   await page.getByRole('tab', { name: 'Full Matrix View' }).click();
-  const table = page.locator('table').filter({ hasText: 'Student Info' });
+  const table = page.locator('table').filter({ hasText: 'Student Details' });
   await expect(table.getByRole('columnheader', { name: 'Lecture (60%)' })).toBeVisible();
   await expect(table.getByRole('columnheader', { name: 'Laboratory (40%)' })).toBeVisible();
   await expect(page.getByText('Component:')).toBeVisible();
@@ -378,7 +378,7 @@ async function mockComputationMatrix(page: import('@playwright/test').Page) {
 test('Show computation switch adds % and Transmuted steps and the period results stay inside each period', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockComputationMatrix(page);
-  const table = page.locator('table').filter({ hasText: 'Student Info' });
+  const table = page.locator('table').filter({ hasText: 'Student Details' });
   const sw = page.getByRole('switch', { name: 'Show computation' });
   await expect(sw).toHaveAttribute('aria-checked', 'false');
   await expect(table.getByRole('columnheader', { name: 'Average %' })).toBeVisible();
@@ -415,7 +415,7 @@ test('Show computation also works below 1280 px', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 800 });
   await page.addInitScript(() => localStorage.setItem('dentisys_matrix_show_computation', '1'));
   await mockComputationMatrix(page);
-  const table = page.locator('table').filter({ hasText: 'Student Info' });
+  const table = page.locator('table').filter({ hasText: 'Student Details' });
   await expect(page.locator('button[role="switch"]', { hasText: 'Show computation' })).toHaveAttribute('aria-checked', 'true');
   await expect(table.getByRole('columnheader', { name: 'Average %' })).toBeVisible();
   await expect(table.getByRole('columnheader', { name: 'Transmuted' })).toHaveCount(3);

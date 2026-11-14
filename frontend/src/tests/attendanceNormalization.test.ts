@@ -111,7 +111,7 @@ test('Closed capture window notice names the Late cutoff and directs to manual a
 
   assert.ok(notice);
   assert.match(notice, /closed at 1:30 PM/);
-  assert.match(notice, /course instructor or Class Secretary/);
+  assert.match(notice, /Faculty or Class Secretary/);
   assert.match(notice, /manually/);
 });
 

@@ -265,7 +265,7 @@ export const FacultyInvitation: React.FC = () => {
     try {
       const response = await reissueFacultyInvitation(invitation.id);
       setNotice(response.delivery_status === 'Sent'
-        ? `Invitation sent to ${invitation.email}. The Admin invitation was reissued.`
+        ? `Invitation sent to ${invitation.email}. The Dean invitation was reissued.`
         : `Invitation reissued for ${invitation.email}, but email delivery failed.`);
       await refresh();
     } catch (err) {

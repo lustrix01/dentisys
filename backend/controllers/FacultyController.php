@@ -555,12 +555,12 @@ function handle_faculty_student_create(): void
         $birthdate = !empty($data['birthdate']) ? $data['birthdate'] : null;
 
         if (empty($studentNumber) || empty($firstName) || empty($lastName)) {
-            safe_error_response('Student ID number, first name, and last name are required.', 400);
+            safe_error_response('Student Number, first name, and last name are required.', 400);
             return;
         }
 
         if (strlen($studentNumber) < 3) {
-            $errors['studentId'] = 'Student ID number must be at least 3 characters.';
+            $errors['studentId'] = 'Student Number must be at least 3 characters.';
         } elseif (preg_match('/[\x00-\x1F\x7F]/', $studentNumber)) {
             $errors['studentId'] = 'Student number cannot contain line breaks or control characters.';
         }
@@ -629,14 +629,14 @@ function handle_faculty_student_create(): void
         $duplicateNumber = $pdo->prepare('SELECT 1 FROM students WHERE lower(student_number) = lower(?) LIMIT 1');
         $duplicateNumber->execute([$studentNumber]);
         if ($duplicateNumber->fetchColumn() !== false) {
-            safe_error_response('A student with this student number already exists. Enter their student ID number in Add Student to enroll the existing student in this class.', 409);
+            safe_error_response('A student with this student number already exists. Enter their Student Number in Add Student to enroll the existing student in this class.', 409);
             return;
         }
         if (!empty($email)) {
             $duplicateEmail = $pdo->prepare('SELECT 1 FROM students WHERE lower(bu_email) = lower(?) LIMIT 1');
             $duplicateEmail->execute([$email]);
             if ($duplicateEmail->fetchColumn() !== false) {
-                safe_error_response('A student with this email already exists. Enter their student ID number in Add Student to enroll the existing student in this class.', 409);
+                safe_error_response('A student with this email already exists. Enter their Student Number in Add Student to enroll the existing student in this class.', 409);
                 return;
             }
             $roleConflict = account_identity_email_role_conflict($pdo, $email, 'student');
@@ -6789,7 +6789,7 @@ function faculty_send_remedial_schedule_email(
     $officialEmail = filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)
         && strtolower((string) substr(strrchr($recipientEmail, '@') ?: '', 1)) === 'bicol-u.edu.ph';
     $initialStatus = $officialEmail ? 'Pending' : 'Failed';
-    $failureReason = $officialEmail ? null : 'Only official @bicol-u.edu.ph addresses can receive DentiSys email.';
+    $failureReason = $officialEmail ? null : 'Only official @bicol-u.edu.ph addresses can receive DentiSYS email.';
     $operationUuid = uuid_v4_string();
     $actionUuid = email_action_uuid([]);
 
@@ -7574,7 +7574,7 @@ function handle_faculty_profile_get(): void
                 'id' => (string) ($user['user_id'] ?? $authCtx['user_id']),
                 'name' => $user['display_name'] ?? 'Faculty Member',
                 'email' => $user['login_email'] ?? '',
-                'title' => $user['title'] ?? 'Dental Faculty Instructor',
+                'title' => $user['title'] ?? 'Dental Faculty',
                 'department' => 'Department of Operative & Clinical Dentistry',
                 'theme' => $user['theme'] ?? 'light',
             ],
@@ -7614,7 +7614,7 @@ function handle_faculty_profile_update(): void
         if ($sqlState === '23505') {
             safe_error_response('That email address is already used by another account.', 409);
         } elseif ($sqlState === '23514' || $sqlState === 'P0001') {
-            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the administrator.', 409);
+            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the Dean.', 409);
         } else {
             safe_error_response('Internal server error.', 500);
         }
@@ -7696,9 +7696,9 @@ function handle_faculty_email_send(): void
 
         $data = $body['data'];
         $type = validate_required_string($data, 'emailType', 2, 100);
-        $subject = validate_optional_string($data, 'subject', 1, 255) ?? "DentiSys Notification: {$type}";
+        $subject = validate_optional_string($data, 'subject', 1, 255) ?? "DentiSYS Notification: {$type}";
         $messageText = validate_optional_string($data, 'message', 1, 10000)
-            ?? "This is an official DentiSys {$type} notice.";
+            ?? "This is an official DentiSYS {$type} notice.";
         $allowedTypes = ['Privacy Consent', 'At-Risk Notification', 'Midterm Advisory', 'Remedial Notice', 'Other'];
         $emailType = in_array($type, $allowedTypes, true) ? $type : 'Other';
         $noticeType = in_array($emailType, ['Midterm Advisory', 'Remedial Notice'], true);
@@ -7878,7 +7878,7 @@ function handle_faculty_email_send(): void
                     'studentId' => (string) $recipient['student_id'],
                     'recipient' => $recipientEmail,
                     'status' => 'Failed',
-                    'failureReason' => 'Only official @bicol-u.edu.ph addresses can receive DentiSys email.',
+                    'failureReason' => 'Only official @bicol-u.edu.ph addresses can receive DentiSYS email.',
                 ];
                 continue;
             }
@@ -8174,7 +8174,7 @@ function handle_faculty_classes_get(): void
                 'labRoom' => filter_var($cls['meetings_recorded'], FILTER_VALIDATE_BOOLEAN) ? class_meetings_display($meetings, 'Laboratory', $cls['lab_room'] ?? '') : ($cls['lab_room'] ?? ''),
                 'lecRoom' => filter_var($cls['meetings_recorded'], FILTER_VALIDATE_BOOLEAN) ? class_meetings_display($meetings, 'Lecture', $cls['lec_room'] ?? '') : ($cls['lec_room'] ?? ''),
                 'enrolledCount' => (int) ($cls['enrolled_count'] ?? 0),
-                'instructorName' => $cls['instructor_name'] ?? 'Faculty Instructor',
+                'instructorName' => $cls['instructor_name'] ?? 'Faculty',
                 'status' => $cls['status'] ?? 'Active',
             ];
         }, $classes);

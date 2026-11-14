@@ -81,30 +81,9 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 **Status: Not started (Owner will scope it).** Official imports (class list PDF, grade sheet workbook) and the official grade sheet export ([contract](contracts/official-exports.md)) exist. The export must be made compatible with the BU format; the Owner defines the format when this work starts.
 
-## 9.7 Wording decisions
+## 9.10 Table header small capitals
 
-**Status: Decided; not built.** The Owner's choices:
-
-- **Product name:** "DentiSYS" in everything users see: screens, emails, PDF and Excel exports, landing page. Developer docs, spec.md, code and the repository keep "DentiSys".
-- **Student number:** "Student No." in table column headers and phone cards; "Student Number" in forms, dialogs, detail views and messages. "Student ID" is not used for this field.
-- **Student column:** "Student Details" ("Student Info" in `GradebookMatrix.tsx` changes).
-- **Top role:** "Dean" ("The Admin invitation" in `FacultyInvitation.tsx` and other "Admin" labels change).
-- **Teacher role:** "Faculty" ("Course Instructor" on the About page and "Instructor" on Student class cards change).
-- Not decided: only 6 of 41 tables show their column headers in small capitals; the rest use normal text.
-
-# 10. Ticket batch 1 — remaining items
-
-## 10.6 Import wording and fixture
-
-**Status: Not started.** The public landing page advertises "PDF / Excel roster import", but the roster importer accepts PDF, CSV, TSV and TXT; Excel (.xlsx) is the grade sheet import format. Fix the landing copy. The "partially readable grade-sheet workbook" case (found + zero counts) has no crafted official-layout fixture in the test suite; add one when touching this area. Never use real class lists or the Owner's workbook for fixtures.
-
-## 10.7 Phone-width layout pass
-
-**Status: Not started.** Student Profile, Face Registration and the measured retention-row overlap need their own phone-width pass.
-
-## 10.8 Session card states
-
-**Status: Not started (visual verification only).** The three-zone session card ("Sessions", "Start session", "Schedule session") is implemented. Verify the Scheduled and View-only pill variants with seeded states and review the desktop spacing.
+**Status: Not decided.** Only 6 of 41 tables show their column headers in small capitals; the rest use normal text. Decide one look for column headers.
 
 ---
 
@@ -129,12 +108,14 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **9.2** Grade Computation tab strip on phones: no horizontal scrolling at 320–390 px; the shared section tabs wrap with short names.
 - **9.3** Main bundle size (2.3 MB, 565 kB gzipped): the ineffective dynamic import of `apiClient` is fixed; the size is left as is by the Owner; reopen if first load on phones feels slow.
 - **9.6** November 2026 polish-audit UI follow-ups.
+- **9.7** Wording: DentiSYS in everything users see; Student No. in table headers and phone cards, Student Number elsewhere; Student Details; Dean; Faculty. Full Matrix switch reads "Name / Student No. and name". The authenticator app entry keeps "DentiSys".
 - **9.8** Shared tab bar standard (white card bar and grey list switch).
 - **9.9** Full Matrix View loads all scores in one request per class; Show computation at every width; the Reports Assessment Scores sheet and PDF print show Score, %, Transmuted, Average % and Weighted.
 - **10.1** T1 transmutation: fixed formula, optional per assessment, new assessments start with it on.
 - **10.2** T4 Full Matrix View unsaved scores kept in the tab and offered back after a forced sign-out.
 - **10.4** T8 + T11 grading clarification: course-level remedial, two attempts at 75%, cost recovery.
 - **10.5** GoogleLinkCard confirm-password field has the standard show/hide control and a screen-reader label.
+- **10.6 (part)** The Features page badge reads "PDF / CSV Roster · Excel Grades".
 - **10.9** T9 session restored after closing the browser: intended behaviour.
 - **10.10** A new assessment in a category named Attendance starts with transmutation off.
 - **11.1–11.4** Docs-audit defects: development show-link flags forwarded, single-server start scripts check every required biometric key, timezone/CA/biometric timeouts settable on single-server and VPS, unused watchlist-unlock route removed.

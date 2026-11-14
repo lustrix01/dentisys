@@ -31,7 +31,7 @@ const SURNAME_PARTICLE = /^(de|del|dela|delos|delas|dos|san|santa|sta\.?|sto\.?|
 
 /** CSV template offered by the roster importer. */
 export function getSampleRegistrarCSV(): string {
-  return 'Student ID,Last Name,First Name,Middle Name,Email,Year Level,Sex,Contact #\n2099-1234-56789,Dela Cruz,Ana,Reyes,ana.fixture@bicol-u.edu.ph,4,Female,\n2099-01-12345,Peña,José,,jose.fixture@bicol-u.edu.ph,3,Male,';
+  return 'Student Number,Last Name,First Name,Middle Name,Email,Year Level,Sex,Contact #\n2099-1234-56789,Dela Cruz,Ana,Reyes,ana.fixture@bicol-u.edu.ph,4,Female,\n2099-01-12345,Peña,José,,jose.fixture@bicol-u.edu.ph,3,Male,';
 }
 
 /** Last, First Middle: last given token (with surname particles) is the middle name; the Faculty still reviews every split. */
@@ -179,7 +179,7 @@ export function parseCSVRoster(text: string): ParsedCSVRoster {
   const headers = rows[0].map(value => value.toLowerCase().replace(/[^a-z0-9]/g, ''));
   const columns = Object.fromEntries(Object.entries(aliases).map(([field, names]) => [field, headers.findIndex(header => names.includes(header))]));
   const hasHeader = columns.studentId >= 0 || columns.firstName >= 0 || columns.originalName >= 0;
-  if (hasHeader && columns.studentId < 0) throw new Error('The roster needs a Student ID or Student No. column.');
+  if (hasHeader && columns.studentId < 0) throw new Error('The roster needs a Student Number column.');
   if (!hasHeader && !headerlessLooksLikeRoster(rows)) {
     throw new Error('The file must start each row with a student number and include an email address.');
   }
@@ -311,7 +311,7 @@ export function catalogUnitsNote(code: string, file: { lectureUnits?: number; la
   const lecture = Number(catalog?.lectureUnits ?? 0), lab = Number(catalog?.labUnits ?? 0);
   if (!catalog || !(lecture > 0 || lab > 0) || file.lectureUnits === undefined || file.labUnits === undefined) return null;
   if (file.lectureUnits === lecture && file.labUnits === lab) return null;
-  return `This file says Lecture ${file.lectureUnits} · Laboratory ${file.labUnits}; DentiSys has Lecture ${lecture} · Laboratory ${lab} for ${code}. Ask the course's creator to change them in Classes & Rosters.`;
+  return `This file says Lecture ${file.lectureUnits} · Laboratory ${file.labUnits}; DentiSYS has Lecture ${lecture} · Laboratory ${lab} for ${code}. Ask the course's creator to change them in Classes & Rosters.`;
 }
 
 const unitsValid = (value: string) => { const n = Number(value); return value.trim() !== '' && Number.isFinite(n) && (n === 0 || (n >= 0.5 && n <= 20)); };

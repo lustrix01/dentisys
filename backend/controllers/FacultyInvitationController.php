@@ -266,7 +266,7 @@ function first_dean_invitation_issue(PDO $pdo, array $config, array $settings, a
         $studentStmt->execute([$email]);
         if ($accountStmt->fetchColumn() !== false || $studentStmt->fetchColumn() !== false) {
             // REG-008: one identity kind per person.
-            throw new DomainException("{$email} already belongs to another DentiSys identity and cannot be invited as the Dean.");
+            throw new DomainException("{$email} already belongs to another DentiSYS identity and cannot be invited as the Dean.");
         }
         $insert = $pdo->prepare(
             "INSERT INTO user_accounts
@@ -452,7 +452,7 @@ function handle_admin_faculty_invitation_create(): void
                 'session_id' => $actor['session_id'],
                 'target_type' => 'security_token',
                 'target_id' => (string) $tokenId,
-                'description' => "Admin authorized Faculty invitation for {$name} ({$email}).",
+                'description' => "Dean authorized Faculty invitation for {$name} ({$email}).",
                 'reason' => null,
                 'http_method' => $context['http_method'],
                 'endpoint' => $context['endpoint'],
@@ -467,7 +467,7 @@ function handle_admin_faculty_invitation_create(): void
         }
 
         $link = app_url($config, '/activate-faculty', ['token' => $token]);
-        $subject = 'DentiSys Faculty Invitation';
+        $subject = 'DentiSYS Faculty Invitation';
         $message = email_faculty_invitation_html($name, $email, $link);
         $sent = faculty_invitation_send_recorded($pdo, $config, (int) $actor['user_id'], $email, $name, $subject, 'Faculty Invitation', $message);
         $showDevLink = !empty($config['show_dev_invitation_link']);
@@ -638,7 +638,7 @@ function handle_admin_faculty_invitation_update(): void
             (int) $actor['user_id'],
             $email,
             $name,
-            'DentiSys Faculty Invitation Updated',
+            'DentiSYS Faculty Invitation Updated',
             'Faculty Invitation (email corrected)',
             email_faculty_invitation_html($name, $email, $link, true)
         );
@@ -849,7 +849,7 @@ function handle_admin_faculty_invitation_reissue(): void
                 'session_id' => $actor['session_id'],
                 'target_type' => 'security_token',
                 'target_id' => (string) $tokenId,
-                'description' => 'Admin reissued Faculty invitation for '
+                'description' => 'Dean reissued Faculty invitation for '
                     . account_identity_display_name($account) . " ({$account['login_email']}).",
                 'reason' => null,
                 'http_method' => $context['http_method'],
@@ -867,7 +867,7 @@ function handle_admin_faculty_invitation_reissue(): void
         $name = account_identity_display_name($account);
         $email = (string) $account['login_email'];
         $link = app_url($config, '/activate-faculty', ['token' => $token]);
-        $subject = 'DentiSys Faculty Invitation';
+        $subject = 'DentiSYS Faculty Invitation';
         $message = email_faculty_invitation_html($name, $email, $link);
         $sent = faculty_invitation_send_recorded($pdo, $config, (int) $actor['user_id'], $email, $name, $subject, 'Faculty Invitation (reissued)', $message);
         $showDevLink = !empty($config['show_dev_invitation_link']);

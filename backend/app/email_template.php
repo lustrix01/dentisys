@@ -80,7 +80,7 @@ function email_render(array $email): string
 
     if (!empty($email['button']['url'])) {
         $url = email_escape((string) $email['button']['url']);
-        $label = email_escape((string) ($email['button']['label'] ?? 'Open DentiSys'));
+        $label = email_escape((string) ($email['button']['label'] ?? 'Open DentiSYS'));
         $body .= '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0;"><tr>'
             . '<td bgcolor="#176b4d" style="background:#176b4d;border-radius:4px;">'
             . '<a href="' . $url . '" target="_blank" style="display:inline-block;padding:11px 18px;font-family:' . $font . ';font-size:14px;line-height:20px;font-weight:bold;color:#ffffff;text-decoration:none;">'
@@ -103,7 +103,7 @@ function email_render(array $email): string
     }
 
     $signature = $email['signature'] ?? [];
-    $signatureName = (string) ($signature['name'] ?? 'DentiSys');
+    $signatureName = (string) ($signature['name'] ?? 'DentiSYS');
     $signatureLines = $signature['lines'] ?? ['Bicol University College of Dental Medicine'];
     $sig = '<p style="margin:0 0 3px;font-family:' . $font . ';font-size:14px;line-height:20px;font-weight:bold;color:#1f2937;">' . email_escape($signatureName) . '</p>';
     foreach ($signatureLines as $line) {
@@ -112,7 +112,7 @@ function email_render(array $email): string
 
     $preheader = email_escape((string) ($email['preheader'] ?? ''));
     return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
-        . '<meta name="viewport" content="width=device-width, initial-scale=1.0"><title>DentiSys</title></head>'
+        . '<meta name="viewport" content="width=device-width, initial-scale=1.0"><title>DentiSYS</title></head>'
         . '<body style="margin:0;padding:0;background:#f3f4f6;">'
         . '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f3f4f6;">' . $preheader . '</div>'
         . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f3f4f6" style="background:#f3f4f6;">'
@@ -137,7 +137,7 @@ function email_student_invitation_html(
     return email_render([
         'preheader' => "Class invitation: {$className}",
         'greeting' => "Hello {$studentName},",
-        'intro' => [email_strong($faculty) . ' invited you to join ' . email_strong($className) . ' on DentiSys.'],
+        'intro' => [email_strong($faculty) . ' invited you to join ' . email_strong($className) . ' on DentiSYS.'],
         'details' => [
             'title' => 'Class Invitation Details',
             'rows' => [
@@ -183,7 +183,7 @@ function email_faculty_invitation_html(string $name, string $email, string $link
 {
     $intro = $updated
         ? ["The Dean's Office updated your pending faculty invitation. Use the new link below; earlier invitation links no longer work."]
-        : ["The Dean's Office invited you to create a Faculty account in DentiSys."];
+        : ["The Dean's Office invited you to create a Faculty account in DentiSYS."];
     return email_render([
         'preheader' => $updated ? 'Your faculty invitation was updated.' : 'Faculty account invitation',
         'greeting' => $name !== '' ? "Hello {$name}," : 'Hello,',
@@ -208,7 +208,7 @@ function email_dean_invitation_html(string $name, string $email, string $link): 
     return email_render([
         'preheader' => 'Dean account invitation',
         'greeting' => $name !== '' ? "Hello {$name}," : 'Hello,',
-        'intro' => ['You have been invited to set up the first Dean account for DentiSys.'],
+        'intro' => ['You have been invited to set up the first Dean account for DentiSYS.'],
         'details' => [
             'title' => 'Dean Account Invitation',
             'rows' => [
@@ -220,16 +220,16 @@ function email_dean_invitation_html(string $name, string $email, string $link): 
         'action_text' => 'Use the link below to set your password and activate the account.',
         'button' => ['label' => 'Accept invitation', 'url' => $link],
         'notice' => 'This link expires in <strong>7 days</strong>. If you were not expecting this invitation, you can ignore this email.',
-        'signature' => ['name' => 'DentiSys', 'lines' => ['Bicol University College of Dental Medicine']],
+        'signature' => ['name' => 'DentiSYS', 'lines' => ['Bicol University College of Dental Medicine']],
     ]);
 }
 
 function email_password_reset_html(string $name, string $email, string $link): string
 {
     return email_render([
-        'preheader' => 'Reset your DentiSys password.',
+        'preheader' => 'Reset your DentiSYS password.',
         'greeting' => $name !== '' ? "Hello {$name}," : 'Hello,',
-        'intro' => ['A password reset was requested for your DentiSys account.'],
+        'intro' => ['A password reset was requested for your DentiSYS account.'],
         'details' => [
             'title' => 'Account',
             'rows' => [
@@ -239,7 +239,7 @@ function email_password_reset_html(string $name, string $email, string $link): s
         'action_text' => 'Click the button below to set a new password:',
         'button' => ['label' => 'Reset Password', 'url' => $link],
         'notice' => 'This link expires in <strong>24 hours</strong>. If you did not request a reset, you can ignore this email. Your password will stay the same.',
-        'signature' => ['name' => 'DentiSys Support', 'lines' => ['Bicol University College of Dental Medicine']],
+        'signature' => ['name' => 'DentiSYS Support', 'lines' => ['Bicol University College of Dental Medicine']],
     ]);
 }
 

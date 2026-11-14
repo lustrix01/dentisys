@@ -798,7 +798,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                       <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Include</span>
                     </div>
                     <label role="cell" className="col-span-2 block min-w-0 sm:col-span-2 lg:col-span-2">
-                      <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Student ID</span>
+                      <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">Student Number</span>
                       <input type="text" value={st.studentId} aria-label={`Student number row ${st.tempKey}`} onChange={event => handleUpdateStudentField(st.tempKey, 'studentId', event.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-mono text-sm font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" />
                     </label>
                     <div role="cell" className="col-span-2 min-w-0 sm:col-span-3 lg:col-span-8">

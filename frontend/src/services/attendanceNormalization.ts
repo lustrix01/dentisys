@@ -102,7 +102,7 @@ const CAPTURE_WINDOW_REJECTION_CODES = [
 
 type CaptureWindowSession = Pick<StudentActiveSession, 'captureStatus' | 'openingTime' | 'presentCutoff' | 'lateCutoff'>;
 
-const MANUAL_ATTENDANCE_DIRECTION = 'Ask your course instructor or Class Secretary to record your attendance manually.';
+const MANUAL_ATTENDANCE_DIRECTION = 'Ask your Faculty or Class Secretary to record your attendance manually.';
 
 export function isCaptureWindowRejection(reason: string | null | undefined): boolean {
   return typeof reason === 'string' && (CAPTURE_WINDOW_REJECTION_CODES as readonly string[]).includes(reason);

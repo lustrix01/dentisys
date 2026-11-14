@@ -122,7 +122,7 @@ export const Profile: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                You can review class attendance and send attendance change requests, which your class Faculty approve. Class assignment changes require an administrator.
+                You can review class attendance and send attendance change requests, which your class Faculty approve. Class assignment changes require the Dean.
               </CardContent>
             </Card>
           </div>

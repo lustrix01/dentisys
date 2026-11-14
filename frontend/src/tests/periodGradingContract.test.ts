@@ -84,7 +84,7 @@ test('Matrix keeps its sticky header and arrow-key input navigation', () => {
 
 test('Matrix renders exactly one identity header and matching ID and name body cells', () => {
   const matrix = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../components/GradebookMatrix.tsx'), 'utf8');
-  assert.equal((matrix.match(/>Student Info<\/th>/g) ?? []).length, 1);
+  assert.equal((matrix.match(/>Student Details<\/th>/g) ?? []).length, 1);
   const render = (jsx: string, periodMode: boolean) => {
     const compiled = ts.transpileModule(`return (<table>${jsx}</table>);`, {
       fileName: 'identity.tsx', compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
@@ -94,10 +94,10 @@ test('Matrix renders exactly one identity header and matching ID and name body c
     ));
   };
   const line = (text: string) => matrix.split('\n').find(row => row.includes(text))!.trim();
-  const group = render(`<thead><tr>${line('>Student Info</th>')}</tr></thead>`, true);
+  const group = render(`<thead><tr>${line('>Student Details</th>')}</tr></thead>`, true);
   assert.match(group, /colSpan="2"/i);
   for (const periodMode of [false, true]) {
-    const headers = render(`<thead><tr>${line('>ID Number</th>')}${line('>Full Name</th>')}</tr></thead>`, periodMode);
+    const headers = render(`<thead><tr>${line('>Student No.</th>')}${line('>Full Name</th>')}</tr></thead>`, periodMode);
     assert.equal((headers.match(/<th /g) ?? []).length, 2);
     assert.match(headers, new RegExp(`rowSpan="${periodMode ? 3 : 1}"`, 'i'));
     const body = render(`<tbody><tr>${line('{student.studentId}</td>')}${line('{student.name}</td>')}</tr></tbody>`, periodMode);

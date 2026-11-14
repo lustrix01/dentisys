@@ -48,12 +48,12 @@ function admin_verify_auth(PDO $pdo, array $config): array
     }
 
     if ($authCtx['role'] !== 'admin') {
-        safe_error_response('Access denied. Administrator privileges required.', 403);
+        safe_error_response('Access denied. Dean privileges required.', 403);
         exit;
     }
 
     if (account_identity_fetch($pdo, (int) $authCtx['user_id']) === null) {
-        safe_error_response('Administrator identity is unavailable.', 409);
+        safe_error_response('Dean identity is unavailable.', 409);
         exit;
     }
 
@@ -390,7 +390,7 @@ function handle_admin_audit_logs(): void
         }
 
         if (($authCtx['role'] ?? '') !== 'admin') {
-            safe_error_response('Access denied. Administrator privileges required.', 403);
+            safe_error_response('Access denied. Dean privileges required.', 403);
             return;
         }
 
@@ -468,7 +468,7 @@ function handle_admin_profile_update(): void
         if ($sqlState === '23505') {
             safe_error_response('That email address is already used by another account.', 409);
         } elseif ($sqlState === '23514' || $sqlState === 'P0001') {
-            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the administrator.', 409);
+            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the Dean.', 409);
         } else {
             safe_error_response('Internal server error.', 500);
         }

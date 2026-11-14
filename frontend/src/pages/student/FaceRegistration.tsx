@@ -388,7 +388,7 @@ export const FaceRegistration: React.FC = () => {
         } : null);
         setAuthStep(3); setScrollToStep3(true);
       } else {
-        setAuthError(result.message || 'Verification could not accept sufficient usable frames. Please adjust lighting and try again, or seek manual attendance check-in from your Secretary or instructor.');
+        setAuthError(result.message || 'Verification could not accept sufficient usable frames. Please adjust lighting and try again, or seek manual attendance check-in from your Secretary or Faculty.');
         setPendingPayload(null);
         setCanRetryUpload(false);
         void startCameraAndChallenge(undefined, true);
@@ -404,13 +404,13 @@ export const FaceRegistration: React.FC = () => {
         setPendingPayload(payload);
         setCanRetryUpload(true);
         const msg = err instanceof Error ? err.message : 'Network or biometric service is temporarily unavailable.';
-        setAuthError(`${msg} Your captured frames and server challenge are preserved. Click "Retry Upload" to resubmit with the same idempotency key, or seek manual attendance from your Secretary or Instructor.`);
+        setAuthError(`${msg} Your captured frames and server challenge are preserved. Click "Retry Upload" to resubmit with the same idempotency key, or seek manual attendance from your Secretary or Faculty.`);
       } else {
         // Semantic failure or quality rejection: discard and request fresh challenge
         setPendingPayload(null);
         setCanRetryUpload(false);
         const msg = err instanceof Error ? err.message : 'Facial enrollment failed.';
-        setAuthError(`${msg} Please adjust lighting, face the camera directly, and start a fresh capture, or contact your course instructor/Secretary for manual attendance.`);
+        setAuthError(`${msg} Please adjust lighting, face the camera directly, and start a fresh capture, or contact your Faculty/Secretary for manual attendance.`);
         void startCameraAndChallenge(undefined, true);
       }
     } finally {
@@ -783,7 +783,7 @@ export const FaceRegistration: React.FC = () => {
 
           <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-5 border border-slate-200/60 dark:border-slate-800 space-y-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
             <p>
-              In accordance with the <strong className="text-slate-800 dark:text-slate-100">Data Privacy Act of 2012 (Republic Act No. 10173)</strong> and DentiSys institutional policies, please review the statutory consent disclosure below:
+              In accordance with the <strong className="text-slate-800 dark:text-slate-100">Data Privacy Act of 2012 (Republic Act No. 10173)</strong> and DentiSYS institutional policies, please review the statutory consent disclosure below:
             </p>
             <ul className="list-disc list-inside space-y-2 pl-1">
               <li>

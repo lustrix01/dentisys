@@ -138,7 +138,7 @@ export const GoogleLinkCard: React.FC = () => {
       setLinked(true);
       setCredential('');
       setPassword('');
-      setSuccess('Google Sign-In is now linked to this DentiSys account.');
+      setSuccess('Google Sign-In is now linked to this DentiSYS account.');
     } catch (requestError) {
       if (requestError instanceof ApiError && requestError.code === 'INVALID_GOOGLE_IDENTITY') {
         setCredential('');
@@ -166,21 +166,21 @@ export const GoogleLinkCard: React.FC = () => {
         {linked === true ? (
           <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-800">
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-            <div><p className="font-bold">Google account linked</p><p className="mt-1">You can use Google Sign-In while keeping your DentiSys password.</p></div>
+            <div><p className="font-bold">Google account linked</p><p className="mt-1">You can use Google Sign-In while keeping your DentiSYS password.</p></div>
           </div>
         ) : (
           <>
-            <p className="text-xs text-slate-500">Link Google from Profile Settings. Your institutional email must match this DentiSys account, and your password confirms ownership.</p>
+            <p className="text-xs text-slate-500">Link Google from Profile Settings. Your institutional email must match this DentiSYS account, and your password confirms ownership.</p>
             <div className="flex min-h-11 justify-center" aria-live="polite">
               <div ref={buttonRef} className={loadState === 'ready' ? 'flex justify-center' : 'hidden'} aria-label="Choose Google account" />
               {loadState === 'loading' && <p className="self-center text-xs text-slate-500">Loading Google Sign-In…</p>}
               {loadState === 'error' && <p className="self-center text-center text-xs font-semibold text-rose-600">Google Sign-In could not be loaded. Try again later.</p>}
             </div>
             {credential && <form onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-              <p className="flex items-center gap-2 text-xs font-bold"><ShieldCheck className="h-4 w-4 text-accent-500" />Confirm with your DentiSys password</p>
+              <p className="flex items-center gap-2 text-xs font-bold"><ShieldCheck className="h-4 w-4 text-accent-500" />Confirm with your DentiSYS password</p>
               <div>
                 <label htmlFor="google-link-password" className="sr-only">
-                  DentiSys password
+                  DentiSYS password
                 </label>
                 <div className="relative">
                   <input
@@ -188,7 +188,7 @@ export const GoogleLinkCard: React.FC = () => {
                     id="google-link-password"
                     value={password}
                     onChange={event => setPassword(event.target.value)}
-                    placeholder="DentiSys password"
+                    placeholder="DentiSYS password"
                     autoComplete="current-password"
                     required
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pr-12 text-xs outline-none dark:border-slate-700 dark:bg-slate-950"

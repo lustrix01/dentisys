@@ -1188,7 +1188,7 @@ export const ClassesAndRosters: React.FC = () => {
       return;
     }
     if (!studentIdInput.trim() || !studentFirstName.trim() || !studentLastName.trim() || !studentEmailInput.trim()) {
-      showFeedback('Please fill in Student ID, first name, last name, and email.', 'error');
+      showFeedback('Please fill in Student Number, first name, last name, and email.', 'error');
       return;
     }
     const normalizedEmail = (studentEmailInput.includes('@') ? studentEmailInput.trim() : `${studentEmailInput.trim()}@${DEFAULT_EMAIL_DOMAIN}`).toLowerCase();
@@ -2002,7 +2002,7 @@ const handleSendAllStudentInvites = async () => {
             <table className="w-full text-left text-xs border-collapse max-md:block">
               <thead className="max-md:hidden">
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4">Student ID</th>
+                  <th className="py-3 px-4">Student No.</th>
                   <th className="py-3 px-4">Full Name</th>
                   <th className="py-3 px-4">BU Email Address</th>
                   <th className="py-3 px-4">Enrolled Class Section</th>
@@ -2049,7 +2049,7 @@ const handleSendAllStudentInvites = async () => {
                     return (
                       <tr key={st.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
                         <td className="py-3.5 px-4 whitespace-nowrap font-mono font-bold text-slate-700 dark:text-slate-200 max-md:order-2 max-md:p-0">
-                          <span className="sr-only md:hidden">Student ID: </span>{st.studentId}
+                          <span className="sr-only md:hidden">Student No.: </span>{st.studentId}
                         </td>
                         <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm">
                           <span className="sr-only md:hidden">Full Name: </span>{st.name}
@@ -2260,7 +2260,7 @@ const handleSendAllStudentInvites = async () => {
 
             <form onSubmit={handleRegisterNewStudent} className="space-y-4">
               <div>
-                <label htmlFor="add-student-id" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Student ID Number *</label>
+                <label htmlFor="add-student-id" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Student Number *</label>
                 <input
                   id="add-student-id"
                   type="text"
@@ -2280,7 +2280,7 @@ const handleSendAllStudentInvites = async () => {
                         : <span className="text-rose-600 dark:text-rose-300">Existing student found, but their email is not @bicol-u.edu.ph. Correct the roster email before enrolling them.</span>
                       : studentAlreadyInTargetClass
                         ? <span className="text-amber-600 dark:text-amber-400">This student is already enrolled in the selected class.</span>
-                        : <span className="text-slate-500 dark:text-slate-400">Enter an existing student's ID number to fill in their details automatically.</span>}
+                        : <span className="text-slate-500 dark:text-slate-400">Enter an existing student's Student Number to fill in their details automatically.</span>}
                 </p>
               </div>
 

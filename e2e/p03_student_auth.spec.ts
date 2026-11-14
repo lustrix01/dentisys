@@ -528,7 +528,7 @@ test.describe('P03 Student identity and authentication', () => {
     await main.getByRole('button', { name: 'Take attendance' }).click();
     await expect(main.getByText(/Your location is too imprecise \(±25 m\)\. Turn on Wi-Fi/)).toBeVisible();
     await main.getByRole('button', { name: 'Retry' }).click();
-    await expect(main.getByText("Your phone can't get a precise enough location here. Ask your Class Secretary or course instructor to record your attendance.")).toBeVisible();
+    await expect(main.getByText("Your phone can't get a precise enough location here. Ask your Class Secretary or Faculty to record your attendance.")).toBeVisible();
     await expect(main.getByRole('button', { name: 'Retry' })).toBeVisible();
     await expect(main.getByRole('heading', { name: 'Active Liveness & Face Verification' })).toHaveCount(0);
   });
@@ -539,7 +539,7 @@ test.describe('P03 Student identity and authentication', () => {
     await openGeofencedAttendance(page, true, checks, () => ({ result: 'inside', distanceMeters: 1, accuracyMeters: 1 }));
     const main = page.getByRole('main');
     await main.getByRole('button', { name: 'Take attendance' }).click();
-    await expect(main.getByText('Location is required for this session. Allow location for this site, or ask your Class Secretary or course instructor to record your attendance.')).toBeVisible();
+    await expect(main.getByText('Location is required for this session. Allow location for this site, or ask your Class Secretary or Faculty to record your attendance.')).toBeVisible();
     await expect(main.getByRole('heading', { name: 'Active Liveness & Face Verification' })).toHaveCount(0);
     expect(checks).toHaveLength(0);
   });
