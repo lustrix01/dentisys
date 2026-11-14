@@ -54,8 +54,8 @@ test.describe('Workflow Characterization (mocked UI only)', () => {
     });
 
     test('Workflow: Faculty Invitation Management', async ({ page }) => {
-      await page.click('a[href="/admin/faculty-invite"]');
-      await expect(page).toHaveURL('/admin/faculty-invite');
+      await page.locator('[aria-label="Account view"] button').nth(1).click(); await page.click('a[href="/superadmin/faculty-invite"]');
+      await expect(page).toHaveURL('/superadmin/faculty-invite');
       await expect(page.locator('body')).toContainText(/Faculty Invitation|Invite|Pending/i);
     });
 
@@ -70,8 +70,8 @@ test.describe('Workflow Characterization (mocked UI only)', () => {
     });
 
     test('Workflow: User Management Audit Logs', async ({ page }) => {
-      await page.click('a[href="/admin/audit-trail"]');
-      await expect(page).toHaveURL('/admin/audit-trail');
+      await page.locator('[aria-label="Account view"] button').nth(1).click(); await page.click('a[href="/superadmin/audit-trail"]');
+      await expect(page).toHaveURL('/superadmin/audit-trail');
       await expect(page.locator('body')).toContainText(/Audit Trail|Activity Log/i);
     });
   });

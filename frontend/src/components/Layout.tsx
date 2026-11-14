@@ -266,21 +266,21 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const getNavItems = (): NavItem[] => {
     if (superadminView) {
       return [
-        { name: 'Audit Trail', path: '/superadmin/audit-trail', icon: ListChecks, short: 'Audit' },
-        { name: 'Course Catalog', path: '/superadmin/course-catalog', icon: BookOpen, short: 'Courses' },
+        { name: 'Overview', path: '/superadmin/overview', icon: LayoutDashboard, short: 'Overview' },
         { name: 'People & Accounts', path: '/superadmin/people', icon: Users, short: 'People' },
+        { name: 'Faculty Invitations', path: '/superadmin/faculty-invite', icon: UserPlus, short: 'Invites' },
+        { name: 'Course Catalog', path: '/superadmin/course-catalog', icon: BookOpen, short: 'Courses' },
+        { name: 'Academic Terms', path: '/superadmin/terms', icon: CalendarDays, short: 'Terms' },
+        { name: 'Rooms', path: '/superadmin/rooms', icon: DoorOpen },
+        { name: 'Audit Trail', path: '/superadmin/audit-trail', icon: ListChecks, short: 'Audit' },
       ];
     }
 
     if (currentUser.role === 'admin') {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-        { name: 'Classes', path: '/admin/classes', icon: BookOpen },
-        { name: 'Academic Terms', path: '/admin/terms', icon: CalendarDays, short: 'Terms' },
-        { name: 'Rooms', path: '/admin/rooms', icon: DoorOpen },
-        { name: 'Faculty Invitations', path: '/admin/faculty-invite', icon: UserPlus, short: 'Invites' },
         { name: 'Reports & Analytics', path: '/admin/reports', icon: FileSpreadsheet, short: 'Reports' },
-        { name: 'Audit Trail', path: '/admin/audit-trail', icon: ListChecks, short: 'Audit' },
+        { name: 'Classes', path: '/admin/classes', icon: BookOpen },
       ];
     }
 
@@ -525,6 +525,14 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'Dean Profile', path: '/admin/profile' });
     } else if (path === '/admin/settings') {
       crumbs.push({ name: 'Dean Settings', path: '/admin/settings' });
+    } else if (path === '/superadmin/overview') {
+      crumbs.push({ name: 'Overview', path: '/superadmin/overview' });
+    } else if (path === '/superadmin/terms') {
+      crumbs.push({ name: 'Academic Terms', path: '/superadmin/terms' });
+    } else if (path === '/superadmin/rooms') {
+      crumbs.push({ name: 'Rooms', path: '/superadmin/rooms' });
+    } else if (path === '/superadmin/faculty-invite') {
+      crumbs.push({ name: 'Faculty Invitations', path: '/superadmin/faculty-invite' });
     } else if (path === '/superadmin/audit-trail') {
       crumbs.push({ name: 'Audit Trail', path: '/superadmin/audit-trail' });
     } else if (path === '/superadmin/course-catalog') {
@@ -537,16 +545,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'My Profile', path: '/secretary/profile' });
     } else if (path === '/secretary/settings') {
       crumbs.push({ name: 'Settings', path: '/secretary/settings' });
-    } else if (path === '/admin/terms') {
-      crumbs.push({ name: 'Academic Terms', path: '/admin/terms' });
-    } else if (path === '/admin/rooms') {
-      crumbs.push({ name: 'Rooms', path: '/admin/rooms' });
-    } else if (path === '/admin/faculty-invite') {
-      crumbs.push({ name: 'Faculty Invitations', path: '/admin/faculty-invite' });
     } else if (path === '/admin/reports') {
       crumbs.push({ name: 'Reports & Analytics', path: '/admin/reports' });
-    } else if (path === '/admin/audit-trail') {
-      crumbs.push({ name: 'Audit Trail', path: '/admin/audit-trail' });
     } else if (path === '/secretary/attendance') {
       crumbs.push({ name: 'Attendance Monitoring', path: '/secretary/attendance' });
     } else if (path === '/secretary/audit-trail') {
@@ -801,7 +801,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           >
             {([
               { label: 'Dean', tip: 'Dean view', to: '/', on: !superadminView, Icon: LayoutDashboard },
-              { label: 'Superadmin', tip: 'Superadmin view', to: '/superadmin/audit-trail', on: superadminView, Icon: ShieldCheck },
+              { label: 'Superadmin', tip: 'Superadmin view', to: '/superadmin/overview', on: superadminView, Icon: ShieldCheck },
             ]).map(({ label, tip, to, on, Icon }) => (
               <button
                 key={label}

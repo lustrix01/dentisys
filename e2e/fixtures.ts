@@ -34,7 +34,7 @@ export const MOCK_ROOMS = SEEDED_ROOMS.map(([name, group]) => ({ name, group, st
 export const roomsJson = (extra: Array<Record<string, unknown>> = []) => ({ status: 'ok', rooms: [...MOCK_ROOMS, ...extra] });
 
 const KNOWN_API_PATHS = new Set([
-  '/api/rooms',
+  '/api/rooms', '/api/admin/people', '/api/admin/courses', '/api/admin/rooms',
   '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/google', '/api/auth/google/link', '/api/auth/google/link/profile', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/faculty/activate', '/api/auth/mfa/enroll/start',
   '/api/auth/mfa/enroll/confirm', '/api/auth/mfa/verify', '/api/auth/mfa/recover', '/api/auth/mfa/settings',
   '/api/auth/mfa/settings/recovery-codes', '/api/auth/mfa/settings/revoke', '/api/auth/me', '/api/auth/refresh', '/api/auth/theme',
@@ -60,7 +60,7 @@ const KNOWN_API_PATHS = new Set([
 ]);
 
 const GET_ONLY_API_PATHS = new Set([
-  '/api/rooms',
+  '/api/rooms', '/api/admin/people', '/api/admin/courses', '/api/admin/rooms',
   '/api/health', '/api/runtime-config', '/api/auth/me', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/student/invitation', '/api/auth/mfa/settings', '/api/admin/faculty-invitations',
   '/api/admin/dashboard/kpis', '/api/admin/audit-logs', '/api/admin/reports/summary', '/api/secretary/invitation', '/api/secretary/invitations',
   '/api/secretary/dashboard/kpis', '/api/secretary/attendance', '/api/secretary/attendance/session/active', '/api/secretary/profile', '/api/secretary/settings',
@@ -98,6 +98,10 @@ function isKnownApiRequest(pathname: string, method: string): boolean {
 
 function responseFor(pathname: string, method: string): unknown {
   if (pathname === '/api/rooms') return roomsJson();
+  // Superadmin Overview reads these lists for its tiles.
+  if (pathname === '/api/admin/people') return { status: 'ok', people: [], total: 0, page: 1, pageSize: 50 };
+  if (pathname === '/api/admin/courses') return { status: 'ok', courses: [] };
+  if (pathname === '/api/admin/rooms') return { status: 'ok', rooms: [], categories: [] };
   if (pathname === '/api/runtime-config') return { status: 'ok', ...DEFAULT_RUNTIME_CONFIG };
   if (pathname === '/api/auth/refresh') return { access_token: 'mock-refresh-token', user: { user_id: 100 } };
   if (pathname === '/api/auth/me') return { id: 100, user_id: 100, login_email: 'mock@bicol-u.edu.ph', display_name: 'Mock User', role: 'faculty', session_uuid: 'server-fixture-session', authentication_source: 'password' };

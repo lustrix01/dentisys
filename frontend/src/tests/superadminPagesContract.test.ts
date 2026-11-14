@@ -29,9 +29,9 @@ test('Part A: class-work scope is a query filter, sent only when chosen, and the
   assert.match(audit, /This list is read-only\./);
   assert.match(audit, /\{superadmin && \(/); // the switch exists only in Superadmin mode
   const dean = read('../pages/admin/AuditTrail.tsx');
-  assert.match(dean, /export const AuditTrail[^\n]*allLogs accent="accent" \/>;/);
-  assert.doesNotMatch(dean.split('export const SuperadminAuditTrail')[0], /superadmin/); // the Dean view page is unchanged
+  assert.doesNotMatch(dean, /export const AuditTrail\b/); // only one Audit Trail page remains: the Superadmin one
   assert.match(dean, /SuperadminAuditTrail[^\n]* superadmin /);
+  assert.match(audit, /Class work \(grades, attendance, retention\) is in the Class work view\./);
 });
 
 test('Part B: Course Catalog edits, retires and restores through the API; no create, no preview data', () => {

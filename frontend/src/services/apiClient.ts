@@ -2585,9 +2585,15 @@ export type AdminPerson = {
   disabledAt: string | null; twoFactor: boolean; lastActivityAt: string | null;
   classes?: PersonClass[]; studentNo?: string; enrolledClasses?: PersonClass[];
 };
-export function getAdminPeopleApi(params: { kind: 'faculty' | 'student'; status?: 'active' | 'deactivated' | 'all'; q?: string; page?: number }): Promise<{ status: string; people: AdminPerson[]; total: number; page: number; pageSize: number }> {
+// Filters run on the server so the total and every page agree. classes is Faculty-only; secretary and face are Student-only.
+export type AdminPeopleFilters = {
+  twoFactor?: 'on' | 'off'; activity?: 'never' | 'inactive30'; classes?: 'current' | 'none'; secretary?: boolean; face?: 'enrolled' | 'not_enrolled';
+};
+export function getAdminPeopleApi(params: { kind: 'faculty' | 'student'; status?: 'active' | 'deactivated' | 'all'; q?: string; page?: number } & AdminPeopleFilters): Promise<{ status: string; people: AdminPerson[]; total: number; page: number; pageSize: number }> {
   const search = new URLSearchParams({ kind: params.kind, status: params.status ?? 'all', page: String(params.page ?? 1) });
   if (params.q) search.set('q', params.q);
+  for (const key of ['twoFactor', 'activity', 'classes', 'face'] as const) if (params[key]) search.set(key, params[key] as string);
+  if (params.secretary) search.set('secretary', '1');
   return request('GET', `/admin/people?${search.toString()}`);
 }
 export function deactivatePersonApi(userId: number, reason?: string): Promise<{ person: AdminPerson }> {

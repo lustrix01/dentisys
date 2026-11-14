@@ -37,8 +37,12 @@ The standard look for each part of a signed-in page ([AGENTS.md](../AGENTS.md) "
 | Attendance session status and actions | A read-only "Session status" panel with one pill (Live session + code + start time, Scheduled session, No session running, View only, Checking) separated from an actions row of buttons (Sessions, Start session when idle, Schedule session while live); the hide-while-live rule stays | `pages/faculty/AttendanceMonitoring.tsx`, `pages/secretary/AttendanceList.tsx` |
 | Table header cells | Small capitals: `text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400` on the `<thead>` (or its `<tr>`), with the label text kept in Title Case in code (CSS does the capitals; `spec.md` UI-001). Keep column widths, alignment, sticky and `max-md:` classes on the cells themselves. Printed and exported report tables follow their own print stylesheet and are exempt. `tests/tableHeaderContract.test.ts` enforces it | `<thead>` in `components/GradebookMatrix.tsx` (Full Matrix) and `pages/admin/PeopleAndAccounts.tsx` |
 | Dialogs, panels, school-year filter | The shared components above | `Modal.tsx`, `Card.tsx`, `SchoolYearFilter.tsx` |
+| Page header | No title inside the page: the top bar shows the page title and breadcrumb. A page may open with one short intro sentence and one summary line ("Showing 3 of 5 …" or "4 active · 1 retired"), `px-1.5 text-xs text-slate-500 dark:text-slate-400`, above its toolbar. Dashboards keep their welcome heading | `pages/admin/Rooms.tsx`, `pages/admin/CourseCatalog.tsx` |
+| Notice banner | `rounded-xl border p-3 text-xs` in the message's tone (amber warning, emerald success, rose error, white with a role-colour icon for information). With an icon: `flex items-start gap-3`, icon `mt-0.5 h-4 w-4 shrink-0` | Term reminder in `pages/admin/Dashboard.tsx`, revoke notice in `pages/admin/SystemAudit.tsx` |
+| Empty state | White card `rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center` (dark: `dark:border-slate-800 dark:bg-slate-900`), a grey icon `mx-auto h-8 w-8 text-slate-300 dark:text-slate-600`, a short heading (sentence case) and one hint line; "Clear filters" when filters hide everything | `pages/admin/CourseCatalog.tsx` |
+| Loading state | Same white card with `p-12 text-center text-sm font-semibold text-slate-500` and `role="status"` text "Loading …" | `pages/admin/CourseCatalog.tsx` |
 
-Not settled yet: the page header, notice banners (three looks today), table bodies and empty states. Until each has a standard here, copy the nearest page that does the same job.
+Not settled yet: table bodies. Until it has a standard here, copy the nearest page that does the same job.
 
 ### Filters, search and list actions
 

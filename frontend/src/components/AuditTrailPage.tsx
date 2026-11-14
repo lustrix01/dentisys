@@ -463,7 +463,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent, superadmi
 
       {role === 'admin' && (
         <p className="text-xs text-slate-500 dark:text-slate-400 no-print">
-          {classWork ? 'Class work (grades, attendance, retention) as recorded. This list is read-only.' : 'Class work (grades, attendance, retention) is not shown here; it stays recorded.'}
+          {classWork ? 'Class work (grades, attendance, retention) as recorded. This list is read-only.' : 'Class work (grades, attendance, retention) is in the Class work view.'}
         </p>
       )}
 

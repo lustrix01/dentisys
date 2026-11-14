@@ -18,7 +18,8 @@ import { ClassesAndRosters } from './pages/faculty/ClassesAndRosters';
 
 import { Dashboard as DeanDashboard } from './pages/admin/Dashboard';
 import { DeanReports } from './pages/admin/SystemAudit';
-import { AuditTrail as DeanAuditTrail, SuperadminAuditTrail } from './pages/admin/AuditTrail';
+import { SuperadminAuditTrail } from './pages/admin/AuditTrail';
+import { SuperadminOverview } from './pages/admin/SuperadminOverview';
 import { FacultyInvitation } from './pages/admin/FacultyInvitation';
 import { AcademicTerms } from './pages/admin/AcademicTerms';
 import { Rooms } from './pages/admin/Rooms';
@@ -255,23 +256,27 @@ function App() {
                 </Route>
 
                 <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
-                  <Route path="/admin/terms" element={<AcademicTerms />} />
-                  <Route path="/admin/rooms" element={<Rooms />} />
+                  <Route path="/admin/terms" element={<Navigate to="/superadmin/terms" replace />} />
+                  <Route path="/admin/rooms" element={<Navigate to="/superadmin/rooms" replace />} />
                   <Route path="/admin/people" element={<Navigate to="/" replace />} />
                   <Route path="/admin/classes" element={<Classes />} />
                   <Route path="/admin/course-catalog" element={<Navigate to="/" replace />} />
-                  <Route path="/superadmin" element={<Navigate to="/superadmin/audit-trail" replace />} />
+                  <Route path="/superadmin" element={<Navigate to="/superadmin/overview" replace />} />
+                  <Route path="/superadmin/overview" element={<SuperadminOverview />} />
+                  <Route path="/superadmin/terms" element={<AcademicTerms />} />
+                  <Route path="/superadmin/rooms" element={<Rooms />} />
+                  <Route path="/superadmin/faculty-invite" element={<FacultyInvitation />} />
                   <Route path="/superadmin/audit-trail" element={<SuperadminAuditTrail />} />
                   <Route path="/superadmin/course-catalog" element={<CourseCatalog />} />
                   <Route path="/superadmin/people" element={<PeopleAndAccounts />} />
-                  <Route path="/admin/academic-terms" element={<Navigate to="/admin/terms" replace />} />
-                  <Route path="/admin/faculty-invite" element={<FacultyInvitation />} />
-                  <Route path="/admin/faculty-approval" element={<Navigate to="/admin/faculty-invite" replace />} />
+                  <Route path="/admin/academic-terms" element={<Navigate to="/superadmin/terms" replace />} />
+                  <Route path="/admin/faculty-invite" element={<Navigate to="/superadmin/faculty-invite" replace />} />
+                  <Route path="/admin/faculty-approval" element={<Navigate to="/superadmin/faculty-invite" replace />} />
                   <Route path="/admin/retention-criteria" element={<Navigate to="/admin/reports" replace />} />
                   <Route path="/admin/reports" element={<DeanReports />} />
-                  <Route path="/admin/audit-trail" element={<DeanAuditTrail />} />
+                  <Route path="/admin/audit-trail" element={<Navigate to="/superadmin/audit-trail" replace />} />
                   <Route path="/admin/users" element={<Navigate to="/" replace />} />
-                  <Route path="/admin/audit" element={<Navigate to="/admin/audit-trail" replace />} />
+                  <Route path="/admin/audit" element={<Navigate to="/superadmin/audit-trail" replace />} />
                   <Route path="/admin/profile" element={<DeanProfile />} />
                   <Route path="/admin/settings" element={<DeanSettings />} />
                   <Route path="/admin/rules" element={<Navigate to="/admin/settings" replace />} />

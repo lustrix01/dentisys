@@ -287,8 +287,10 @@ export const Rooms: React.FC = () => {
       {loading ? (
         <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800">Loading rooms…</div>
       ) : cards.length === 0 ? (
-        <div className="p-12 text-center text-sm font-medium text-slate-500 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
-          {tab === 'retired' ? 'Nothing is retired.' : 'No rooms yet. Add the first room.'}
+        <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
+          {tab === 'retired' ? <Archive className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /> : <DoorOpen className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />}
+          <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{tab === 'retired' ? 'Nothing is retired' : 'No rooms yet'}</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{tab === 'retired' ? 'Retired rooms appear here.' : 'Add the first room.'}</p>
         </div>
       ) : (
         <div className="space-y-4">

@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  CheckCircle2,
   Moon,
   RotateCcw,
   ShieldAlert,
@@ -31,12 +30,6 @@ export const Settings: React.FC = () => {
   };
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
-      <div className="flex justify-end pb-2">
-        <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-accent-700 dark:text-accent-400 bg-accent-50 dark:bg-accent-950/30 px-3 py-2 rounded-xl">
-          <CheckCircle2 className="w-3.5 h-3.5" />
-          System administration
-        </div>
-      </div>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <div className="lg:col-span-4 space-y-5">
           <Card>

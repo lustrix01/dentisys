@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, CircleAlert, KeyRound, Search, ShieldCheck, UserRound, X } from 'lucide-react';
 import Tabs from '../../components/Tabs';
 import { ListToolbar, SearchField } from '../../components/FilterBars';
@@ -24,11 +24,16 @@ const sentence = (name: string, n: number) => `${name} teaches ${n} ${n === 1 ? 
 const classesOf = (person: AdminPerson): PersonClass[] => (person.kind === 'faculty' ? person.classes : person.enrolledClasses) ?? [];
 
 export const PeopleAndAccounts: React.FC = () => {
-  const [kind, setKind] = useState<Kind>('faculty');
+  const [params] = useSearchParams(); // read once: other pages link here with ?kind=, ?status= or ?twoFactor=
+  const [kind, setKind] = useState<Kind>(() => (params.get('kind') === 'student' ? 'student' : 'faculty'));
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState<StatusFilter>('all');
-  const [twoFactor, setTwoFactor] = useState('all');
+  const [status, setStatus] = useState<StatusFilter>(() => (['active', 'deactivated'] as const).find(v => v === params.get('status')) ?? 'all');
+  const [twoFactor, setTwoFactor] = useState<'all' | 'on' | 'off'>(() => (['on', 'off'] as const).find(v => v === params.get('twoFactor')) ?? 'all');
+  const [activity, setActivity] = useState<'all' | 'never' | 'inactive30'>('all');
+  const [classes, setClasses] = useState<'all' | 'current' | 'none'>('all');
+  const [secretary, setSecretary] = useState(false);
+  const [face, setFace] = useState<'all' | 'enrolled' | 'not_enrolled'>('all');
   const [page, setPage] = useState(1);
   const [people, setPeople] = useState<AdminPerson[]>([]);
   const [total, setTotal] = useState(0);
@@ -49,14 +54,21 @@ export const PeopleAndAccounts: React.FC = () => {
     const ticket = ++latest.current;
     setLoading(true);
     setError('');
-    getAdminPeopleApi({ kind, status, q, page })
+    getAdminPeopleApi({
+      kind, status, q, page,
+      twoFactor: twoFactor === 'all' ? undefined : twoFactor,
+      activity: activity === 'all' ? undefined : activity,
+      classes: classes === 'all' ? undefined : classes,
+      secretary: secretary || undefined,
+      face: face === 'all' ? undefined : face,
+    })
       .then(r => { if (ticket === latest.current) { setPeople(r.people); setTotal(r.total); } })
       .catch(err => { if (ticket === latest.current) setError(err instanceof Error ? err.message : 'Unable to load accounts.'); })
       .finally(() => { if (ticket === latest.current) setLoading(false); });
   };
-  useEffect(load, [kind, status, q, page]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [kind, status, q, page, twoFactor, activity, classes, secretary, face]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const shown = people.filter(person => twoFactor === 'all' || (twoFactor === 'on') === person.twoFactor);
+  const clearFilters = () => { setSearch(''); setQ(''); setStatus('all'); setTwoFactor('all'); setActivity('all'); setClasses('all'); setSecretary(false); setFace('all'); setPage(1); };
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const openAction = (person: AdminPerson) => {
@@ -92,13 +104,13 @@ export const PeopleAndAccounts: React.FC = () => {
   return (
     <section className="mx-auto max-w-7xl animate-fade-in space-y-6">
       <p className="px-1.5 text-xs text-slate-500 dark:text-slate-400">
-        Showing <b className="text-slate-800 dark:text-slate-100">{shown.length}</b> of {total} {kind === 'faculty' ? 'Faculty accounts' : 'Student accounts'}
+        Showing <b className="text-slate-800 dark:text-slate-100">{people.length}</b> of {total} {kind === 'faculty' ? 'Faculty accounts' : 'Student accounts'}
       </p>
 
       <ListToolbar
         left={(
           <Tabs variant="switch" color="accent" label="Account roles" value={kind}
-            onChange={value => { setKind(value); setSearch(''); setQ(''); setStatus('all'); setTwoFactor('all'); setPage(1); }}
+            onChange={value => { setKind(value); setClasses('all'); setSecretary(false); setFace('all'); setPage(1); setSearch(''); setQ(''); setStatus('all'); setTwoFactor('all'); setActivity('all'); }}
             tabs={[{ id: 'faculty', label: 'Faculty' }, { id: 'student', label: 'Students' }]} />
         )}
         below={(
@@ -110,16 +122,42 @@ export const PeopleAndAccounts: React.FC = () => {
               </select>
             </label>
             <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">2FA</span>
-              <select aria-label="2FA" value={twoFactor} onChange={event => setTwoFactor(event.target.value)} className={filterClass}>
+              <select aria-label="2FA" value={twoFactor} onChange={event => { setTwoFactor(event.target.value as typeof twoFactor); setPage(1); }} className={filterClass}>
                 <option value="all">All 2FA</option><option value="on">On</option><option value="off">Off</option>
               </select>
             </label>
-            <button type="button" onClick={() => { setSearch(''); setQ(''); setStatus('all'); setTwoFactor('all'); setPage(1); }} className="min-h-10 rounded-lg px-3 text-xs font-bold text-accent-700 hover:bg-accent-50 dark:text-accent-300 dark:hover:bg-accent-950/40">Clear filters</button>
+            <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Activity</span>
+              <select aria-label="Activity" value={activity} onChange={event => { setActivity(event.target.value as typeof activity); setPage(1); }} className={filterClass}>
+                <option value="all">Any activity</option><option value="never">Never signed in</option><option value="inactive30">Inactive 30+ days</option>
+              </select>
+            </label>
+            {kind === 'faculty' && (
+              <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Classes</span>
+                <select aria-label="Classes" value={classes} onChange={event => { setClasses(event.target.value as typeof classes); setPage(1); }} className={filterClass}>
+                  <option value="all">All classes</option><option value="current">Has classes this school year</option><option value="none">No classes this school year</option>
+                </select>
+              </label>
+            )}
+            {kind === 'student' && (
+              <>
+                <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Role</span>
+                  <select aria-label="Role" value={secretary ? 'secretary' : 'all'} onChange={event => { setSecretary(event.target.value === 'secretary'); setPage(1); }} className={filterClass}>
+                    <option value="all">All students</option><option value="secretary">Class Secretaries</option>
+                  </select>
+                </label>
+                <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Face enrollment</span>
+                  <select aria-label="Face enrollment" value={face} onChange={event => { setFace(event.target.value as typeof face); setPage(1); }} className={filterClass}>
+                    <option value="all">Any face status</option><option value="enrolled">Face enrolled</option><option value="not_enrolled">Face not enrolled</option>
+                  </select>
+                </label>
+              </>
+            )}
+            <button type="button" onClick={clearFilters} className="min-h-10 rounded-lg px-3 text-xs font-bold text-accent-700 hover:bg-accent-50 dark:text-accent-300 dark:hover:bg-accent-950/40">Clear filters</button>
           </>
         )}
       />
 
-      <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+      <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent-600 dark:text-accent-400" />
         <p>Deactivating an account signs the person out on every device and blocks sign-in until you reactivate it. Records, classes and enrolments are kept. Faculty are invited from Faculty Invitations; Students are invited from class rosters.</p>
       </div>
@@ -134,7 +172,7 @@ export const PeopleAndAccounts: React.FC = () => {
       <div className="min-w-0 overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900">
         {loading ? (
           <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading accounts…</div>
-        ) : shown.length === 0 ? (
+        ) : people.length === 0 ? (
           <div className="px-6 py-14 text-center">
             <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
             <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No matching accounts</h3>
@@ -158,7 +196,7 @@ export const PeopleAndAccounts: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {shown.map(person => (
+                  {people.map(person => (
                     <tr key={person.userId} className="align-middle hover:bg-slate-50/70 dark:hover:bg-slate-800/30">
                       <td className="px-5 py-4"><div className="font-bold text-slate-800 dark:text-slate-100">{person.name}</div></td>
                       <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{person.email}</td>
@@ -174,7 +212,7 @@ export const PeopleAndAccounts: React.FC = () => {
               </table>
             </div>
             <div className="space-y-3 p-3 sm:hidden">
-              {shown.map(person => (
+              {people.map(person => (
                 <article key={person.userId} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-50 text-accent-700 dark:bg-accent-950/50 dark:text-accent-300"><UserRound className="h-5 w-5" /></span><div className="min-w-0"><h3 className="break-words text-sm font-bold text-slate-800 dark:text-slate-100">{person.name}</h3><p className="break-all text-xs text-slate-500 dark:text-slate-400">{person.email}</p></div></div>

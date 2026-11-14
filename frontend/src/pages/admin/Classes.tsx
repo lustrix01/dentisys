@@ -116,28 +116,29 @@ export const Classes: React.FC = () => {
 
   return (
     <section className="mx-auto max-w-7xl animate-fade-in space-y-6">
-      <div role="note" className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-xs leading-relaxed text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+      <div role="note" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
         <Clock3 className="mt-0.5 h-4 w-4 shrink-0" /><p><strong>Preview data.</strong> These sample classes and rosters are not live records. Create, edit, archive and restore changes are temporary and stay in this view only.</p>
       </div>
 
       <p className="px-1.5 text-xs text-slate-500 dark:text-slate-400">Showing <b className="text-slate-800 dark:text-slate-100">{shown.length}</b> of {classes.filter(item => item.status === view).length} sample {view} classes · {classes.filter(item => item.status === 'active').length} active overall</p>
 
-      <Tabs variant="section" color="accent" className="w-full" label="Class views" value={view} onChange={value => setView(value)} tabs={[
-        { id: 'active', label: 'Active Classes', icon: <BookOpen className="h-4 w-4" />, count: classes.filter(item => item.status === 'active').length },
-        { id: 'archived', label: 'Archived Classes', icon: <Archive className="h-4 w-4" />, count: classes.filter(item => item.status === 'archived').length },
-      ]} />
-
       <ListToolbar
-        left={<SearchField value={search} onChange={setSearch} placeholder="Search course, section or Faculty…" color="accent" />}
-        right={(
-          // Full-width controls on phones, and a width-capped group at lg so the filters wrap
-          // inside the toolbar instead of colliding with the search field.
-          <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto lg:max-w-[24rem] lg:justify-end xl:max-w-none">
+        left={(
+          <>
+            <Tabs variant="switch" color="accent" label="Class views" value={view} onChange={value => setView(value)} tabs={[
+              { id: 'active', label: 'Active Classes', icon: <BookOpen className="h-4 w-4" />, count: classes.filter(item => item.status === 'active').length },
+              { id: 'archived', label: 'Archived Classes', icon: <Archive className="h-4 w-4" />, count: classes.filter(item => item.status === 'archived').length },
+            ]} />
+          </>
+        )}
+        right={view === 'active' ? <button type="button" onClick={startCreate} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-accent-700 hover:shadow-md"><Plus className="h-4 w-4" />Create Class</button> : undefined}
+        below={(
+          <>
+            <SearchField value={search} onChange={setSearch} placeholder="Search course, section or Faculty…" color="accent" />
             <label className="w-full min-w-0 sm:w-auto sm:flex-none"><span className="sr-only">School Year</span><select aria-label="School Year" value={schoolYear} onChange={event => setSchoolYear(event.target.value)} className={filterClass}><option value="all">All School Years</option>{years.map(year => <option key={year} value={year}>S.Y. {year}</option>)}</select></label>
             <label className="w-full min-w-0 sm:w-auto sm:flex-none"><span className="sr-only">Faculty</span><select aria-label="Faculty" value={faculty} onChange={event => setFaculty(event.target.value)} className={filterClass}><option value="all">All Faculty</option>{facultyNames.map(name => <option key={name} value={name}>{name}</option>)}</select></label>
             <button type="button" onClick={() => { setSchoolYear('all'); setFaculty('all'); setSearch(''); }} className="min-h-10 rounded-lg px-3 text-xs font-bold text-accent-700 hover:bg-accent-50 dark:text-accent-300 dark:hover:bg-accent-950/40">Clear filters</button>
-            {view === 'active' && <button type="button" onClick={startCreate} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-accent-700 hover:shadow-md"><Plus className="h-4 w-4" />Create Class</button>}
-          </div>
+          </>
         )}
       />
 

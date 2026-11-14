@@ -390,7 +390,7 @@ export const DeanReports: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto px-1 sm:px-2 animate-fade-in">
+    <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
       {/* Tab Navigation */}
       <Tabs
         variant="section"

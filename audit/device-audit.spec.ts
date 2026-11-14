@@ -12,7 +12,7 @@ const ROUTES: Record<Role, string[]> = {
   public: ['/landing', '/login'],
   // Redirect aliases (/admin/faculty-approval, /retention-criteria, /users, /audit, /rules) are left out:
   // they only land on pages already listed here.
-  admin: ['/', '/admin/terms', '/admin/rooms', '/admin/faculty-invite', '/admin/reports', '/admin/audit-trail', '/admin/profile', '/admin/settings'],
+  admin: ['/', '/admin/reports', '/admin/classes', '/superadmin/overview', '/superadmin/people', '/superadmin/faculty-invite', '/superadmin/course-catalog', '/superadmin/terms', '/superadmin/rooms', '/superadmin/audit-trail', '/admin/profile', '/admin/settings'],
   faculty: ['/', '/classes', '/students', '/grades', '/retention', '/attendance', '/reports', '/email-management',
     '/faculty/audit-trail', '/attendance?tab=activity', '/attendance?tab=requests', '/faculty/profile', '/faculty/settings'],
   secretary: ['/', '/secretary/start-session', '/secretary/attendance', '/secretary/override', '/secretary/audit-trail',

@@ -21,9 +21,9 @@ Class Sections stays a preview. No new role, no new flag, no new account (decisi
 | # | Rule |
 |---|---|
 | SA1 | Superadmin mode is **route-based, UI-only**: it is on when the path starts with `/superadmin/`. No localStorage key, no session field, no request header, no server flag. A refresh or a bookmark keeps the mode. |
-| SA2 | Every account with role `admin` (Dean) sees the switcher; nobody else does. It copies the Secretary switcher markup (`Layout.tsx`, "Secretary / Student Role Switcher"): segments **Dean** and **Superadmin** (icon `ShieldCheck`, tooltip "Superadmin view" when the sidebar is collapsed). Dean goes to `/admin/dashboard`, Superadmin to `/superadmin/audit-trail`. |
-| SA3 | Superadmin sidebar: **Audit Trail** (`/superadmin/audit-trail`), **Course Catalog** (`/superadmin/course-catalog`), **People & Accounts** (`/superadmin/people`), plus the Dean's Profile and Settings links. Class Sections is not listed in this mode; it stays where it is in the Dean view as a preview (decision 18). |
-| SA4 | The Dean view loses the Course Catalog and People & Accounts entries (decision 18). Old paths `/admin/course-catalog` and `/admin/people` redirect to the dashboard; `/superadmin/*` for a non-Dean redirects to their own home (`ProtectedRoute allowedRoles={['admin']}`). Top bar shows a "Superadmin" chip so the mode is visible on every page. |
+| SA2 | Every account with role `admin` (Dean) sees the switcher; nobody else does. It copies the Secretary switcher markup (`Layout.tsx`, "Secretary / Student Role Switcher"): segments **Dean** and **Superadmin** (icon `ShieldCheck`, tooltip "Superadmin view" when the sidebar is collapsed). Dean goes to `/`, Superadmin to `/superadmin/overview`. |
+| SA3 | Superadmin sidebar, in this order: **Overview** (`/superadmin/overview`), **People & Accounts** (`/superadmin/people`), **Faculty Invitations** (`/superadmin/faculty-invite`), **Course Catalog** (`/superadmin/course-catalog`), **Academic Terms** (`/superadmin/terms`), **Rooms** (`/superadmin/rooms`), **Audit Trail** (`/superadmin/audit-trail`), plus the Dean's Profile and Settings links. Dean sidebar: **Dashboard**, **Reports & Analytics**, **Classes** (preview, decision 18). The Overview shows one tile per area (Faculty and Student accounts, 2FA use, pending Faculty invitations, courses, rooms, current term), built from the existing list APIs; each tile opens its page. |
+| SA4 | Old paths `/admin/course-catalog` and `/admin/people` redirect to the dashboard; `/admin/terms` and `/admin/academic-terms`, `/admin/rooms`, `/admin/faculty-invite` and `/admin/faculty-approval`, `/admin/audit-trail` and `/admin/audit` redirect to their Superadmin pages; `/superadmin/*` for a non-Dean redirects to their own home (`ProtectedRoute allowedRoles={['admin']}`). Top bar shows a "Superadmin" chip so the mode is visible on every page. |
 | SA5 | **The server does not know the mode.** Justification: the Dean role already authorises every `/api/admin/*` call, and decision 14 says every Dean is a superadmin, so the mode adds no authority. A header or flag the client sends would be fake security (any Dean could send it) and extra code. The server's job is the same as today: verify the access token, require role `admin`, return 403 otherwise. The only mode-like server input is the explicit `scope=class_work` request parameter on the audit endpoint (SA8), which is a filter, not a permission. Accepted trade-off: a Dean calling the API by hand can read class work without the toggle; they could always do so as a Dean with an admin token. Class-work rows stay out of the **normal** Dean screens and the Dashboard widget (`audit-logging.md` section 3 changes, see section 9). |
 
 ## 3. Part A - Class-work audit (decision 16)
@@ -59,13 +59,13 @@ Response: the existing entry shape (When, Who, What, Record, Change, status, `ch
 
 | # | Rule |
 |---|---|
-| SA6 | The Superadmin Audit Trail is the existing page (`pages/admin/AuditTrail.tsx` -> `SystemAudit.tsx` Audit view) rendered with `scope` = `class_work` or `overview` chosen by a **list switch** at the top ("Activity" / "Class work"), copied from the Assigned / Archived list switch standard. In the Dean view the page is unchanged and its note "Class work ... is not shown here" stays. |
+| SA6 | The Superadmin Audit Trail is the existing page (`pages/admin/AuditTrail.tsx` -> `SystemAudit.tsx` Audit view) rendered with `scope` = `class_work` or `overview` chosen by a **list switch** at the top ("Activity" / "Class work"), copied from the Assigned / Archived list switch standard. It is the only Audit Trail: the Dean view has none. The Activity view notes "Class work (grades, attendance, retention) is in the Class work view." |
 | SA7 | Class-work view is **read-only**: no edit, undo, export of changed data back. Display standard, details panel, 50 per page, server-side paging and Asia/Manila times follow `audit-logging.md` section 4. CSV/print export uses the same filters (decision: allowed, read-only). |
 | SA8 | Filters in Class work: Search, **Faculty** (select of Faculty with at least one class-work row), **Class** (select; "DENT 101-A · SY 2026-2027"), **Student** (search-select by name or student number), Date (presets + custom range), Status, Sort, Clear filters. Area chips: Grading, Attendance, Retention. Filters combine with AND. |
 | SA9 | `facultyId` means "work in that Faculty member's classes": rows whose `scope_cs_id` is a class they teach, so a Secretary's attendance change is found under the Faculty member too. The row's Who still shows the real actor. |
 | SA10 | Before/after values are shown in the Changes table as stored (R4). Redaction rules R5 still hold; no new data is stored. Old rows (R13) show what they stored. |
 | SA11 | Opening class-work rows is **not itself audited** (same as R11 spirit: reads are not events). Accepted (answer 4). |
-| SA12 | The Dashboard "Latest audit events" widget and the normal Dean Audit Trail never include class work, in either mode. |
+| SA12 | The Dashboard "Latest audit events" widget and the Audit Trail Activity view never include class work. |
 
 ## 4. Part B - Course Catalog (decision 17)
 
@@ -121,7 +121,7 @@ Example update: `{"id":12,"courseCode":"DENT 101","name":"Dental Anatomy","lectu
 
 | Method | Path | Body / query | Success |
 |---|---|---|---|
-| GET | `/api/admin/people` | `?kind=faculty\|student&status=active\|deactivated\|all&q=&page=` (50 per page) | `data.people[]` |
+| GET | `/api/admin/people` | `?kind=faculty\|student&status=active\|deactivated\|all&q=&page=` (50 per page); optional filters combined with AND: `twoFactor=on\|off`, `activity=never\|inactive30` (no session ever / last seen over 30 days ago), `classes=current\|none` (Faculty only), `secretary=1` and `face=enrolled\|not_enrolled` (Students only); an unknown value or a filter for the other kind is a 422 | `data.people[]` |
 | POST | `/api/admin/people/deactivate` | `{userId, reason?}` | updated person |
 | POST | `/api/admin/people/reactivate` | `{userId}` | updated person |
 

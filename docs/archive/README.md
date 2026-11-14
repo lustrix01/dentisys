@@ -88,3 +88,5 @@ These documents are kept for history. They describe past plans, handoffs, and ev
 - [Batch 2, 2026-11-14](ui-batch2-2026-11-14.md)
 - [Owner decisions, 2026-11-15 (iBU look)](owner-decisions-2026-11-15.md)
 - [Exports before and after (iBU look), 2026-11-15](https://claude.ai/artifact/57XHGw1rDTSLwHgX6hrvoq) (demo)
+- [Owner decisions, 2026-11-15 (Dean / Superadmin regroup)](owner-decisions-2026-11-15-second.md)
+- [Dean and Superadmin regroup, 2026-11-15](https://claude.ai/artifact/8eq3ms5oxBP8JoW5heDMRT) (demo)

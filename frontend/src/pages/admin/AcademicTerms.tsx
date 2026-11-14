@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   CheckCircle2,
+  CalendarDays,
   CalendarPlus,
   Copy,
   Pencil,
@@ -222,13 +223,13 @@ export const AcademicTermsSettings: React.FC = () => {
 
       {/* Notifications & Status Alerts */}
       {error && !draft && (
-        <div role="alert" className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-xs font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2.5">
+        <div role="alert" className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-xs font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2.5">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
       {message && (
-        <div role="status" className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2.5">
+        <div role="status" className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-2.5">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{message}</span>
         </div>
@@ -240,8 +241,10 @@ export const AcademicTermsSettings: React.FC = () => {
           Loading academic terms…
         </div>
       ) : years.length === 0 ? (
-        <div className="p-12 text-center text-sm font-medium text-slate-500 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
-          No academic terms defined. Add the terms for {currentYear}.
+        <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
+          <CalendarDays className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+          <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No academic terms defined</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Add the terms for {currentYear}.</p>
         </div>
       ) : (
         <div className="space-y-4">

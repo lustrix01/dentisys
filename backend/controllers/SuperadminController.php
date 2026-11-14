@@ -227,7 +227,7 @@ function people_json(array $r, array $classes): array
 }
 
 /** Page of people. Classes: Faculty teach them, Students are enrolled in them (current school year first). */
-function people_list(PDO $pdo, string $kind, string $status, string $q, int $page, ?int $onlyUserId = null): array
+function people_list(PDO $pdo, string $kind, string $status, string $q, int $page, ?int $onlyUserId = null, array $f = []): array
 {
     $cur = academic_current_school_year($pdo);
     $from = $kind === 'faculty'
@@ -244,6 +244,24 @@ function people_list(PDO $pdo, string $kind, string $status, string $q, int $pag
     if ($onlyUserId !== null) {
         $where[] = 'ua.user_id = ?';
         $params[] = $onlyUserId;
+    }
+    $mfa = "EXISTS (SELECT 1 FROM security_tokens t WHERE t.user_id = ua.user_id AND t.purpose = 'mfa_credential' AND t.mfa_status = 'enabled')";
+    if (($f['twoFactor'] ?? '') === 'on') $where[] = $mfa;
+    if (($f['twoFactor'] ?? '') === 'off') $where[] = "NOT {$mfa}";
+    if (($f['activity'] ?? '') === 'never') $where[] = 'NOT EXISTS (SELECT 1 FROM auth_sessions a WHERE a.user_id = ua.user_id)';
+    if (($f['activity'] ?? '') === 'inactive30') $where[] = "(SELECT MAX(a.last_seen_at) FROM auth_sessions a WHERE a.user_id = ua.user_id) < NOW() - INTERVAL '30 days'";
+    if (isset($f['classes'])) {
+        $where[] = ($f['classes'] === 'none' ? 'NOT ' : '') . 'EXISTS (SELECT 1 FROM class_sections c WHERE c.instructor_user_id = ua.user_id AND c.school_year = ? AND c.archived_at IS NULL)';
+        $params[] = $cur;
+    }
+    // Same rule as secretary_has_current_appointment(): an active section of the current school year names the Student's account.
+    if (!empty($f['secretary'])) {
+        $where[] = "EXISTS (SELECT 1 FROM class_sections c WHERE c.secretary_user_id = ua.user_id AND LOWER(c.status) = 'active' AND UPPER(c.school_year) = UPPER(?))";
+        $params[] = $cur;
+    }
+    // Same rule as the attendance capture check: an active profile that still holds its protected reference.
+    if (isset($f['face'])) {
+        $where[] = ($f['face'] === 'not_enrolled' ? 'NOT ' : '') . "EXISTS (SELECT 1 FROM biometric_profiles b WHERE b.student_id = s.student_id AND b.enrollment_status = 'active' AND b.protected_object_reference IS NOT NULL)";
     }
     $whereSql = ' AND ' . implode(' AND ', $where);
     $total = $pdo->prepare("SELECT COUNT(*) {$from}{$whereSql}");
@@ -347,8 +365,20 @@ function handle_admin_people(): void
             if (!in_array($status, ['active', 'deactivated', 'all'], true)) $errors['status'] = 'Status must be active, deactivated or all.';
             if (preg_match('/^[1-9]\d{0,5}$/', $page) !== 1) $errors['page'] = 'Page must be a positive whole number.';
             if (mb_strlen($q) > 100) $errors['q'] = 'Search must be 100 characters or fewer.';
+            $filters = [];
+            $allowed = ['twoFactor' => ['on', 'off'], 'activity' => ['never', 'inactive30'],
+                'classes' => $kind === 'faculty' ? ['current', 'none'] : [], 'face' => $kind === 'student' ? ['enrolled', 'not_enrolled'] : []];
+            foreach ($allowed as $key => $values) {
+                if (!isset($_GET[$key])) continue;
+                if (!in_array((string) $_GET[$key], $values, true)) $errors[$key] = "Invalid {$key} filter.";
+                else $filters[$key] = (string) $_GET[$key];
+            }
+            if (isset($_GET['secretary'])) {
+                if ($kind !== 'student' || (string) $_GET['secretary'] !== '1') $errors['secretary'] = 'Invalid secretary filter.';
+                else $filters['secretary'] = true;
+            }
             if ($errors !== []) throw new ValidationException($errors);
-            json_response(['status' => 'ok'] + people_list($pdo, $kind, $status, $q, (int) $page));
+            json_response(['status' => 'ok'] + people_list($pdo, $kind, $status, $q, (int) $page, null, $filters));
             return;
         }
         $body = request_body();

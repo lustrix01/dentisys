@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Archive, ArchiveRestore, BookOpen, Pencil, Search, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import Tabs from '../../components/Tabs';
+import { filterCourses } from './courseCatalogFilters';
+import type { CourseFilters } from './courseCatalogFilters';
 import { ListToolbar, SearchField } from '../../components/FilterBars';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
@@ -14,6 +17,7 @@ type Draft = { id: number; courseCode: string; name: string; lectureUnits: strin
 const inputClass = 'mt-1.5 min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-800 outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
 const cancelButton = 'min-h-11 rounded-xl px-4 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800';
 const iconButton = 'inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 disabled:opacity-40';
+const filterClass = 'min-h-10 w-full min-w-36 cursor-pointer rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200';
 const num = (value: number | null) => (value ?? 0);
 const shownUnits = (value: number | null) => (value === null ? '—' : String(value)); // older courses have no lecture/lab split
 const used = (course: CatalogCourse) => `Used by ${course.classCount} ${course.classCount === 1 ? 'class' : 'classes'} (${course.currentClassCount} this school year)`;
@@ -22,8 +26,12 @@ export const CourseCatalog: React.FC = () => {
   const [courses, setCourses] = useState<CatalogCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<'active' | 'retired'>('active');
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState<CourseFilters['tab']>(() => params.get('tab') === 'retired' ? 'retired' : 'active');
   const [search, setSearch] = useState('');
+  const [units, setUnits] = useState<CourseFilters['units']>('all');
+  const [use, setUse] = useState<CourseFilters['use']>('all');
+  const [sort, setSort] = useState<CourseFilters['sort']>('code');
   const [draft, setDraft] = useState<Draft | null>(null);
   const [formError, setFormError] = useState('');
   const [retiring, setRetiring] = useState<CatalogCourse | null>(null);
@@ -36,8 +44,9 @@ export const CourseCatalog: React.FC = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  const filtered = useMemo(() => courses.filter(course => course.status === tab
-    && `${course.courseCode} ${course.name}`.toLowerCase().includes(search.trim().toLowerCase())), [courses, tab, search]);
+  const filtered = useMemo(() => filterCourses(courses, { tab, search, units, use, sort }), [courses, tab, search, units, use, sort]);
+  const filtering = Boolean(search) || units !== 'all' || use !== 'all';
+  const clearFilters = () => { setSearch(''); setUnits('all'); setUse('all'); };
   const activeCount = courses.filter(course => course.status === 'active').length;
   const retiredCount = courses.length - activeCount;
 
@@ -86,21 +95,44 @@ export const CourseCatalog: React.FC = () => {
     <section className="mx-auto max-w-7xl animate-fade-in space-y-6">
       <p className="px-1.5 text-xs text-slate-500 dark:text-slate-400">Showing <b className="text-slate-800 dark:text-slate-100">{filtered.length}</b> of {tab === 'active' ? activeCount : retiredCount} {tab} courses</p>
 
-      <Tabs variant="switch" color="accent" label="Course views" value={tab} onChange={setTab} tabs={[
-        { id: 'active', label: 'Active Courses', icon: <BookOpen className="h-4 w-4" />, count: activeCount },
-        { id: 'retired', label: 'Retired Courses', icon: <Archive className="h-4 w-4" />, count: retiredCount },
-      ]} />
-
-      <ListToolbar left={<SearchField value={search} onChange={setSearch} placeholder="Search course code or title…" color="accent" />} />
+      <ListToolbar
+        left={(
+          <Tabs variant="switch" color="accent" label="Course views" value={tab} onChange={setTab} tabs={[
+            { id: 'active', label: 'Active Courses', icon: <BookOpen className="h-4 w-4" />, count: activeCount },
+            { id: 'retired', label: 'Retired Courses', icon: <Archive className="h-4 w-4" />, count: retiredCount },
+          ]} />
+        )}
+        below={(
+          <>
+            <SearchField value={search} onChange={setSearch} placeholder="Search course code or title…" color="accent" />
+            <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Units</span>
+              <select aria-label="Units" value={units} onChange={event => setUnits(event.target.value as CourseFilters['units'])} className={filterClass}>
+                <option value="all">All units</option><option value="lecture">Lecture only</option><option value="lab">Has Laboratory</option>
+              </select>
+            </label>
+            <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Use</span>
+              <select aria-label="Use" value={use} onChange={event => setUse(event.target.value as CourseFilters['use'])} className={filterClass}>
+                <option value="all">Any use</option><option value="current">Used this school year</option><option value="unused">Not used</option>
+              </select>
+            </label>
+            <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Sort</span>
+              <select aria-label="Sort" value={sort} onChange={event => setSort(event.target.value as CourseFilters['sort'])} className={filterClass}>
+                <option value="code">Code A–Z</option><option value="title">Title A–Z</option><option value="classes">Most classes</option>
+              </select>
+            </label>
+            <button type="button" onClick={clearFilters} className="min-h-10 rounded-lg px-3 text-xs font-bold text-accent-700 hover:bg-accent-50 dark:text-accent-300 dark:hover:bg-accent-950/40">Clear filters</button>
+          </>
+        )}
+      />
 
       {loading ? (
         <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Loading courses…</div>
       ) : filtered.length === 0 ? (
         <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
           <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
-          <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{search ? 'No matching courses' : tab === 'retired' ? 'Nothing is retired' : 'No courses yet'}</h3>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{search ? 'Search for another course.' : tab === 'retired' ? 'Retired courses appear here.' : 'Faculty add a course when they create a class.'}</p>
-          {search && <button type="button" onClick={() => setSearch('')} className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-accent-700 hover:bg-accent-50 dark:text-accent-300 dark:hover:bg-accent-950/40"><X className="h-3.5 w-3.5" />Clear search</button>}
+          <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{filtering ? 'No matching courses' : tab === 'retired' ? 'Nothing is retired' : 'No courses yet'}</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{filtering ? 'Change the search or filters.' : tab === 'retired' ? 'Retired courses appear here.' : 'Faculty add a course when they create a class.'}</p>
+          {filtering && <button type="button" onClick={clearFilters} className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-accent-700 hover:bg-accent-50 dark:text-accent-300 dark:hover:bg-accent-950/40"><X className="h-3.5 w-3.5" />Clear filters</button>}
         </div>
       ) : (
         <>

@@ -1149,9 +1149,9 @@ Owner-approved amendment (2026-11-10): The Dean/Admin class-section screen is a 
 
 Every Dean account may switch into Superadmin mode with a toggle like the Secretary's Student view. There is no separate role, flag or account. The mode is a view only: the Dean role authorises every administrative action, and the server does not track the mode.
 
-In Superadmin mode the Dean has three pages that the normal Dean view does not show: Audit Trail with class work, Course Catalog and People & Accounts.
+In Superadmin mode the Dean has the setup pages: Overview, People & Accounts, Faculty Invitations, Course Catalog, Academic Terms, Rooms and Audit Trail. The normal Dean view has Dashboard, Reports & Analytics and Classes. The Audit Trail exists only in Superadmin mode.
 
-Class-work audit. The Audit Trail also lists class work (scores, assessments, grade weights, recomputes, attendance records and sessions, Excused requests, retention entries) with Faculty, class, Student and date filters and before/after values. It is read-only, and opening it is not itself audited. The normal Dean overview and the Dashboard never show class work.
+Class-work audit. The Audit Trail also lists class work (scores, assessments, grade weights, recomputes, attendance records and sessions, Excused requests, retention entries) with Faculty, class, Student and date filters and before/after values. It is read-only, and opening it is not itself audited. The Audit Trail Activity view and the Dashboard never show class work.
 
 Course Catalog. The Dean edits a course's code, title and units and may retire and restore a course. Retired courses leave Faculty's course pickers and cannot be typed again when creating a class; Faculty who try are told to ask the Dean to restore the course. Retired courses stay on every existing class section. Faculty still add new course codes when creating a class. Removing Laboratory units follows GRD-003 (blocked while a current class has Laboratory assessments). Courses are never deleted. Changes are audited.
 
@@ -1159,7 +1159,7 @@ People & Accounts. The Dean sees Faculty (with each member's class sections) and
 
 The Class Sections screen remains a non-authoritative preview, shown in the normal Dean view only. Details: `docs/contracts/superadmin.md`.
 
-History: 2026-10-28 Dean grade-change view, catalog control and deactivation backlogged; 2026-11-14 Superadmin mode decided and built. Records: docs/archive/.
+History: 2026-10-28 Dean grade-change view, catalog control and deactivation backlogged; 2026-11-14 Superadmin mode decided and built; 2026-11-15 setup pages and the only Audit Trail moved into Superadmin mode. Records: docs/archive/.
 
 ## ID-002 - Structured names and 3NF
 

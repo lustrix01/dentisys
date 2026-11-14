@@ -146,6 +146,16 @@ expect_true($saDeanStatus === 404 && ($saDean['code'] ?? '') === 'person_not_fou
 [$saKindStatus] = $saGet('/api/admin/people?kind=dean');
 expect_same([404, 422], [$saGhostStatus, $saKindStatus], 'An unknown account is 404 and an unknown kind is 422');
 
+// People filters are applied on the server (count and page), and a bad or kind-mismatched value is 422.
+$saIds = static fn(array $r): array => array_map('intval', array_column($r['people'] ?? [], 'userId'));
+$saFilter = fn(string $kind, string $extra): array => $saGet("/api/admin/people?kind={$kind}&q=" . rawurlencode($saTag) . $extra);
+[, $saHas] = $saFilter('faculty', '&classes=current');
+[, $saNone] = $saFilter('faculty', '&classes=none');
+expect_true($saIds($saHas) === [$saBusy] && $saHas['total'] === 1 && in_array($saFaculty, $saIds($saNone), true) && !in_array($saBusy, $saIds($saNone), true), 'The classes filter counts only current, unarchived classes');
+$saBad = [];
+foreach ([['faculty', '&face=enrolled'], ['faculty', '&secretary=1'], ['student', '&classes=current'], ['student', '&secretary=0'], ['faculty', '&twoFactor=maybe'], ['faculty', '&activity=never,x']] as [$saK, $saX]) $saBad[] = $saFilter($saK, $saX)[0];
+expect_same([422, 422, 422, 422, 422, 422], $saBad, 'Unknown or kind-mismatched people filters are 422');
+
 // A Student and a Student who is a Class Secretary share one account, so one deactivation blocks both sign-ins.
 $saStudent = $saAccount("sa-stu-{$saTag}@bicol-u.edu.ph", 'student', "Sa Stu {$saTag}", "SA-{$saTag}-1");
 $saSecretary = $saAccount("sa-sec-{$saTag}@bicol-u.edu.ph", 'secretary', "Sa Sec {$saTag}", "SA-{$saTag}-2");

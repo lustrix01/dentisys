@@ -23,7 +23,9 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 # 9. Known issues
 
-No open items.
+- **9.14** Apply the Page patterns notice banner, empty state and loading state standards (docs/frontend.md) to the Faculty, Secretary and Student pages; the Dean and Superadmin pages already follow them.
+- **9.15** People & Accounts phone cards break long email addresses mid-word (for example "bicol-u.ed / u.ph").
+- **9.16** Superadmin ideas, not yet approved to build: pending invitations inside People & Accounts with resend and revoke; the Dean resets a user's 2FA (needs a spec rule); sign a user out everywhere without deactivating (needs a spec rule); export the People and Course Catalog lists.
 
 ---
 
@@ -38,6 +40,7 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **4.3** Faculty invitation rows start with a read-only View action; the Invitation Details dialog shows name, email, status, sent and expiry dates and the invitation's email history, with no token or link.
 - **4.4** Dean Settings: no Course Component Ratios or Retention Standard setting (tested).
 - **4.5–4.7** Superadmin mode (spec ADM-001, [contract](contracts/superadmin.md)): Dean / Superadmin switch; Audit Trail class work; Course Catalog edit, retire and restore (migration 060); People & Accounts deactivate and reactivate.
+- **4.9** Dean / Superadmin regroup (spec ADM-001): the Dean view keeps Dashboard, Reports & Analytics and Classes; Superadmin mode gets an Overview plus People & Accounts, Faculty Invitations, Course Catalog, Academic Terms, Rooms and the only Audit Trail; Course Catalog and People & Accounts filters (People filters run on the server); Page patterns standards for page header, notice banner, empty and loading states.
 - **4.8** Invitation Details matches email history by invitation id (migration 059 stores it on each invitation email), falling back to the address for older emails.
 - **5.1** Faculty Dashboard: no repeated Quick Actions or duplicate class figures (tested).
 - **5.2** Grade Computation confirms mutations, not interactions: a Save that deletes saved scores asks first, the grade-sheet import asks once with a summary, and leaving the page through an in-app link (or closing the tab) warns only when unsaved scores or grade weights would be lost. Browser Back/Forward is not guarded (needs a data router).
