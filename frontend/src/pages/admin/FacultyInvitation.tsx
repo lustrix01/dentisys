@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Clock,
   Edit3,
+  Eye,
   Mail,
   RefreshCw,
   Search,
@@ -84,6 +85,10 @@ export const FacultyInvitation: React.FC = () => {
   const [editEmail, setEditEmail] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
+
+  // View modal state (read-only)
+  const [viewingInvitation, setViewingInvitation] = useState<FacultyInvitationRecord | null>(null);
+  const [viewSearch, setViewSearch] = useState('');
 
   // Revoke modal state
   const [revokingInvitation, setRevokingInvitation] = useState<FacultyInvitationRecord | null>(null);
@@ -301,6 +306,15 @@ export const FacultyInvitation: React.FC = () => {
 
   const invitationActions = (invitation: FacultyInvitationRecord) => (
   <div className="flex items-center justify-end gap-1.5">
+    <button
+      type="button"
+      onClick={() => { setViewSearch(''); setViewingInvitation(invitation); }}
+      className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-40 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/40"
+      aria-label={`View invitation for ${invitation.name}`}
+      title={`View invitation for ${invitation.name}`}
+    >
+      <Eye className="h-4 w-4" />
+    </button>
     {invitation.status !== 'Accepted' && invitation.status !== 'Active' && (
       <>
         <button
@@ -722,6 +736,55 @@ export const FacultyInvitation: React.FC = () => {
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* View Invitation Modal (read-only; email history is matched by recipient email, the actions carry no invitation id) */}
+      {viewingInvitation && (
+        <Modal isOpen={true} onClose={() => setViewingInvitation(null)} title="Invitation Details">
+          <div className="space-y-4">
+            <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
+              <div>
+                <dt className="font-bold uppercase tracking-wider text-[10px] text-slate-500 dark:text-slate-400">Name</dt>
+                <dd className="mt-1 font-bold text-slate-800 dark:text-slate-100">{viewingInvitation.name}</dd>
+              </div>
+              <div>
+                <dt className="font-bold uppercase tracking-wider text-[10px] text-slate-500 dark:text-slate-400">Status</dt>
+                <dd className="mt-1">{statusBadge(viewingInvitation.status)}</dd>
+              </div>
+              <div>
+                <dt className="font-bold uppercase tracking-wider text-[10px] text-slate-500 dark:text-slate-400">Institutional Email</dt>
+                <dd className="mt-1 break-all font-mono text-slate-600 dark:text-slate-300">{viewingInvitation.email}</dd>
+              </div>
+              <div>
+                <dt className="font-bold uppercase tracking-wider text-[10px] text-slate-500 dark:text-slate-400">Sent</dt>
+                <dd className="mt-1 text-slate-600 dark:text-slate-300">{viewingInvitation.invitedAt ? formatManilaWhen(viewingInvitation.invitedAt) : '—'}</dd>
+              </div>
+              <div>
+                <dt className="font-bold uppercase tracking-wider text-[10px] text-slate-500 dark:text-slate-400">Expires</dt>
+                <dd className="mt-1 text-slate-600 dark:text-slate-300">{viewingInvitation.expiresAt ? formatManilaWhen(viewingInvitation.expiresAt) : '—'}</dd>
+              </div>
+            </dl>
+
+            <div>
+              <h3 className="mb-3 text-xs font-bold text-slate-800 dark:text-slate-100">Email history</h3>
+              <EmailHistoryTable
+                actions={emailActions.filter(action => action.recipients.some(r => r.email.toLowerCase() === viewingInvitation.email.toLowerCase()))}
+                search={viewSearch}
+                onSearch={setViewSearch}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setViewingInvitation(null)}
+                className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
 

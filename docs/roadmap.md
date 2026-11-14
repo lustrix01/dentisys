@@ -2,7 +2,7 @@
 
 What's next, in order. Each item is one feature: agree the contract, implement, run the gates, then start the next. Details and status are in the [product backlog](PRODUCT_BACKLOG.md); behaviour is defined by [spec.md](../spec.md); what already works is in [features.md](features.md).
 
-1. **UI items, one demo at a time** — the Faculty invitation View action, Grade Computation confirmations, remedial record details, large attendance lists, Email Management filtering, the phone-width pass and session card states (backlog 4.3, 5.2, 5.4, 5.6, 5.7, 10.7, 10.8).
+1. **UI items, one demo at a time** — Grade Computation confirmations, remedial record details, large attendance lists, Email Management filtering, the phone-width pass and session card states, then the email-history follow-ups (backlog 5.2, 5.4, 5.6, 5.7, 10.7, 10.8, 4.8, 9.11).
 2. **Superadmin mode** — the Dean's Superadmin toggle for grade and attendance changes, the course catalog and account deactivation (backlog 4.5–4.7); needs a spec section and a contract first.
 
 The BU-format grade sheet export (backlog 9.4) waits until the Owner scopes it.

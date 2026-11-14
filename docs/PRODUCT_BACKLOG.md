@@ -23,9 +23,9 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 # 4. Dean
 
-## 4.3 Faculty invitation row actions
+## 4.8 Invitation email history across email corrections
 
-**Status: Partial.** No token material reaches the browser (tested). The row actions are Edit, Revoke and Reissue; there is no View action, so Reissue is the main non-destructive action. Add a View/Eye action as the primary row action (a visible change: demo first). Decided: a read-only View dialog (name, email, status, sent and expiry dates, and that invitation's email history), no token or link, as the primary row action.
+**Status: Not started (Owner-approved recommendation).** The Invitation Details dialog matches email history by the invitation's current email, so emails sent to an address before a correction do not show. Return the invitation id with each email action and match on it.
 
 ## 4.5–4.7 Superadmin mode
 
@@ -85,6 +85,10 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 **Status: Not decided.** Only 6 of 41 tables show their column headers in small capitals; the rest use normal text. Decide one look for column headers.
 
+## 9.11 Email history table on phones
+
+**Status: Not started (Owner-approved recommendation).** The shared Email history table (Faculty Email Management, Dean Faculty Invitations and its Invitation Details dialog) squeezes "Date Sent" onto several lines on phones. Give it stacked phone cards like the other lists below 768 px (spec UI-001).
+
 ---
 
 # 10. Ticket batch 1 — remaining items
@@ -111,6 +115,7 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **3.2** Authenticator confirmation for name changes.
 - **4.1** Dean My Activity: dropped; the Audit Trail role filter covers it.
 - **4.2** Dean Dashboard: server-backed metrics, no Quick Actions block (tested).
+- **4.3** Faculty invitation rows start with a read-only View action; the Invitation Details dialog shows name, email, status, sent and expiry dates and the invitation's email history, with no token or link.
 - **4.4** Dean Settings: no Course Component Ratios or Retention Standard setting (tested).
 - **5.3** Midterm Watchlist offers no remedial action; the server refuses remedial without a final grade (tested).
 - **5.5** Future worksheet dates: sessions can be scheduled or viewed, not recorded.
