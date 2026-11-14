@@ -87,6 +87,22 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 ---
 
+# 10. Ticket batch 1 — remaining items
+
+## 10.6 Partially readable grade-sheet fixture
+
+**Status: Not started.** The "partially readable grade-sheet workbook" case (found + zero counts) has no crafted official-layout fixture in the test suite; add one when touching this area. Never use real class lists or the Owner's workbook for fixtures.
+
+## 10.7 Phone-width layout pass
+
+**Status: Not started.** Student Profile, Face Registration and the measured retention-row overlap need their own phone-width pass.
+
+## 10.8 Session card states
+
+**Status: Not started (visual verification only).** The three-zone session card ("Sessions", "Start session", "Schedule session") is implemented. Verify the Scheduled and View-only pill variants with seeded states and review the desktop spacing.
+
+---
+
 # Done
 
 Full text and Owner decisions of these items: [backlog items closed before 2026-11-14](archive/backlog-done-2026-11.md).
