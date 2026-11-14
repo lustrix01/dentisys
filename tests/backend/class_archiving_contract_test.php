@@ -71,3 +71,10 @@ $check(substr_count($fn($faculty, 'faculty_grading_snapshot'), $visible) === 2 &
 $check(substr_count($fn($faculty, 'faculty_grading_save_configuration'), $visible) === 7, 'grading configuration save skips cancelled/mistake class assessments in all seven checks');
 $check(str_contains($fn($faculty, 'handle_faculty_email_send'), $visible), 'Email Management refuses Students whose only classes are cancelled/mistake');
 $check(substr_count($read('backend/controllers/AdminController.php'), "school_year IS NOT NULL AND (archive_reason IS NULL OR archive_reason = 'finished')") === 2, 'Dean school-year lists skip years with only hidden classes');
+
+// 9.1: the Faculty Dashboard counts the current school year like Classes & Rosters' Assigned tab (no Finished); past years keep Finished.
+$dash = $fn($faculty, 'handle_faculty_dashboard_kpis');
+$check(str_contains($dash, "cs.archive_reason = 'finished' AND UPPER(cs.school_year) IS DISTINCT FROM UPPER(:current_year)") && substr_count($dash, '{$classVisible}') === 2,
+    'dashboard student and class counts exclude Finished classes of the current school year only');
+$check(str_contains($dash, 'AND cs.archive_reason IS NULL') && !str_contains($dash, "AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')"),
+    'dashboard at-risk count follows the same classes');

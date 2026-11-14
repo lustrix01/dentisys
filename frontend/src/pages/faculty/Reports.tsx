@@ -46,21 +46,28 @@ import {
   getFacultyGradingConfigApi,
   getFacultyRetentionApi,
   getFacultyAttendanceWorksheetApi,
+  previewFacultyGradesApi,
+  isPeriodComputeResult,
+  ApiError,
+  type FacultyGradeComputeResult,
   type FacultyGradingConfiguration,
   type FacultyRetentionRecord,
   type FacultyAttendanceWorksheetRosterItem,
 } from '../../services/apiClient';
 import GradeValue from '../../components/GradeValue';
 import Tabs from '../../components/Tabs';
-import { downloadXlsx, type Cell as XlsxCell, type CellObject, type XlsxSheet } from '../../utils/xlsxDownload';
+import { downloadXlsx, type Cell as XlsxCell, type XlsxSheet } from '../../utils/xlsxDownload';
 import { showFeedback } from '../../components/FeedbackCenter';
-import { buildReportSheet, dayToDate, termLine } from '../../utils/reportWorkbook';
+import { assessmentMatrixCells, assessmentMatrixGroups, buildAssessmentScoresSheet, buildReportSheet, dayToDate, termLine } from '../../utils/reportWorkbook';
+import { savedGradeResult } from '../../utils/officialGradeSheetExport';
 
 type ReportsBundleSnapshot = {
   retention: FacultyRetentionRecord[];
   attendance: FacultyAttendanceWorksheetRosterItem[];
   analyticsAttendance: FacultyAttendanceWorksheetRosterItem[];
   revokedAttendanceSessions: string[];
+  /** The server's grade results by student id; null for a past class (its saved breakdowns are read instead). */
+  gradeResults: Record<string, FacultyGradeComputeResult> | null;
 };
 
 type ReportAnalyticsRow = { dataset: string; metric: string; value: number; unit: string };
@@ -704,10 +711,17 @@ export const Reports: React.FC = () => {
 
   async function collectReportsBundleSnapshot(): Promise<ReportsBundleSnapshot> {
     if (!selectedClass?.csId) throw new Error('Select a class before exporting the Grades & Assessments report.');
-    const [retentionResponse, attendanceSnapshot, analyticsAttendance] = await Promise.all([
+    const [retentionResponse, attendanceSnapshot, analyticsAttendance, gradeResults] = await Promise.all([
       getFacultyRetentionApi(),
       loadReportAttendance(Number(selectedClass.csId), attendanceDate, selectedAttendanceSessionId),
       loadReportAnalyticsAttendance(Number(selectedClass.csId), analyticsAssessmentDates),
+      // Same fallback as the Grade Computation export: the preview refuses past (409) and non-live (403) classes.
+      previewFacultyGradesApi(String(selectedClass.csId || selectedClass.id))
+        .then(response => Object.fromEntries((response.results ?? []).map(result => [String(result.studentId), result])))
+        .catch((error: unknown) => {
+          if (error instanceof ApiError && [403, 409].includes(error.status)) return null;
+          throw error;
+        }),
     ]);
     if (attendanceSnapshot.selectedSessionId && !selectedAttendanceSessionId) {
       setSelectedAttendanceSessionId(attendanceSnapshot.selectedSessionId);
@@ -717,6 +731,7 @@ export const Reports: React.FC = () => {
       attendance: attendanceSnapshot.records,
       analyticsAttendance: analyticsAttendance.records,
       revokedAttendanceSessions: analyticsAttendance.revokedSessions,
+      gradeResults,
     };
   }
 
@@ -754,9 +769,11 @@ export const Reports: React.FC = () => {
         && (!item.gradingPeriod || item.gradingPeriod === assessment.gradingPeriod));
       return {
         id: assessment.id,
-        period: assessment.gradingPeriod === 'Final' ? 'Finals' : 'Midterm',
+        period: assessment.gradingPeriod === 'Final' ? 'Finals' as const : 'Midterm' as const,
         component: category?.component ?? 'Course',
         category: category?.name ?? assessment.type,
+        categoryId: category && category.sourceKind !== 'attendance' && category.id != null ? Number(category.id) : null,
+        weight: category ? Number(category.weight) : null,
         title: assessment.title,
         maxScore: assessment.maxScore,
         transmutationEnabled: Boolean(assessment.transmutationEnabled),
@@ -765,6 +782,10 @@ export const Reports: React.FC = () => {
       };
     });
     const assessmentMatrixRows = classStudents.map(student => {
+      const subject = (student.enrolledSubjects || []).find(sub => sub.code === selectedClass.courseCode
+        && String(sub.classId ?? student.classId ?? classId) === classId);
+      const live = snapshot.gradeResults?.[student.id];
+      const periods = snapshot.gradeResults ? (live && isPeriodComputeResult(live) ? live.periods : undefined) : savedGradeResult(subject)?.periods;
       const scores = assessmentColumns.map(column => scoreByStudentAndAssessment.get(`${student.id}|${column.id}`) ?? null);
       const effectivePercentages = assessmentColumns.map((column, index) => {
         const linked = Boolean(column.attendanceSessionDate && column.attendanceSessionCode);
@@ -787,6 +808,7 @@ export const Reports: React.FC = () => {
         studentName: student.name,
         scores,
         effectivePercentages,
+        periods,
       };
     });
     const gradeRows = classStudents.map(student => {
@@ -862,59 +884,11 @@ export const Reports: React.FC = () => {
       columns,
       rows,
     });
-    const matrixHead = (value: string | number, extra: Partial<CellObject> = {}): XlsxCell => ({
-      value, fontWeight: 'bold', backgroundColor: '#E1BEE8', align: 'center', alignVertical: 'center', wrap: true, ...extra,
+    const assessmentSheet = buildAssessmentScoresSheet({
+      columns: assessmentColumns,
+      rows: assessmentMatrixRows,
+      titleLines: ['Republic of the Philippines', 'BICOL UNIVERSITY', 'COLLEGE OF DENTAL MEDICINE', 'GRADES & ASSESSMENT SCORES', classLabel, term, `Exported by ${by}`, ''],
     });
-    const matrixWidth = 2 + assessmentColumns.length * 2;
-    const matrixBlank = (): XlsxCell[] => Array.from({ length: matrixWidth }, () => null);
-    const matrixData: XlsxCell[][] = [
-      ...['Republic of the Philippines', 'BICOL UNIVERSITY', 'COLLEGE OF DENTAL MEDICINE', 'GRADES & ASSESSMENT SCORES', classLabel, term, `Exported by ${by}`, ''].map((value, index) => {
-        const row = matrixBlank();
-        row[0] = { value, columnSpan: matrixWidth, align: 'center', fontWeight: index === 1 || index === 2 || index === 3 ? 'bold' : undefined };
-        return row;
-      }),
-    ];
-    const periodHeader = matrixBlank();
-    periodHeader[0] = matrixHead('Student Number', { rowSpan: 5 });
-    periodHeader[1] = matrixHead('Student Name', { rowSpan: 5 });
-    const groupedColumns = (key: 'period' | 'component' | 'category', header: XlsxCell[]) => {
-      let start = 0;
-      while (start < assessmentColumns.length) {
-        let end = start + 1;
-        while (end < assessmentColumns.length && assessmentColumns[end][key] === assessmentColumns[start][key]
-          && (key !== 'category' || assessmentColumns[end].component === assessmentColumns[start].component)) end++;
-        const columnIndex = 2 + start * 2;
-        const label = key === 'category' ? `${assessmentColumns[start].component} · ${assessmentColumns[start].category}` : assessmentColumns[start][key];
-        header[columnIndex] = matrixHead(label, { columnSpan: (end - start) * 2 });
-        start = end;
-      }
-    };
-    groupedColumns('period', periodHeader);
-    const componentHeader = matrixBlank();
-    groupedColumns('component', componentHeader);
-    const categoryHeader = matrixBlank();
-    groupedColumns('category', categoryHeader);
-    const assessmentHeader = matrixBlank();
-    assessmentColumns.forEach((column, index) => { assessmentHeader[2 + index * 2] = matrixHead(`${column.title} (Max ${column.maxScore})`, { columnSpan: 2 }); });
-    const scoreHeader = matrixBlank();
-    assessmentColumns.forEach((_column, index) => {
-      scoreHeader[2 + index * 2] = matrixHead('Score');
-      scoreHeader[3 + index * 2] = matrixHead('%');
-    });
-    matrixData.push(periodHeader, componentHeader, categoryHeader, assessmentHeader, scoreHeader,
-      ...assessmentMatrixRows.map(row => [
-        { value: row.studentNumber }, { value: row.studentName, align: 'left' as const },
-        ...row.scores.flatMap((score, index) => {
-          const max = assessmentColumns[index].maxScore;
-          const effective = row.effectivePercentages[index];
-          return [score === null ? null : { value: score, format: '0.##' }, effective === null || max <= 0 ? null : { value: effective / 100, format: '0.00%' }];
-        }),
-      ]));
-    const assessmentSheet: XlsxSheet = {
-      sheet: 'Assessment Scores', data: matrixData,
-      columns: [{ width: 16 }, { width: 28 }, ...assessmentColumns.flatMap(() => [{ width: 12 }, { width: 10 }])],
-      stickyRowsCount: 13, stickyColumnsCount: 2, orientation: 'landscape',
-    };
     const sheets = [
       assessmentSheet,
       titleInput('Grade Summary', 'MIDTERM, FINALS & COURSE GRADE SUMMARY', [
@@ -1555,16 +1529,21 @@ export const Reports: React.FC = () => {
               <tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex} className={cellIndex < 2 ? 'l' : ''}>{cell ?? '—'}</td>)}</tr>)}</tbody>
             </table>
           );
-          const scoreGroups = (key: 'period' | 'component' | 'category') => {
-            const groups: Array<{ label: string; count: number }> = [];
-            bundle.assessmentColumns.forEach(column => {
-              const label = key === 'period' ? column.period : `${column.component} · ${column.category}`;
-              const previous = groups[groups.length - 1];
-              if (previous?.label === label) previous.count++;
-              else groups.push({ label, count: 1 });
-            });
-            return groups;
+          const matrixGroups = assessmentMatrixGroups(bundle.assessmentColumns);
+          // Columns per group: 3 per categorised assessment (Score, %, Transmuted) plus Average % and Weighted; 2 per uncategorised one.
+          const groupWidth = (group: typeof matrixGroups[number]) => group.indexes.length * (group.categoryId === null ? 2 : 3) + (group.categoryId === null ? 0 : 2);
+          const spanHeaders = (same: (x: typeof matrixGroups[number], y: typeof matrixGroups[number]) => boolean, label: (g: typeof matrixGroups[number]) => string) => {
+            const headers: React.ReactNode[] = [];
+            for (let start = 0; start < matrixGroups.length;) {
+              let end = start + 1, span = groupWidth(matrixGroups[start]);
+              while (end < matrixGroups.length && same(matrixGroups[start], matrixGroups[end])) span += groupWidth(matrixGroups[end++]);
+              headers.push(<th key={start} colSpan={span}>{label(matrixGroups[start])}</th>);
+              start = end;
+            }
+            return headers;
           };
+          const printPercent = (value: number | null) => (value === null ? '?' : `${value.toFixed(2)}%`);
+          const printNumber = (value: number | null) => (value === null ? '?' : value.toFixed(2));
           const analyticsGroups = [
             { title: 'Retention standing', key: 'Retention Watch Standings', color: '#15803d' },
             { title: 'Grade distribution', key: 'Grade Distribution', color: '#2563eb' },
@@ -1579,19 +1558,37 @@ export const Reports: React.FC = () => {
               <table className="assessment-matrix">
                 <thead>
                   <tr><th className="l" rowSpan={5}>Student Number</th><th className="l" rowSpan={5}>Student Name</th>
-                    {scoreGroups('period').map((group, index) => <th key={index} colSpan={group.count * 2}>{group.label}</th>)}</tr>
-                  <tr>{scoreGroups('component').map((group, index) => <th key={index} colSpan={group.count * 2}>{group.label}</th>)}</tr>
-                  <tr>{scoreGroups('category').map((group, index) => <th key={index} colSpan={group.count * 2}>{group.label}</th>)}</tr>
-                  <tr>{bundle.assessmentColumns.map(column => <th key={column.id} colSpan={2}>{column.title} (Max {column.maxScore})</th>)}</tr>
-                  <tr>{bundle.assessmentColumns.flatMap(column => [<th key={`${column.id}-score`}>Score</th>, <th key={`${column.id}-percent`}>%</th>])}</tr>
+                    {spanHeaders((x, y) => x.period === y.period, group => group.period)}</tr>
+                  <tr>{spanHeaders((x, y) => x.period === y.period && x.component === y.component, group => group.component)}</tr>
+                  <tr>{spanHeaders(() => false, group => `${group.component} · ${group.category}`)}</tr>
+                  <tr>{matrixGroups.flatMap((group, groupIndex) => [
+                    ...group.indexes.map(i => <th key={bundle.assessmentColumns[i].id} colSpan={group.categoryId === null ? 2 : 3}>{bundle.assessmentColumns[i].title} (Max {bundle.assessmentColumns[i].maxScore})</th>),
+                    ...(group.categoryId === null ? [] : [<th key={`${groupIndex}-avg`} rowSpan={2}>Average %</th>, <th key={`${groupIndex}-wt`} rowSpan={2}>Weighted ({Number(group.weight ?? 0)}%)</th>]),
+                  ])}</tr>
+                  <tr>{matrixGroups.flatMap(group => group.indexes.flatMap(i => [
+                    <th key={`${i}-score`}>Score</th>, <th key={`${i}-percent`}>%</th>,
+                    ...(group.categoryId === null ? [] : [<th key={`${i}-transmuted`}>Transmuted</th>]),
+                  ]))}</tr>
                 </thead>
                 <tbody>{bundle.assessmentMatrixRows.map((row, rowIndex) => <tr key={rowIndex}>
                   <td className="id">{row.studentNumber}</td><td className="nm">{row.studentName}</td>
-                  {row.scores.flatMap((score, index) => {
-                    const max = bundle.assessmentColumns[index].maxScore;
-                    const effective = row.effectivePercentages[index];
-                    return [<td key={`${index}-score`}>{score === null ? '?' : score}</td>,
-                      <td key={`${index}-percent`}>{effective === null || max <= 0 ? '?' : `${effective.toFixed(2)}%`}</td>];
+                  {matrixGroups.flatMap((group, groupIndex) => {
+                    const server = assessmentMatrixCells({ columns: bundle.assessmentColumns, row, group });
+                    return [
+                      ...group.indexes.flatMap(i => {
+                        const score = row.scores[i];
+                        if (group.categoryId === null) {
+                          const effective = row.effectivePercentages[i];
+                          return [<td key={`${i}-score`}>{score === null ? '?' : score}</td>,
+                            <td key={`${i}-percent`}>{effective === null || bundle.assessmentColumns[i].maxScore <= 0 ? '?' : printPercent(effective)}</td>];
+                        }
+                        const transmuted = server.transmuted(i);
+                        return [<td key={`${i}-score`}>{score === null ? '?' : score}</td>,
+                          <td key={`${i}-percent`}>{printPercent(server.percent(i))}</td>,
+                          <td key={`${i}-transmuted`}>{typeof transmuted === 'string' ? transmuted : printPercent(transmuted)}</td>];
+                      }),
+                      ...(group.categoryId === null ? [] : [<td key={`${groupIndex}-avg`}>{printNumber(server.average)}</td>, <td key={`${groupIndex}-wt`}>{printNumber(server.weighted)}</td>]),
+                    ];
                   })}
                 </tr>)}</tbody>
               </table>

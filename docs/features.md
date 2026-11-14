@@ -34,11 +34,14 @@ What DentiSys does today. Behaviour is defined by [spec.md](../spec.md); open an
 - Faculty edit grading categories and weights; weights must total exactly 100% and grades stay computed — GRD-002, GRD-003 — implemented, tests passing.
 - Grades follow the official BUCDM grade sheet: plain category averages, whole-percent rounding (.5 up), the official conversion table with below 75% = 5.0, and a hover showing the steps (e.g. "83.77% → 84% → 2.5"); server and screen produce the same value — UI-003 — implemented, tests passing.
 - Assessment categories say Lecture or Laboratory; a new max score starts empty and asks for confirmation above 500 points; a cell shows "Incomplete" with a note naming categories that have no assessments; students without a final grade show "No Grade Yet" in Dean reports, exports and the Dashboard — GRD-002 — implemented in code.
+- A new assessment starts with transmutation on, except in a category named "Attendance", where it starts off; Faculty can switch it on — GRD-001 — implemented, tests passing.
 - The assessment dialog shows inline field errors for a blank title or non-positive maximum score using the existing Create Class field-error pattern, and keeps Confirm enabled — UI-002/GRD-002 — implemented, tests passing.
 - Students see grades only; exports are .xlsx in the official layouts — GRD-002 — implemented in code.
 - Score entry (single assessment and full matrix) saves when Faculty leave a cell while Auto-save is on, keeps a visible Saving / Saved / Failed – Retry bar, asks before clearing a stored score, and saves the matrix all-or-nothing; the matrix pins student ID and name columns — UI-002 — implemented, tests passing.
 - Grade ledgers, retention lists, attendance registers and class lists export as .xlsx or as a printable PDF of the open section — GRD-002 — implemented, tests passing for the exports and print content; the open-section-only PDF was checked manually.
+- Faculty Reports → Grades & Assessments: the Assessment Scores sheet and its PDF print follow Full Matrix View with Show computation on. Each categorised assessment has Score, % (raw) and Transmuted (the value used in the grade, or "Absent (0)"); each category ends with Average % and Weighted, all from the server's results — GRD-002 — implemented, tests passing.
 - Midterm Watchlist shows server risk once a student's midterm is complete; the screen has no lock or manual unlock — UI-003 — implemented, tests passing.
+- The Faculty Dashboard counts the current school year's classes, students and At Risk (midterm) students from classes with no archive reason, like the Assigned tab of Classes & Rosters; a Finished class counts only in a past school-year view — CLS-003 — implemented, tests passing.
 - Retention Monitoring uses the Faculty's real classes, enrollments and scores, the "Midterm Grade" wording and the single At Risk flag (no risk levels) — UI-003, ACA-001 — implemented, tests passing.
 - Remedial is a row action after Finals with Student, Course and Section locked; no separate "Schedule a Remedial" action — UI-003 — implemented, tests passing.
 - Two remedial attempts, each passing at 75% or more; the second only after a failed first; the original course grade never changes — UI-003 — implemented, tests passing.
@@ -55,6 +58,7 @@ What DentiSys does today. Behaviour is defined by [spec.md](../spec.md); open an
 - Every Secretary or Faculty override records actor, Student, class, session, old and new status, reason and time — ATT-006 — implemented, tests passing.
 - Faculty Class Attendance Activity, a tab in Attendance Monitoring, shows their own and their Secretary's attendance changes with that full context — ATT-006 — implemented, tests passing.
 - Dean Attendance Reports and the all-classes attendance export count every record, with no cap — ATT-001 — implemented in code.
+- A session whose class end equals its opening time is refused with "Class end must be after the opening time."; the 12-hour limit stays — ATT-001 — implemented, tests passing.
 
 ## Audit and notifications
 

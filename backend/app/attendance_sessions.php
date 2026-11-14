@@ -368,7 +368,7 @@ function attendance_session_class_end_time_from_request(
         throw new ValidationException([['field' => 'classEndTime', 'message' => 'Class end time is required.']]);
     }
     if ($classEnd === $opening) {
-        throw new ValidationException([['field' => 'classEndTime', 'message' => 'The session must last under 24 hours.']]);
+        throw new ValidationException([['field' => 'classEndTime', 'message' => 'Class end must be after the opening time.']]);
     }
     if (attendance_session_offset($classEnd, $opening) > 12 * 3600) {
         throw new ValidationException([['field' => 'classEndTime', 'message' => 'A session can last at most 12 hours.']]);

@@ -120,3 +120,7 @@ export const saveStatusBadge = (status: string, unsaved: boolean): { kind: 'savi
     : status === 'error' ? { kind: 'error', label: 'Save failed' }
     : unsaved ? { kind: 'unsaved', label: 'Unsaved changes' }
     : { kind: 'saved', label: 'All changes saved' };
+
+/** GRD-001 T1: a new assessment starts with transmutation on, except in a category named "Attendance". */
+export const defaultTransmutationEnabled = (categoryName: string | null | undefined): boolean =>
+  String(categoryName ?? '').trim().toLowerCase() !== 'attendance';

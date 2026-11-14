@@ -38,3 +38,13 @@ schedule_assert(class_meetings_display([], 'Lecture', 'Room 101 (Mon 08:00 AM - 
 schedule_assert(class_meetings_display([], 'Lecture', 'Legacy Room (Mon 08:00 AM - 10:00 AM); Unfinished Room (Tue 03:00 PM -') === 'Legacy Room', 'Cleared mixed legacy schedule display contains rooms without removed meeting times');
 $session = ['status' => 'scheduled', 'session_date' => '2026-10-03', 'opening_time' => '08:00', 'present_cutoff_time' => '09:00', 'late_cutoff_time' => '10:00'];
 schedule_assert(attendance_session_timing_decision($session, $now, $config)['code'] === 'attendance_not_open', 'Queued sessions never accept attendance before opening');
+
+// 11.5: a class end equal to the opening time is its own error, not a "24 hours" rule; the 12-hour cap stays.
+foreach (['08:00' => 'Class end must be after the opening time.', '21:00' => 'A session can last at most 12 hours.'] as $end => $expected) {
+    try {
+        attendance_session_class_end_time_from_request(['classEndTime' => $end], '08:00:00', '10:00:00', '2026-10-03', $config);
+        schedule_assert(false, "Class end {$end} must fail");
+    } catch (ValidationException $e) {
+        schedule_assert($e->getErrors() === [['field' => 'classEndTime', 'message' => $expected]], "Class end {$end} on a 08:00 opening says: {$expected}");
+    }
+}

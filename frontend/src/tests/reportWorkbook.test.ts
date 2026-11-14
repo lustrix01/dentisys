@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildClassList, buildReportSheet, dayToDate, exportedLine, HEADER_ROW_INDEX } from '../utils/reportWorkbook.ts';
+import { buildAssessmentScoresSheet, buildClassList, buildReportSheet, dayToDate, exportedLine, HEADER_ROW_INDEX } from '../utils/reportWorkbook.ts';
 
 const cellValue = (c: unknown) => (c && typeof c === 'object' ? (c as { value?: unknown }).value : c);
 const rowValues = (row: unknown[]) => row.map(cellValue);
@@ -63,4 +63,30 @@ test('class list: header block, columns, name cell, total line, program and file
   assert.deepEqual(rowValues(d[head + 2]), [2, '2023-0102', 'DMD', 'Zamora, Ben L.\nNo University Email', null, 3, null]);
   assert.equal(cellValue(d[d.length - 1][0]), 'Total Number of Students: 2');
   assert.equal(sheet.orientation, 'landscape');
+});
+
+test('assessment scores sheet: Show computation columns carry the server values', () => {
+  const col = (id: string, title: string, categoryId: number | null, category: string) =>
+    ({ id, period: 'Midterm' as const, component: 'Lecture', category, categoryId, weight: categoryId === null ? null : 40, title, maxScore: 20 });
+  const step = (assessmentId: string, rawPercentage: number, effectivePercentage: number | null, transmuted = true, attendanceStatus: string | null = null) =>
+    ({ assessmentId, categoryId: 1, rawPercentage, transmuted, effectivePercentage, attendanceStatus });
+  const midterm = {
+    assessmentSteps: [step('a1', 80, 90), step('a2', 50, 0, true, 'absent')],
+    categories: [{ categoryId: 1, earnedPoints: 45, contribution: 18 }],
+  };
+  const sheet = buildAssessmentScoresSheet({
+    titleLines: ['t'],
+    columns: [col('a1', 'Quiz 1', 1, 'Quiz'), col('a2', 'Quiz 2', 1, 'Quiz'), col('a3', 'Seatwork', null, 'Other')],
+    rows: [
+      { studentNumber: '1', studentName: 'Ana', scores: [16, 10, 15], effectivePercentages: [null, null, 75], periods: { midterm } as any },
+      { studentNumber: '2', studentName: 'Ben', scores: [null, null, null], effectivePercentages: [null, null, null] },
+    ],
+  });
+  const d = sheet.data;
+  // title row + 5 header rows; Score / % / Transmuted per categorised assessment, then Average % and Weighted; scores only plus % outside a category
+  assert.deepEqual(rowValues(d[4]).slice(2), ['Quiz 1 (Max 20)', null, null, 'Quiz 2 (Max 20)', null, null, 'Average %', 'Weighted (40%)', 'Seatwork (Max 20)', null]);
+  assert.deepEqual(rowValues(d[5]).slice(2), ['Score', '%', 'Transmuted', 'Score', '%', 'Transmuted', null, null, 'Score', '%']);
+  assert.equal(sheet.columns!.length, d[5].length);
+  assert.deepEqual(rowValues(d[6]).slice(2), [16, 0.8, 0.9, 10, 0.5, 'Absent (0)', 45, 18, 15, 0.75]);
+  assert.deepEqual(rowValues(d[7]).slice(2), Array(10).fill(null));
 });

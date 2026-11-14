@@ -44,6 +44,7 @@ export const checkTimes = (times: TimeSet): string | null => {
   if (!complete(times)) return 'Fill in all four times.';
   if (rel(times, 'presentCutoff') <= 0) return 'Present cutoff must be after the opening time.';
   if (rel(times, 'lateCutoff') <= rel(times, 'presentCutoff')) return 'Late cutoff must be after the present cutoff.';
+  if (rel(times, 'classEndTime') === 0) return 'Class end must be after the opening time.';
   if (rel(times, 'classEndTime') < rel(times, 'lateCutoff')) return 'Class end time must be at or after the late cutoff.';
   if (rel(times, 'classEndTime') > MAX_SESSION_MINUTES) return 'A session can last at most 12 hours.';
   return null;

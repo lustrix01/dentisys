@@ -1,5 +1,6 @@
 // Tidy-table and class-list workbooks (contract docs/contracts/official-exports.md, X15-X19).
-import type { Cell, Row, XlsxSheet } from './xlsxDownload';
+import type { Cell, CellObject, Row, XlsxSheet } from './xlsxDownload';
+import type { FacultyPeriodBreakdown } from '../services/apiClient';
 
 const UNIVERSITY = ['Republic of the Philippines', 'BICOL UNIVERSITY', 'COLLEGE OF DENTAL MEDICINE'];
 const LILAC = '#E1BEE8';
@@ -161,5 +162,147 @@ export function buildClassList(input: ClassListInput): { fileName: string; sheet
   return {
     fileName,
     sheet: { data, sheet: 'Class List', columns: [6, 16, 10, 42, 10, 11, 16].map(w => ({ width: w })), orientation: 'landscape' },
+  };
+}
+
+export interface AssessmentMatrixColumn {
+  id: string;
+  period: 'Midterm' | 'Finals';
+  component: string;
+  category: string;
+  /** Grade Weights category id; null for an assessment outside every category (scores only, as in the matrix). */
+  categoryId: number | null;
+  weight: number | null;
+  title: string;
+  maxScore: number;
+}
+export interface AssessmentMatrixRow {
+  studentNumber: string;
+  studentName: string;
+  scores: Array<number | null>;
+  /** Percentage shown for an assessment outside every category. */
+  effectivePercentages: Array<number | null>;
+  /** The server's period breakdowns for the student (live preview or the breakdown saved with the grade). */
+  periods?: { midterm?: FacultyPeriodBreakdown; final?: FacultyPeriodBreakdown };
+}
+
+/** Column groups of the Assessment Scores matrix: one per run of assessments in the same period, component and category. */
+export function assessmentMatrixGroups(columns: AssessmentMatrixColumn[]) {
+  type Group = { period: string; component: string; category: string; categoryId: number | null; weight: number | null; indexes: number[] };
+  const groups: Group[] = [];
+  columns.forEach((c, index) => {
+    const last = groups[groups.length - 1];
+    if (last && last.period === c.period && last.component === c.component && last.category === c.category && last.categoryId === c.categoryId) last.indexes.push(index);
+    else groups.push({ period: c.period, component: c.component, category: c.category, categoryId: c.categoryId, weight: c.weight, indexes: [index] });
+  });
+  return groups;
+}
+type AssessmentGroup = ReturnType<typeof assessmentMatrixGroups>[number];
+
+/** The server's values for one student's cells in a group: each assessment's % and Transmuted, then the category's Average % and Weighted. */
+export function assessmentMatrixCells(a: { columns: AssessmentMatrixColumn[]; row: AssessmentMatrixRow; group: AssessmentGroup }) {
+  const { columns, row, group: g } = a;
+  const breakdown = row.periods?.[g.period === 'Finals' ? 'final' : 'midterm'];
+  const stepFor = (i: number) => breakdown?.assessmentSteps?.find(s => String(s.assessmentId) === String(columns[i].id));
+  const category = g.categoryId === null ? undefined : breakdown?.categories?.find(c => c.categoryId === g.categoryId);
+  return {
+    percent: (i: number) => stepFor(i)?.rawPercentage ?? null,
+    /** A number (effective %), the text "Absent (0)", or null when the server has no value. */
+    transmuted: (i: number): number | string | null => {
+      const step = stepFor(i);
+      if (typeof step?.rawPercentage !== 'number') return null;
+      if (step.transmuted && step.attendanceStatus === 'absent') return 'Absent (0)';
+      return step.effectivePercentage ?? null;
+    },
+    average: category?.earnedPoints ?? null,
+    weighted: category?.contribution ?? null,
+  };
+}
+
+/**
+ * "Assessment Scores" sheet of the Grades & Assessments report: the Full Matrix View with "Show computation" on.
+ * Each categorised assessment has Score, %, Transmuted; each category ends with Average % and Weighted.
+ * Every computed cell is the server's value; nothing is recomputed here.
+ */
+export function buildAssessmentScoresSheet(a: { columns: AssessmentMatrixColumn[]; rows: AssessmentMatrixRow[]; titleLines: string[] }): XlsxSheet {
+  const groups = assessmentMatrixGroups(a.columns);
+  const perAssessment = (g: AssessmentGroup) => (g.categoryId === null ? 2 : 3);
+  const width = (g: AssessmentGroup) => g.indexes.length * perAssessment(g) + (g.categoryId === null ? 0 : 2);
+  const total = 2 + groups.reduce((sum, g) => sum + width(g), 0);
+  const head = (value: string | number, extra: Partial<CellObject> = {}): CellObject =>
+    ({ value, fontWeight: 'bold', backgroundColor: LILAC, align: 'center', alignVertical: 'center', wrap: true, ...extra });
+  const blank = (): Cell[] => Array.from({ length: total }, () => null);
+
+  const rows: Cell[][] = a.titleLines.map((value, index) => {
+    const row = blank();
+    row[0] = { value, columnSpan: total, align: 'center', fontWeight: index >= 1 && index <= 3 ? 'bold' : undefined };
+    return row;
+  });
+  const [periodRow, componentRow, categoryRow, assessmentRow, subRow] = [blank(), blank(), blank(), blank(), blank()];
+  periodRow[0] = head('Student Number', { rowSpan: 5 });
+  periodRow[1] = head('Student Name', { rowSpan: 5 });
+  const spans = (row: Cell[], same: (x: AssessmentGroup, y: AssessmentGroup) => boolean, label: (g: AssessmentGroup) => string) => {
+    let start = 0, offset = 2;
+    while (start < groups.length) {
+      let end = start + 1, span = width(groups[start]);
+      while (end < groups.length && same(groups[start], groups[end])) span += width(groups[end++]);
+      row[offset] = head(label(groups[start]), { columnSpan: span });
+      offset += span;
+      start = end;
+    }
+  };
+  spans(periodRow, (x, y) => x.period === y.period, g => g.period);
+  spans(componentRow, (x, y) => x.period === y.period && x.component === y.component, g => g.component);
+  spans(categoryRow, () => false, g => `${g.component} · ${g.category}`);
+  let at = 2;
+  for (const g of groups) {
+    const per = perAssessment(g);
+    for (const i of g.indexes) {
+      const c = a.columns[i];
+      assessmentRow[at] = head(`${c.title} (Max ${c.maxScore})`, { columnSpan: per });
+      subRow[at] = head('Score');
+      subRow[at + 1] = head('%');
+      if (per === 3) subRow[at + 2] = head('Transmuted');
+      at += per;
+    }
+    if (g.categoryId !== null) {
+      assessmentRow[at] = head('Average %', { rowSpan: 2 });
+      assessmentRow[at + 1] = head(`Weighted (${Number(g.weight ?? 0)}%)`, { rowSpan: 2 });
+      at += 2;
+    }
+  }
+
+  const pct = (value: number | null | undefined): Cell => (typeof value === 'number' && Number.isFinite(value) ? { value: value / 100, format: '0.00%' } : null);
+  const num = (value: number | null | undefined): Cell => (typeof value === 'number' && Number.isFinite(value) ? { value, format: '0.00' } : null);
+  const body = a.rows.map(row => {
+    const cells: Cell[] = [{ value: row.studentNumber }, { value: row.studentName, align: 'left' as const }];
+    for (const g of groups) {
+      const server = assessmentMatrixCells({ columns: a.columns, row, group: g });
+      for (const i of g.indexes) {
+        const score = row.scores[i];
+        cells.push(score === null ? null : { value: score, format: '0.##' });
+        if (g.categoryId === null) {
+          cells.push(pct(row.effectivePercentages[i]));
+          continue;
+        }
+        cells.push(pct(server.percent(i)));
+        const transmuted = server.transmuted(i);
+        cells.push(typeof transmuted === 'string' ? { value: transmuted, align: 'center' as const } : pct(transmuted));
+      }
+      if (g.categoryId !== null) cells.push(num(server.average), num(server.weighted));
+    }
+    return cells;
+  });
+
+  return {
+    sheet: 'Assessment Scores',
+    data: [...rows, periodRow, componentRow, categoryRow, assessmentRow, subRow, ...body],
+    columns: [{ width: 16 }, { width: 28 }, ...groups.flatMap(g => [
+      ...g.indexes.flatMap(() => (g.categoryId === null ? [{ width: 12 }, { width: 10 }] : [{ width: 12 }, { width: 10 }, { width: 12 }])),
+      ...(g.categoryId === null ? [] : [{ width: 11 }, { width: 13 }]),
+    ])],
+    stickyRowsCount: a.titleLines.length + 5,
+    stickyColumnsCount: 2,
+    orientation: 'landscape',
   };
 }

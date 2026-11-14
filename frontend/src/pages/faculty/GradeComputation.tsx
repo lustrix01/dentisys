@@ -84,7 +84,7 @@ import {
   extractPeriodEvaluation,
   isPeriodComputeResult
 } from '../../utils/periodGradingHelper';
-import { formatGrade, percentageToGWAExact, matchesActivityFilters, saveStatusBadge } from '../../utils/gradeHelper';
+import { formatGrade, percentageToGWAExact, matchesActivityFilters, saveStatusBadge, defaultTransmutationEnabled } from '../../utils/gradeHelper';
 import { exportGradeWorkbook } from '../../utils/gradeSheetExportFlow';
 import { GradeSheetImportPanel } from '../../components/GradeSheetImportPanel';
 import type { GradeSheetImportPlan } from '../../utils/gradeSheetImport';
@@ -5792,6 +5792,7 @@ export const GradeComputation: React.FC = () => {
                         setAssGradingCategoryId('');
                         setAssType(selectedVal);
                       }
+                      if (!editingAssessment) setAssTransmutationEnabled(defaultTransmutationEnabled(found?.name ?? selectedVal));
                       setModalCategoryWarning(false);
                     }}
                     required

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { effectiveAssessmentPercentage } from '../utils/gradeHelper.ts';
+import { defaultTransmutationEnabled, effectiveAssessmentPercentage } from '../utils/gradeHelper.ts';
 
 test('transmutation uses fixed bounds and ignores legacy custom bounds', () => {
   const legacyAssessment = {
@@ -30,8 +30,16 @@ test('Reports bundle and print output use effective percentages', async () => {
   assert.match(source, /effectivePercentages/);
   assert.match(source, /revokedAttendanceSessions/);
   assert.match(source, /revoked \? 'unlinked'/);
-  assert.match(source, /value: effective \/ 100/);
-  assert.match(source, /\$\{effective\.toFixed\(2\)\}%/);
+  // Categorised assessments: the effective (transmuted) value is the Transmuted column, in the workbook and in print.
+  const workbook = fs.readFileSync(new URL('../utils/reportWorkbook.ts', import.meta.url), 'utf8');
+  assert.match(workbook, /head\('Transmuted'\)/);
+  assert.match(workbook, /transmuted: \(i: number\)[\s\S]*step\.effectivePercentage/);
+  assert.match(workbook, /\{ value: value \/ 100, format: '0\.00%' \}/);
+  assert.match(source, /Transmuted<\/th>/);
+  assert.match(source, /server\.transmuted\(i\)/);
+  assert.match(source, /printPercent\(transmuted\)/);
+  // Outside a category there is no Transmuted column: the effective percentage stays in %.
+  assert.match(source, /printPercent\(effective\)/);
   assert.doesNotMatch(source, /score \/ max, format: '0\.00%'/);
 });
 
@@ -44,4 +52,15 @@ test('Admin and Faculty no longer edit legacy transmutation bounds', async () =>
   assert.doesNotMatch(faculty, /Minimum Percentage|Maximum Percentage|transmutationMinimumPercentage\s*:/);
   assert.doesNotMatch(admin, /minimumPercentage|maximumPercentage/);
   assert.match(api, /key !== 'transmutationMinimumPercentage' && key !== 'transmutationMaximumPercentage'/);
+});
+
+test('a new assessment starts with transmutation on, except in the Attendance category', async () => {
+  assert.equal(defaultTransmutationEnabled('Attendance'), false);
+  assert.equal(defaultTransmutationEnabled('  attendance '), false);
+  assert.equal(defaultTransmutationEnabled('Quiz'), true);
+  assert.equal(defaultTransmutationEnabled('Attendance Bonus'), true);
+  assert.equal(defaultTransmutationEnabled(null), true);
+  const fs = await import('node:fs');
+  const page = fs.readFileSync(new URL('../pages/faculty/GradeComputation.tsx', import.meta.url), 'utf8');
+  assert.match(page, /if \(!editingAssessment\) setAssTransmutationEnabled\(defaultTransmutationEnabled\(/);
 });

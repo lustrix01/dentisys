@@ -41,7 +41,7 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 ## 5.1 Faculty Dashboard
 
-**Status: Partial.** Server-backed; closes with 9.1.
+**Status: Partial.** Server-backed, and its class count matches Classes & Rosters (9.1). No test shows that the Quick Actions and duplicate figures below are gone.
 
 Remove Quick Actions that repeat the sidebar and duplicate Assigned/Total Classes figures; keep warnings, operational status and at-a-glance information.
 
@@ -73,17 +73,9 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 **Status: Partial.** Activation, reset and login have validation, password visibility toggles and requirements that mirror the backend policy. The remaining data-entry fields have not been checked one by one.
 
-## 8.2 Audit event for recovery-code regeneration
-
-**Status: Decided; not built.** Regenerating recovery codes writes an audit event "Regenerated recovery codes" (no codes stored), like the other MFA events.
-
 ---
 
 # 9. Known issues
-
-## 9.1 Faculty class counts
-
-**Status: Decided; not built.** The Dashboard counts current-year Finished-archived classes, which Classes & Rosters moves to its Archived tab. Decided: for the current school year the Dashboard counts only classes still running (no archive reason), and its student and at-risk counts follow the same classes; past-year views are unchanged.
 
 ## 9.4 Official grade sheet export in the BU format
 
@@ -100,10 +92,6 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 - **Teacher role:** "Faculty" ("Course Instructor" on the About page and "Instructor" on Student class cards change).
 - Not decided: only 6 of 41 tables show their column headers in small capitals; the rest use normal text.
 
-## 9.9 Full Matrix View export (Excel and PDF)
-
-**Status: Decided; Excel built, not committed.** The Reports Assessment Scores sheet and its PDF print match Full Matrix View with Show computation on: per assessment Score, % (raw) and Transmuted (the value used in the grade); per category Average % and Weighted.
-
 # 10. Ticket batch 1 — remaining items
 
 ## 10.6 Import wording and fixture
@@ -117,18 +105,6 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 ## 10.8 Session card states
 
 **Status: Not started (visual verification only).** The three-zone session card ("Sessions", "Start session", "Schedule session") is implemented. Verify the Scheduled and View-only pill variants with seeded states and review the desktop spacing.
-
-## 10.10 Attendance category transmutation default
-
-**Status: Decided; not built.** A new assessment in a category named Attendance starts with transmutation off; Faculty may switch it on. Saved automatic (attendance-record) Attendance categories keep working.
-
----
-
-# 11. Configuration and code defects found by the docs audit
-
-**Status: Decided; not built.** Found while syncing the docs to the code (record: [docs sync changes](archive/docs-sync-changes-2026-11.md)).
-
-- **11.5** Decided: a session whose class end equals its opening time is rejected by its own rule, "Class end must be after the opening time.", replacing the "under 24 hours" check in `backend/app/attendance_sessions.php`.
 
 ---
 
@@ -148,15 +124,18 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **5.11** Client requests: cost-recovery remedials implemented; the remove-student error was not reproduced.
 - **7.1** Secretary Dashboard: no Quick Actions; status, alerts and pending work remain (tested).
 - **7.2** Manual Override filtering: date, then session, then records; revoked sessions view-only.
-- **8.2 (part)** Recovery-code regeneration and turning 2FA off are limited to 10 attempts per 5 minutes per user.
+- **8.2** 2FA settings: recovery-code regeneration and turning 2FA off are limited to 10 attempts per 5 minutes per user; regeneration is audited ("Regenerated recovery codes.").
+- **9.1** Faculty Dashboard counts only classes still running in the current school year, like the Classes & Rosters Assigned tab.
 - **9.2** Grade Computation tab strip on phones: no horizontal scrolling at 320–390 px; the shared section tabs wrap with short names.
 - **9.3** Main bundle size (2.3 MB, 565 kB gzipped): the ineffective dynamic import of `apiClient` is fixed; the size is left as is by the Owner; reopen if first load on phones feels slow.
 - **9.6** November 2026 polish-audit UI follow-ups.
 - **9.8** Shared tab bar standard (white card bar and grey list switch).
-- **9.9 (part)** Full Matrix View loads all scores in one request per class; Show computation at every width.
+- **9.9** Full Matrix View loads all scores in one request per class; Show computation at every width; the Reports Assessment Scores sheet and PDF print show Score, %, Transmuted, Average % and Weighted.
 - **10.1** T1 transmutation: fixed formula, optional per assessment, new assessments start with it on.
 - **10.2** T4 Full Matrix View unsaved scores kept in the tab and offered back after a forced sign-out.
 - **10.4** T8 + T11 grading clarification: course-level remedial, two attempts at 75%, cost recovery.
 - **10.5** GoogleLinkCard confirm-password field has the standard show/hide control and a screen-reader label.
 - **10.9** T9 session restored after closing the browser: intended behaviour.
+- **10.10** A new assessment in a category named Attendance starts with transmutation off.
 - **11.1–11.4** Docs-audit defects: development show-link flags forwarded, single-server start scripts check every required biometric key, timezone/CA/biometric timeouts settable on single-server and VPS, unused watchlist-unlock route removed.
+- **11.5** A session whose class end equals its opening time is rejected: "Class end must be after the opening time."

@@ -191,6 +191,8 @@ function handle_faculty_dashboard_kpis(): void
         $schoolYear = academic_resolve_school_year_filter($pdo, $_GET['schoolYear'] ?? null);
         $yearFilter = $schoolYear === null ? '' : 'AND UPPER(cs.school_year) = UPPER(:school_year)';
         $yearParams = $schoolYear === null ? [] : [':school_year' => $schoolYear];
+        // Current school year: only classes with no archive reason, as on Classes & Rosters' Assigned tab. Past years keep Finished classes.
+        $classVisible = "(cs.archive_reason IS NULL OR (cs.archive_reason = 'finished' AND UPPER(cs.school_year) IS DISTINCT FROM UPPER(:current_year)))";
         $yearsStmt = $pdo->prepare(
             "SELECT DISTINCT school_year FROM class_sections WHERE instructor_user_id = ? AND school_year IS NOT NULL AND (archive_reason IS NULL OR archive_reason = 'finished')"
         );
@@ -210,12 +212,12 @@ function handle_faculty_dashboard_kpis(): void
             JOIN class_sections cs ON e.cs_id = cs.cs_id
             LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
             WHERE cs.instructor_user_id = :faculty_id
-              AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
+              AND {$classVisible}
               AND LOWER(e.status) = 'active'
               {$yearFilter}
             GROUP BY s.student_id
         ");
-        $studentStmt->execute([':faculty_id' => $authCtx['user_id']] + $yearParams);
+        $studentStmt->execute([':faculty_id' => $authCtx['user_id'], ':current_year' => (string) $currentSchoolYear] + $yearParams);
         $students = $studentStmt ? $studentStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
         $classStmt = $pdo->prepare("
@@ -234,12 +236,12 @@ function handle_faculty_dashboard_kpis(): void
                 AND NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = ar.attendance_session_id AND rs.status = 'revoked')
             WHERE cs.instructor_user_id = :faculty_id
               AND (LOWER(cs.status) = 'active' OR cs.status IS NULL)
-              AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
+              AND {$classVisible}
               {$yearFilter}
             GROUP BY cs.cs_id, cs.cs_name, c.course_code, c.name
             ORDER BY cs.cs_id
         ");
-        $classStmt->execute([':faculty_id' => $authCtx['user_id']] + $yearParams);
+        $classStmt->execute([':faculty_id' => $authCtx['user_id'], ':current_year' => (string) $currentSchoolYear] + $yearParams);
         $classesList = $classStmt ? $classStmt->fetchAll(PDO::FETCH_ASSOC) : [];
         $activeClassesCount = count($classesList);
 
@@ -255,7 +257,7 @@ function handle_faculty_dashboard_kpis(): void
             JOIN class_sections cs ON cs.cs_id = e.cs_id
             LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
             WHERE cs.instructor_user_id = :faculty_id AND LOWER(e.status) = 'active'
-              AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
+              AND cs.archive_reason IS NULL
               AND UPPER(cs.school_year) = UPPER(:current_year) {$yearFilter}
         ");
         $midtermStmt->execute([':faculty_id' => $authCtx['user_id'], ':current_year' => (string) $currentSchoolYear] + $yearParams);
