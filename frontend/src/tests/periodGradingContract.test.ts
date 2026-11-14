@@ -62,7 +62,7 @@ test('Score panels keep one manual Save per view, show the clear count, and warn
   assert.match(source, /checked=\{autoSaveEnabled\}/);
   assert.match(source, /Auto-save on/);
   assert.match(source, /addEventListener\('beforeunload', warnUnsaved\)/);
-  assert.match(source, /if \(!singleDirtyRef\.current && !matrixDirtyRef\.current\r?\n\s+&& !singleDebounceTimerRef\.current && !matrixDebounceTimerRef\.current\) return;/);
+  assert.match(source, /if \(!weightsDirtyRef\.current && !singleDirtyRef\.current && !matrixDirtyRef\.current\r?\n\s+&& !singleDebounceTimerRef\.current && !matrixDebounceTimerRef\.current\) return;/);
   assert.match(source, /removeEventListener\('beforeunload', warnUnsaved\)/);
 });
 
@@ -1152,6 +1152,8 @@ function scoreSaveHarness(mode: 'single' | 'matrix' = 'single', autoSaveEnabled 
     singleDebounceTimerRef: { current: null as unknown },
     singlePendingClearRef: { current: { assessmentId: 'assessment', ids: new Set<string>() } },
     singleScoresRef: { current: singleState },
+    singlePendingClears: new Set<string>(),
+    matrixPendingClears: new Set<string>(),
     saveSingleRef: { current: async (_manual?: boolean) => {} },
     setSingleSaveStatus: (status: string) => statuses.push(status),
     hasStoredScore: (_assessmentId: string, studentId: string) => studentId === 'student',
@@ -1539,4 +1541,27 @@ test('Lecture-only CSV uses the existing three-column period header and no Labor
   assert.equal(csv, 'Student Number,Student Name,Midterm %,Final %,Overall Grade,Status\n');
   assert.doesNotMatch(csv, /Laboratory/);
   assert.equal(generateGradeSummaryCSV([], 'CLIN401', true), csv);
+});
+
+test('Manual Save asks to remove saved scores only when clears are pending; Cancel saves nothing', async () => {
+  for (const mode of ['single', 'matrix'] as const) {
+    const plain = scoreSaveHarness(mode);
+    await plain.actions.handleManualSaveScores();
+    await plain.settle();
+    assert.equal(plain.prompts.length, 0, `${mode}: an ordinary save stays silent`);
+    assert.equal(plain.calls.length, 1);
+
+    const clearing = scoreSaveHarness(mode);
+    (mode === 'single' ? clearing.context.singlePendingClears : clearing.context.matrixPendingClears).add('student');
+    clearing.answer(false);
+    await clearing.actions.handleManualSaveScores();
+    await clearing.settle();
+    assert.equal(clearing.prompts[0][0], 'Remove Saved Scores');
+    assert.match(clearing.prompts[0][1], /^Remove 1 saved score\?/);
+    assert.equal(clearing.calls.length, 0, `${mode}: Cancel saves nothing`);
+    clearing.answer(true);
+    await clearing.actions.handleManualSaveScores();
+    await clearing.settle();
+    assert.equal(clearing.calls.length, 1, `${mode}: confirming saves`);
+  }
 });

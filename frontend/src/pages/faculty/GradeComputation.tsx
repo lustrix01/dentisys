@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Calculator,
   User,
@@ -1142,10 +1142,14 @@ export const GradeComputation: React.FC = () => {
   const [matrixSaveStatus, setMatrixSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('saved');
   const matrixDirtyRef = useRef(false);
 
-  // Unsaved scores (e.g. Auto-save off): let the browser ask before closing or reloading.
+  const weightsDirtyRef = useRef(false);
+  // Unsaved single-view scores or grade weights: lost when the page is left (matrix edits survive in the tab draft).
+  const unsavedWorkRef = useRef(false);
+  const navigate = useNavigate();
+  // Unsaved scores or grade weights (e.g. Auto-save off): let the browser ask before closing or reloading.
   useEffect(() => {
     const warnUnsaved = (event: BeforeUnloadEvent) => {
-      if (!singleDirtyRef.current && !matrixDirtyRef.current
+      if (!weightsDirtyRef.current && !singleDirtyRef.current && !matrixDirtyRef.current
         && !singleDebounceTimerRef.current && !matrixDebounceTimerRef.current) return;
       event.preventDefault();
       event.returnValue = '';
@@ -1424,6 +1428,8 @@ export const GradeComputation: React.FC = () => {
   const handleManualSaveScores = async () => {
     if (singleDebounceTimerRef.current) clearTimeout(singleDebounceTimerRef.current);
     singleDebounceTimerRef.current = null;
+    if (singlePendingClears.size > 0 && !hasInvalidSingleScore()
+      && !await requestConfirmation(`Remove ${singlePendingClears.size} saved score${singlePendingClears.size === 1 ? '' : 's'}? This deletes ${singlePendingClears.size === 1 ? 'it' : 'them'} from this assessment.`, 'Remove Saved Scores', 'Remove and save')) return;
     performSaveSingleScores(true);
   };
 
@@ -1623,6 +1629,8 @@ export const GradeComputation: React.FC = () => {
   const handleSaveMatrixScores = async () => {
     if (matrixDebounceTimerRef.current) clearTimeout(matrixDebounceTimerRef.current);
     matrixDebounceTimerRef.current = null;
+    if (matrixPendingClears.size > 0
+      && !await requestConfirmation(`Remove ${matrixPendingClears.size} saved score${matrixPendingClears.size === 1 ? '' : 's'}? This deletes ${matrixPendingClears.size === 1 ? 'it' : 'them'} from the matrix.`, 'Remove Saved Scores', 'Remove and save')) return;
     performSaveMatrixScores(true);
   };
 
@@ -2131,6 +2139,26 @@ export const GradeComputation: React.FC = () => {
   }, [componentMode, savedComponentMode, componentWeights, savedComponentWeights, termRatio, savedTermRatio, attendanceDateRanges, savedAttendanceDateRanges, midtermCategories, savedMidtermCategories, finalCategories, savedFinalCategories]);
 
   const isDirty = schemaMode === 'overall' ? isOverallDirty : isPeriodDirty;
+  weightsDirtyRef.current = isDirty;
+  unsavedWorkRef.current = isDirty || hasUnsavedSingleScores();
+  // The app uses BrowserRouter (no useBlocker): ask before an in-app link leaves the page with unsaved work.
+  // shortcut: browser Back/Forward is not intercepted, switch to a data router if that matters.
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = (event.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+      if (!link || !unsavedWorkRef.current || link.target === '_blank' || link.origin !== window.location.origin || link.pathname === window.location.pathname) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void requestConfirmation('You have unsaved changes on this page. Leaving will discard them. Continue?', 'Discard unsaved changes?').then(ok => {
+        if (!ok) return;
+        unsavedWorkRef.current = false;
+        navigate(link.pathname + link.search + link.hash);
+      });
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, [navigate]);
   const isLegacyCombinedPeriodConfig = loadedConfig?.schemaMode === 'periods'
     && loadedConfig.componentMode !== 'lecture_laboratory'
     && componentMode === 'combined';

@@ -533,6 +533,15 @@ export interface GradeSheetImportPlan {
   scores: Array<{ itemKey: string; studentId: string; score: number }>;
 }
 
+// Summary shown once before the import writes anything.
+export function importConfirmMessage(plan: GradeSheetImportPlan): string {
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const fresh = plan.items.filter(i => i.action === 'create').length;
+  const removed = plan.removeAssessmentIds.length;
+  return `Import ${plural(plan.scores.length, 'score')} into ${plural(plan.items.length, 'assessment')} (${fresh} new)?`
+    + (removed ? ` ${plural(removed, 'assessment')} and their saved scores will be removed.` : '');
+}
+
 export function buildPlan(preview: Preview, ctx: ImportContext, dec: Decisions): GradeSheetImportPlan {
   const plan: GradeSheetImportPlan = { classId: ctx.classId, items: [], removeAssessmentIds: [], scores: [] };
   for (const v of preview.sheets) {

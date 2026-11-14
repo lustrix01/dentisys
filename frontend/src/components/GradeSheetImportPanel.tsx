@@ -5,7 +5,7 @@ import { requestConfirmation } from './FeedbackCenter';
 import type { Assessment, AssessmentScore, Student } from '../types';
 import type { FacultyGradingCategoryItem, FacultyGradingConfiguration } from '../services/apiClient';
 import {
-  buildPlan, buildPreview, checkWorkbookFile, emptyDecisions, isUsed, OUT, parseWorkbook,
+  buildPlan, buildPreview, checkWorkbookFile, emptyDecisions, importConfirmMessage, isUsed, OUT, parseWorkbook,
   type Cell, type CellView, type Component, type Decisions, type GradeSheetImportPlan, type ImportContext,
   type ItemView, type ParsedSheet, type Period, type SavedAssessment, type SavedCategory,
 } from '../utils/gradeSheetImport';
@@ -140,6 +140,7 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
   const importDisabled = saving || reading || preview.blockers.length > 0 || nothingToDo;
 
   const doImport = async () => {
+    if (!await requestConfirmation(importConfirmMessage(plan), 'Import Grade Sheet', 'Import')) return;
     setSaving(true);
     try { await onImport(plan); reset(); }
     catch { /* the caller already showed the error; keep the preview so nothing is lost */ }
