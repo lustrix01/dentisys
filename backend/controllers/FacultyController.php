@@ -7459,8 +7459,8 @@ function handle_faculty_retention_remedial_save(): void
         if ($existing === null) {
             $insert = $pdo->prepare(
                 'INSERT INTO enrollment_remedial_attempts
-                    (enrollment_id, attempt_number, scheduled_date, percentage, outcome, actor_user_id, notes)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)'
+                    (enrollment_id, attempt_number, scheduled_date, percentage, outcome, actor_user_id, notes, completed_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, CASE WHEN ?::text = \'pending\' THEN NULL ELSE CURRENT_TIMESTAMP(6) END)'
             );
             $insert->execute([
                 $enrollmentId,
@@ -7470,6 +7470,7 @@ function handle_faculty_retention_remedial_save(): void
                 $outcome,
                 (int) $authCtx['user_id'],
                 $request['notes'],
+                $outcome,
             ]);
         } else {
             $scheduledDate = $hasScheduledDate
@@ -7479,7 +7480,10 @@ function handle_faculty_retention_remedial_save(): void
             $update = $pdo->prepare(
                 'UPDATE enrollment_remedial_attempts
                     SET scheduled_date = ?, percentage = ?, outcome = ?,
-                        actor_user_id = ?, notes = ?, updated_at = CURRENT_TIMESTAMP(6)
+                        actor_user_id = ?, notes = ?, updated_at = CURRENT_TIMESTAMP(6),
+                        completed_at = CASE WHEN ?::text = \'pending\' THEN NULL
+                                            WHEN outcome = \'pending\' THEN CURRENT_TIMESTAMP(6)
+                                            ELSE completed_at END
                   WHERE remedial_attempt_id = ?'
             );
             $update->execute([
@@ -7488,6 +7492,7 @@ function handle_faculty_retention_remedial_save(): void
                 $outcome,
                 (int) $authCtx['user_id'],
                 $attemptNotes,
+                $outcome,
                 (int) $existing['remedial_attempt_id'],
             ]);
         }

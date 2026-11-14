@@ -45,10 +45,6 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 Remove Quick Actions that repeat the sidebar and duplicate Assigned/Total Classes figures; keep warnings, operational status and at-a-glance information.
 
-## 5.4 Remedial record details
-
-**Status: Partial.** Attempts and notes are stored. A complete record (Student, Course, Section, original course grade, date, score, pass/fail, status, Faculty notes, completion date) is not shown to be returned or displayed together.
-
 ## 5.6 Large attendance lists
 
 **Status: Partial.** Search and status filters exist; a sticky table header and a bounded scrolling area are not established.
@@ -113,6 +109,7 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **4.4** Dean Settings: no Course Component Ratios or Retention Standard setting (tested).
 - **5.2** Grade Computation confirms mutations, not interactions: a Save that deletes saved scores asks first, the grade-sheet import asks once with a summary, and leaving the page through an in-app link (or closing the tab) warns only when unsaved scores or grade weights would be lost. Browser Back/Forward is not guarded (needs a data router).
 - **5.3** Midterm Watchlist offers no remedial action; the server refuses remedial without a final grade (tested).
+- **5.4** Faculty Remedial Record dialog: Student Number, both attempts with Faculty notes and a completion date (set once when the result is recorded, migration 058; older records show Last updated), and the cost-recovery grade, result and date.
 - **5.5** Future worksheet dates: sessions can be scheduled or viewed, not recorded.
 - **5.8** Email History built from the outbox, one row per send action.
 - **5.9** Class archiving gaps: Cancelled and Created-by-mistake classes are excluded from Email Management, school-year lists and offering-wide grading; archived-class messages match the server.

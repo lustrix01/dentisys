@@ -163,7 +163,7 @@ function remedial_attempts_load(PDO $pdo, array $enrollmentIds, array $legacyByE
     $placeholders = implode(',', array_fill(0, count($result), '?'));
     $stmt = $pdo->prepare(
         "SELECT remedial_attempt_id, enrollment_id, attempt_number, scheduled_date,
-                percentage, outcome, actor_user_id, created_at, updated_at, notes
+                percentage, outcome, actor_user_id, created_at, updated_at, notes, completed_at
            FROM enrollment_remedial_attempts
           WHERE enrollment_id IN ({$placeholders})
           ORDER BY enrollment_id, attempt_number"
@@ -211,7 +211,7 @@ function remedial_attempts_lock_rows(PDO $pdo, int $enrollmentId): array
 {
     $stmt = $pdo->prepare(
         'SELECT remedial_attempt_id, enrollment_id, attempt_number, scheduled_date,
-                percentage, outcome, actor_user_id, created_at, updated_at, notes
+                percentage, outcome, actor_user_id, created_at, updated_at, notes, completed_at
            FROM enrollment_remedial_attempts
           WHERE enrollment_id = ?
           ORDER BY attempt_number
@@ -258,6 +258,7 @@ function remedial_attempts_progression_from_rows(array $rows, bool $legacyUnclas
             'notes' => isset($row['notes']) && $row['notes'] !== '' ? (string) $row['notes'] : null,
             'createdAt' => (string) ($row['created_at'] ?? ''),
             'updatedAt' => (string) ($row['updated_at'] ?? ''),
+            'completedAt' => isset($row['completed_at']) ? (string) $row['completed_at'] : null,
         ];
     }
 

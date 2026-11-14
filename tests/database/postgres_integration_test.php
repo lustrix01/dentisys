@@ -296,6 +296,7 @@ $expectedMigrations = [
     '055_overnight_sessions.sql',
     '056_room_history.sql',
     '057_room_categories.sql',
+    '058_remedial_completed_at.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -3701,6 +3702,7 @@ $remedialSecondAttemptView = array_values(array_filter(
 ));
 expect_same('Bring the lab manual.', $remedialSecondAttemptView[0]['notes'] ?? null, 'Remedial attempt notes are saved and returned');
 expect_same('attempt_2_pending', $remedialSecondScheduleBody['progression']['stage'] ?? null, 'Scheduled attempt 2 is pending');
+expect_same(null, array_key_exists('completedAt', $remedialSecondAttemptView[0] ?? []) ? $remedialSecondAttemptView[0]['completedAt'] : 'missing', 'A pending remedial attempt has no completion date');
 [$remedialSecondPassStatus, $remedialSecondPassBody] = $remedialPost($invitedEnrollmentId, [
     'attemptNumber' => 2,
     'percentage' => 75.01,
@@ -3714,6 +3716,13 @@ $remedialPassedAttemptView = array_values(array_filter(
     static fn(array $attempt): bool => ($attempt['attemptNumber'] ?? null) === 2,
 ));
 expect_same('Bring the lab manual.', $remedialPassedAttemptView[0]['notes'] ?? null, 'Grading an attempt without notes keeps the scheduling notes');
+$remedialCompletedAt = $remedialPassedAttemptView[0]['completedAt'] ?? null;
+expect_true(is_string($remedialCompletedAt) && $remedialCompletedAt !== '', 'Recording the result sets the completion date once');
+[$remedialEditAfterStatus] = $remedialPost($invitedEnrollmentId, ['attemptNumber' => 2, 'percentage' => 75.01, 'notes' => 'Edited later.'], $seedFacultyAccessToken);
+expect_same(409, $remedialEditAfterStatus, 'A recorded remedial attempt cannot be edited again');
+$remedialCompletedStmt = $pdo->prepare('SELECT completed_at FROM enrollment_remedial_attempts WHERE enrollment_id = ? AND attempt_number = 2');
+$remedialCompletedStmt->execute([$invitedEnrollmentId]);
+expect_same(substr($remedialCompletedAt, 0, 19), substr((string) $remedialCompletedStmt->fetchColumn(), 0, 19), 'The completion date is kept after a later edit attempt');
 $remedialRowsStmt = $pdo->prepare(
     'SELECT attempt_number, scheduled_date, percentage, outcome FROM enrollment_remedial_attempts WHERE enrollment_id = ? ORDER BY attempt_number'
 );

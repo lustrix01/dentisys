@@ -11,6 +11,7 @@ import {
   saveFacultyCostRecoveryApi,
 } from '../../services/apiClient';
 import { formatGrade, percentageToGWA } from '../../utils/gradeHelper';
+import { manilaDayKey } from '../../services/auditService';
 import type {
   FacultyClassItem,
   FacultyRetentionRecord,
@@ -38,6 +39,7 @@ interface RemedialAttemptView {
   status: RemedialAttemptStatus | null;
   notes: string | null;
   updatedAt: string | null;
+  completedAt: string | null;
 }
 
 interface RemedialProgressionView {
@@ -46,6 +48,7 @@ interface RemedialProgressionView {
   passedAttempt: 1 | 2 | null;
   legacyUnclassified: boolean;
   costRecoveryGrade?: number | null;
+  costRecoveryRecordedAt?: string | null;
   /** When the student was cleared: a passing attempt or a passing cost recovery. */
   clearedAt?: string | null;
 }
@@ -150,7 +153,15 @@ const readAttempt = (value: unknown): RemedialAttemptView | null => {
     status: readAttemptStatus(value.outcome ?? value.status),
     notes: typeof value.notes === 'string' && value.notes.trim().length > 0 ? value.notes : null,
     updatedAt: typeof value.updatedAt === 'string' && value.updatedAt.length > 0 ? value.updatedAt : null,
+    completedAt: typeof value.completedAt === 'string' && value.completedAt.length > 0 ? value.completedAt : null,
   };
+};
+
+// Timestamps arrive as 'YYYY-MM-DD HH:MM:SS.ffffff'; the T form parses in every browser.
+// Server timestamps are UTC without a zone; show the Manila day in the same YYYY-MM-DD form as the scheduled date.
+const formatRecordDate = (value: string): string => {
+  const date = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : `${value.replace(' ', 'T')}Z`);
+  return Number.isNaN(date.getTime()) ? value : manilaDayKey(date);
 };
 
 const readRemedialProgression = (record: FacultyRetentionRecord): RemedialProgressionView => {
@@ -170,10 +181,11 @@ const readRemedialProgression = (record: FacultyRetentionRecord): RemedialProgre
     const legacyUnclassified = rawLegacyUnclassified || stage === 'legacy_unclassified';
     const rawCost = rawProgression.costRecovery;
     const costRecoveryGrade = isRecordValue(rawCost) && typeof rawCost.finalGrade === 'number' ? rawCost.finalGrade : null;
+    const costRecoveryRecordedAt = isRecordValue(rawCost) && typeof rawCost.recordedAt === 'string' && rawCost.recordedAt.length > 0 ? rawCost.recordedAt : null;
     const clearedAt = stage === 'cost_recovery_passed' && isRecordValue(rawCost) && typeof rawCost.recordedAt === 'string'
       ? rawCost.recordedAt
       : stage === 'passed' ? (attempts.find(attempt => attempt.attemptNumber === passedAttempt)?.updatedAt ?? null) : null;
-    return { stage, attempts, passedAttempt, legacyUnclassified, costRecoveryGrade, clearedAt };
+    return { stage, attempts, passedAttempt, legacyUnclassified, costRecoveryGrade, costRecoveryRecordedAt, clearedAt };
   }
 
   // A legacy current-state JSON blob is deliberately not interpreted as an attempt.
@@ -1384,14 +1396,14 @@ export const RetentionMonitoring: React.FC = () => {
             setIsPolicyOpen(false);
             setSelectedPolicyRecord(null);
           }}
-          title="Retention Policy Progression"
+          title="Remedial Record"
         >
           <div className="space-y-4 text-xs">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(selectedPolicyRecord.studentName, 'Student name unavailable')}</p>
-                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{textOrUnavailable(selectedPolicyRecord.subjectCode, 'Subject code unavailable')} · {textOrUnavailable(selectedPolicyRecord.className, `Class name unavailable (${selectedPolicyRecord.classId})`)}</p>
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{textOrUnavailable(selectedPolicyRecord.studentNumber, 'Student number unavailable')} · {textOrUnavailable(selectedPolicyRecord.subjectCode, 'Subject code unavailable')} · {textOrUnavailable(selectedPolicyRecord.className, `Class name unavailable (${selectedPolicyRecord.classId})`)}</p>
                 </div>
                 {renderStatusBadge(selectedPolicyRecord.state)}
               </div>
@@ -1410,9 +1422,15 @@ export const RetentionMonitoring: React.FC = () => {
                   {([1, 2] as AllowedAttempt[]).map(attemptNumber => {
                     const attempt = selectedPolicyProgression.attempts.find(item => item.attemptNumber === attemptNumber);
                     const status = attemptStatus(selectedPolicyProgression, attemptNumber);
-                    return <div key={attemptNumber} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950"><div className="flex-1"><p className="font-bold text-slate-800 dark:text-slate-100">Attempt {attemptNumber}</p><p className="text-[10px] text-slate-500 dark:text-slate-400">{attempt?.scheduledDate ? `Scheduled ${attempt.scheduledDate} · ` : ''}{isFiniteNumber(attempt?.percentage) ? `${attempt.percentage.toFixed(2)}% · ` : ''}{attemptStatusLabel(status)}</p></div><span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{status === 'passed' ? 'Passed' : status === 'failed' ? 'Failed' : status === 'pending' ? 'Pending' : status === 'available' ? 'Available' : 'Not started'}</span></div>;
+                    return <div key={attemptNumber} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950"><div className="flex-1"><p className="font-bold text-slate-800 dark:text-slate-100">Attempt {attemptNumber}</p><p className="text-[10px] text-slate-500 dark:text-slate-400">{attempt?.scheduledDate ? `Scheduled ${attempt.scheduledDate} · ` : ''}{isFiniteNumber(attempt?.percentage) ? `${attempt.percentage.toFixed(2)}% · ` : ''}{attemptStatusLabel(status)}</p>{attempt?.completedAt ? <p className="text-[10px] text-slate-500 dark:text-slate-400">Completed {formatRecordDate(attempt.completedAt)}</p> : attempt?.updatedAt ? <p className="text-[10px] text-slate-500 dark:text-slate-400">Last updated {formatRecordDate(attempt.updatedAt)}</p> : null}{attempt && <p className="mt-1 text-[10px] text-slate-600 dark:text-slate-300">{attempt.notes ?? <span className="text-slate-400 dark:text-slate-500">No notes</span>}</p>}</div><span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{status === 'passed' ? 'Passed' : status === 'failed' ? 'Failed' : status === 'pending' ? 'Pending' : status === 'available' ? 'Available' : 'Not started'}</span></div>;
                   })}
                 </div>
+                {isFiniteNumber(selectedPolicyProgression.costRecoveryGrade) && (
+                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950">
+                    <p className="font-bold text-slate-800 dark:text-slate-100">Cost recovery</p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Final grade {selectedPolicyProgression.costRecoveryGrade.toFixed(2)} · {selectedPolicyProgression.stage === 'cost_recovery_passed' ? 'Passed' : 'Failed'}{selectedPolicyProgression.costRecoveryRecordedAt ? ` · Recorded ${formatRecordDate(selectedPolicyProgression.costRecoveryRecordedAt)}` : ''}</p>
+                  </div>
+                )}
                 <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">Original final grade remains unchanged. A remedial pass changes progression readiness only. Legacy records are not interpreted as a new attempt.</p>
               </div>
             )}

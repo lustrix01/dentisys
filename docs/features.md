@@ -45,6 +45,7 @@ What DentiSys does today. Behaviour is defined by [spec.md](../spec.md); open an
 - Retention Monitoring uses the Faculty's real classes, enrollments and scores, the "Midterm Grade" wording and the single At Risk flag (no risk levels) — UI-003, ACA-001 — implemented, tests passing.
 - Remedial is a row action after Finals with Student, Course and Section locked; no separate "Schedule a Remedial" action — UI-003 — implemented, tests passing.
 - Two remedial attempts, each passing at 75% or more; the second only after a failed first; the original course grade never changes — UI-003 — implemented, tests passing.
+- Faculty Remedial Record dialog shows Student Number, each attempt's notes, cost recovery and a completion date set once when the result is recorded (older attempts show Last updated) — UI-003 — implemented, tests passing.
 - Students get a stored in-app notification when a remedial is assigned — UI-003, NTF-001 — implemented, tests passing.
 - Student roster import into existing classes from the official class list PDF (or the CSV template; no "Official format not confirmed" label), with total-count and wrong-class checks — IMP-001 — implemented, tests passing.
 - Roster import shows persistent per-cause errors for an unsupported file, a non-class-list PDF, a scanned PDF or an unusable CSV; headerless/positional CSV still parses with an amber warning, and the same file can be retried. Grade Sheet Import shows a persistent error when a workbook has no grade-sheet records — IMP-001 — implemented, tests passing.

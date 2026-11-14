@@ -145,3 +145,14 @@ test('The integration suite must cover restrictions and preservation beyond stat
   assert.equal(requiredCases.length, 14);
   assert.ok(requiredCases.every(caseName => caseName.length > 0));
 });
+
+test('Faculty Remedial Record shows student number, notes, cost recovery and a completed or last-updated date', () => {
+  const dialog = facultyPage.slice(facultyPage.indexOf('title="Remedial Record"'));
+  assert.ok(!facultyPage.includes('Retention Policy Progression'));
+  assert.match(dialog, /selectedPolicyRecord\.studentNumber/);
+  assert.match(dialog, /attempt\.notes \?\?[^]*No notes/);
+  assert.match(dialog, /Completed \{formatRecordDate\(attempt\.completedAt\)\}/);
+  assert.match(dialog, /Last updated \{formatRecordDate\(attempt\.updatedAt\)\}/);
+  assert.match(dialog, /Cost recovery[^]*costRecoveryGrade[^]*costRecoveryRecordedAt/);
+  assert.match(facultyPage, /completedAt: typeof value\.completedAt === 'string'/);
+});
