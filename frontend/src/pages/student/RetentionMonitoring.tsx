@@ -403,7 +403,7 @@ export const RetentionMonitoring: React.FC = () => {
 
       {/* --- TAB 1: ACTIVE COURSES --- */}
       {activeTab === 'current' && (
-        <Card className="overflow-hidden border border-slate-200 dark:border-slate-800">
+        <Card className="overflow-hidden border border-slate-200 dark:border-slate-800 max-md:p-0">
           <div className="space-y-2 p-3 md:hidden">
             {currentRecords.length === 0 ? (
               <p className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">No courses enrolled for the active term.</p>
@@ -640,7 +640,7 @@ export const RetentionMonitoring: React.FC = () => {
             <strong>Advisory Reminder:</strong> Remedial exams are not held at midterm. This is an early notification to consult your Faculty before final exams.
           </div>
 
-          <Card className="overflow-hidden border border-slate-200 dark:border-slate-800">
+          <Card className="overflow-hidden border border-slate-200 dark:border-slate-800 max-md:p-0">
             <div className="space-y-2 p-3 md:hidden">
               {midtermRiskRecords.length === 0 ? (
                 <div className="py-6 text-center text-xs text-slate-500 dark:text-slate-400"><CheckCircle2 className="mx-auto mb-1 h-6 w-6 text-emerald-500" />{currentRecords.length === 0 ? 'No current courses available for a midterm advisory.' : 'No courses are on the Midterm Advisory.'}</div>

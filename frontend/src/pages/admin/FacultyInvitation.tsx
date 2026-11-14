@@ -20,7 +20,7 @@ import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { formatManilaWhen } from '../../services/auditService';
 import { EmailHistoryTable } from '../../components/email/EmailHistoryTable';
-import type { EmailAction } from '../../components/email/emailHistory';
+import { actionsForInvitation, type EmailAction } from '../../components/email/emailHistory';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { validateBicolUEmail } from '../../services/authService';
 import {
@@ -769,7 +769,7 @@ export const FacultyInvitation: React.FC = () => {
             <div>
               <h3 className="mb-3 text-xs font-bold text-slate-800 dark:text-slate-100">Email history</h3>
               <EmailHistoryTable
-                actions={emailActions.filter(action => action.recipients.some(r => r.email.toLowerCase() === viewingInvitation.email.toLowerCase()))}
+                actions={actionsForInvitation(emailActions, viewingInvitation)}
                 search={viewSearch}
                 onSearch={setViewSearch}
               />

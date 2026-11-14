@@ -66,6 +66,8 @@ onboarding_contract_assert(!str_contains($studentAccept, 'google_verify_id_token
 onboarding_contract_assert(str_contains($studentAccept, 'student_account_user_id') && str_contains($studentAccept, 'student_auth_active_class_enrollment'), 'Student acceptance rechecks canonical identity and active class enrollment');
 onboarding_contract_assert(str_contains($studentAccept, "status = 'Active'") && str_contains($studentAccept, 'SET used_at = ?'), 'Student acceptance activates and consumes its scoped invitation');
 
+onboarding_contract_assert(substr_count((string) $faculty, 'faculty_invitation_send_recorded(') === 4 && str_contains((string) $faculty, 'invitation_user_id'), 'Every Dean invitation email records its invitation id');
+
 if ($hasFullSourceTree) {
     foreach (['/signup', '/register', '/signup/student'] as $path) {
         onboarding_contract_assert(str_contains((string) $app, "path=\"{$path}\" element={<Navigate to=\"/login?invitationRequired=1\" replace />"), "Public frontend signup URL redirects to login: {$path}");

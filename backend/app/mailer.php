@@ -253,16 +253,16 @@ function email_history_actions(PDO $pdo, int $senderUserId): array
     $stmt = $pdo->prepare(
         "WITH rows AS (
              SELECT email_id, COALESCE(action_uuid, 'mail-' || email_id) AS action_key,
-                    recipient_email, recipient_name, email_type, status, sent_at, failure_reason, created_at
+                    recipient_email, recipient_name, email_type, status, sent_at, failure_reason, created_at, invitation_user_id
                FROM email_outbox
               WHERE sender_user_id = ?
          ), acts AS (
-             SELECT action_key, MIN(COALESCE(sent_at, created_at)) AS action_at
+             SELECT action_key, MIN(COALESCE(sent_at, created_at)) AS action_at, MIN(invitation_user_id) AS invitation_user_id
                FROM rows GROUP BY action_key
               ORDER BY action_at DESC, action_key DESC LIMIT 100
          )
          SELECT r.action_key, a.action_at, r.email_type, r.recipient_email, r.recipient_name,
-                r.status, r.failure_reason
+                r.status, r.failure_reason, a.invitation_user_id
            FROM rows r JOIN acts a ON a.action_key = r.action_key
           ORDER BY a.action_at DESC, r.action_key DESC, r.email_id ASC"
     );
@@ -270,7 +270,7 @@ function email_history_actions(PDO $pdo, int $senderUserId): array
     $actions = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $key = (string) $r['action_key'];
-        $actions[$key] ??= ['id' => $key, 'type' => $r['email_type'], 'sentAt' => $r['action_at'], 'recipients' => []];
+        $actions[$key] ??= ['id' => $key, 'type' => $r['email_type'], 'sentAt' => $r['action_at'], 'invitationId' => $r['invitation_user_id'] === null ? null : (string) $r['invitation_user_id'], 'recipients' => []];
         $actions[$key]['recipients'][] = [
             'name' => $r['recipient_name'] ?: $r['recipient_email'],
             'email' => $r['recipient_email'],

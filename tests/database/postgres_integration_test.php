@@ -297,6 +297,7 @@ $expectedMigrations = [
     '056_room_history.sql',
     '057_room_categories.sql',
     '058_remedial_completed_at.sql',
+    '059_email_outbox_invitation.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -2091,6 +2092,11 @@ $deanLoggedTypes = array_values(array_unique(array_map(
 )));
 sort($deanLoggedTypes);
 expect_same($deanInvitationTypes, $deanLoggedTypes, 'The Dean Email History lists the invitation actions');
+$deanInvitationActions = array_values(array_filter($adminLogsBody['actions'] ?? [], static fn(array $action): bool => ($action['recipients'][0]['email'] ?? null) === $facultyInvitationEmail));
+foreach ($deanInvitationActions as $deanInvitationAction) {
+    expect_true(array_key_exists('invitationId', $deanInvitationAction), 'Every Email History action carries an invitationId key');
+    expect_same((string) $facultyInvitationAccount['user_id'], $deanInvitationAction['invitationId'], 'Send, email correction and reissue actions carry the invitation id');
+}
 $deanLogsJson = json_encode($adminLogsBody, JSON_THROW_ON_ERROR);
 expect_true(!str_contains($deanLogsJson, 'message_body') && !str_contains($deanLogsJson, '"subject"') && !str_contains($deanLogsJson, 'activate-faculty'), 'The Dean Email History never returns subjects, bodies or token links');
 [$facultyAdminLogsStatus] = integration_http_get_json('/api/admin/email-logs', $facultyAccessToken);

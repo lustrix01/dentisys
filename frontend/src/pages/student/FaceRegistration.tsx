@@ -857,8 +857,8 @@ export const FaceRegistration: React.FC = () => {
       {/* STEP 2: CAMERA CAPTURE & LIVENESS */}
       {currentStep === 2 && (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-2 border-b border-slate-100 dark:border-slate-800 pb-4">
+            <div className="flex items-center gap-3 flex-1 basis-56 min-w-0">
               <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
                 <Camera className="w-5 h-5" />
               </div>
@@ -878,7 +878,7 @@ export const FaceRegistration: React.FC = () => {
                 if (isAuthoritative) setAuthStep(1);
                 else setMockStep(1);
               }}
-              className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
+              className="shrink-0 whitespace-nowrap text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
             >
               Back to terms
             </button>
@@ -1110,7 +1110,7 @@ export const FaceRegistration: React.FC = () => {
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
               <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Student Name</span>
               <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block">{studentName}</span>
-              <span className="text-xs text-slate-500 font-mono">ID: {studentIdNum}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">ID: {studentIdNum}</span>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">

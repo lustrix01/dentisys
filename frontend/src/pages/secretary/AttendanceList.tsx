@@ -1008,7 +1008,7 @@ export const AttendanceList: React.FC = () => {
                   ) : scheduledSession ? (
                     <span className="inline-flex max-w-full flex-col items-start gap-0.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3.5 py-1.5 text-indigo-700 dark:text-indigo-300">
                       <span className="text-[10px] font-extrabold uppercase tracking-wider">Scheduled session</span>
-                      <span className="mt-0.5 flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 pl-[14px] text-[11px] font-semibold text-indigo-700/90 dark:text-indigo-200/90">
+                      <span className="mt-0.5 flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] font-semibold text-indigo-700/90 dark:text-indigo-200/90">
                         {scheduledSession.sessionDate && <span>{scheduledSession.sessionDate}</span>}
                         <span>{formatVisibleTime(scheduledSession.openingTime)}&ndash;{formatVisibleTime(scheduledSession.classEndTime)}</span>
                       </span>
@@ -1310,7 +1310,7 @@ export const AttendanceList: React.FC = () => {
             ) : (
               <div className="max-h-[560px] overflow-y-auto overflow-x-auto">
                 <table className="w-full min-w-[640px] text-left text-xs border-collapse">
-                  <thead className="sticky top-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-xs border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
+                  <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
                     <tr>
                       <th className="py-3 px-4 sm:py-4 sm:px-6">Student Details</th>
                       <th className="py-3 px-4 sm:py-4 sm:px-6">Check-In Time</th>

@@ -23,10 +23,6 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 # 4. Dean
 
-## 4.8 Invitation email history across email corrections
-
-**Status: Not started (Owner-approved recommendation).** The Invitation Details dialog matches email history by the invitation's current email, so emails sent to an address before a correction do not show. Return the invitation id with each email action and match on it.
-
 ## 4.5–4.7 Superadmin mode
 
 **Status: Not started (planned; needs a spec section and a contract).** The Dean will get a Superadmin toggle, like the existing Secretary / Student view toggle, that switches the Dean into superadmin mode. Superadmin features:
@@ -44,16 +40,6 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 **Status: Partial.** Server-backed, and its class count matches Classes & Rosters (9.1). No test shows that the Quick Actions and duplicate figures below are gone.
 
 Remove Quick Actions that repeat the sidebar and duplicate Assigned/Total Classes figures; keep warnings, operational status and at-a-glance information.
-
-## 5.6 Large attendance lists
-
-**Status: Partial.** Search and status filters exist; a sticky table header and a bounded scrolling area are not established.
-
-Use search, filters, a sticky header, bounded scrolling and clear status controls. No virtualisation or pagination unless real data needs it.
-
-## 5.7 Email Management filtering
-
-**Status: Partial.** Search and roster filtering exist; filtering by Course, then Class Section, then Student is not established.
 
 ---
 
@@ -75,9 +61,9 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 **Status: Not decided.** Only 6 of 41 tables show their column headers in small capitals; the rest use normal text. Decide one look for column headers.
 
-## 9.11 Email history table on phones
+## 9.12 Profile security cards on phones
 
-**Status: Not started (Owner-approved recommendation).** The shared Email history table (Faculty Email Management, Dean Faculty Invitations and its Invitation Details dialog) squeezes "Date Sent" onto several lines on phones. Give it stacked phone cards like the other lists below 768 px (spec UI-001).
+**Status: Not started (Owner-approved recommendation).** The shared Two-Factor, Google Sign-In and Change Password cards (`MfaSettingsCard.tsx`, `GoogleLinkCard.tsx`, `PasswordChangeCard.tsx`, on every role's profile) are heavily inset on phones and the password placeholder is clipped. Give them the phone padding the other cards use.
 
 ---
 
@@ -86,14 +72,6 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 ## 10.6 Partially readable grade-sheet fixture
 
 **Status: Not started.** The "partially readable grade-sheet workbook" case (found + zero counts) has no crafted official-layout fixture in the test suite; add one when touching this area. Never use real class lists or the Owner's workbook for fixtures.
-
-## 10.7 Phone-width layout pass
-
-**Status: Not started.** Student Profile, Face Registration and the measured retention-row overlap need their own phone-width pass.
-
-## 10.8 Session card states
-
-**Status: Not started (visual verification only).** The three-zone session card ("Sessions", "Start session", "Schedule session") is implemented. Verify the Scheduled and View-only pill variants with seeded states and review the desktop spacing.
 
 ---
 
@@ -107,10 +85,13 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **4.2** Dean Dashboard: server-backed metrics, no Quick Actions block (tested).
 - **4.3** Faculty invitation rows start with a read-only View action; the Invitation Details dialog shows name, email, status, sent and expiry dates and the invitation's email history, with no token or link.
 - **4.4** Dean Settings: no Course Component Ratios or Retention Standard setting (tested).
+- **4.8** Invitation Details matches email history by invitation id (migration 059 stores it on each invitation email), falling back to the address for older emails.
 - **5.2** Grade Computation confirms mutations, not interactions: a Save that deletes saved scores asks first, the grade-sheet import asks once with a summary, and leaving the page through an in-app link (or closing the tab) warns only when unsaved scores or grade weights would be lost. Browser Back/Forward is not guarded (needs a data router).
 - **5.3** Midterm Watchlist offers no remedial action; the server refuses remedial without a final grade (tested).
 - **5.4** Faculty Remedial Record dialog: Student Number, both attempts with Faculty notes and a completion date (set once when the result is recorded, migration 058; older records show Last updated), and the cost-recovery grade, result and date.
 - **5.5** Future worksheet dates: sessions can be scheduled or viewed, not recorded.
+- **5.6** Attendance roll call lists (Faculty and Secretary) keep a solid sticky header inside their bounded scroll box.
+- **5.7** Email Management filters by Course, then Class Section, then Student; ticked recipients stay ticked when filters change; on desktop the search box sits on its own row.
 - **5.8** Email History built from the outbox, one row per send action.
 - **5.9** Class archiving gaps: Cancelled and Created-by-mistake classes are excluded from Email Management, school-year lists and offering-wide grading; archived-class messages match the server.
 - **5.11** Client requests: cost-recovery remedials implemented; the remove-student error was not reproduced.
@@ -124,11 +105,14 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **9.7** Wording: DentiSYS in everything users see; Student No. in table headers and phone cards, Student Number elsewhere; Student Details; Dean; Faculty. Full Matrix switch reads "Name / Student No. and name". The authenticator app entry keeps "DentiSys".
 - **9.8** Shared tab bar standard (white card bar and grey list switch).
 - **9.9** Full Matrix View loads all scores in one request per class; Show computation at every width; the Reports Assessment Scores sheet and PDF print show Score, %, Transmuted, Average % and Weighted.
+- **9.11** The shared Email history table becomes stacked cards below 768 px.
 - **10.1** T1 transmutation: fixed formula, optional per assessment, new assessments start with it on.
 - **10.2** T4 Full Matrix View unsaved scores kept in the tab and offered back after a forced sign-out.
 - **10.4** T8 + T11 grading clarification: course-level remedial, two attempts at 75%, cost recovery.
 - **10.5** GoogleLinkCard confirm-password field has the standard show/hide control and a screen-reader label.
 - **10.6 (part)** The Features page badge reads "PDF / CSV Roster · Excel Grades".
+- **10.7** Phone pass: Student Retention cards full width; Face Registration "Back to terms" never splits and its ID line is readable in dark mode.
+- **10.8** Session cards: the Scheduled date line aligns with its title; View-only checked and correct.
 - **10.9** T9 session restored after closing the browser: intended behaviour.
 - **10.10** A new assessment in a category named Attendance starts with transmutation off.
 - **11.1–11.4** Docs-audit defects: development show-link flags forwarded, single-server start scripts check every required biometric key, timezone/CA/biometric timeouts settable on single-server and VPS, unused watchlist-unlock route removed.

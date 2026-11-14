@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { filterEmailActions, recipientsLabel, summarizeStatuses, type EmailAction } from '../components/email/emailHistory.ts';
+import { actionsForInvitation, filterEmailActions, recipientsLabel, summarizeStatuses, type EmailAction } from '../components/email/emailHistory.ts';
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const read = (relative: string) => fs.readFileSync(path.join(currentDirectory, relative), 'utf8');
@@ -59,4 +59,22 @@ test('Email History table has no Subject column, an accessible toggle and a Dean
   assert.match(faculty, /label: 'Email History Log'/);
   assert.match(faculty, /count: logs\.length/);
   assert.match(faculty, /Email Dispatch History \(\{logs\.length\}\)/);
+});
+
+test('invitation history matches by invitation id, and falls back to the email for older rows', () => {
+  const row = (id: string, email: string, invitationId?: string): EmailAction => ({
+    id, type: 'Faculty Invitation', sentAt: '2026-11-10 01:00:00', invitationId,
+    recipients: [{ name: 'Dr. Santos', email, status: 'Sent' }],
+  });
+  const all = [row('1', 'old@bicol-u.edu.ph', '101'), row('2', 'new@bicol-u.edu.ph', '101'), row('3', 'new@bicol-u.edu.ph', '202'), row('4', 'NEW@bicol-u.edu.ph')];
+  const ids = actionsForInvitation(all, { id: '101', email: 'new@bicol-u.edu.ph' }).map((a) => a.id);
+  assert.deepEqual(ids, ['1', '2', '4']);
+});
+
+test('email history table stacks into row cards below 768px without changing desktop classes', () => {
+  const table = read('../components/email/EmailHistoryTable.tsx');
+  assert.match(table, /<table className="w-full text-left text-xs max-md:block">/);
+  assert.match(table, /<thead className="[^"]*max-md:hidden">/);
+  assert.match(table, /<tr className="hover:bg-slate-50\/50 dark:hover:bg-slate-900\/30 max-md:flex max-md:flex-wrap/);
+  assert.match(table, /max-md:order-4 max-md:w-full/);
 });

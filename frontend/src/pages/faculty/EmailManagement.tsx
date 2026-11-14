@@ -32,6 +32,7 @@ import {
 } from '../../services/authService';
 import { createStudentInvitation, removeSecretaryAppointmentApi, getFacultyRetentionApi, saveFacultyRemedialApi, sendFacultyEmailApi, type FacultyRetentionRecord } from '../../services/apiClient';
 import { Student } from '../../types';
+import { courseOptions, sectionOptions, studentOptions } from '../../utils/emailRecipientFilter';
 import { getFacultyStudentsApi, getFacultyClassesApi, getFacultyEmailLogsApi } from '../../services/apiClient';
 
 type Tab = 'student_invites' | 'secretary' | 'midterm_advisory' | 'remedial' | 'history';
@@ -131,12 +132,27 @@ export const EmailManagement: React.FC = () => {
   // Email History has its own type filter; it is not the class selector.
   const [historyTypeFilter, setHistoryTypeFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
+  // 5.7: Course -> Class Section -> Student. A choice that falls outside the one above it resets to "all".
+  const [selectedCourse, setSelectedCourse] = useState<string>('all');
+  const [selectedStudentId, setSelectedStudentId] = useState<string>('all');
+  const courses = useMemo(() => courseOptions(assignedClasses), [assignedClasses]);
+  const sectionChoices = useMemo(() => sectionOptions(assignedClasses, selectedCourse), [assignedClasses, selectedCourse]);
+  const studentChoices = useMemo(
+    () => studentOptions(dbStudents, assignedClasses, selectedCourse, selectedClassId),
+    [dbStudents, assignedClasses, selectedCourse, selectedClassId],
+  );
 
   useEffect(() => {
-    if (selectedClassId !== 'all' && !assignedClasses.some(classItem => classIdOf(classItem) === selectedClassId)) {
+    if (selectedCourse !== 'all' && !courses.some(course => course.code === selectedCourse)) setSelectedCourse('all');
+  }, [courses, selectedCourse]);
+  useEffect(() => {
+    if (selectedClassId !== 'all' && !sectionChoices.some(classItem => classIdOf(classItem) === selectedClassId)) {
       setSelectedClassId('all');
     }
-  }, [assignedClasses, selectedClassId]);
+  }, [sectionChoices, selectedClassId]);
+  useEffect(() => {
+    if (selectedStudentId !== 'all' && !studentChoices.some(student => student.id === selectedStudentId)) setSelectedStudentId('all');
+  }, [studentChoices, selectedStudentId]);
 
   const [preview, setPreview] = useState(false);
   const [previewType, setPreviewType] = useState<EmailPreviewType>('consent');
@@ -226,9 +242,10 @@ export const EmailManagement: React.FC = () => {
       const matchesSearch = (s.name || '').toLowerCase().includes(search.toLowerCase()) ||
                             (s.studentId || '').toLowerCase().includes(search.toLowerCase()) ||
                             (s.email || '').toLowerCase().includes(search.toLowerCase());
-      return matchesSchoolYear && matchesClass && matchesSearch;
+      const matchesCourse = selectedCourse === 'all' || s.classSections?.some(cs => sectionChoices.some(c => String(cs.classId) === classIdOf(c) || cs.className === c.csName || cs.className === c.block));
+      return matchesSchoolYear && matchesCourse && matchesClass && (selectedStudentId === 'all' || s.id === selectedStudentId) && matchesSearch;
     });
-  }, [safeStudents, selectedClassId, selectedClass, selectedSchoolYear, search, classSchoolYearMap]);
+  }, [safeStudents, selectedCourse, sectionChoices, selectedStudentId, selectedClassId, selectedClass, selectedSchoolYear, search, classSchoolYearMap]);
   const invitationEligibleStudents = useMemo(
     () => filteredStudents.filter(student => isOfficialBicolEmail(student.email)),
     [filteredStudents],
@@ -247,6 +264,8 @@ export const EmailManagement: React.FC = () => {
     const student = safeStudents.find(candidate => String(candidate.id) === String(record.studentId) || String(candidate.studentId) === String(record.studentId));
     const classId = String(record.classId);
     const matchesClass = selectedClassId === 'all' || classId === selectedClassId;
+    const matchesCourse = selectedCourse === 'all' || sectionChoices.some(c => classIdOf(c) === classId);
+    const matchesStudent = selectedStudentId === 'all' || String(student?.id) === selectedStudentId;
     const matchesYear = selectedSchoolYear === 'all' || record.schoolYear === selectedSchoolYear;
     const query = search.trim().toLowerCase();
     const matchesSearch = !query || `${record.studentName ?? ''} ${record.studentNumber ?? ''} ${student?.email ?? ''} ${record.subjectCode ?? ''} ${record.className ?? ''}`.toLowerCase().includes(query);
@@ -256,9 +275,9 @@ export const EmailManagement: React.FC = () => {
     // Keep persisted pending attempts visible, including ones that still need
     // a date, so Faculty can see what is preventing an email from being sent.
     const eligible = tab === 'midterm_advisory' ? record.midtermAtRisk === true : Boolean(pendingAttempt);
-    if (!eligible || !matchesClass || !matchesYear || !matchesSearch) return [];
+    if (!eligible || !matchesClass || !matchesCourse || !matchesStudent || !matchesYear || !matchesSearch) return [];
     return [{ ...record, email: record.email || student?.email || '', pendingAttempt }];
-  }), [retentionRecords, safeStudents, selectedClassId, selectedSchoolYear, search, tab]);
+  }), [retentionRecords, safeStudents, selectedClassId, selectedCourse, sectionChoices, selectedStudentId, selectedSchoolYear, search, tab]);
 
   const selectableNoticeRows = noticeRows.filter(row =>
     isOfficialBicolEmail(row.email) && (tab !== 'remedial' || Boolean(row.pendingAttempt?.scheduledDate))
@@ -553,18 +572,31 @@ export const EmailManagement: React.FC = () => {
         />
 
         {/* Filters & Search Bar Positioned Below */}
-        <Card className="order-1 no-print p-4 flex flex-col xl:flex-row gap-4 xl:items-center">
-          {/* Class Section Filter Dropdown */}
-          <div className="w-full xl:flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+        <Card className="order-1 no-print p-4 flex flex-col xl:flex-row xl:flex-wrap gap-4 xl:items-center">
+          {/* Course -> Class Section -> Student (5.7) */}
+          <div className="w-full xl:w-48 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+            <BookMarked className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
+            <select
+              value={selectedCourse}
+              onChange={(e) => { setSelectedCourse(e.target.value); setSelectedClassId('all'); setSelectedStudentId('all'); }}
+              aria-label="Course"
+              className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
+            >
+              <option value="all">All courses</option>
+              {courses.map(course => <option key={course.code} value={course.code}>{course.code} · {course.title}</option>)}
+            </select>
+          </div>
+
+          <div className="w-full xl:flex-1 xl:min-w-[14rem] rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
             <Filter className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
             <select
               value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
+              onChange={(e) => { setSelectedClassId(e.target.value); setSelectedStudentId('all'); }}
               aria-label="Class: course code, section, and course title"
               className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
               <option value="all">All class sections</option>
-              {assignedClasses.map((classItem: any) => {
+              {sectionChoices.map((classItem: any) => {
                 const classId = classIdOf(classItem);
                 const courseCode = classItem.courseCode || 'Course';
                 const courseTitle = classItem.courseTitle || classItem.courseName || courseCode;
@@ -574,8 +606,21 @@ export const EmailManagement: React.FC = () => {
             </select>
           </div>
 
+          {tab !== 'history' && <div className="w-full xl:w-52 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+            <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
+            <select
+              value={selectedStudentId}
+              onChange={(e) => setSelectedStudentId(e.target.value)}
+              aria-label="Student"
+              className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
+            >
+              <option value="all">All students</option>
+              {studentChoices.map(student => <option key={student.id} value={student.id}>{student.name} ({student.studentId})</option>)}
+            </select>
+          </div>}
+
           {/* School Year Selector Filter Dropdown */}
-          <div className="w-full xl:w-56 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+          <div className="w-full xl:w-60 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
             <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
             <select
               value={selectedSchoolYear}
@@ -593,7 +638,7 @@ export const EmailManagement: React.FC = () => {
           </div>
 
           {/* Search Bar (hidden on History: the history list has its own search) */}
-          {tab !== 'history' && <div className="relative w-full xl:w-56">
+          {tab !== 'history' && <div className="relative w-full xl:w-56 xl:flex-1 xl:min-w-[14rem]">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"

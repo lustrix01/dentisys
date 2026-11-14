@@ -83,3 +83,4 @@ These documents are kept for history. They describe past plans, handoffs, and ev
 - [spec.md merge proposal](spec-merge-proposal-2026-11.md)
 - [Backlog items closed before 2026-11-14](backlog-done-2026-11.md)
 - [Owner decisions, 2026-11-14 (docs sync grill)](owner-decisions-2026-11-14.md)
+- [UI items, 2026-11-14 (docs-sync step 8)](ui-step8-2026-11-14.md)

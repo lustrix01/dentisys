@@ -11,16 +11,16 @@ if (!function_exists('sanitize_for_log')) {
 
 // Sends a Dean invitation email and records it in email_outbox (Email History).
 // An outbox failure never blocks the invitation itself.
-function faculty_invitation_send_recorded(PDO $pdo, array $config, int $senderId, string $email, string $name, string $subject, string $type, string $body): bool
+function faculty_invitation_send_recorded(PDO $pdo, array $config, int $senderId, string $email, string $name, string $subject, string $type, string $body, int $invitationUserId): bool
 {
     $emailId = 0;
     try {
         $insert = $pdo->prepare(
             "INSERT INTO email_outbox
-             (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid, action_uuid)
-             VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?, ?) RETURNING email_id"
+             (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid, action_uuid, invitation_user_id)
+             VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?) RETURNING email_id"
         );
-        $insert->execute([$senderId, mb_strtolower($email), $name, $subject, $type, $body, uuid_v4_string(), uuid_v4_string()]);
+        $insert->execute([$senderId, mb_strtolower($email), $name, $subject, $type, $body, uuid_v4_string(), uuid_v4_string(), $invitationUserId]);
         $emailId = (int) $insert->fetchColumn();
     } catch (Throwable $e) {
         error_log('Faculty invitation outbox write error: ' . sanitize_for_log($e));
@@ -469,7 +469,7 @@ function handle_admin_faculty_invitation_create(): void
         $link = app_url($config, '/activate-faculty', ['token' => $token]);
         $subject = 'DentiSYS Faculty Invitation';
         $message = email_faculty_invitation_html($name, $email, $link);
-        $sent = faculty_invitation_send_recorded($pdo, $config, (int) $actor['user_id'], $email, $name, $subject, 'Faculty Invitation', $message);
+        $sent = faculty_invitation_send_recorded($pdo, $config, (int) $actor['user_id'], $email, $name, $subject, 'Faculty Invitation', $message, $userId);
         $showDevLink = !empty($config['show_dev_invitation_link']);
         json_response([
             'status' => 'ok',
@@ -640,7 +640,8 @@ function handle_admin_faculty_invitation_update(): void
             $name,
             'DentiSYS Faculty Invitation Updated',
             'Faculty Invitation (email corrected)',
-            email_faculty_invitation_html($name, $email, $link, true)
+            email_faculty_invitation_html($name, $email, $link, true),
+            $userId
         );
         json_response([
             'status' => 'ok',
@@ -869,7 +870,7 @@ function handle_admin_faculty_invitation_reissue(): void
         $link = app_url($config, '/activate-faculty', ['token' => $token]);
         $subject = 'DentiSYS Faculty Invitation';
         $message = email_faculty_invitation_html($name, $email, $link);
-        $sent = faculty_invitation_send_recorded($pdo, $config, (int) $actor['user_id'], $email, $name, $subject, 'Faculty Invitation (reissued)', $message);
+        $sent = faculty_invitation_send_recorded($pdo, $config, (int) $actor['user_id'], $email, $name, $subject, 'Faculty Invitation (reissued)', $message, $userId);
         $showDevLink = !empty($config['show_dev_invitation_link']);
         json_response([
             'status' => 'ok',

@@ -13,6 +13,8 @@ export type EmailAction = {
   type: string;
   sentAt: string;
   recipients: EmailRecipient[];
+  // Faculty invitation emails carry the invitation id; older rows do not.
+  invitationId?: string | null;
 };
 
 const STATUS_ORDER: EmailStatus[] = ['Sent', 'Failed', 'Pending', 'Suppressed'];
@@ -33,5 +35,13 @@ export function filterEmailActions(actions: EmailAction[], search: string, filte
     (action) =>
       (filter === 'all' || action.type === filter) &&
       `${action.type} ${action.recipients.map((r) => `${r.name} ${r.email}`).join(' ')}`.toLowerCase().includes(query)
+  );
+}
+
+// An invitation action matches by invitation id (survives an email correction); rows without an id fall back to the email.
+export function actionsForInvitation(actions: EmailAction[], invitation: { id: string; email: string }): EmailAction[] {
+  const email = invitation.email.toLowerCase();
+  return actions.filter((action) =>
+    action.invitationId ? String(action.invitationId) === String(invitation.id) : action.recipients.some((r) => r.email.toLowerCase() === email)
   );
 }
