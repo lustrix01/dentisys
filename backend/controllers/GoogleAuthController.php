@@ -158,6 +158,9 @@ function handle_google_login(): void
         }
 
         $matching = google_auth_user_by_email($pdo, $claims['email']);
+        if ($matching !== null && email_is_retired($pdo, $claims['email'])) { // a retired address never signs in (12.1)
+            $matching = null;
+        }
         if ($matching === null) {
             google_auth_audit($pdo, $config, $context, 'google_login_denied', 'Failed', null, 'No existing DentiSYS account matched the verified Google identity.');
             google_auth_error('NO_EXISTING_ACCOUNT', 'No existing DentiSYS account was found.', 404);

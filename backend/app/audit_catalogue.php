@@ -96,6 +96,10 @@ function audit_catalogue(): array
         'sessions_ended_by_dean' => ['Signed out everywhere', $P, true, false],
         'student_invitation_resent_by_dean' => ['Student invitation resent by the Dean', $P, true, false],
         'student_invitation_revoked_by_dean' => ['Student invitation revoked by the Dean', $P, true, false],
+        'account_email_moved' => ['Account moved to a new email', $P, true, false],
+        'account_name_changed_by_dean' => ['Name corrected by the Dean', $P, true, false],
+        'dean_transferred' => ['Dean role transferred', $P, true, false],
+        'email_unretired' => ['Retired email released', $P, true, false],
         // 5.3 Settings and terms
         'system_settings_updated' => ['System settings changed', $T, true, false],
         'academic_term_created' => ['Term added', $T, true, false],

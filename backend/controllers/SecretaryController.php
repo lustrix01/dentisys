@@ -85,6 +85,7 @@ function handle_secretary_invite(): void
             throw new ValidationException([['field' => 'cs_id', 'message' => 'A class section is required.']]);
         }
         $email = validate_institutional_email($data['email'] ?? '');
+        email_assert_not_retired($pdo, $email);
 
         $scopeSql = "SELECT s.student_id, s.person_id, s.user_id AS student_user_id,
                             s.student_account_user_id, s.bu_email,

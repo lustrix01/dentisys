@@ -239,8 +239,12 @@ Same auth, response style and error shape as Part C (Dean role, flat `{status:"o
 | GET | `/api/admin/people/filters` | none | `{courses:[{id, courseCode, name}], classes:[{csId, label, courseId}]}` |
 | POST | `/api/admin/people/sign-out` | `{userId, reason?}` | `{person}` |
 | POST | `/api/admin/people/reset-2fa` | `{userId, reason?}` | `{person}` |
+| POST | `/api/admin/people/move-email` | `{userId, newEmail, reason, idChecked:true}` (Faculty and Student accounts; errors in `docs/contracts/roles.md` section 4) | `{person}` |
+| POST | `/api/admin/people/name` | `{userId, name:{prefix, firstName, middleName, lastName, suffix}, reason}` (`name_unchanged` 422 when nothing changes) | `{person}` |
 | POST | `/api/admin/people/invitation/resend` | `{userId}` | `{person, delivery:"Sent"\|"Failed"}` |
 | POST | `/api/admin/people/invitation/revoke` | `{userId}` | `{person:null}` (the person leaves the Invited list) |
+
+Person also carries `nameParts: {prefix, firstName, middleName, lastName, suffix}` (strings or null, the canonical identity columns Change Name uses) for the Edit Name dialog.
 
 Person additions: `status:"invited"`, `invitation:{sentAt, expiresAt, expired}` (Manila ISO; only when invited), `studentId` (Students, the id the existing `POST /api/admin/biometrics/revoke` takes) and `faceEnrolled:boolean` (Students, same rule as the `face` filter). An invited person has `twoFactor:false`, `lastActivityAt:null` and `disabledAt:null`.
 

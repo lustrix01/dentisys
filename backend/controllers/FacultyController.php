@@ -588,6 +588,7 @@ function handle_faculty_student_create(): void
         if (!empty($email)) {
             try {
                 $email = validate_institutional_email($email);
+                email_assert_not_retired($pdo, $email);
             } catch (ValidationException $e) {
                 $errors['email'] = $e->getErrors()[0]['message'] ?? 'Email is not valid.';
             }
@@ -858,6 +859,7 @@ function handle_faculty_student_update(array $params = []): void
             }
             $newEmail = $email === '' ? null : validate_institutional_email($email);
             if ($newEmail !== null) {
+                email_assert_not_retired($pdo, $newEmail);
                 $roleConflict = account_identity_email_role_conflict($pdo, $newEmail, 'student');
                 if ($roleConflict !== null) {
                     throw new DomainException($roleConflict);

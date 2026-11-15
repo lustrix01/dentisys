@@ -86,6 +86,8 @@ DentiSYS has four application roles:
 
 Every Admin (Dean) account may use Superadmin mode (ADM-001); it is not a fifth role.
 
+There is exactly one Dean account. Permissions come from the four roles; there is no per-person permission. The Dean role changes hands only through the system administrator's server script, never while a term is in progress (`docs/contracts/roles.md`).
+
 Roles, permissions, approval, eligibility, and authorization are controlled by DentiSYS.
 
 External identity providers MUST NOT assign or elevate DentiSYS roles.
@@ -354,7 +356,7 @@ A person holds one kind of DentiSYS identity: either a Student (who may also be 
 
 **Status: APPROVED**
 
-A user cannot change their own login email. Before activation, a pending invitation's email may be corrected: by the Dean for Faculty invitations, and by Faculty for Student records that have no account. After activation, an account's email cannot be changed.
+A user cannot change their own login email. Before activation, a pending invitation's email may be corrected: by the Dean for Faculty invitations, and by Faculty for Student records that have no account. After activation, an account's email changes only by a move to a new email (ADM-001): the Dean moves a Faculty or Student account, and the system administrator moves the Dean's account with the server script. The old address is retired and can never be used again.
 
 ## REG-010 — First Dean account
 
@@ -1161,7 +1163,7 @@ Class-work audit. The Superadmin Audit Trail also lists class work (scores, asse
 
 Course Catalog. The Dean edits a course's code, title and units and may retire and restore a course. Retired courses leave Faculty's course pickers and cannot be typed again when creating a class; Faculty who try are told to ask the Dean to restore the course. Retired courses stay on every existing class section. Faculty still add new course codes when creating a class. Removing Laboratory units follows GRD-003 (blocked while a current class has Laboratory assessments). Courses are never deleted. Changes are audited.
 
-People & Accounts. The Dean sees Faculty (with each member's class sections) and Students and may deactivate or reactivate a Faculty or Student account. Deactivation blocks every sign-in (the sign-in screen says "Contact the Dean."), ends all sessions, keeps every record and is audited with a reason. Deactivating a Student who is a Class Secretary also blocks the Secretary sign-in, and reactivating the Student restores both. A Faculty member who has a class section in the current school year cannot be deactivated; the Dean sees the classes that block it. Reactivation restores sign-in with the existing password and 2FA. The Dean cannot deactivate a Dean account.
+People & Accounts. The Dean sees Faculty (with each member's class sections) and Students and may deactivate or reactivate a Faculty or Student account. Deactivation blocks every sign-in (the sign-in screen says "Contact the Dean."), ends all sessions, keeps every record and is audited with a reason. Deactivating a Student who is a Class Secretary also blocks the Secretary sign-in, and reactivating the Student restores both. A Faculty member who has a class section in the current school year cannot be deactivated; the Dean sees the classes that block it. Reactivation restores sign-in with the existing password and 2FA. The Dean cannot deactivate a Dean account. The Dean may also move a Faculty or Student account to a new email, after checking the person's university ID in person, and correct a Faculty or Student name; both are audited with a reason. Details: `docs/contracts/roles.md`.
 
 The Dean may also sign a person out everywhere without deactivating; reset a person's authenticator 2FA, which removes the authenticator and recovery codes, signs them out everywhere and emails them, after which they sign in with their password and may set 2FA up again; and revoke a Student's face enrollment (BIO-002). Pending invitations appear in People & Accounts as Invited, where the Dean may resend or revoke them. Filters include course and, for Students, class section, both counting this school year's classes. The People and Course Catalog lists export to Excel.
 

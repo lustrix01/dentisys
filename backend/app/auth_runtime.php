@@ -90,7 +90,7 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
     $stmt->execute([$email]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($user === false) {
+    if ($user === false || email_is_retired($pdo, $email)) { // a retired address never signs in (12.1)
         password_verify($password, auth_get_dummy_hash());
         auth_audit_denial($pdo, $config, $context, 'login_failed', "Password sign-in failed for {$email}: no such account.");
         rate_limit_record_login_failure($rateStorage, $emailScope, 'post_auth_failed_login', 900, 5, 900);

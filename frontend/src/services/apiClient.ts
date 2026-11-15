@@ -2585,6 +2585,7 @@ export type AdminPerson = {
   invitation?: { sentAt: string | null; expiresAt: string | null; expired: boolean }; faceEnrolled?: boolean; studentId?: number;
   disabledAt: string | null; twoFactor: boolean; lastActivityAt: string | null;
   classes?: PersonClass[]; studentNo?: string; enrolledClasses?: PersonClass[];
+  nameParts?: { prefix: string | null; firstName: string | null; middleName: string | null; lastName: string | null; suffix: string | null };
 };
 // Filters run on the server so the total and every page agree. classes is Faculty-only; secretary and face are Student-only.
 export type AdminPeopleFilters = {
@@ -2627,6 +2628,12 @@ export function signOutPersonApi(userId: number, reason?: string): Promise<{ per
 }
 export function resetPersonTwoFactorApi(userId: number, reason?: string): Promise<{ person: AdminPerson }> {
   return request('POST', '/admin/people/reset-2fa', { userId, reason });
+}
+export function editPersonNameApi(userId: number, name: { prefix: string; firstName: string; middleName: string; lastName: string; suffix: string }, reason: string): Promise<{ person: AdminPerson }> {
+  return request('POST', '/admin/people/name', { userId, name, reason });
+}
+export function movePersonEmailApi(userId: number, newEmail: string, reason: string): Promise<{ person: AdminPerson }> {
+  return request('POST', '/admin/people/move-email', { userId, newEmail, reason, idChecked: true });
 }
 export function resendInvitationApi(userId: number): Promise<{ person: AdminPerson; delivery: 'Sent' | 'Failed' }> {
   return request('POST', '/admin/people/invitation/resend', { userId });

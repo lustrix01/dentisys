@@ -10,13 +10,14 @@ export const emailParts = (email: string): string[] => {
   return at < 0 ? name : [...name, email.slice(at)];
 };
 
-export type PersonAction = 'sign-out' | 'reset-2fa' | 'revoke-face' | 'deactivate' | 'reactivate' | 'resend' | 'revoke-invite';
+export type PersonAction = 'edit-name' | 'move-email' | 'sign-out' | 'reset-2fa' | 'revoke-face' | 'deactivate' | 'reactivate' | 'resend' | 'revoke-invite';
 
 /** Row menu items by account state (9.16). */
-export function personActions(person: AdminPerson): PersonAction[] {
+export function personActions(person: AdminPerson, selfUserId?: number): PersonAction[] {
   if (person.status === 'invited') return ['resend', 'revoke-invite'];
-  if (person.status === 'deactivated') return ['reactivate'];
-  const items: PersonAction[] = ['sign-out'];
+  const own: PersonAction[] = person.userId === selfUserId ? [] : ['edit-name', 'move-email'];
+  if (person.status === 'deactivated') return [...own, 'reactivate'];
+  const items: PersonAction[] = [...own, 'sign-out'];
   if (person.twoFactor) items.push('reset-2fa');
   if (person.kind === 'student' && person.faceEnrolled && person.studentId) items.push('revoke-face');
   items.push('deactivate');

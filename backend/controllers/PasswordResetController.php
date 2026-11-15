@@ -40,6 +40,9 @@ function handle_password_reset_request(): void
         $stmt = $pdo->prepare("SELECT user_id, login_email, display_name, role FROM user_accounts WHERE login_email = ?");
         $stmt->execute([$email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (email_is_retired($pdo, $email)) { // same neutral answer as an unknown address, nothing sent (12.1)
+            $user = false;
+        }
 
         if ($user !== false && $user['role'] === 'student') {
             try {

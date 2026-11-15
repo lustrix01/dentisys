@@ -133,3 +133,34 @@ assert_superadmin(!str_contains($audit, 'Face enrolment') && !str_contains($audi
 foreach (["'yearLevel'", "'invitation'", "'studentNo'", "'lastActivity'", "NULLS LAST", "'yearLevels'"] as $needle) {
     assert_superadmin(str_contains($controller, $needle), "The people list handles {$needle}");
 }
+
+// 12.1 Account management (docs/contracts/roles.md): routes, migration, audit codes, retired-email guards, the server script.
+foreach (['move-email', 'name'] as $r121) {
+    assert_superadmin(str_contains($routes, "['method' => 'POST', 'path' => '/api/admin/people/{$r121}', 'handler' => 'handle_admin_people']"), "POST /api/admin/people/{$r121} is registered");
+}
+assert_superadmin(str_contains($controller, "'move-email' => people_move_email") && str_contains($controller, "'name' => people_edit_name"), 'The people handler dispatches move-email and name');
+$m062 = (string) file_get_contents(__DIR__ . '/../../database/migrations/062_retired_emails.sql');
+assert_superadmin(str_contains($m062, 'CREATE TABLE retired_emails') && str_contains($m062, 'email      CITEXT') && str_contains($m062, 'PRIMARY KEY') && str_contains($m062, 'REFERENCES user_accounts'), 'Migration 062 adds retired_emails (case-insensitive unique email, user_id, retired_at, reason)');
+foreach (['account_email_moved' => 'Account moved to a new email', 'account_name_changed_by_dean' => 'Name corrected by the Dean', 'dean_transferred' => 'Dean role transferred', 'email_unretired' => 'Retired email released'] as $code => $label) {
+    $info = audit_code_info($code);
+    assert_superadmin($info['label'] === $label && $info['area'] === AUDIT_AREA_PEOPLE && $info['deanVisible'] === true, "{$code} is labelled, People & accounts and Dean-visible");
+}
+foreach (['email_taken', 'email_retired', 'email_unchanged', 'move_not_allowed', 'name_unchanged', "Confirm that you checked this person's university ID in person.", "'Moved to a new email'", 'google_subject = NULL', "'account_email_moved'", "'account_name_changed_by_dean'", "'Set your DentiSYS password'"] as $needle) {
+    assert_superadmin(str_contains($controller, $needle), "The move and name code handles {$needle}");
+}
+$retiredGuards = [
+    'app/auth_runtime.php' => 'email_is_retired', 'controllers/PasswordResetController.php' => 'email_is_retired', 'controllers/GoogleAuthController.php' => 'email_is_retired',
+    'controllers/FacultyInvitationController.php' => 'email_assert_not_retired', 'controllers/FacultyController.php' => 'email_assert_not_retired',
+    'controllers/SecretaryController.php' => 'email_assert_not_retired', 'controllers/StudentAuthController.php' => 'email_assert_not_retired',
+];
+foreach ($retiredGuards as $file => $needle) {
+    assert_superadmin(str_contains((string) file_get_contents(__DIR__ . '/../../backend/' . $file), $needle), "{$file} refuses retired emails");
+}
+$script = (string) file_get_contents(__DIR__ . '/../../backend/bin/account-admin.php');
+foreach (["'transfer-dean'", "'move-email'", "'unretire-email'", 'Type YES to continue', "'dean_transferred'", "'email_unretired'", "'role' => 'system'", '--old-dean faculty|deactivate is required', 'academic_terms_read', 'account_move_email('] as $needle) {
+    assert_superadmin(str_contains($script, $needle), "account-admin.php has {$needle}");
+}
+$parts = people_json(['user_id' => '7', 'display_name' => 'Dr. A', 'login_email' => 'a@x.test', 'kind' => 'faculty', 'status' => 'Active', 'disabled_at' => null, 'two_factor' => false, 'last_activity_at' => null,
+    'name_parts' => '{"prefix":"Dr.","firstName":"Ana","middleName":null,"lastName":"Cruz","suffix":"DMD"}'], []);
+assert_superadmin($parts['nameParts'] === ['prefix' => 'Dr.', 'firstName' => 'Ana', 'middleName' => null, 'lastName' => 'Cruz', 'suffix' => 'DMD'], 'A person carries nameParts for the Edit Name dialog');
+assert_superadmin($person['nameParts'] === ['prefix' => null, 'firstName' => null, 'middleName' => null, 'lastName' => null, 'suffix' => null], 'A person without a name row has all-null nameParts');

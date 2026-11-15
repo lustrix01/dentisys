@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, CircleAlert, Download, KeyRound, LogOut, Mail, MoreVertical, RotateCcw, ScanFace, Search, Send, ShieldCheck, UserRound, X } from 'lucide-react';
+import { CheckCircle2, CircleAlert, Download, KeyRound, LogOut, Mail, MailPlus, MoreVertical, PenLine, RotateCcw, ScanFace, Search, Send, ShieldCheck, UserRound, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Tabs from '../../components/Tabs';
 import { ListToolbar, SearchField } from '../../components/FilterBars';
@@ -9,7 +9,7 @@ import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { useAuth } from '../../context/AuthContext';
 import {
-  ApiError, deactivatePersonApi, getAdminPeopleApi, getAdminPeopleFiltersApi, reactivatePersonApi, resendInvitationApi,
+  ApiError, deactivatePersonApi, editPersonNameApi, getAdminPeopleApi, getAdminPeopleFiltersApi, movePersonEmailApi, reactivatePersonApi, resendInvitationApi,
   resetPersonTwoFactorApi, revokeInvitationApi, revokeStudentBiometricApi, signOutPersonApi,
 } from '../../services/apiClient';
 import type { AdminPerson, PeopleFilterOptions, PersonClass } from '../../services/apiClient';
@@ -18,6 +18,9 @@ import { downloadXlsx } from '../../utils/xlsxDownload';
 import { buildReportSheet } from '../../utils/reportWorkbook';
 import { ATTENTION_OPTIONS, DEFAULT_PEOPLE_SORT, PEOPLE_EXPORT_HEADERS, attentionFromUrl, attentionParams, classesOf, emailParts, lastActivityText, peopleExportRow, personActions, statusLabel, yearLevelLabel } from './peopleHelpers';
 import type { Attention, PeopleSortKey, PersonAction } from './peopleHelpers';
+import { PersonNameFields, composePersonName, emptyNameParts } from '../../components/PersonNameFields';
+import type { PersonNameParts } from '../../components/PersonNameFields';
+import { validateBicolUEmail } from '../../services/authService';
 import { SortableHeader, ariaSort } from '../../components/SortableHeader';
 import type { SortState } from '../../components/SortableHeader';
 
@@ -38,7 +41,12 @@ const kindLabel: Record<Kind, string> = { faculty: 'Faculty', student: 'Students
 const sentence = (name: string, n: number) => `${name} teaches ${n} ${n === 1 ? 'class' : 'classes'} this school year. Reassign or archive them first.`;
 
 type ActionInfo = { label: string; Icon: LucideIcon; destructive?: boolean; title: string; confirm: string; reason: 'none' | 'optional' | 'required'; bullets: (p: AdminPerson) => string[]; done: string };
+const EMAIL_DOMAIN = 'bicol-u.edu.ph'; // spec UI-001: email-entry controls default to the college domain
+const fullEmail = (value: string) => { const v = value.trim(); return !v || v.includes('@') ? v : `${v}@${EMAIL_DOMAIN}`; };
 const ACTIONS: Record<PersonAction, ActionInfo> = {
+  'edit-name': { label: 'Edit name', Icon: PenLine, title: 'Edit Name', confirm: 'Save name', reason: 'required', done: 'name updated', bullets: () => [] },
+  'move-email': { label: 'Move to new email', Icon: MailPlus, title: 'Move to New Email', confirm: 'Move email', reason: 'required', done: 'moved to a new email', destructive: false,
+    bullets: () => ['Signed out on every device now; their password, 2FA and Google link are removed.', 'A link to set a new password goes to the new address only. Nothing is sent to the old address.', 'Records, classes and enrollments are kept.'] },
   'sign-out': { label: 'Sign out everywhere', Icon: LogOut, title: 'Sign Out Everywhere', confirm: 'Sign out everywhere', reason: 'optional', done: 'signed out everywhere',
     bullets: () => ['Signed out on every device now. The account stays active; they can sign in again right away.'] },
   'reset-2fa': { label: 'Reset 2FA', Icon: KeyRound, title: 'Reset 2FA', confirm: 'Reset 2FA', reason: 'optional', done: '2FA reset',
@@ -79,6 +87,11 @@ export const PeopleAndAccounts: React.FC = () => {
   const [action, setAction] = useState<PersonAction>('deactivate');
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState('');
+  const [nameParts, setNameParts] = useState<PersonNameParts>(emptyNameParts);
+  const [newEmail, setNewEmail] = useState('');
+  const [idChecked, setIdChecked] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState('');
   const [blocked, setBlocked] = useState<Blocked | null>(null);
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -145,6 +158,12 @@ export const PeopleAndAccounts: React.FC = () => {
   const openAction = (person: AdminPerson, next: PersonAction) => {
     setReason('');
     setReasonError('');
+    setFieldErrors({});
+    setFormError('');
+    setNewEmail('');
+    setIdChecked(false);
+    const np = person.nameParts;
+    setNameParts(np ? { prefix: np.prefix ?? '', firstName: np.firstName ?? '', middleName: np.middleName ?? '', lastName: np.lastName ?? '', suffix: np.suffix ?? '' } : emptyNameParts);
     const current = next === 'deactivate' && person.kind === 'faculty' ? classesOf(person).filter(c => c.current) : [];
     setBlocked(current.length > 0 ? { message: sentence(person.name, current.length), classes: current } : null);
     setAction(next);
@@ -156,9 +175,21 @@ export const PeopleAndAccounts: React.FC = () => {
     const info = ACTIONS[action];
     const note = reason.trim();
     if (info.reason === 'required' && (note.length < 8 || note.length > 240)) { setReasonError('Enter a reason of 8 to 240 characters.'); return; }
+    const form = action === 'edit-name' || action === 'move-email';
+    if (action === 'move-email') {
+      const check = validateBicolUEmail(fullEmail(newEmail), [EMAIL_DOMAIN]);
+      const errors: Record<string, string> = {};
+      if (!check.isValid) errors.newEmail = check.message;
+      if (!idChecked) errors.idChecked = "Confirm that you checked this person's university ID in person.";
+      if (Object.keys(errors).length > 0) { setFieldErrors(errors); return; }
+    }
+    if (action === 'edit-name' && composePersonName(nameParts) === composePersonName(target.nameParts ? { prefix: target.nameParts.prefix ?? '', firstName: target.nameParts.firstName ?? '', middleName: target.nameParts.middleName ?? '', lastName: target.nameParts.lastName ?? '', suffix: target.nameParts.suffix ?? '' } : emptyNameParts)) { setFormError('The name is unchanged.'); return; }
+    setFormError('');
     setBusy(true);
     try {
-      if (action === 'deactivate') await deactivatePersonApi(target.userId, note || undefined);
+      if (action === 'edit-name') await editPersonNameApi(target.userId, nameParts, note);
+      else if (action === 'move-email') await movePersonEmailApi(target.userId, fullEmail(newEmail), note);
+      else if (action === 'deactivate') await deactivatePersonApi(target.userId, note || undefined);
       else if (action === 'reactivate') await reactivatePersonApi(target.userId);
       else if (action === 'sign-out') await signOutPersonApi(target.userId, note || undefined);
       else if (action === 'reset-2fa') await resetPersonTwoFactorApi(target.userId, note || undefined);
@@ -178,6 +209,15 @@ export const PeopleAndAccounts: React.FC = () => {
       setBlocked(null);
       load();
     } catch (err) {
+      if (form && err instanceof ApiError) {
+        const list = Array.isArray(err.errors) ? (err.errors as Array<{ field: string; message: string }>) : [];
+        if (err.status === 422 && list.length > 0) {
+          const next: Record<string, string> = {};
+          for (const item of list) { const key = item.field.split('.').pop() ?? item.field; if (key === 'reason') setReasonError(item.message); else next[key] = item.message; }
+          setFieldErrors(next);
+        } else setFormError(err.message);
+        return;
+      }
       const classes = err instanceof ApiError ? (err.details?.classes as Array<{ csId: number; label: string }> | undefined) : undefined;
       if (err instanceof ApiError && err.code === 'faculty_has_current_classes' && classes) {
         setBlocked({ message: err.message, classes: classes.map(c => ({ ...c, schoolYear: '', current: true })) });
@@ -333,7 +373,7 @@ export const PeopleAndAccounts: React.FC = () => {
                       <td className="px-4 py-4"><StatusPill person={person} /></td>
                       <td className="px-4 py-4">{person.status === 'invited' ? '—' : <TwoFactor on={person.twoFactor} />}</td>
                       <td className="whitespace-nowrap px-4 py-4 text-slate-500 dark:text-slate-400">{lastActivityText(person, formatManilaWhen)}</td>
-                      <td className="px-4 py-4 text-right"><RowMenu person={person} onSelect={next => openAction(person, next)} /></td>
+                      <td className="px-4 py-4 text-right"><RowMenu person={person} selfUserId={user?.user_id} onSelect={next => openAction(person, next)} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -344,7 +384,7 @@ export const PeopleAndAccounts: React.FC = () => {
                 <article key={person.userId} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-50 text-accent-700 dark:bg-accent-950/50 dark:text-accent-300"><UserRound className="h-5 w-5" /></span><div className="min-w-0"><h3 className="break-words text-sm font-bold text-slate-800 dark:text-slate-100">{person.name}</h3><p className="break-words text-xs text-slate-500 dark:text-slate-400"><Email value={person.email} /></p></div></div>
-                    <RowMenu person={person} onSelect={next => openAction(person, next)} />
+                    <RowMenu person={person} selfUserId={user?.user_id} onSelect={next => openAction(person, next)} />
                   </div>
                   <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
                     {kind === 'student' && <Item label="Student Number">{person.studentNo}</Item>}
@@ -370,7 +410,7 @@ export const PeopleAndAccounts: React.FC = () => {
         </div>
       )}
 
-      <Modal isOpen={Boolean(target)} onClose={close} title={info.title} size="sm">
+      <Modal isOpen={Boolean(target)} onClose={close} title={info.title} size={action === 'edit-name' ? 'lg' : 'sm'}>
         {target && (
           <div className="space-y-4 p-5 sm:p-6">
             <div>
@@ -384,20 +424,44 @@ export const PeopleAndAccounts: React.FC = () => {
               </div>
             ) : (
               <>
+                {action === 'move-email' && <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">Use this when the college has given this person a new email, for example because the old one was compromised. The old address will never work in DentiSYS again.</p>}
+                {action === 'edit-name' && <PersonNameFields value={nameParts} onChange={value => { setNameParts(value); setFormError(''); setFieldErrors({}); }} />}
+                {action === 'edit-name' && <>{(['prefix', 'firstName', 'middleName', 'lastName', 'suffix'] as const).filter(k => fieldErrors[k]).map(k => <span key={k} role="alert" className="block text-xs font-semibold text-rose-600 dark:text-rose-400">{fieldErrors[k]}</span>)}</>}
                 {action === 'reactivate'
                   ? <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">{info.bullets(target)[0]}</p>
                   : <ul className="list-disc space-y-1 pl-5 text-xs leading-relaxed text-slate-600 dark:text-slate-300">{info.bullets(target).map(b => <li key={b}>{b}</li>)}</ul>}
+                {action === 'move-email' && (
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">New Email
+                    <div className="mt-1.5 flex">
+                      <input maxLength={254} type="text" inputMode="email" value={newEmail} onChange={event => { setNewEmail(event.target.value); setFieldErrors(e => ({ ...e, newEmail: '' })); }}
+                        placeholder={newEmail.includes('@') ? `name@${EMAIL_DOMAIN}` : 'username'}
+                        className={`min-h-11 min-w-0 flex-1 border border-slate-200 bg-white px-3.5 text-sm font-normal text-slate-800 outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 ${newEmail.includes('@') ? 'rounded-xl' : 'rounded-l-xl'}`} />
+                      {!newEmail.includes('@') && <span className="flex items-center rounded-r-xl border border-l-0 border-slate-200 bg-slate-100 px-3 text-xs font-bold text-accent-700 dark:border-slate-700 dark:bg-slate-800 dark:text-accent-300">@{EMAIL_DOMAIN}</span>}
+                    </div>
+                    {fieldErrors.newEmail && <span role="alert" className="mt-1 block text-xs font-semibold text-rose-600 dark:text-rose-400">{fieldErrors.newEmail}</span>}
+                  </label>
+                )}
                 {info.reason !== 'none' && (
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">{info.reason === 'required' ? 'Reason (8 to 240 characters)' : 'Reason (optional)'}
                     <input maxLength={info.reason === 'required' ? 240 : 500} value={reason} onChange={event => { setReason(event.target.value); setReasonError(''); }} className={inputClass} />
                     {reasonError && <span role="alert" className="mt-1 block text-xs font-semibold text-rose-600 dark:text-rose-400">{reasonError}</span>}
                   </label>
                 )}
+                {action === 'move-email' && (
+                  <div>
+                    <label className="flex min-h-11 cursor-pointer items-start gap-2.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+                      <input type="checkbox" checked={idChecked} onChange={event => { setIdChecked(event.target.checked); setFieldErrors(e => ({ ...e, idChecked: '' })); }} className="mt-0.5 h-4 w-4 shrink-0 accent-accent-600" />
+                      I checked this person's university ID in person.
+                    </label>
+                    {fieldErrors.idChecked && <span role="alert" className="mt-1 block text-xs font-semibold text-rose-600 dark:text-rose-400">{fieldErrors.idChecked}</span>}
+                  </div>
+                )}
+                {formError && <div role="alert" className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs font-semibold text-rose-700 dark:text-rose-400">{formError}</div>}
               </>
             )}
             <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
               <button type="button" disabled={busy} onClick={close} className={cancelButton}>{blocked ? 'Close' : 'Cancel'}</button>
-              {!blocked && <button type="button" disabled={busy} onClick={() => void confirm()} className={`min-h-11 rounded-xl px-4 text-xs font-bold text-white disabled:opacity-50 ${info.destructive ? 'bg-rose-600 hover:bg-rose-700' : 'bg-accent-600 hover:bg-accent-700'}`}>{info.confirm}</button>}
+              {!blocked && <button type="button" disabled={busy} onClick={() => void confirm()} className={`min-h-11 rounded-xl px-4 text-xs font-bold text-white disabled:opacity-50 ${info.destructive || action === 'move-email' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-accent-600 hover:bg-accent-700'}`}>{info.confirm}</button>}
             </div>
           </div>
         )}
@@ -440,7 +504,7 @@ function Item({ label, children }: { label: string; children: React.ReactNode })
 }
 
 /** Row menu copied from the student row menu in pages/faculty/ClassesAndRosters.tsx. */
-function RowMenu({ person, onSelect }: { person: AdminPerson; onSelect: (action: PersonAction) => void }) {
+function RowMenu({ person, selfUserId, onSelect }: { person: AdminPerson; selfUserId?: number; onSelect: (action: PersonAction) => void }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
   useEffect(() => {
@@ -485,7 +549,7 @@ function RowMenu({ person, onSelect }: { person: AdminPerson; onSelect: (action:
       </button>
       {open && pos && createPortal(
         <div role="menu" style={pos} onClick={(e) => e.stopPropagation()} className="fixed w-44 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-900/10 py-1.5 z-[60] text-xs text-left">
-          {personActions(person).map(key => {
+          {personActions(person, selfUserId).map(key => {
             const { Icon, label, destructive } = ACTIONS[key];
             return (
               <button key={key} type="button" role="menuitem" onClick={() => { setOpen(false); onSelect(key); }}

@@ -37,6 +37,8 @@ return [
     ['method' => 'GET', 'path' => '/api/admin/people/filters', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/sign-out', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/reset-2fa', 'handler' => 'handle_admin_people'],
+    ['method' => 'POST', 'path' => '/api/admin/people/move-email', 'handler' => 'handle_admin_people'],
+    ['method' => 'POST', 'path' => '/api/admin/people/name', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/invitation/resend', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/invitation/revoke', 'handler' => 'handle_admin_people'],
     ['method' => 'GET', 'path' => '/api/rooms', 'handler' => 'handle_rooms_list'],

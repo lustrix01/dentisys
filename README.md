@@ -366,6 +366,22 @@ If the settings were empty on the first start, fill them in and run the start sc
 
 If invitation delivery fails, fix the mail configuration and run the start script again. The failed token is revoked and the retry sends a fresh invitation for the same pending Dean account. An invitation whose delivery succeeded is left pending without being resent on each start.
 
+### B5a. Dean changes and retired emails (system administrator only)
+
+The Dean role and the Dean's own login email change only through a server script, never in the app (`docs/contracts/roles.md`). Run it inside the web container; add the single-server `--env-file` and `-f` flags from B6 on a single server:
+
+```bash
+docker compose exec web php /var/www/html/backend/bin/account-admin.php transfer-dean --to new.dean@bicol-u.edu.ph --old-dean faculty --reason "New Dean appointed"
+docker compose exec web php /var/www/html/backend/bin/account-admin.php move-email --to new.address@bicol-u.edu.ph --reason "Old mailbox compromised"
+docker compose exec web php /var/www/html/backend/bin/account-admin.php unretire-email old.address@bicol-u.edu.ph --reason "College gave the address back"
+```
+
+- `transfer-dean` makes an active Faculty member the Dean. `--old-dean faculty` keeps the outgoing Dean as Faculty; `--old-dean deactivate` deactivates them (there is no default). Both are signed out and emailed. It refuses while a term is in progress (today in Asia/Manila is between any academic term's start and end dates), when the new Dean has a class whose term has not ended, or when the target is not an active Faculty member.
+- `move-email` moves the Dean's own account to a new address: the old address is retired, the password, 2FA and Google link are removed, every session ends, and a password-setup link goes to the new address only.
+- `unretire-email` removes an address from the retired list. Moved-away addresses (including those the Dean moves in the app) can never be used again until then.
+
+Each command prints what it will do, waits for `YES` on the keyboard, runs in one transaction and writes an Audit Trail row as System. `--reason` (8 to 240 characters) is required.
+
 ### B6. Stop, upgrade, and restore
 
 Stop the stack:

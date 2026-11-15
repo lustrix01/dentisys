@@ -223,6 +223,9 @@ function people_json(array $r, array $classes): array
             'expiresAt' => $expires === '' ? null : audit_manila_iso($expires),
             'expired' => $expires !== '' && new DateTimeImmutable($expires, new DateTimeZone('UTC')) <= new DateTimeImmutable('now', new DateTimeZone('UTC'))];
     }
+    $parts = isset($r['name_parts']) ? (json_decode((string) $r['name_parts'], true) ?: []) : []; // the Edit Name dialog's current values
+    $json['nameParts'] = ['prefix' => $parts['prefix'] ?? null, 'firstName' => $parts['firstName'] ?? null, 'middleName' => $parts['middleName'] ?? null,
+        'lastName' => $parts['lastName'] ?? null, 'suffix' => $parts['suffix'] ?? null];
     if ($r['kind'] === 'faculty') {
         $json['classes'] = $classes;
     } else {
@@ -316,7 +319,9 @@ function people_list(PDO $pdo, string $kind, string $status, string $q, int $pag
     $stmt = $pdo->prepare("SELECT ua.user_id, ua.display_name, ua.login_email, ua.status, ua.disabled_at, '{$kind}' AS kind, inv.issued_at AS invited_at, inv.expires_at AS invitation_expires_at"
         . ($kind === 'student' ? ", s.student_id, s.student_number, {$faceSql} AS face_enrolled" : ', NULL AS student_id, NULL AS student_number') . ",
         EXISTS (SELECT 1 FROM security_tokens t WHERE t.user_id = ua.user_id AND t.purpose = 'mfa_credential' AND t.mfa_status = 'enabled') AS two_factor,
-        (SELECT MAX(a.last_seen_at) FROM auth_sessions a WHERE a.user_id = ua.user_id) AS last_activity_at
+        (SELECT MAX(a.last_seen_at) FROM auth_sessions a WHERE a.user_id = ua.user_id) AS last_activity_at,
+        (SELECT json_build_object('prefix', pi.name_prefix, 'firstName', pi.first_name, 'middleName', pi.middle_name, 'lastName', pi.last_name, 'suffix', pi.name_suffix)
+           FROM person_identities pi WHERE pi.person_id = ua.person_id) AS name_parts
         {$from}{$whereSql} ORDER BY {$orderBy} LIMIT " . PEOPLE_PAGE_SIZE . ' OFFSET ' . (($page - 1) * PEOPLE_PAGE_SIZE));
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -446,6 +451,141 @@ function people_reset_2fa(PDO $pdo, array $config, array $actor, array $data): a
             error_log('People 2FA reset email error: ' . sanitize_for_log($e));
         }
     }];
+}
+
+/**
+ * 12.1 Move to new email (docs/contracts/roles.md section 4), shared by the Dean's People action and bin/account-admin.php.
+ * Runs inside the caller's transaction; returns the after-commit mail sender. $account needs user_id, login_email, display_name.
+ * $idChecked only changes the audit wording (the script has no ID check).
+ */
+function account_move_email_check(PDO $pdo, array $account, string $newEmail): void
+{
+    if (strcasecmp((string) $account['login_email'], $newEmail) === 0) throw new SuperadminConflict('email_unchanged', "This is already the person's email.", [], 422);
+    if (email_is_retired($pdo, $newEmail)) throw new SuperadminConflict('email_retired', 'That email address was retired and cannot be used again.');
+    $taken = $pdo->prepare('SELECT 1 FROM user_accounts WHERE login_email = ? UNION ALL SELECT 1 FROM students WHERE bu_email = ? LIMIT 1');
+    $taken->execute([$newEmail, $newEmail]);
+    if ($taken->fetchColumn() !== false) throw new SuperadminConflict('email_taken', 'That email address is already used by another account.');
+}
+
+function account_move_email(PDO $pdo, array $config, array $actor, array $account, string $newEmail, string $reason, bool $idChecked): Closure
+{
+    $userId = (int) $account['user_id'];
+    $old = (string) $account['login_email'];
+    $name = (string) $account['display_name'];
+    account_move_email_check($pdo, $account, $newEmail);
+
+    $pdo->prepare('INSERT INTO retired_emails (email, user_id, reason) VALUES (?, ?, ?)')->execute([$old, $userId, $reason]);
+    // The random password hash makes every old password useless; the person sets a new one with the emailed link.
+    $pdo->prepare('UPDATE user_accounts SET login_email = ?, password_hash = ?, google_subject = NULL, updated_at = CURRENT_TIMESTAMP(6) WHERE user_id = ?')
+        ->execute([$newEmail, password_hash_user_password(bin2hex(random_bytes(32))), $userId]);
+    // A Student's record email and a Class Secretary's sign-in are the same account; migration 005 checks they match at commit.
+    $pdo->prepare('UPDATE students SET bu_email = ? WHERE student_account_user_id = ? OR user_id = ?')->execute([$newEmail, $userId, $userId]);
+    people_end_sessions($pdo, $userId, 'Moved to a new email');
+    $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
+    $pdo->prepare(
+        "UPDATE security_tokens
+         SET mfa_status = CASE WHEN purpose = 'mfa_credential' THEN 'revoked' ELSE mfa_status END, revoked_at = ?, revocation_reason = 'Moved to a new email'
+         WHERE user_id = ? AND purpose IN ('mfa_credential', 'mfa_recovery') AND revoked_at IS NULL"
+    )->execute([$nowSql, $userId]);
+    $pdo->prepare("UPDATE security_tokens SET revoked_at = ?, revocation_reason = 'Moved to a new email'
+        WHERE purpose = 'password_reset' AND user_id = ? AND used_at IS NULL AND revoked_at IS NULL")->execute([$nowSql, $userId]);
+    $token = bin2hex(random_bytes(16)); // same token and 24-hour expiry as PasswordResetController
+    $pdo->prepare("INSERT INTO security_tokens (purpose, user_id, secret_hash, issued_at, expires_at) VALUES ('password_reset', ?, ?, ?, ?)")
+        ->execute([$userId, hash('sha256', $token), $nowSql, (new DateTimeImmutable($nowSql, new DateTimeZone('UTC')))->add(new DateInterval('P1D'))->format('Y-m-d H:i:s.u')]);
+    $subject = 'Set your DentiSYS password';
+    $body = email_account_moved_html($name, $newEmail, app_url($config, '/reset-password', ['token' => $token]));
+    $outbox = $pdo->prepare("INSERT INTO email_outbox (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid, action_uuid)
+        VALUES (?, ?, ?, ?, 'Password Setup', ?, 'Pending', ?, ?) RETURNING email_id");
+    $outbox->execute([$actor['user_id'] ?? $userId, $newEmail, $name, $subject, $body, uuid_v4_string(), uuid_v4_string()]);
+    $emailId = (int) $outbox->fetchColumn();
+    audit_record_action($pdo, $config, $actor, 'people', 'account_email_moved', 'user_account', (string) $userId,
+        "Moved {$name} to a new email: {$old} → {$newEmail}." . ($idChecked ? ' University ID checked in person.' : ''),
+        ['before' => ['email' => $old], 'after' => ['email' => $newEmail], 'reason' => $reason]);
+    return static function () use ($pdo, $config, $emailId, $newEmail, $subject, $body): void {
+        try {
+            if (!student_invitation_outbox_send($pdo, $config, $emailId, $newEmail, $subject, $body)) error_log('Email move: the password-setup email was not delivered.');
+        } catch (Throwable $e) {
+            error_log('Email move mail error: ' . sanitize_for_log($e));
+        }
+    };
+}
+
+/** A Faculty or Student account that has signed up (active or deactivated), else 404 person_not_found or 422 move_not_allowed (Dean, invited). */
+function people_fetch_for_move(PDO $pdo, int $userId): array
+{
+    try {
+        return people_fetch($pdo, $userId, true);
+    } catch (SuperadminConflict $e) {
+        $exists = $pdo->prepare('SELECT 1 FROM user_accounts WHERE user_id = ?');
+        $exists->execute([$userId]);
+        if ($exists->fetchColumn() === false) throw $e;
+        throw new SuperadminConflict('move_not_allowed', 'Email moves are for Faculty and Student accounts that have signed up.', [], 422);
+    }
+}
+
+function people_move_email(PDO $pdo, array $config, array $actor, array $data): array
+{
+    $errors = [];
+    if (($data['idChecked'] ?? null) !== true) $errors[] = ['field' => 'idChecked', 'message' => "Confirm that you checked this person's university ID in person."];
+    $reason = '';
+    try {
+        $reason = validate_required_string($data, 'reason', 8, 240);
+    } catch (ValidationException $e) {
+        $errors[] = $e->getErrors()[0];
+    }
+    $newEmail = '';
+    try {
+        $newEmail = validate_institutional_email((string) ($data['newEmail'] ?? ''));
+    } catch (ValidationException $e) {
+        $errors[] = ['field' => 'newEmail', 'message' => $e->getErrors()[0]['message']];
+    }
+    if ($errors !== []) throw new ValidationException($errors);
+    $userId = (int) ($data['userId'] ?? 0);
+    $person = people_fetch_for_move($pdo, $userId);
+    $afterCommit = account_move_email($pdo, $config, $actor, $person, $newEmail, $reason, true);
+    return ['person' => people_one($pdo, $userId, $person['kind']), 'afterCommit' => $afterCommit];
+}
+
+/** 12.1 Edit name (roles.md section 5): same fields, rules and display name as Change Name, but the Dean edits another account and needs no 2FA code. */
+function people_edit_name(PDO $pdo, array $config, array $actor, array $data): array
+{
+    $errors = [];
+    $parts = null;
+    try {
+        $name = $data['name'] ?? null; // the body parser casts only the top level, so a nested object arrives as stdClass
+        $parts = account_identity_name_parts($name instanceof stdClass ? (array) $name : (is_array($name) ? $name : []));
+        if ($parts === null) $errors[] = ['field' => 'firstName', 'message' => 'Provide the separate name fields; combined names are not split automatically.'];
+    } catch (ValidationException $e) {
+        $errors = array_merge($errors, $e->getErrors());
+    }
+    $reason = '';
+    try {
+        $reason = validate_required_string($data, 'reason', 8, 240);
+    } catch (ValidationException $e) {
+        $errors[] = $e->getErrors()[0];
+    }
+    if ($errors !== []) throw new ValidationException($errors);
+    $userId = (int) ($data['userId'] ?? 0);
+    $person = people_fetch($pdo, $userId, true);
+    $current = account_identity_fetch($pdo, $userId, true);
+    if ($current === null) throw new SuperadminConflict('person_not_found', 'Account not found.', [], 404);
+    $old = account_identity_profile_parts($current);
+    if (array_filter(array_keys($parts), static fn(string $k): bool => !account_identity_parts_match($old[$k], $parts[$k])) === []) {
+        throw new SuperadminConflict('name_unchanged', "That is already the person's name.", [], 422);
+    }
+    account_identity_sync_canonical_person($pdo, (int) $current['person_id'], $parts);
+    $labels = ['prefix' => 'Prefix', 'firstName' => 'First name', 'middleName' => 'Middle name', 'lastName' => 'Last name', 'suffix' => 'Suffix'];
+    $before = ['Name' => (string) $person['display_name']];
+    $after = ['Name' => account_identity_composed_name($parts)];
+    foreach ($labels as $key => $label) {
+        $before[$label] = trim((string) $old[$key]) === '' ? null : (string) $old[$key];
+        $after[$label] = trim((string) $parts[$key]) === '' ? null : (string) $parts[$key];
+    }
+    $changed = audit_changed_fields($before, $after) ?? [$before, $after];
+    audit_record_action($pdo, $config, $actor, 'people', 'account_name_changed_by_dean', 'user_account', (string) $userId,
+        'Corrected the name of ' . $person['display_name'] . ' (' . ucfirst($person['kind']) . ') to ' . $after['Name'] . '.',
+        ['before' => $changed[0], 'after' => $changed[1], 'reason' => $reason]);
+    return ['person' => people_one($pdo, $userId, $person['kind'])];
 }
 
 /** The Pending Activation Faculty or Student account whose latest invitation is still live (unused, not revoked, maybe expired). */
@@ -714,6 +854,8 @@ function handle_admin_people(): void
             'reactivate' => people_reactivate($pdo, $config, $actor, $body['data']),
             'sign-out' => people_sign_out($pdo, $config, $actor, $body['data']),
             'reset-2fa' => people_reset_2fa($pdo, $config, $actor, $body['data']),
+            'move-email' => people_move_email($pdo, $config, $actor, $body['data']),
+            'name' => people_edit_name($pdo, $config, $actor, $body['data']),
             default => null,
         };
         if ($result === null) { $pdo->rollBack(); safe_error_response('Not found.', 404); return; }

@@ -19,12 +19,29 @@ test('email wraps only before "@" and after "."', () => {
 });
 
 test('row menu items by account state', () => {
-  assert.deepEqual(personActions(base), ['sign-out', 'reset-2fa', 'deactivate']);
-  assert.deepEqual(personActions({ ...base, twoFactor: false }), ['sign-out', 'deactivate']);
-  assert.deepEqual(personActions({ ...base, kind: 'student', faceEnrolled: true, studentId: 7 }), ['sign-out', 'reset-2fa', 'revoke-face', 'deactivate']);
-  assert.deepEqual(personActions({ ...base, kind: 'student', faceEnrolled: false, studentId: 7 }), ['sign-out', 'reset-2fa', 'deactivate']);
-  assert.deepEqual(personActions({ ...base, status: 'deactivated' }), ['reactivate']);
+  assert.deepEqual(personActions(base), ['edit-name', 'move-email', 'sign-out', 'reset-2fa', 'deactivate']);
+  assert.deepEqual(personActions({ ...base, twoFactor: false }), ['edit-name', 'move-email', 'sign-out', 'deactivate']);
+  assert.deepEqual(personActions({ ...base, kind: 'student', faceEnrolled: true, studentId: 7 }), ['edit-name', 'move-email', 'sign-out', 'reset-2fa', 'revoke-face', 'deactivate']);
+  assert.deepEqual(personActions({ ...base, kind: 'student', faceEnrolled: false, studentId: 7 }), ['edit-name', 'move-email', 'sign-out', 'reset-2fa', 'deactivate']);
+  assert.deepEqual(personActions({ ...base, status: 'deactivated' }), ['edit-name', 'move-email', 'reactivate']);
   assert.deepEqual(personActions({ ...base, status: 'invited', twoFactor: false }), ['resend', 'revoke-invite']);
+});
+
+test('Edit name and Move to new email: shown for active and deactivated rows, never invited or own row', () => {
+  assert.deepEqual(personActions(base, 99).slice(0, 2), ['edit-name', 'move-email']);
+  assert.deepEqual(personActions({ ...base, status: 'deactivated' }, 99), ['edit-name', 'move-email', 'reactivate']);
+  assert.deepEqual(personActions({ ...base, status: 'invited' }, 99), ['resend', 'revoke-invite']);
+  assert.deepEqual(personActions(base, base.userId), ['sign-out', 'reset-2fa', 'deactivate']);
+});
+
+test('move email needs the ID checkbox and a reason; payload shapes', () => {
+  const page = read('../pages/admin/PeopleAndAccounts.tsx');
+  assert.ok(page.includes('if (!idChecked) errors.idChecked'));
+  assert.ok(page.includes('note.length < 8 || note.length > 240'));
+  assert.ok(page.includes("info.destructive || action === 'move-email' ? 'bg-rose-600"));
+  const api = read('../services/apiClient.ts');
+  assert.ok(api.includes("'/admin/people/move-email', { userId, newEmail, reason, idChecked: true }"));
+  assert.ok(api.includes("'/admin/people/name', { userId, name, reason }"));
 });
 
 test('export rows match the table columns, with the full class list and the shown status', () => {

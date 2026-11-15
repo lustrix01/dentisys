@@ -146,6 +146,9 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | Class created / changed | class_create, class_update | Faculty | changed fields before → after | yes | yes | KEEP |
 | Class schedule saved over an overlap | class_schedule_overlap_confirmed | Faculty | who confirmed, other classes | yes | yes | KEEP |
 | Account deactivated / reactivated | account_deactivated, account_reactivated | Dean (Superadmin mode) | status Active ↔ Disabled, kind (Faculty or Student), reason on deactivation; a Student who is a Class Secretary is the same account, so one row | yes | — | **NEW** |
+| Moved to a new email | account_email_moved | Dean (Superadmin mode), or System (server script) | email old → new, reason, university ID checked in person | yes | — | **NEW** |
+| Name corrected by the Dean | account_name_changed_by_dean | Dean (Superadmin mode) | name parts before → after, reason | yes | — | **NEW** |
+| Dean role transferred / email unretired | dean_transferred, email_unretired | System (server script) | new Dean, outgoing Dean Faculty or deactivated, reason | yes | — | **NEW** |
 | Signed out everywhere | sessions_ended_by_dean | Dean (Superadmin mode) | reason | yes | — | **NEW** |
 | Student invitation resent / revoked by the Dean | student_invitation_resent_by_dean, student_invitation_revoked_by_dean | Dean (Superadmin mode) | the resend targets the new token, the revoke the account; reason on revoke | yes | — | **NEW** |
 

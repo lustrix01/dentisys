@@ -243,6 +243,33 @@ function email_password_reset_html(string $name, string $email, string $link): s
     ]);
 }
 
+/** 12.1: the account moved to this address; the person sets a password with the one-time link. */
+function email_account_moved_html(string $name, string $email, string $link): string
+{
+    return email_render([
+        'preheader' => 'Set your DentiSYS password.',
+        'greeting' => $name !== '' ? "Hello {$name}," : 'Hello,',
+        'intro' => ['Your DentiSYS account now uses this address. Set a password to sign in.'],
+        'details' => ['title' => 'Account', 'rows' => [['Email', $email]]],
+        'action_text' => 'Click the button below to set your password:',
+        'button' => ['label' => 'Set Password', 'url' => $link],
+        'notice' => 'This link expires in <strong>24 hours</strong>. For your security, you were signed out everywhere and two-factor authentication was removed; you can set it up again after you sign in.',
+        'signature' => ['name' => 'DentiSYS Support', 'lines' => ['Bicol University College of Dental Medicine']],
+    ]);
+}
+
+/** 12.1: the system administrator moved the Dean role; $lines say what changed for this person. */
+function email_dean_transferred_html(string $name, array $lines): string
+{
+    return email_render([
+        'preheader' => 'The Dean role in DentiSYS changed hands.',
+        'greeting' => $name !== '' ? "Hello {$name}," : 'Hello,',
+        'intro' => $lines,
+        'notice' => 'You were signed out everywhere. Sign in again to continue.',
+        'signature' => ['name' => 'DentiSYS Support', 'lines' => ['Bicol University College of Dental Medicine']],
+    ]);
+}
+
 /** AUTH-006: the Dean reset this person's authenticator 2FA. */
 function email_two_factor_reset_html(string $name, string $email): string
 {

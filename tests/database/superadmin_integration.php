@@ -431,6 +431,133 @@ expect_same(["Ana Cruz{$saTag}, DMD", 'Dr. Ben (hand edited)'], [$pdo->query("SE
 $pdo->exec($saUpdateSql);
 expect_same("Ana Cruz{$saTag}, DMD", $pdo->query("SELECT display_name FROM user_accounts WHERE user_id = {$saOld}")->fetchColumn(), 'Migration 061 is idempotent');
 
+// ---- 12.1 Account management: move to a new email, edit name, retired emails, account-admin.php (docs/contracts/roles.md) ----
+$mvLetters = strtr($saTag, '0123456789', 'abcdefghij'); // names take letters only
+$mvRun = static function (array $args, string $stdin = '') use ($pdo): array {
+    $proc = proc_open([PHP_BINARY, __DIR__ . '/../../backend/bin/account-admin.php', ...$args], [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    fwrite($pipes[0], $stdin);
+    fclose($pipes[0]);
+    $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+    return [proc_close($proc), $out];
+};
+$mvFac = $saAccount("sa-mvf-{$saTag}@bicol-u.edu.ph", 'faculty', "Sa Mvf {$saTag}");
+$mvStu = $saAccount("sa-mvs-{$saTag}@bicol-u.edu.ph", 'student', "Sa Mvs {$saTag}", "MV-{$saTag}-1");
+$mvSec = $saAccount("sa-mvc-{$saTag}@bicol-u.edu.ph", 'secretary', "Sa Mvc {$saTag}", "MV-{$saTag}-2");
+$mvInvited = $saAccount("sa-mvi-{$saTag}@bicol-u.edu.ph", 'faculty', "Sa Mvi {$saTag}");
+$pdo->exec("UPDATE user_accounts SET status = 'Pending Activation' WHERE user_id = {$mvInvited}");
+$mvPost = static fn(array $body): array => $saPost('/api/admin/people/move-email', $body + ['reason' => 'Old mailbox compromised', 'idChecked' => true]);
+$mvField = static fn(array $body, string $field): bool => in_array($field, array_column($body['errors'] ?? [], 'field'), true);
+$mvNew = static fn(string $kind): string => "sa-new-{$kind}-{$saTag}@bicol-u.edu.ph";
+
+foreach ([['POST', '/api/admin/people/move-email'], ['POST', '/api/admin/people/name']] as [$mvM, $mvPath]) {
+    foreach ([['Faculty', $seedFacultyAccessToken, 403], ['anonymous', '', 401]] as [$mvWho, $mvToken, $mvWant]) {
+        expect_same($mvWant, integration_http_json($mvPath, $mvToken, ['userId' => $mvStu])[0], "{$mvWho} gets {$mvWant} on {$mvM} {$mvPath}");
+    }
+}
+// Errors (roles.md section 4 table).
+[$mvStatus, $mvBody] = $saPost('/api/admin/people/move-email', ['userId' => $mvStu, 'newEmail' => $mvNew('stu'), 'reason' => 'Old mailbox compromised', 'idChecked' => false]);
+expect_true($mvStatus === 422 && $mvField($mvBody, 'idChecked') && str_contains(json_encode($mvBody), "Confirm that you checked this person's university ID in person."), 'Move to new email needs the ID checkbox (422 on idChecked)');
+[$mvStatus, $mvBody] = $mvPost(['userId' => $mvStu, 'newEmail' => $mvNew('stu'), 'reason' => 'short']);
+expect_true($mvStatus === 422 && $mvField($mvBody, 'reason'), 'Move to new email needs a reason of 8 to 240 characters');
+[$mvStatus, $mvBody] = $mvPost(['userId' => $mvStu, 'newEmail' => "sa-new-{$saTag}@gmail.com"]);
+expect_true($mvStatus === 422 && $mvField($mvBody, 'newEmail'), 'Another domain is refused on newEmail (AUTH-004)');
+[$mvStatus, $mvBody] = $mvPost(['userId' => $mvStu, 'newEmail' => strtoupper("sa-mvs-{$saTag}@bicol-u.edu.ph")]);
+expect_true($mvStatus === 422 && ($mvBody['code'] ?? '') === 'email_unchanged', 'The same email (any case) is email_unchanged');
+[$mvStatus, $mvBody] = $mvPost(['userId' => $mvStu, 'newEmail' => "sa-mvf-{$saTag}@bicol-u.edu.ph"]);
+expect_true($mvStatus === 409 && ($mvBody['code'] ?? '') === 'email_taken', 'An address used by an account is email_taken');
+$pdo->prepare("INSERT INTO students (student_number, first_name, last_name, bu_email, status) VALUES (?, 'Sa', 'Rec', ?, 'active')")->execute(["MV-{$saTag}-R", "sa-rec-{$saTag}@bicol-u.edu.ph"]);
+[$mvStatus, $mvBody] = $mvPost(['userId' => $mvFac, 'newEmail' => "sa-rec-{$saTag}@bicol-u.edu.ph"]);
+expect_true($mvStatus === 409 && ($mvBody['code'] ?? '') === 'email_taken', 'An address used by a Student record is email_taken');
+foreach ([['the Dean', (int) $readDean['user_id']], ['an invited person', $mvInvited]] as [$mvWho, $mvId]) {
+    [$mvStatus, $mvBody] = $mvPost(['userId' => $mvId, 'newEmail' => $mvNew('x')]);
+    expect_true($mvStatus === 422 && ($mvBody['code'] ?? '') === 'move_not_allowed', "Moving {$mvWho} is move_not_allowed");
+}
+[$mvStatus, $mvBody] = $mvPost(['userId' => 999999999, 'newEmail' => $mvNew('x')]);
+expect_true($mvStatus === 404 && ($mvBody['code'] ?? '') === 'person_not_found', 'An unknown account is person_not_found');
+expect_same(0, (int) $pdo->query("SELECT COUNT(*) FROM retired_emails WHERE user_id IN ({$mvFac}, {$mvStu}, {$mvSec})")->fetchColumn(), 'Refused moves retire nothing');
+
+// Happy path: a Student with a Google link, 2FA, a live session and an open reset link.
+$mvOldEmail = "sa-mvs-{$saTag}@bicol-u.edu.ph";
+$pdo->prepare('UPDATE user_accounts SET google_subject = ? WHERE user_id = ?')->execute(["google-{$saTag}", $mvStu]);
+$pdo->prepare("INSERT INTO security_tokens (purpose, user_id, mfa_status, mfa_verified_at) VALUES ('mfa_credential', ?, 'enabled', CURRENT_TIMESTAMP(6))")->execute([$mvStu]);
+[, $mvLogin] = integration_http_json('/api/auth/login', '', ['email' => $mvOldEmail, 'password' => $saPass]);
+integration_http_json('/api/auth/password/reset-request', '', ['email' => $mvOldEmail]);
+$mvOpenTokens = static fn(int $id): int => (int) $pdo->query("SELECT COUNT(*) FROM security_tokens WHERE user_id = {$id} AND purpose = 'password_reset' AND used_at IS NULL AND revoked_at IS NULL")->fetchColumn();
+expect_same(1, $mvOpenTokens($mvStu), 'Setup: the Student has one open password-reset link');
+$mvVersion = (int) $pdo->query("SELECT token_version FROM user_accounts WHERE user_id = {$mvStu}")->fetchColumn();
+$mvOutboxBefore = (int) $pdo->query('SELECT COUNT(*) FROM email_outbox')->fetchColumn();
+[$mvStatus, $mvBody] = $mvPost(['userId' => $mvStu, 'newEmail' => '  ' . strtoupper($mvNew('stu')) . ' ']);
+expect_true($mvStatus === 200 && ($mvBody['status'] ?? '') === 'ok' && ($mvBody['person']['email'] ?? '') === $mvNew('stu') && ($mvBody['person']['userId'] ?? 0) === $mvStu, 'Move to new email answers {status, person} with the lower-cased new address');
+expect_same([$mvNew('stu'), $mvNew('stu')], [$pdo->query("SELECT login_email FROM user_accounts WHERE user_id = {$mvStu}")->fetchColumn(), $pdo->query("SELECT bu_email FROM students WHERE student_account_user_id = {$mvStu}")->fetchColumn()], 'The sign-in email and the Student record email both change');
+expect_same($mvOldEmail, $pdo->query("SELECT email FROM retired_emails WHERE user_id = {$mvStu}")->fetchColumn(), 'The old address is retired');
+expect_same([$mvVersion + 1, 0, null], [(int) $pdo->query("SELECT token_version FROM user_accounts WHERE user_id = {$mvStu}")->fetchColumn(), (int) $pdo->query("SELECT COUNT(*) FROM auth_sessions WHERE user_id = {$mvStu} AND revoked_at IS NULL")->fetchColumn(),
+    $pdo->query("SELECT google_subject FROM user_accounts WHERE user_id = {$mvStu}")->fetchColumn() ?: null], 'Every session ends and the Google link is removed');
+expect_same(0, (int) $pdo->query("SELECT COUNT(*) FROM security_tokens WHERE user_id = {$mvStu} AND purpose IN ('mfa_credential', 'mfa_recovery') AND revoked_at IS NULL")->fetchColumn(), '2FA and recovery codes are removed');
+expect_same(1, $mvOpenTokens($mvStu), 'The earlier reset link is cancelled and exactly one new password-reset link is issued');
+expect_same(401, integration_http_get_json('/api/student/dashboard', (string) ($mvLogin['access_token'] ?? ''))[0], 'The old access token stops working');
+$mvMail = $pdo->query("SELECT recipient_email, subject, sender_user_id FROM email_outbox ORDER BY email_id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+expect_same([$mvOutboxBefore + 1, $mvNew('stu'), 'Set your DentiSYS password', (int) $readDean['user_id']], [(int) $pdo->query('SELECT COUNT(*) FROM email_outbox')->fetchColumn(), $mvMail['recipient_email'], $mvMail['subject'], (int) $mvMail['sender_user_id']], 'One "Set your DentiSYS password" email goes to the new address only, with the Dean as sender');
+expect_same(0, (int) $pdo->query("SELECT COUNT(*) FROM email_outbox WHERE recipient_email = '{$mvOldEmail}' AND created_at > NOW() - INTERVAL '1 minute'")->fetchColumn(), 'Nothing is sent to the old address');
+$mvRows = $saAuditRows('account_email_moved', (string) $mvStu);
+expect_true(count($mvRows) === 1 && $mvRows[0]['reason'] === 'Old mailbox compromised' && str_contains((string) $mvRows[0]['before_state_json'], $mvOldEmail) && str_contains((string) $mvRows[0]['after_state_json'], $mvNew('stu')), 'One account_email_moved audit row holds old, new and the reason');
+[$mvStatus] = integration_http_json('/api/auth/login', '', ['email' => $mvOldEmail, 'password' => $saPass]);
+[$mvStatus2] = integration_http_json('/api/auth/login', '', ['email' => $mvNew('stu'), 'password' => $saPass]);
+expect_same([401, 401], [$mvStatus, $mvStatus2], 'The old address and the old password cannot sign in');
+
+// Retired address: refused everywhere (section 6).
+[$mvStatus, $mvBody] = $mvPost(['userId' => $mvFac, 'newEmail' => $mvOldEmail]);
+expect_true($mvStatus === 409 && ($mvBody['code'] ?? '') === 'email_retired' && ($mvBody['message'] ?? '') === 'That email address was retired and cannot be used again.', 'Moving to a retired address is email_retired');
+$mvTokensBefore = (int) $pdo->query("SELECT COUNT(*) FROM security_tokens WHERE purpose = 'password_reset'")->fetchColumn();
+[$mvStatus, $mvBody] = integration_http_json('/api/auth/password/reset-request', '', ['email' => $mvOldEmail]);
+[, $mvUnknown] = integration_http_json('/api/auth/password/reset-request', '', ['email' => "sa-nobody-{$saTag}@bicol-u.edu.ph"]);
+expect_true($mvStatus === 200 && ($mvBody['message'] ?? '') === ($mvUnknown['message'] ?? 'x') && (int) $pdo->query("SELECT COUNT(*) FROM security_tokens WHERE purpose = 'password_reset'")->fetchColumn() === $mvTokensBefore, 'Password reset for a retired address gets the neutral answer and issues nothing');
+[$mvStatus, $mvBody] = integration_http_json('/api/admin/faculty-invitations', $adminAccessToken, ['firstName' => 'Retired', 'lastName' => 'Address', 'email' => $mvOldEmail]);
+expect_true($mvStatus === 422 && $mvField($mvBody, 'email'), 'A Faculty invitation to a retired address is refused');
+[$mvStatus, $mvBody] = integration_http_json('/api/faculty/students', $seedFacultyAccessToken, ['studentNumber' => "RT-{$saTag}", 'firstName' => 'Retired', 'lastName' => 'Address', 'email' => $mvOldEmail]);
+expect_true(in_array($mvStatus, [400, 422], true) && str_contains(json_encode($mvBody), 'retired'), 'A Student record with a retired address is refused');
+
+// A Class Secretary is the same account; a deactivated person can be moved and stays deactivated.
+$saPost('/api/admin/people/deactivate', ['userId' => $mvSec]);
+[$mvStatus, $mvBody] = $mvPost(['userId' => $mvSec, 'newEmail' => $mvNew('sec')]);
+expect_true($mvStatus === 200 && ($mvBody['person']['status'] ?? '') === 'deactivated' && $pdo->query("SELECT bu_email FROM students WHERE student_account_user_id = {$mvSec}")->fetchColumn() === $mvNew('sec'), 'A deactivated Class Secretary moves with the Student record and stays deactivated');
+
+// Edit name (section 5).
+$mvNameBody = static fn(array $over = []): array => array_replace(['userId' => $mvFac, 'reason' => 'Misspelled at registration', 'name' => ['prefix' => 'Dr.', 'firstName' => 'Lea', 'middleName' => 'M', 'lastName' => "Santos{$mvLetters}", 'suffix' => 'DMD']], $over);
+$mvVersion = (int) $pdo->query("SELECT token_version FROM user_accounts WHERE user_id = {$mvFac}")->fetchColumn();
+[$mvStatus, $mvBody] = $saPost('/api/admin/people/name', $mvNameBody());
+expect_true($mvStatus === 200 && ($mvBody['person']['name'] ?? '') === "Dr. Lea M Santos{$mvLetters}, DMD" && ($mvBody['person']['nameParts']['firstName'] ?? '') === 'Lea' && ($mvBody['person']['nameParts']['suffix'] ?? '') === 'DMD', 'Edit name recomposes the display name (comma before a degree) and returns nameParts');
+expect_same($mvVersion, (int) $pdo->query("SELECT token_version FROM user_accounts WHERE user_id = {$mvFac}")->fetchColumn(), 'Editing a name signs nobody out');
+$mvRows = $saAuditRows('account_name_changed_by_dean', (string) $mvFac);
+expect_true(count($mvRows) === 1 && $mvRows[0]['reason'] === 'Misspelled at registration' && str_contains((string) $mvRows[0]['before_state_json'], "Sa Mvf {$saTag}") && str_contains((string) $mvRows[0]['after_state_json'], 'Lea'), 'Edit name writes one audit row with before, after and the reason');
+[$mvStatus, $mvBody] = $saPost('/api/admin/people/name', $mvNameBody());
+expect_true($mvStatus === 422 && ($mvBody['code'] ?? '') === 'name_unchanged' && count($saAuditRows('account_name_changed_by_dean', (string) $mvFac)) === 1, 'The same name is name_unchanged with no audit row');
+[$mvStatus, $mvBody] = $saPost('/api/admin/people/name', $mvNameBody(['name' => ['firstName' => 'L', 'lastName' => 'Santos'], 'reason' => 'x']));
+expect_true($mvStatus === 422 && $mvField($mvBody, 'firstName') && $mvField($mvBody, 'reason'), 'Edit name validates the name parts and the reason');
+[$mvStatus, $mvBody] = $saPost('/api/admin/people/name', $mvNameBody(['userId' => (int) $readDean['user_id']]));
+expect_same(404, $mvStatus, 'The Dean\'s own name is not edited here');
+[$mvStatus, $mvBody] = $saPost('/api/admin/people/name', $mvNameBody(['userId' => $mvSec, 'name' => ['firstName' => 'Sec', 'lastName' => "Renamed{$mvLetters}"]]));
+expect_true($mvStatus === 200 && ($mvBody['person']['name'] ?? '') === "Sec Renamed{$mvLetters}" && $pdo->query("SELECT last_name FROM students WHERE student_account_user_id = {$mvSec}")->fetchColumn() === "Renamed{$mvLetters}", 'Editing a Student name also updates the Student record');
+[, $mvList] = $saGet('/api/admin/people?kind=faculty&q=' . rawurlencode("Santos{$mvLetters}"));
+expect_same(['Dr.', 'Lea', 'M', "Santos{$mvLetters}", 'DMD'], array_values($mvList['people'][0]['nameParts'] ?? []), 'The people list carries nameParts');
+
+// bin/account-admin.php (section 7).
+[$mvCode, $mvOut] = $mvRun(['transfer-dean', '--to', "sa-mvf-{$saTag}@bicol-u.edu.ph", '--reason', 'New Dean appointed'], "YES\n");
+expect_true($mvCode === 1 && str_contains($mvOut, '--old-dean'), 'transfer-dean refuses without --old-dean');
+[$mvCode, $mvOut] = $mvRun(['transfer-dean', '--to', $mvNew('stu'), '--old-dean', 'faculty', '--reason', 'New Dean appointed'], "YES\n");
+expect_true($mvCode === 1 && str_contains($mvOut, 'not an active Faculty'), 'transfer-dean refuses a target that is not active Faculty');
+$pdo->exec("INSERT INTO academic_terms (school_year, semester, start_date, end_date) VALUES ('2098-2099', '1ST', CURRENT_DATE - 30, CURRENT_DATE + 30)");
+[$mvCode, $mvOut] = $mvRun(['transfer-dean', '--to', "sa-mvf-{$saTag}@bicol-u.edu.ph", '--old-dean', 'faculty', '--reason', 'New Dean appointed'], "YES\n");
+$pdo->exec("DELETE FROM academic_terms WHERE school_year = '2098-2099'");
+expect_true($mvCode === 1 && str_contains($mvOut, 'term is in progress') && $pdo->query("SELECT role FROM user_accounts WHERE user_id = {$mvFac}")->fetchColumn() === 'faculty', 'transfer-dean refuses while a term is in progress and changes nothing');
+[$mvCode] = $mvRun(['transfer-dean', '--to', "sa-mvf-{$saTag}@bicol-u.edu.ph", '--old-dean', 'faculty', '--reason', 'New Dean appointed'], "no\n");
+expect_true($mvCode === 1 && $pdo->query("SELECT role FROM user_accounts WHERE user_id = {$mvFac}")->fetchColumn() === 'faculty', 'Anything but YES cancels');
+[$mvCode, $mvOut] = $mvRun(['unretire-email', "sa-nobody-{$saTag}@bicol-u.edu.ph", '--reason', 'College gave it back'], "YES\n");
+expect_true($mvCode === 1 && str_contains($mvOut, 'not a retired address'), 'unretire-email refuses an address that is not retired');
+[$mvCode, $mvOut] = $mvRun(['unretire-email', $mvOldEmail, '--reason', 'College gave it back'], "YES\n");
+$mvSystemRows = $pdo->prepare("SELECT actor_role, reason FROM audit_events WHERE action_code = 'email_unretired' AND target_id = ?");
+$mvSystemRows->execute([(string) $mvStu]);
+expect_true($mvCode === 0 && (int) $pdo->query("SELECT COUNT(*) FROM retired_emails WHERE email = '{$mvOldEmail}'")->fetchColumn() === 0 && $mvSystemRows->fetchAll(PDO::FETCH_ASSOC) === [['actor_role' => 'system', 'reason' => 'College gave it back']], 'unretire-email releases the address and audits as System');
+
 // ---- Part A: class-work audit scope ----
 $saStudentRow = $pdo->prepare("INSERT INTO students (student_number, first_name, last_name, bu_email, status) VALUES (?, 'Sa', ?, ?, 'active') RETURNING student_id");
 $saStudentRow->execute(["SW-{$saTag}-1", "Fixture{$saTag}", "sw1-{$saTag}@bicol-u.edu.ph"]);

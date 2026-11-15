@@ -362,6 +362,7 @@ function handle_admin_faculty_invitation_create(): void
         $nameParts = faculty_invitation_name_parts_from_payload($body['data']);
         $name = $nameParts['displayName'];
         $email = validate_institutional_email((string) ($body['data']['email'] ?? ''));
+        email_assert_not_retired($pdo, $email);
         $token = faculty_invitation_token();
         $digest = hash('sha256', $token, true);
         $passwordHash = password_hash(faculty_invitation_token(), PASSWORD_DEFAULT);
@@ -537,6 +538,7 @@ function handle_admin_faculty_invitation_update(): void
         $nameParts = faculty_invitation_name_parts_from_payload($body['data']);
         $name = $nameParts['displayName'];
         $email = validate_institutional_email((string) ($body['data']['email'] ?? ''));
+        email_assert_not_retired($pdo, $email);
         $token = faculty_invitation_token();
         $digest = hash('sha256', $token, true);
         $passwordHash = password_hash(faculty_invitation_token(), PASSWORD_DEFAULT);

@@ -300,6 +300,7 @@ $expectedMigrations = [
     '059_email_outbox_invitation.sql',
     '060_course_retire.sql',
     '061_name_degree_comma.sql',
+    '062_retired_emails.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');

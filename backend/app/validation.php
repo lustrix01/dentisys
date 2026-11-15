@@ -103,6 +103,21 @@ function validate_institutional_email(string $value): string
     return $email;
 }
 
+/** ADM-001 / 12.1: an address an account was moved away from can never be used again (table retired_emails). */
+function email_is_retired(PDO $pdo, string $email): bool
+{
+    $stmt = $pdo->prepare('SELECT 1 FROM retired_emails WHERE email = ?');
+    $stmt->execute([trim($email)]);
+    return $stmt->fetchColumn() !== false;
+}
+
+function email_assert_not_retired(PDO $pdo, string $email): void
+{
+    if (email_is_retired($pdo, $email)) {
+        throw new ValidationException([['field' => 'email', 'message' => 'That email address was retired and cannot be used again.']]);
+    }
+}
+
 function validate_person_name(array $data, string $field, int $minBytes = 2, int $maxBytes = 255): string
 {
     $raw = array_key_exists($field, $data) ? (string) $data[$field] : '';
