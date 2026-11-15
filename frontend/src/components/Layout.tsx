@@ -24,6 +24,7 @@ import {
   UserCheck,
   UserPlus,
   BookOpen,
+  Library,
   Camera,
   History,
   CheckCheck,
@@ -278,10 +279,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       return [
         { name: 'Overview', path: '/superadmin/overview', icon: LayoutDashboard, short: 'Overview' },
         { name: 'People & Accounts', path: '/superadmin/people', icon: Users, short: 'People' },
-        { name: 'Faculty Invitations', path: '/superadmin/faculty-invite', icon: UserPlus, short: 'Invites' },
-        { name: 'Course Catalog', path: '/superadmin/course-catalog', icon: BookOpen, short: 'Courses' },
-        { name: 'Academic Terms', path: '/superadmin/terms', icon: CalendarDays, short: 'Terms' },
-        { name: 'Rooms', path: '/superadmin/rooms', icon: DoorOpen },
         { name: 'Audit Trail', path: '/superadmin/audit-trail', icon: ListChecks, short: 'Audit' },
       ];
     }
@@ -291,6 +288,11 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
         { name: 'Reports & Analytics', path: '/admin/reports', icon: FileSpreadsheet, short: 'Reports' },
         { name: 'Classes', path: '/admin/classes', icon: BookOpen },
+        { name: 'Faculty Invitations', path: '/admin/faculty-invite', icon: UserPlus, short: 'Invites' },
+        { name: 'Course Catalog', path: '/admin/course-catalog', icon: Library, short: 'Courses' },
+        { name: 'Academic Terms', path: '/admin/terms', icon: CalendarDays, short: 'Terms' },
+        { name: 'Rooms', path: '/admin/rooms', icon: DoorOpen },
+        { name: 'Audit Trail', path: '/admin/audit-trail', icon: ListChecks, short: 'Audit' },
       ];
     }
 
@@ -537,16 +539,18 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'Dean Settings', path: '/admin/settings' });
     } else if (path === '/superadmin/overview') {
       crumbs.push({ name: 'Overview', path: '/superadmin/overview' });
-    } else if (path === '/superadmin/terms') {
-      crumbs.push({ name: 'Academic Terms', path: '/superadmin/terms' });
-    } else if (path === '/superadmin/rooms') {
-      crumbs.push({ name: 'Rooms', path: '/superadmin/rooms' });
-    } else if (path === '/superadmin/faculty-invite') {
-      crumbs.push({ name: 'Faculty Invitations', path: '/superadmin/faculty-invite' });
+    } else if (path === '/admin/terms') {
+      crumbs.push({ name: 'Academic Terms', path: '/admin/terms' });
+    } else if (path === '/admin/rooms') {
+      crumbs.push({ name: 'Rooms', path: '/admin/rooms' });
+    } else if (path === '/admin/faculty-invite') {
+      crumbs.push({ name: 'Faculty Invitations', path: '/admin/faculty-invite' });
     } else if (path === '/superadmin/audit-trail') {
       crumbs.push({ name: 'Audit Trail', path: '/superadmin/audit-trail' });
-    } else if (path === '/superadmin/course-catalog') {
-      crumbs.push({ name: 'Course Catalog', path: '/superadmin/course-catalog' });
+    } else if (path === '/admin/audit-trail') {
+      crumbs.push({ name: 'Audit Trail', path: '/admin/audit-trail' });
+    } else if (path === '/admin/course-catalog') {
+      crumbs.push({ name: 'Course Catalog', path: '/admin/course-catalog' });
     } else if (path === '/superadmin/people') {
       crumbs.push({ name: 'People & Accounts', path: '/superadmin/people' });
     } else if (path === '/admin/classes') {

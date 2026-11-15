@@ -38,41 +38,42 @@ test('SA2 only the Dean sees the Dean / Superadmin switch; it copies the Secreta
   assert.match(secretary, /\{user\?\.role === 'secretary' && \(/); // the Secretary switcher is still Secretary-only
 });
 
-test('SA3 the Superadmin sidebar sets things up: Overview, People, Invitations, Courses, Terms, Rooms, Audit Trail', () => {
+test('SA3 the Superadmin sidebar has three pages: Overview, People & Accounts, Audit Trail', () => {
   const nav = between(layout, 'if (superadminView) {', "if (currentUser.role === 'admin') {");
   assert.deepEqual([...nav.matchAll(/name: '([^']+)', path: '([^']+)'/g)].map(m => [m[1], m[2]]), [
     ['Overview', '/superadmin/overview'],
     ['People & Accounts', '/superadmin/people'],
-    ['Faculty Invitations', '/superadmin/faculty-invite'],
-    ['Course Catalog', '/superadmin/course-catalog'],
-    ['Academic Terms', '/superadmin/terms'],
-    ['Rooms', '/superadmin/rooms'],
     ['Audit Trail', '/superadmin/audit-trail'],
   ]);
   assert.doesNotMatch(nav, /Classes/); // Class Sections stays a Dean-view preview (answer 4)
 });
 
-test('SA4 the Dean view watches: Dashboard, Reports & Analytics, Classes only', () => {
+test('SA4 the Dean view: Dashboard, Reports, Classes, the setup pages and its own Audit Trail', () => {
   const nav = between(layout, "if (currentUser.role === 'admin') {", "if (currentUser.role === 'secretary') {");
   assert.deepEqual([...nav.matchAll(/name: '([^']+)', path: '([^']+)'/g)].map(m => [m[1], m[2]]), [
     ['Dashboard', '/'],
     ['Reports & Analytics', '/admin/reports'],
     ['Classes', '/admin/classes'],
+    ['Faculty Invitations', '/admin/faculty-invite'],
+    ['Course Catalog', '/admin/course-catalog'],
+    ['Academic Terms', '/admin/terms'],
+    ['Rooms', '/admin/rooms'],
+    ['Audit Trail', '/admin/audit-trail'],
   ]);
 });
 
-test('SA4 routes: old paths go to the dashboard; /superadmin/* is Dean-only; the top bar shows a Superadmin chip', () => {
+test('SA4 routes: setup pages live under /admin/, old /superadmin/ setup paths redirect; /superadmin/* is Dean-only; the top bar shows a Superadmin chip', () => {
   assert.match(app, /path="\/admin\/people" element=\{<Navigate to="\/" replace \/>\}/);
-  assert.match(app, /path="\/admin\/course-catalog" element=\{<Navigate to="\/" replace \/>\}/);
   const adminRoutes = between(app, "<ProtectedRoute allowedRoles={['admin']} />", "<ProtectedRoute allowedRoles={['secretary']} />");
-  for (const p of ['overview', 'terms', 'rooms', 'faculty-invite', 'audit-trail', 'course-catalog', 'people']) assert.match(adminRoutes, new RegExp(`path="/superadmin/${p}" element=\\{<(?!Navigate)`));
+  for (const p of ['overview', 'audit-trail', 'people']) assert.match(adminRoutes, new RegExp(`path="/superadmin/${p}" element=\\{<(?!Navigate)`));
+  for (const p of ['terms', 'rooms', 'faculty-invite', 'course-catalog', 'audit-trail']) assert.match(adminRoutes, new RegExp(`path="/admin/${p}" element=\\{<(?!Navigate)`));
   assert.match(adminRoutes, /path="\/superadmin" element=\{<Navigate to="\/superadmin\/overview" replace \/>\}/);
   const redirects: Array<[string, string]> = [
-    ['terms', 'terms'], ['academic-terms', 'terms'], ['rooms', 'rooms'], ['faculty-invite', 'faculty-invite'],
-    ['faculty-approval', 'faculty-invite'], ['audit-trail', 'audit-trail'], ['audit', 'audit-trail'],
+    ['superadmin/terms', 'terms'], ['superadmin/rooms', 'rooms'], ['superadmin/faculty-invite', 'faculty-invite'], ['superadmin/course-catalog', 'course-catalog'],
+    ['admin/academic-terms', 'terms'], ['admin/faculty-approval', 'faculty-invite'], ['admin/audit', 'audit-trail'],
   ];
-  for (const [from, to] of redirects) assert.match(adminRoutes, new RegExp(`path="/admin/${from}" element=\\{<Navigate to="/superadmin/${to}" replace />\\}`));
-  assert.doesNotMatch(app, /DeanAuditTrail/); // only one Audit Trail page remains
+  for (const [from, to] of redirects) assert.match(adminRoutes, new RegExp(`path="/${from}" element=\\{<Navigate to="/admin/${to}" replace />\\}`));
+  assert.match(adminRoutes, /path="\/admin\/audit-trail" element=\{<DeanAuditTrail \/>\}/);
   assert.equal((layout.match(/>Superadmin<\/span>/g) ?? []).length, 2); // desktop header and phone page title
   assert.match(layout, /\{superadminView && <span/);
 });

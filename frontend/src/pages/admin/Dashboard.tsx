@@ -99,7 +99,7 @@ export const Dashboard: React.FC = () => {
 
       {apiData?.academicTermReminder && <div role="status" className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200">
         This term ends on {apiData.academicTermReminder.endDate}. Add dates for {apiData.academicTermReminder.semester} {apiData.academicTermReminder.schoolYear}.
-        <button type="button" onClick={() => navigate('/superadmin/terms')} className="ml-2 font-bold underline">Open academic terms</button>
+        <button type="button" onClick={() => navigate('/admin/terms')} className="ml-2 font-bold underline">Open academic terms</button>
       </div>}
       {/* 2-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -120,7 +120,7 @@ export const Dashboard: React.FC = () => {
               </div>
 
               <button
-                onClick={() => navigate('/superadmin/faculty-invite')}
+                onClick={() => navigate('/admin/faculty-invite')}
                 className="self-start sm:self-center flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-600 hover:bg-accent-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-accent-600/20 transition-all cursor-pointer flex-shrink-0"
               >
                 <span>Invite Faculty</span>
@@ -230,7 +230,7 @@ export const Dashboard: React.FC = () => {
           <section aria-label="Latest audit events" className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Latest Audit Events</h3>
-              <button type="button" onClick={() => navigate('/superadmin/audit-trail')} className="text-xs font-bold whitespace-nowrap text-accent-600 hover:underline cursor-pointer">View audit trail</button>
+              <button type="button" onClick={() => navigate('/admin/audit-trail')} className="text-xs font-bold whitespace-nowrap text-accent-600 hover:underline cursor-pointer">View audit trail</button>
             </div>
             {recentAuditEvents.length === 0 ? (
               <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">No audit events recorded yet.</p>

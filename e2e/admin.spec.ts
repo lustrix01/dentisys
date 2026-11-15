@@ -116,7 +116,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
       else { saves++; terms = terms.map(term => term.schoolYear === data.schoolYear && term.semester === data.semester ? { ...term, id: 1, startDate: data.startDate, endDate: data.endDate } : term); body = { status: 'ok', confirmationRequired: false, id: 1 }; }
       await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
     });
-    await page.locator('[aria-label="Account view"] button').nth(1).click(); await page.click('a[href="/superadmin/terms"]');
+    await page.click('a[href="/admin/terms"]');
     const section = page.locator('#academic-terms');
     const row = section.getByTestId('2026-2027-1ST');
     await expect(row).toContainText('Dates not set');
@@ -173,7 +173,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
       { id: 4, schoolYear: '2026-2027', semester: '2ND', startDate: '2027-01-05', endDate: '2027-05-15', classCount: 0 },
     ];
     await page.route('**/api/admin/academic-terms**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', today: '2026-10-10', terms }) }));
-    await page.locator('[aria-label="Account view"] button').nth(1).click(); await page.click('a[href="/superadmin/terms"]');
+    await page.click('a[href="/admin/terms"]');
     const section = page.locator('#academic-terms');
     const pastYear = section.getByTestId('year-2025-2026');
     await expect(section.getByTestId('year-2024-2025')).toContainText('No dates set');
@@ -201,7 +201,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.reload();
     await expect(page.getByRole('status')).toContainText('Add dates for 2ND 2026-2027');
     await page.getByRole('button', { name: 'Open academic terms' }).click();
-    await expect(page).toHaveURL('/superadmin/terms');
+    await expect(page).toHaveURL('/admin/terms');
     await expect(page.getByRole('heading', { level: 1, name: 'Academic Terms' })).toBeVisible();
     await expect(page.locator('#academic-terms')).toBeVisible();
   });
@@ -211,8 +211,8 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
   });
 
   test('admin can navigate to the Faculty Invitation page', async ({ page }) => {
-    await page.locator('[aria-label="Account view"] button').nth(1).click(); await page.click('a[href="/superadmin/faculty-invite"]');
-    await expect(page).toHaveURL('/superadmin/faculty-invite');
+    await page.click('a[href="/admin/faculty-invite"]');
+    await expect(page).toHaveURL('/admin/faculty-invite');
     await expect(page.locator('body')).toContainText(/Faculty Invitation|Invite|Pending/i);
   });
 
@@ -328,6 +328,22 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.locator('[aria-label="Account view"] button').nth(1).click(); await page.click('a[href="/superadmin/audit-trail"]');
     await expect(page).toHaveURL('/superadmin/audit-trail');
     await expect(page.locator('body')).toContainText(/Audit Trail|Activity Log/i);
+  });
+
+  test('Dean view has the 8 setup/watch pages; Superadmin has 3; old paths redirect', async ({ page }) => {
+    for (const p of ['/', '/admin/reports', '/admin/classes', '/admin/faculty-invite', '/admin/course-catalog', '/admin/terms', '/admin/rooms', '/admin/audit-trail']) {
+      await expect(page.locator(`a[href="${p}"]`).first()).toBeAttached();
+    }
+    for (const [from, to] of [['/superadmin/terms', '/admin/terms'], ['/superadmin/rooms', '/admin/rooms'], ['/superadmin/faculty-invite', '/admin/faculty-invite'],
+      ['/superadmin/course-catalog', '/admin/course-catalog'], ['/admin/academic-terms', '/admin/terms'], ['/admin/faculty-approval', '/admin/faculty-invite'], ['/admin/audit', '/admin/audit-trail']]) {
+      await page.goto(from);
+      await expect(page).toHaveURL(to);
+    }
+    await expect(page.getByRole('tablist', { name: 'Audit views' })).toHaveCount(0); // Dean Audit Trail: Activity only
+    await page.goto('/superadmin/overview');
+    for (const p of ['/superadmin/overview', '/superadmin/people', '/superadmin/audit-trail']) await expect(page.locator(`a[href="${p}"]`).first()).toBeAttached();
+    await page.goto('/superadmin/audit-trail');
+    await expect(page.getByRole('tablist', { name: 'Audit views' })).toBeVisible();
   });
 
   test('admin can view Profile page', async ({ page }) => {
@@ -502,7 +518,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
 
   test('Rooms page: Retire and Delete ask first; Cancel sends nothing', async ({ page }) => {
     const posted = await mockRooms(page);
-    await page.locator('[aria-label="Account view"] button').nth(1).click(); await page.click('a[href="/superadmin/rooms"]');
+    await page.click('a[href="/admin/rooms"]');
     const used = page.getByTestId('room-Room 302');
     await expect(used).toContainText('Active');
     await expect(used).toContainText('Used by 3 classes · 1 session');

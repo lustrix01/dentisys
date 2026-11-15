@@ -32,7 +32,7 @@ export function attentionRows(a: AdminOverview['attention']): Array<{ count: num
     { count: a.inactive30.faculty, text: a.inactive30.faculty === 1 ? 'Faculty account inactive for 30+ days' : 'Faculty accounts inactive for 30+ days', to: '/superadmin/people?kind=faculty&activity=inactive30' },
     { count: a.inactive30.students, text: a.inactive30.students === 1 ? 'Student account inactive for 30+ days' : 'Student accounts inactive for 30+ days', to: '/superadmin/people?kind=student&activity=inactive30' },
   ].filter(r => r.count > 0) as Array<{ count: number | null; text: string; to: string }>;
-  return a.nextTermMissing ? [...rows, { count: null, text: 'The next term has no dates yet', to: '/superadmin/terms' }] : rows;
+  return a.nextTermMissing ? [...rows, { count: null, text: 'The next term has no dates yet', to: '/admin/terms' }] : rows;
 }
 
 export const SuperadminOverview: React.FC = () => {
@@ -85,9 +85,9 @@ export const SuperadminOverview: React.FC = () => {
 
   const term = data.setup.currentTerm;
   const tiles: Tile[] = [
-    { label: 'Current Term', value: term ? semesterLabel(term.semester) : 'No current term', sub: term ? `${schoolYearText(term.schoolYear)}${term.endDate ? ` · ends ${shortDate(term.endDate)}` : ''}` : 'Add the term dates', to: '/superadmin/terms' },
-    { label: 'Courses', value: String(data.setup.courses.active), sub: `${data.setup.courses.retired} retired`, to: '/superadmin/course-catalog' },
-    { label: 'Rooms', value: String(data.setup.rooms.active), sub: `${data.setup.rooms.retired} retired`, to: '/superadmin/rooms' },
+    { label: 'Current Term', value: term ? semesterLabel(term.semester) : 'No current term', sub: term ? `${schoolYearText(term.schoolYear)}${term.endDate ? ` · ends ${shortDate(term.endDate)}` : ''}` : 'Add the term dates', to: '/admin/terms' },
+    { label: 'Courses', value: String(data.setup.courses.active), sub: `${data.setup.courses.retired} retired`, to: '/admin/course-catalog' },
+    { label: 'Rooms', value: String(data.setup.rooms.active), sub: `${data.setup.rooms.retired} retired`, to: '/admin/rooms' },
   ];
 
   return (
