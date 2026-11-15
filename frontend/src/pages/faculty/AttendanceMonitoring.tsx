@@ -1015,7 +1015,7 @@ export const AttendanceMonitoring: React.FC = () => {
 
       <Tabs
         variant="section"
-        color="emerald"
+        color="clinical"
         label="Attendance sections"
         value={tab}
         onChange={setTab}

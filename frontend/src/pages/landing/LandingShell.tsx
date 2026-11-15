@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mail, MapPin, Phone, LogIn, Menu, X } from 'lucide-react';
+import { Mail, MapPin, LogIn, Menu, X } from 'lucide-react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 
 const links = [
@@ -72,7 +72,6 @@ export function LandingShell({ children }: { children?: React.ReactNode }) {
     <div className="relative isolate flex min-h-screen flex-col bg-slate-50 text-slate-800">
       <div className="pointer-events-none absolute inset-0" aria-hidden="true">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_48%,rgba(139,92,246,0.15)_0%,rgba(139,92,246,0.06)_36%,transparent_72%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1.2px,transparent_1.2px)] [background-size:24px_24px] opacity-40" />
       </div>
       <header className="sticky top-0 z-50 w-full flex-shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur-xs px-4 py-3 shadow-2xs sm:px-6 sm:py-3.5 md:px-12">
         <div className="mx-auto flex max-w-7xl items-center justify-start gap-3 sm:gap-6">
@@ -139,9 +138,8 @@ export function LandingShell({ children }: { children?: React.ReactNode }) {
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 text-center text-xs sm:flex-row sm:text-left">
           <span className="font-medium text-slate-300">© {new Date().getFullYear()} Bicol University College of Dental Medicine. All rights reserved.</span>
           <div className="flex flex-wrap items-center justify-center gap-4 text-slate-400 sm:justify-end sm:gap-6">
-            <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 flex-shrink-0 text-purple-400" />Legazpi City</span>
-            <a href="mailto:bu-cdm@bicol-u.edu.ph" className="inline-flex items-center gap-1.5 transition-colors hover:text-white"><Mail className="h-3.5 w-3.5 flex-shrink-0 text-purple-400" />bu-cdm@bicol-u.edu.ph</a>
-            <span className="inline-flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 flex-shrink-0 text-purple-400" />(052) 480-0100</span>
+            <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 flex-shrink-0 text-purple-400" />Daraga</span>
+            <a href="mailto:bu-dmd@bicol-u.edu.ph" className="inline-flex items-center gap-1.5 transition-colors hover:text-white"><Mail className="h-3.5 w-3.5 flex-shrink-0 text-purple-400" />bu-dmd@bicol-u.edu.ph</a>
           </div>
         </div>
       </footer>

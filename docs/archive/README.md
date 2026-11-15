@@ -59,7 +59,7 @@ These documents are kept for history. They describe past plans, handoffs, and ev
 
 ## Merge notes
 
-- Owhie merges: [UI changes (October)](owhie-merge-2026-10.md), [responsive (October)](owhie-responsive-merge-2026-10.md), [roster import (October)](owhie-roster-import-merge-2026-10.md), [landing pages, reports and import (November)](owhie-landing-reports-merge-2026-11.md), [responsive workflow (November)](owhie-responsive-workflow-merge-2026-11.md), [session timeout and phone views (November)](owhie-session-timeout-merge-2026-11.md)
+- Owhie merges: [UI changes (October)](owhie-merge-2026-10.md), [responsive (October)](owhie-responsive-merge-2026-10.md), [roster import (October)](owhie-roster-import-merge-2026-10.md), [landing pages, reports and import (November)](owhie-landing-reports-merge-2026-11.md), [responsive workflow (November)](owhie-responsive-workflow-merge-2026-11.md), [session timeout and phone views (November)](owhie-session-timeout-merge-2026-11.md), [landing and Faculty accents (November)](owhie-accents-merge-2026-11.md)
 - [Rooms and session times audit and merge, November 2026](rooms-times-merge-2026-11.md)
 
 ## Specification amendment records (applied to spec.md)

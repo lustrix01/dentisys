@@ -55,7 +55,7 @@ export function AboutPage() {
 
             {/* SLIDE 1: TEXT ON LEFT, BUCDM SEAL ON RIGHT (NO BACKGROUND CARD, NO GAP) */}
             {currentSlide === 0 && (
-              <div className="mx-auto flex w-full max-w-6xl flex-col-reverse items-center justify-center gap-6 md:flex-row-reverse md:gap-12 lg:gap-20 animate-fade-in">
+              <div className="mx-auto flex w-full max-w-6xl flex-col-reverse items-center justify-center gap-8 md:flex-row-reverse md:gap-16 lg:gap-24 animate-fade-in">
 
                 {/* LEFT: TEXT & INFORMATION */}
                 <div className="flex w-full min-w-0 flex-1 flex-col items-center text-center max-w-xl md:items-start md:text-left">
