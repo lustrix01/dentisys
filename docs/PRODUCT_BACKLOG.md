@@ -23,11 +23,7 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 # 9. Known issues
 
-- **9.14** Apply the Page patterns notice banner, empty state and loading state standards (docs/frontend.md) to the Faculty, Secretary and Student pages; the Dean and Superadmin pages already follow them.
-- **9.15** People & Accounts phone cards break long email addresses mid-word (for example "bicol-u.ed / u.ph").
-- **9.16** Superadmin ideas, not yet approved to build: pending invitations inside People & Accounts with resend and revoke; the Dean resets a user's 2FA (needs a spec rule); sign a user out everywhere without deactivating (needs a spec rule); export the People and Course Catalog lists.
-- **9.17** People & Accounts filters: by course on both tabs (Faculty who teach a class of that course; Students enrolled in a class of that course), and by class section on the Students tab.
-- **9.18** Pinned columns on every table in the app (any role, any page): while scrolling, the column labels stay in view so the user knows what each value is. When this is picked up, confirm the scope with the Owner: the header row on vertical scrolling, the identifying first column (such as Name) on sideways scrolling, or both.
+No open items.
 
 ---
 
@@ -35,6 +31,11 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 Full text and Owner decisions of these items: [backlog items closed before 2026-11-14](archive/backlog-done-2026-11.md).
 
+- **9.14** Notice banner, empty state and loading state standards on the Faculty, Secretary and Student pages (small dashboard panels keep a one-line message).
+- **9.15** People & Accounts phone cards wrap emails only before "@".
+- **9.16** Superadmin account actions: sign out everywhere, reset 2FA, revoke face enrollment, Invited people with resend and revoke, People and Course Catalog Excel export.
+- **9.17** People & Accounts course and class-section filters (this school year).
+- **9.18** Pinned header row and first column on every screen table.
 - **3.1** Read-only profiles with a Change Name action for every role.
 - **3.2** Authenticator confirmation for name changes.
 - **4.1** Dean My Activity: dropped; the Audit Trail role filter covers it.

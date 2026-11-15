@@ -62,7 +62,7 @@ student_contract_assert(str_contains((string) $identitySource, 'require_owned_en
 $invitationStart = substr((string) $controllerSource, (int) strpos((string) $controllerSource, 'function handle_student_invitation_create'), (int) strpos((string) $controllerSource, 'function handle_student_invitation_get') - (int) strpos((string) $controllerSource, 'function handle_student_invitation_create'));
 student_contract_assert(str_contains($invitationStart, 'cs.instructor_user_id = ?'), 'Student invitation requires Faculty ownership of the specified class');
 student_contract_assert(str_contains($invitationStart, "e.status = 'Active'"), 'Student invitation requires the exact active class enrollment');
-student_contract_assert(str_contains($invitationStart, 'related_cs_id'), 'Student invitation token is bound to the authorized class');
+student_contract_assert(str_contains($invitationStart, 'student_invitation_issue_token(') && str_contains((string) $controllerSource, 'related_cs_id'), 'Student invitation token is bound to the authorized class');
 student_contract_assert(str_contains($invitationStart, "student['user_id'] !== null"), 'Student invitation rejects legacy Secretary-linked identities');
 $activationStart = (int) strpos((string) $controllerSource, 'function handle_student_activate');
 $mockStart = (int) strpos((string) $controllerSource, 'function handle_development_mock_student_session');

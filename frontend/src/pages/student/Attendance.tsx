@@ -1018,12 +1018,7 @@ export const Attendance: React.FC = () => {
   // --- LOADING STATE ---
   if (isAuthoritative && initialLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-        <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-          Loading active attendance sessions…
-        </p>
-      </div>
+      <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Loading active attendance sessions…</div>
     );
   }
 
@@ -1033,9 +1028,9 @@ export const Attendance: React.FC = () => {
       {/* FACE REGISTRATION WARNING / ENROLLMENT CHECK */}
       {isAuthoritative ? (
         !isAuthoritativeActiveEnrolled(profile?.enrollmentStatus) && (
-          <div className="bg-amber-50 dark:bg-amber-950/40 rounded-2xl p-4 border border-amber-200 dark:border-amber-900 flex items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-3 text-amber-900 dark:text-amber-200">
-              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+          <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>
                 {profile?.enrollmentStatus === 'expired'
                   ? 'Your biometric enrollment expired for this semester. Face re-registration is required.'
@@ -1055,9 +1050,9 @@ export const Attendance: React.FC = () => {
         )
       ) : (
         !isMockFaceRegistered && (
-          <div className="bg-amber-50 dark:bg-amber-950/40 rounded-2xl p-4 border border-amber-200 dark:border-amber-900 flex items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-3 text-amber-900 dark:text-amber-200">
-              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+          <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>Face registration required before taking session attendance.</span>
             </div>
             <button
@@ -1073,8 +1068,8 @@ export const Attendance: React.FC = () => {
 
       {/* General Error */}
       {authError && (
-        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-3 animate-fade-in">
-          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 animate-fade-in">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="space-y-2">
             <p className="leading-relaxed">{authError}</p>
             <button
@@ -1116,9 +1111,9 @@ export const Attendance: React.FC = () => {
         <div className="space-y-6">
 
           {canRetryUpload && pendingAttendancePayload && checkInStage !== 'result' && (
-            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-3">
-              <div className="flex items-start gap-2.5">
-                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <div>
                   <strong className="block font-bold">Network or biometric service interruption</strong>
                   <p className="mt-0.5 leading-relaxed">
@@ -1232,11 +1227,14 @@ export const Attendance: React.FC = () => {
                 )}
 
                 {!upcomingError && upcomingSessions.length === 0 && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {upcomingRange === 'week'
-                      ? 'No attendance sessions scheduled in the next 7 days.'
-                      : 'No upcoming attendance sessions scheduled.'}
-                  </p>
+                  <div className="px-6 py-14 text-center">
+                    <Clock className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                    <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">
+                      {upcomingRange === 'week'
+                        ? 'No attendance sessions scheduled in the next 7 days.'
+                        : 'No upcoming attendance sessions scheduled.'}
+                    </h3>
+                  </div>
                 )}
 
                 {upcomingToday.length > 0 && (
@@ -1489,8 +1487,8 @@ export const Attendance: React.FC = () => {
                   />
 
                   {cameraError && (
-                    <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-3">
-                      <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                       <div>
                         <strong className="block font-bold">{cameraErrorIsChallenge ? 'Liveness check unavailable' : 'Camera access required'}</strong>
                         <p className="mt-0.5 leading-relaxed">{cameraError}</p>
@@ -1533,8 +1531,8 @@ export const Attendance: React.FC = () => {
                     </p>
 
                     {failureNotice && (
-                      <div role="alert" className="text-left p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-3 animate-fade-in">
-                        <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+                      <div role="alert" className="flex items-start gap-3 text-left rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 animate-fade-in">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                         <div className="space-y-1">
                           <strong className="block font-bold">Biometric Attendance Notice</strong>
                           <p className="leading-relaxed">{failureNotice}</p>
@@ -1627,12 +1625,9 @@ export const Attendance: React.FC = () => {
 
               {/* VERIFYING WITH SERVER OVERLAY */}
               {checkInStage === 'verifying' && (
-                <div className="bg-white dark:bg-slate-900 rounded-3xl p-12 text-center border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4 animate-fade-in">
-                  <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto" />
-                  <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                    Authoritative Verification in Progress…
-                  </h3>
-                  <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 animate-fade-in dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                  Authoritative Verification in Progress…
+                  <p className="mx-auto mt-2 max-w-sm text-xs font-normal leading-relaxed">
                     Evaluating liveness challenge, 1:1 facial verification, and session parameters. Please do not close the browser.
                   </p>
                 </div>
@@ -1640,8 +1635,8 @@ export const Attendance: React.FC = () => {
 
               {/* A rejected or paused check-in returns here, so its notice must stay visible. */}
               {checkInStage === 'idle' && failureNotice && (
-                <div role="alert" className="text-left p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-3 animate-fade-in">
-                  <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+                <div role="alert" className="flex items-start gap-3 text-left rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 animate-fade-in">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="space-y-1">
                     <strong className="block font-bold">Biometric Attendance Notice</strong>
                     <p className="leading-relaxed">{failureNotice}</p>

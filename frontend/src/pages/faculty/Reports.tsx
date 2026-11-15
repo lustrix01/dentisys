@@ -14,7 +14,8 @@ import {
   Layers,
   FileText,
   AlertCircle,
-  Filter
+  Filter,
+  Inbox
 } from 'lucide-react';
 import { 
   AreaChart,
@@ -1095,9 +1096,7 @@ export const Reports: React.FC = () => {
           {/* Phones: one block per student (name first, then the grade fields) instead of a clipped table. */}
           <ul className="md:hidden max-h-[480px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium">
             {paginatedStudentsInSubject.length === 0 ? (
-              <li className="px-5 py-12 text-center text-slate-500 dark:text-slate-400 font-semibold">
-                No student records found for the selected course and class section.
-              </li>
+              <li className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No student records found for the selected course and class section.</h3></li>
             ) : (
               paginatedStudentsInSubject.map((student) => {
                 const subj = subjectForSelection(student);
@@ -1141,9 +1140,9 @@ export const Reports: React.FC = () => {
             )}
           </ul>
 
-          <div className="hidden md:block overflow-x-auto max-h-[480px] overflow-y-auto">
+          <div className="table-pin table-pin-first hidden md:block">
             <table className="w-full text-left">
-              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
+              <thead>
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
                   <th className="px-5 py-3">Student Details</th>
                   {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Midterm Lecture</th>}
@@ -1159,9 +1158,7 @@ export const Reports: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium">
                 {paginatedStudentsInSubject.length === 0 ? (
                   <tr>
-                    <td colSpan={isLectureLaboratoryMode ? 9 : 5} className="px-5 py-12 text-center text-slate-500 dark:text-slate-400 font-semibold">
-                      No student records found for the selected course and class section.
-                    </td>
+                    <td colSpan={isLectureLaboratoryMode ? 9 : 5} className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No student records found for the selected course and class section.</h3></td>
                   </tr>
                 ) : (
                   paginatedStudentsInSubject.map((student: any) => {
@@ -1255,9 +1252,9 @@ export const Reports: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+          <div className="table-pin table-pin-first">
             <table className="w-full text-left">
-              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
+              <thead>
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
                   <th className="px-5 py-3">Student Details</th>
                   <th className="px-5 py-3 text-center">Standing Grade</th>
@@ -1368,14 +1365,14 @@ export const Reports: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="table-pin table-pin-first">
             {attendanceError && (
-              <div className="m-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
+              <div className="m-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{attendanceError}</span>
               </div>
             )}
-            {attendanceLoading && <p className="p-6 text-center text-xs text-slate-500 dark:text-slate-400">Loading persisted attendance records…</p>}
+            {attendanceLoading && <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading persisted attendance records…</div>}
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
@@ -1387,7 +1384,7 @@ export const Reports: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium">
                 {!attendanceLoading && attendanceRecords.length === 0 ? (
-                  <tr><td colSpan={4} className="px-5 py-10 text-center text-xs text-slate-500 dark:text-slate-400">No persisted attendance records for this class and date.</td></tr>
+                  <tr><td colSpan={4} className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No persisted attendance records for this class and date.</h3></td></tr>
                 ) : attendanceRecords.map(record => {
                     return (
                       <tr key={record.enrollmentId} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
@@ -1432,11 +1429,9 @@ export const Reports: React.FC = () => {
             </div>
             <div className="h-56 flex items-center justify-center">
               {retentionUnavailable ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
-                  {retentionLoading ? 'Loading authoritative retention data…' : 'Retention distribution unavailable.'}
-                </p>
+                retentionLoading ? <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading authoritative retention data…</div> : <div className="text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">Retention distribution unavailable.</h3></div>
               ) : pieData.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">No retention distribution data available.</p>
+                <div className="text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No retention distribution data available.</h3></div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -1500,11 +1495,11 @@ export const Reports: React.FC = () => {
             </div>
             <div className="h-56">
               {analyticsAttendanceLoading ? (
-                <div className="py-12 text-center text-xs">Loading authoritative attendance records…</div>
+                <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading authoritative attendance records…</div>
               ) : analyticsAttendanceError ? (
-                <div className="py-12 text-center text-xs">Assessment attendance data is unavailable.</div>
+                <div className="text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">Assessment attendance data is unavailable.</h3></div>
               ) : assessmentStatsData.length === 0 ? (
-                <div className="py-12 text-center text-xs">No assessment grades recorded yet.</div>
+                <div className="text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No assessment grades recorded yet.</h3></div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={assessmentStatsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>

@@ -54,7 +54,7 @@ $studentInviteStart = strpos((string) $student, 'function handle_student_invitat
 $studentInspectStart = strpos((string) $student, 'function handle_student_invitation_get');
 $studentInvite = substr((string) $student, (int) $studentInviteStart, (int) $studentInspectStart - (int) $studentInviteStart);
 onboarding_contract_assert(str_contains($studentInvite, 'cs.instructor_user_id = ?'), 'Student invitation is scoped to its Faculty owner');
-onboarding_contract_assert(str_contains($studentInvite, 'related_student_id, related_cs_id'), 'Student invitation token binds canonical Student and class identifiers');
+onboarding_contract_assert(str_contains($studentInvite, 'student_invitation_issue_token(') && str_contains((string) $student, 'related_student_id, related_cs_id'), 'Student invitation token binds canonical Student and class identifiers');
 onboarding_contract_assert(str_contains($studentInvite, 'validate_institutional_email'), 'Student invitation uses the authoritative institutional email policy');
 
 $studentAcceptStart = strpos((string) $student, 'function handle_student_activate');

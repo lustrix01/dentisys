@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   UserCheck,
   Users,
+  X,
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { Card } from '../../components/Card';
@@ -592,6 +593,8 @@ export const AttendanceList: React.FC = () => {
   const scopedCard = assignedClassCards.length > 1 ? activeCard : undefined; // a single section needs no filtering
 
   // Filtered Roster for Worksheet View
+  const filtersActive = query.trim() !== '' || status !== 'all' || overriddenFilter !== 'all' || recordedByFilter !== 'all';
+  const clearFilters = () => { setQuery(''); setStatus('all'); setOverriddenFilter('all'); setRecordedByFilter('all'); };
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     return (sessionId ? sessionRecords : []).filter((record) => {
@@ -715,11 +718,9 @@ export const AttendanceList: React.FC = () => {
 
       {/* Global Error Banner */}
       {error && (
-        <div role="alert" className="flex items-center justify-between rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-xs text-rose-700 dark:text-rose-300">
-          <span className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            {error}
-          </span>
+        <div role="alert" className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span className="flex-1">{error}</span>
           <button
             type="button"
             disabled={submitting}
@@ -738,17 +739,17 @@ export const AttendanceList: React.FC = () => {
       {feedback && (
         <div
           role="status"
-          className={`p-4 rounded-2xl border text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in ${
+          className={`flex items-start justify-between gap-3 rounded-xl border p-3 text-xs animate-fade-in ${
             feedback.type === 'success'
-              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300'
-              : 'bg-rose-500/10 border-rose-500/20 text-rose-800 dark:text-rose-300'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200'
+              : 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200'
           }`}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-3">
             {feedback.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             )}
             <span>{feedback.text}</span>
           </div>
@@ -793,22 +794,12 @@ export const AttendanceList: React.FC = () => {
             </div>
 
             {loading ? (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                {[1, 2, 3].map((n) => (
-                  <div key={n} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 animate-pulse space-y-3">
-                    <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/3" />
-                    <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded w-3/4" />
-                    <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/2" />
-                  </div>
-                ))}
-              </div>
+              <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Loading classes…</div>
             ) : assignedClassCards.length === 0 ? (
-              <Card className="p-8 text-center text-slate-500 dark:text-slate-400">
-                <BookOpen className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
-                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-                  No classes assigned to this workspace.
-                </p>
-              </Card>
+              <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
+                <BookOpen className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No classes assigned to this workspace.</h3>
+              </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
                 {assignedClassCards.map((c) => {
@@ -1214,7 +1205,7 @@ export const AttendanceList: React.FC = () => {
           </Card>
 
           {revokedSessionOpen && openSession && (
-            <div className="p-4 rounded-2xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 space-y-1 text-xs shadow-xs">
+            <div className="space-y-1 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-300 font-extrabold text-[10px] uppercase tracking-wider">
                   <Ban className="w-3 h-3 text-rose-600" />
@@ -1285,12 +1276,17 @@ export const AttendanceList: React.FC = () => {
               // Phones: one stacked block per student instead of a sideways-scrolling table.
               <div className="max-h-[560px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
                 {loading || sessionLoading ? (
-                  <div className="py-12 text-center text-xs text-slate-500 dark:text-slate-400">
-                    <RefreshCw className="w-6 h-6 mx-auto mb-2 text-blue-500 animate-spin" />
-                    <span>Loading persisted attendance…</span>
-                  </div>
+                  <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading persisted attendance…</div>
                 ) : filtered.length === 0 ? (
-                  <div className="py-12 text-center text-xs text-slate-500 dark:text-slate-400">No attendance records match this filter.</div>
+                  <div className="px-6 py-14 text-center">
+                    <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                    <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No attendance records match this filter.</h3>
+                    {filtersActive && (
+                      <button type="button" onClick={clearFilters} className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/40">
+                        <X className="h-3.5 w-3.5" />Clear filters
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   filtered.map((record) => (
                     <div key={record.id || `${record.studentId}-${record.attendanceSessionId}`} className="space-y-3 p-4 text-xs">
@@ -1314,7 +1310,7 @@ export const AttendanceList: React.FC = () => {
                 )}
               </div>
             ) : (
-              <div className="max-h-[560px] overflow-y-auto overflow-x-auto">
+              <div className="table-pin table-pin-first">
                 <table className="w-full min-w-[640px] text-left text-xs border-collapse">
                   <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
                     <tr>
@@ -1328,15 +1324,20 @@ export const AttendanceList: React.FC = () => {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                     {loading || sessionLoading ? (
                       <tr>
-                        <td colSpan={5} className="py-12 text-center text-slate-500 dark:text-slate-400">
-                          <RefreshCw className="w-6 h-6 mx-auto mb-2 text-blue-500 animate-spin" />
-                          <span>Loading persisted attendance…</span>
-                        </td>
+                        <td colSpan={5} role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading persisted attendance…</td>
                       </tr>
                     ) : filtered.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-12 text-center text-slate-500 dark:text-slate-400">
-                          No attendance records match this filter.
+                        <td colSpan={5}>
+                          <div className="px-6 py-14 text-center">
+                            <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                            <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No attendance records match this filter.</h3>
+                            {filtersActive && (
+                      <button type="button" onClick={clearFilters} className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/40">
+                        <X className="h-3.5 w-3.5" />Clear filters
+                      </button>
+                    )}
+                          </div>
                         </td>
                       </tr>
                     ) : (
@@ -1519,12 +1520,10 @@ export const AttendanceList: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="p-8 text-center text-slate-500 dark:text-slate-400 space-y-2">
-                    <Clock className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
-                    <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-                      No active attendance session is running right now.
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                  <div className="px-6 py-14 text-center">
+                    <Clock className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                    <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No active attendance session is running right now.</h3>
+                    <p className="mx-auto mt-1 max-w-sm text-xs text-slate-500 dark:text-slate-400">
                       When a scheduled session arrives at its opening time, it will automatically appear here.
                     </p>
                     <div className="pt-2">
@@ -1560,12 +1559,10 @@ export const AttendanceList: React.FC = () => {
                   </button>
                 </div>
                 {upcomingSessions.length === 0 ? (
-                  <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-5 py-8 text-center dark:border-slate-700 dark:bg-slate-900/40 sm:py-10">
-                    <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-300">
-                      <Calendar className="h-6 w-6" />
-                    </span>
-                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">No sessions scheduled yet</p>
-                    <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">
+                  <div className="px-6 py-14 text-center">
+                    <Calendar className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                    <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No sessions scheduled yet</h3>
+                    <p className="mx-auto mt-1 max-w-sm text-xs text-slate-500 dark:text-slate-400">
                       Scheduled sessions for this class will appear here. Create one when you are ready to plan attendance.
                     </p>
                   </div>
@@ -1646,8 +1643,8 @@ export const AttendanceList: React.FC = () => {
         >
           <div className="space-y-4 text-xs">
             {endError && (
-              <div role="alert" className="flex items-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-rose-700 dark:text-rose-300">
-                <AlertCircle className="w-4 h-4 shrink-0" />
+              <div role="alert" className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{endError}</span>
               </div>
             )}
@@ -1702,13 +1699,13 @@ export const AttendanceList: React.FC = () => {
         >
           <form onSubmit={(e) => void handleRevokeSession(e)} className="space-y-4 text-xs">
             {revokeError && (
-              <div role="alert" className="flex items-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-rose-700 dark:text-rose-300">
-                <AlertCircle className="w-4 h-4 shrink-0" />
+              <div role="alert" className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{revokeError}</span>
               </div>
             )}
 
-            <div className="p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 space-y-1.5 text-rose-800 dark:text-rose-300">
+            <div className="space-y-1.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
               <p className="font-bold">Important Session Revocation Rules:</p>
               <ul className="list-disc list-inside space-y-1 text-[11px]">
                 <li>Revoking immediately closes capture and blocks student check-ins.</li>

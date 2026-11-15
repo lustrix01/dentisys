@@ -5,7 +5,6 @@ import {
   BookOpen,
   CalendarDays,
   GraduationCap,
-  RefreshCw,
   ShieldCheck,
   UserCircle,
   Camera,
@@ -132,10 +131,7 @@ export const RealStudentDashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[400px] flex items-center justify-center p-8 text-center text-sm font-semibold text-slate-500">
-        <RefreshCw className="w-5 h-5 animate-spin mr-2 text-blue-600" />
-        Loading student dashboard…
-      </div>
+      <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Loading student dashboard…</div>
     );
   }
 
@@ -318,12 +314,13 @@ export const RealStudentDashboard: React.FC = () => {
         </CardHeader>
         <CardContent className="p-0">
           {classes.length === 0 ? (
-            <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
-              No active course enrollments recorded for this term.
+            <div className="px-6 py-14 text-center">
+              <BookOpen className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+              <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No active course enrollments recorded for this term.</h3>
             </div>
           ) : (
             <>
-            <div className="hidden overflow-x-auto md:block lg:hidden xl:block">
+            <div className="hidden table-pin table-pin-first md:block lg:hidden xl:block">
               <table className="w-full min-w-[700px] text-xs text-left">
                 <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px] font-bold border-b border-slate-100 dark:border-slate-800">
                   <tr>
@@ -476,10 +473,7 @@ export const RealStudentProfile: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[400px] flex items-center justify-center p-8 text-center text-sm font-semibold text-slate-500">
-        <RefreshCw className="w-5 h-5 animate-spin mr-2 text-blue-600" />
-        Loading student profile…
-      </div>
+      <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Loading student profile…</div>
     );
   }
 
@@ -501,8 +495,9 @@ export const RealStudentProfile: React.FC = () => {
       </div>
 
       {error && (
-        <div role="alert" className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400">
-          {error}
+        <div role="alert" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
         </div>
       )}
 

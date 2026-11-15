@@ -58,6 +58,29 @@ html {
   border: 1px solid rgba(67, 160, 71, 0.1);
 }
 
+/* Pinned table columns (docs/frontend.md "Page patterns", backlog 9.18). On the table's scroll wrapper:
+   .table-pin        the table scrolls inside a box at most one screen tall; the header row stays on top;
+   .table-pin-first  the first column also stays on the left when scrolling sideways;
+   .table-pin-blocks the table turns into phone blocks below 768 px, so nothing is pinned there.
+   The first column is painted solid only while the table is scrolled sideways ([data-pinned-x], set by
+   components/Layout.tsx), so a table at rest looks the same on glass cards. */
+.table-pin { overflow: auto; max-height: calc(100dvh - 6rem); }
+.table-pin > table > thead th { position: sticky; top: 0; z-index: 2; background-color: #f8fafc; }
+.table-pin-first > table > tbody > tr > :first-child { position: sticky; left: 0; z-index: 1; }
+.table-pin-first > table > thead > tr > :first-child { left: 0; z-index: 3; }
+.table-pin-first[data-pinned-x] > table > tbody > tr > :first-child { background-color: #ffffff; box-shadow: 1px 0 0 #e2e8f0; }
+.table-pin-first[data-pinned-x] > table > tbody > tr:hover > :first-child { background-color: #f8fafc; }
+.table-pin-first[data-pinned-x] > table > thead > tr > :first-child { box-shadow: 1px 0 0 #e2e8f0; }
+.dark .table-pin > table > thead th { background-color: #0f172a; }
+.dark .table-pin-first[data-pinned-x] > table > tbody > tr > :first-child { background-color: #0f172a; box-shadow: 1px 0 0 #1e293b; }
+.dark .table-pin-first[data-pinned-x] > table > tbody > tr:hover > :first-child { background-color: #172033; }
+.dark .table-pin-first[data-pinned-x] > table > thead > tr > :first-child { box-shadow: 1px 0 0 #1e293b; }
+@media (max-width: 767.98px) {
+  .table-pin.table-pin-blocks { max-height: none; }
+  .table-pin-blocks > table > thead th,
+  .table-pin-blocks > table > tbody > tr > :first-child { position: static; box-shadow: none; }
+}
+
 /* Native <select> popups follow the app theme (dark mode is the .dark class on <html>). */
 .dark select {
   color-scheme: dark;

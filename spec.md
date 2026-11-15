@@ -202,6 +202,8 @@ Google ───┘
 
 Google Sign-In MUST NOT bypass required DentiSys MFA.
 
+The Dean may reset a Faculty or Student account's 2FA (ADM-001); the reset ends the account's sessions and emails the person.
+
 Email-code authentication/MFA is retired and MUST NOT be reintroduced unless explicitly approved.
 
 ## AUTH-007 — Sessions
@@ -285,6 +287,8 @@ There is no public Faculty or Student signup. A Faculty account may be establish
 The invitation authorizes account establishment. Google MUST NOT create an invitation or independently begin account creation; Google may be linked only after activation (REG-003). Secretary appointment remains governed by REG-006.
 
 Owner decision (2026-10-28): Faculty and Student invitations expire 7 days after they are sent; reissuing starts a new 7 days.
+
+Owner decision (2026-11-15): the Dean may resend or revoke a pending Student invitation; a resent invitation keeps the original Faculty authorization and class and starts a new 7 days.
 
 ## REG-002 — Password-backed invitation acceptance
 
@@ -1157,9 +1161,11 @@ Course Catalog. The Dean edits a course's code, title and units and may retire a
 
 People & Accounts. The Dean sees Faculty (with each member's class sections) and Students and may deactivate or reactivate a Faculty or Student account. Deactivation blocks every sign-in (the sign-in screen says "Contact the Dean."), ends all sessions, keeps every record and is audited with a reason. Deactivating a Student who is a Class Secretary also blocks the Secretary sign-in, and reactivating the Student restores both. A Faculty member who has a class section in the current school year cannot be deactivated; the Dean sees the classes that block it. Reactivation restores sign-in with the existing password and 2FA. The Dean cannot deactivate a Dean account.
 
+The Dean may also sign a person out everywhere without deactivating; reset a person's authenticator 2FA, which removes the authenticator and recovery codes, signs them out everywhere and emails them, after which they sign in with their password and may set 2FA up again; and revoke a Student's face enrollment (BIO-002). Pending invitations appear in People & Accounts as Invited, where the Dean may resend or revoke them. Filters include course and, for Students, class section, both counting this school year's classes. The People and Course Catalog lists export to Excel.
+
 The Class Sections screen remains a non-authoritative preview, shown in the normal Dean view only. Details: `docs/contracts/superadmin.md`.
 
-History: 2026-10-28 Dean grade-change view, catalog control and deactivation backlogged; 2026-11-14 Superadmin mode decided and built; 2026-11-15 setup pages and the only Audit Trail moved into Superadmin mode. Records: docs/archive/.
+History: 2026-10-28 Dean grade-change view, catalog control and deactivation backlogged; 2026-11-14 Superadmin mode decided and built; 2026-11-15 setup pages and the only Audit Trail moved into Superadmin mode; 2026-11-15 account actions, invitations, course and class filters and exports added. Records: docs/archive/.
 
 ## ID-002 - Structured names and 3NF
 

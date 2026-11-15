@@ -30,7 +30,9 @@ import {
   Zap,
   RotateCcw,
   CalendarDays,
-  Filter
+  Filter,
+  Inbox,
+  Info
 } from 'lucide-react';
 import { flushSync } from 'react-dom';
 import { PrintStyle, PrintHeader, PrintLegend, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
@@ -3199,7 +3201,7 @@ export const GradeComputation: React.FC = () => {
   const saveResultBanner = (
     <>
       {conflictError && (
-        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-start gap-2.5">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
             <div>
@@ -3220,8 +3222,8 @@ export const GradeComputation: React.FC = () => {
         </div>
       )}
       {saveError && !conflictError && (
-        <div role="alert" className="text-left p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-400 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+        <div role="alert" className="rounded-xl border p-3 text-left text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 flex items-start gap-3">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{saveError}</span>
         </div>
       )}
@@ -3318,13 +3320,13 @@ export const GradeComputation: React.FC = () => {
       </Card>
 
       {selectedClassIsHistorical && (
-        <div role="status" className="no-print rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+        <div role="status" className="no-print rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
           {selectedClassIsArchived ? 'Archived classes are view-only.' : 'Past school-year classes are view-only.'} Saved grade summaries can be viewed and exported, but grades and grading settings cannot be changed.
         </div>
       )}
 
       {setupSteps && (
-        <div role="status" className="no-print flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+        <div role="status" className="no-print flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border p-3 text-xs font-semibold border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
           <span className="font-bold text-slate-800 dark:text-slate-100">Set up this class:</span>
           {setupSteps.map((step, index) => (
             <React.Fragment key={step.label}>
@@ -3541,12 +3543,9 @@ export const GradeComputation: React.FC = () => {
                         </div>
 
                         {activeAssessments.length === 0 ? (
-                          <div className="p-4 bg-slate-50 dark:bg-slate-900 border rounded-xl text-xs text-center">
-                            No active assessments. Please create one under "Assessments Manager" first.
-                          </div>
+                          <div className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No active assessments. Please create one under "Assessments Manager" first.</h3></div>
                         ) : singleActivityFilteredAssessments.length === 0 ? (
-                          <div className="p-3 bg-slate-50 dark:bg-slate-900 border dark:border-slate-800 rounded-xl text-center space-y-1">
-                            <p className="text-xs text-slate-500">No assessments match the active filters.</p>
+                          <div className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No assessments match the active filters.</h3>
                             <button
                               type="button"
                               onClick={() => {
@@ -3554,9 +3553,9 @@ export const GradeComputation: React.FC = () => {
                                 setActivityFilterType('all');
                                 setActivityFilterSearch('');
                               }}
-                              className="text-[11px] font-bold text-clinical-600 hover:underline"
+                              className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-clinical-700 hover:bg-clinical-50 dark:text-clinical-300 dark:hover:bg-clinical-950/40"
                             >
-                              Reset filters
+                              <X className="h-3.5 w-3.5" />Clear filters
                             </button>
                           </div>
                         ) : (
@@ -3683,13 +3682,9 @@ export const GradeComputation: React.FC = () => {
 
                   <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
                     {!selectedAssessmentId ? (
-                      <div className="py-12 text-center text-slate-500 dark:text-slate-400 text-xs font-semibold">
-                        Please select or create an assessment activity on the left pane.
-                      </div>
+                      <div className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">Please select or create an assessment activity on the left pane.</h3></div>
                     ) : filteredScoreStudents.length === 0 ? (
-                      <div className="py-12 text-center text-slate-500 dark:text-slate-400 text-xs font-semibold">
-                        No matching student records found.
-                      </div>
+                      <div className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No matching student records found.</h3></div>
                     ) : (
                       filteredScoreStudents.map((student, idx) => {
                         const row = scoresInputState[student.id] || { score: '', remarks: '' };
@@ -3925,9 +3920,9 @@ export const GradeComputation: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+          <div className="table-pin table-pin-first">
             <table className="min-w-full divide-y dark:divide-slate-800">
-              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
+              <thead>
                 <tr className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">
                   <th className="px-5 py-3">Assessment Title</th>
                   <th className="px-5 py-3">Category</th>
@@ -3941,15 +3936,11 @@ export const GradeComputation: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs">
                 {activeAssessments.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-10 text-center text-slate-500 dark:text-slate-400">
-                      No active assessments created for this course. Click "Add Assessment" to create one.
-                    </td>
+                    <td colSpan={7} className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No active assessments created for this course. Click "Add Assessment" to create one.</h3></td>
                   </tr>
                 ) : filteredAssessments.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-10 text-center text-slate-500 dark:text-slate-400 font-semibold">
-                      No assessments match the selected filters.
-                    </td>
+                    <td colSpan={7} className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No assessments match the selected filters.</h3><button type="button" onClick={() => { setAssessmentSearch(''); setAssessmentPeriodFilter('all'); setAssessmentCategoryFilter('all'); setAssessmentStatusFilter('all'); }} className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-clinical-700 hover:bg-clinical-50 dark:text-clinical-300 dark:hover:bg-clinical-950/40"><X className="h-3.5 w-3.5" />Clear filters</button></td>
                   </tr>
                 ) : (
                   filteredAssessments.map(ass => (
@@ -3985,7 +3976,7 @@ export const GradeComputation: React.FC = () => {
                         {(() => {
                           if (assessmentConfigStatus === 'loading') {
                             return (
-                              <span className="px-2 py-0.5 rounded-md font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 uppercase text-[9px] tracking-wide animate-pulse">
+                              <span role="status" className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
                                 Loading...
                               </span>
                             );
@@ -4146,7 +4137,7 @@ export const GradeComputation: React.FC = () => {
 
             {/* First-Save Unmapped Assessment Alert (422) */}
             {assessmentMappingItems.length > 0 && (
-              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 space-y-3 text-xs">
+              <div className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 space-y-3">
                 <div className="flex items-start gap-2.5">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
                   <div>
@@ -4158,7 +4149,7 @@ export const GradeComputation: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="overflow-x-auto rounded-xl border border-amber-500/20 bg-white/60 dark:bg-slate-900/60">
+                <div className="table-pin table-pin-first rounded-xl border border-amber-500/20 bg-white/60 dark:bg-slate-900/60">
                   <table className="min-w-full divide-y divide-amber-500/20 text-xs">
                     <thead>
                       <tr className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">
@@ -4205,7 +4196,7 @@ export const GradeComputation: React.FC = () => {
 
             {/* Conversion Mapping Error Alert (422) */}
             {conversionMappingError && conversionMappingError.length > 0 && (
-              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 space-y-3 text-xs">
+              <div className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 space-y-3">
                 <div className="flex items-start gap-2.5">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
                   <div>
@@ -4215,7 +4206,7 @@ export const GradeComputation: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="overflow-x-auto rounded-xl border border-amber-500/20 bg-white/60 dark:bg-slate-900/60">
+                <div className="table-pin table-pin-first rounded-xl border border-amber-500/20 bg-white/60 dark:bg-slate-900/60">
                   <table className="min-w-full divide-y divide-amber-500/20 text-xs">
                     <thead>
                       <tr className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">
@@ -4246,22 +4237,19 @@ export const GradeComputation: React.FC = () => {
 
             {/* General Error Alert */}
             {configError && !conflictError && (
-              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-400 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+              <div className="rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{configError}</span>
               </div>
             )}
 
             {/* Loading State */}
             {configLoading ? (
-              <div className="py-12 flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 gap-2">
-                <RefreshCw className="w-6 h-6 animate-spin" />
-                <span className="text-xs">Loading course grade configuration...</span>
-              </div>
+              <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading course grade configuration…</div>
             ) : schemaMode === 'overall' ? (
               /* LEGACY OVERALL GRADING VIEW */
               <div className="space-y-5">
-                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <div className="font-bold flex items-center gap-1.5">
                       <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -4298,9 +4286,7 @@ export const GradeComputation: React.FC = () => {
                     </div>
 
                     {categoryRows.length === 0 ? (
-                      <div className="py-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
-                        <p className="text-xs text-slate-500 dark:text-slate-400">No categories added yet.</p>
-                      </div>
+                      <div className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No categories added yet.</h3></div>
                     ) : (
                       <div className="divide-y dark:divide-slate-800 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-950">
                         {categoryRows.map((row, index) => (
@@ -4410,7 +4396,7 @@ export const GradeComputation: React.FC = () => {
                 <form onSubmit={handleSaveGradingConfig} className="space-y-6">
                   {/* STATUS / UNSAVED BANNER */}
                   {isDirty ? (
-                    <div className="p-3 sm:p-3.5 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 font-semibold">
                         <Edit className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                         <span>You have unsaved changes. Adjust weights or categories directly below, then click Save grade weights.</span>
@@ -4439,7 +4425,7 @@ export const GradeComputation: React.FC = () => {
 
                   {/* COURSE STRUCTURE CHANGED SINCE LAST SAVE */}
                   {structureNotice && (
-                    <div className="rounded-2xl border border-amber-300/70 dark:border-amber-800/70 bg-amber-50/60 dark:bg-amber-950/20 p-4 text-xs">
+                    <div className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                       <h3 className="font-bold text-amber-900 dark:text-amber-200">
                         {structureNotice === 'now-lecture'
                           ? 'This course is now Lecture only. Save to remove the Laboratory part.'
@@ -4449,14 +4435,15 @@ export const GradeComputation: React.FC = () => {
                   )}
 
                   {courseStructure === 'unrecorded' && (
-                    <p role="note" className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
-                      Set this course's Lecture and Laboratory units in Classes &amp; Rosters to use a Lecture-only grade structure.
+                    <p role="note" className="flex items-start gap-3 rounded-xl border p-3 text-xs border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                      <Info className="mt-0.5 h-4 w-4 shrink-0 text-clinical-600 dark:text-clinical-400" />
+                      <span>Set this course's Lecture and Laboratory units in Classes &amp; Rosters to use a Lecture-only grade structure.</span>
                     </p>
                   )}
 
                   {/* LEGACY COMBINED NOTIFICATION (IF APPLICABLE) */}
                   {isLegacyCombinedPeriodConfig && (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-300/70 dark:border-amber-800/70 bg-amber-50/60 dark:bg-amber-950/20 p-4 text-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                       <div className="space-y-0.5">
                         <h3 className="font-bold text-amber-900 dark:text-amber-200">Saved Combined Period Grading</h3>
                         <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80">
@@ -4710,15 +4697,15 @@ export const GradeComputation: React.FC = () => {
 
                   {/* Period Validation Error */}
                   {periodValidationError && (
-                    <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-700 dark:text-rose-400 flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                    <div className="rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 flex items-start gap-3">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                       <span>{periodValidationError}</span>
                     </div>
                   )}
 
                   {/* UNASSIGNED CATEGORIES NOTICE (FOR CONVERSION SCENARIOS) */}
                   {componentMode === 'lecture_laboratory' && activePeriodUnassignedCategories.length > 0 && (
-                    <div className="p-4 rounded-2xl border border-amber-300/70 dark:border-amber-800/70 bg-amber-50/60 dark:bg-amber-950/20 space-y-3" data-testid="unassigned-component-categories">
+                    <div className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 space-y-3" data-testid="unassigned-component-categories">
                       <div>
                         <h4 className="text-xs font-extrabold text-amber-900 dark:text-amber-200">Assign Existing Categories to a Component</h4>
                         <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80 mt-0.5">Category IDs and linked assessment history are retained when you choose Lecture or Laboratory.</p>
@@ -4777,8 +4764,9 @@ export const GradeComputation: React.FC = () => {
 
                     {/* Categories rows list */}
                     {activePeriodVisibleCategories.length === 0 ? (
-                      <div className="py-12 text-center text-slate-500 dark:text-slate-400 space-y-2">
-                        <p className="text-xs">No {activeComponentEditorTab} categories defined for {activePeriodEditorTab}.</p>
+                      <div className="px-6 py-14 text-center">
+                        <Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                        <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No {activeComponentEditorTab} categories defined for {activePeriodEditorTab}.</h3>
                         <button
                           type="button"
                           onClick={() => handleAddPeriodCategory(activePeriodEditorTab)}
@@ -4891,8 +4879,8 @@ export const GradeComputation: React.FC = () => {
                       </p>
 
                       {!validateDateRanges(attendanceDateRanges).valid && periodValidationError !== validateDateRanges(attendanceDateRanges).error && (
-                        <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-700 dark:text-rose-400 flex items-center gap-2">
-                          <AlertTriangle className="w-4 h-4 shrink-0" />
+                        <div className="rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 flex items-start gap-3">
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                           <span>{validateDateRanges(attendanceDateRanges).error}</span>
                         </div>
                       )}
@@ -5041,7 +5029,7 @@ export const GradeComputation: React.FC = () => {
           title="Convert to Period Grading"
         >
           <div className="space-y-4">
-            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 space-y-2">
+            <div className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 space-y-2">
               <div className="font-bold flex items-center gap-1.5">
                 <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                 Convert Course Offering to Period Grading
@@ -5052,7 +5040,7 @@ export const GradeComputation: React.FC = () => {
             </div>
 
             {conversionMappingError && conversionMappingError.length > 0 && (
-              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-400 space-y-2">
+              <div className="rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 space-y-2">
                 <div className="font-bold">Missing Period Category Mappings</div>
                 <p className="text-[11px]">The following assessments need valid period category assignments before conversion:</p>
                 <div className="max-h-32 overflow-y-auto">
@@ -5161,7 +5149,7 @@ export const GradeComputation: React.FC = () => {
           title="Recompute Class Grades"
         >
           <div className="space-y-4 text-xs">
-            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 space-y-2">
+            <div className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 space-y-2">
               <div className="font-bold flex items-center gap-1.5">
                 <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                 Confirm Grade Recomputation
@@ -5290,14 +5278,15 @@ export const GradeComputation: React.FC = () => {
           )}
 
           {isPeriodMode && isLectureLaboratoryMode && (
-            <p role="note" className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
-              Lecture and Laboratory results are available after recomputation with the saved component setup. Older combined period results remain historical; unavailable component values are not derived from the new weights.
+            <p role="note" className="mb-3 flex items-start gap-3 rounded-xl border p-3 text-xs border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-clinical-600 dark:text-clinical-400" />
+              <span>Lecture and Laboratory results are available after recomputation with the saved component setup. Older combined period results remain historical; unavailable component values are not derived from the new weights.</span>
             </p>
           )}
 
-          <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+          <div className="table-pin table-pin-first">
             <table className="min-w-full divide-y dark:divide-slate-800">
-              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
+              <thead>
                 <tr className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">
                   <th className="px-5 py-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => toggleSort('name')}>
                     <div className="flex items-center gap-1">
@@ -5780,7 +5769,7 @@ export const GradeComputation: React.FC = () => {
                 </div>
               )}
               {modalConfigStatus === 'error' && (
-                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-400 space-y-2">
+                <div className="rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 space-y-2">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
                     <div className="flex-1 font-medium">{modalConfigError || 'Failed to resolve grading configuration.'}</div>
@@ -5802,7 +5791,7 @@ export const GradeComputation: React.FC = () => {
               {modalConfigStatus !== 'loading' && modalConfigStatus !== 'error' && (
                 <div className="space-y-2">
                   {modalCategoryWarning && (
-                    <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                    <div className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 flex items-start gap-3">
                       <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
                       <div>This assessment requires a valid grading category assignment configured in grade weights.</div>
                     </div>

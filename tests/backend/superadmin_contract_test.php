@@ -29,7 +29,9 @@ foreach ([
     ['GET', '/api/admin/courses', 'handle_admin_courses'], ['POST', '/api/admin/courses/update', 'handle_admin_courses'],
     ['POST', '/api/admin/courses/retire', 'handle_admin_courses'], ['POST', '/api/admin/courses/restore', 'handle_admin_courses'],
     ['GET', '/api/admin/people', 'handle_admin_people'], ['POST', '/api/admin/people/deactivate', 'handle_admin_people'],
-    ['POST', '/api/admin/people/reactivate', 'handle_admin_people'],
+    ['POST', '/api/admin/people/reactivate', 'handle_admin_people'], ['GET', '/api/admin/people/filters', 'handle_admin_people'],
+    ['POST', '/api/admin/people/sign-out', 'handle_admin_people'], ['POST', '/api/admin/people/reset-2fa', 'handle_admin_people'],
+    ['POST', '/api/admin/people/invitation/resend', 'handle_admin_people'], ['POST', '/api/admin/people/invitation/revoke', 'handle_admin_people'],
 ] as [$method, $path, $handler]) {
     assert_superadmin(str_contains($routes, "['method' => '{$method}', 'path' => '{$path}', 'handler' => '{$handler}']"), "{$method} {$path} is registered");
 }
@@ -44,7 +46,7 @@ assert_superadmin(str_contains($faculty, "FROM courses WHERE status = 'active' O
 assert_superadmin(substr_count($faculty, "'This course was retired by the Dean. Ask the Dean to restore it.', 409, 'course_retired'") === 2, 'A retired course (typed code or id) is refused with the Dean message');
 
 // Deactivation (SA19-SA23).
-$deactivate = substr($controller, (int) strpos($controller, 'function people_deactivate'), 3600);
+$deactivate = substr($controller, (int) strpos($controller, 'function people_end_sessions'), 4200); // the shared helper sits right before people_deactivate
 foreach ([
     'people_fetch($pdo, $userId, true)' => 'locks the account row (FOR UPDATE)', 'auth_invalidate_account' => 'bumps token_version', 'auth_revoke_session' => 'revokes every session',
     "'Account deactivated'" => 'uses the session revocation reason', 'archived_at IS NULL' => 'ignores archived classes',
@@ -101,3 +103,19 @@ assert_superadmin($person['status'] === 'deactivated' && $person['twoFactor'] ==
 $student = people_json(['user_id' => '8', 'display_name' => 'S', 'login_email' => 's@x.test', 'kind' => 'student', 'status' => 'Active', 'disabled_at' => null,
     'two_factor' => false, 'last_activity_at' => null, 'student_number' => '2026-1'], []);
 assert_superadmin($student['studentNo'] === '2026-1' && $student['enrolledClasses'] === [] && !array_key_exists('classes', $student), 'A Student person has a student number and enrolled classes');
+
+// 9.16 / 9.17: account actions, invitations and filters (docs/contracts/superadmin.md Part D).
+foreach (['mfa_reset_by_dean' => ['2FA reset by the Dean', AUDIT_AREA_SECURITY], 'sessions_ended_by_dean' => ['Signed out everywhere', AUDIT_AREA_PEOPLE],
+    'student_invitation_resent_by_dean' => ['Student invitation resent by the Dean', AUDIT_AREA_PEOPLE], 'student_invitation_revoked_by_dean' => ['Student invitation revoked by the Dean', AUDIT_AREA_PEOPLE]] as $code => [$label, $area]) {
+    $info = audit_code_info($code);
+    assert_superadmin($info['label'] === $label && $info['area'] === $area && $info['deanVisible'] === true, "{$code} is labelled, in its area and Dean-visible");
+}
+assert_superadmin(AUDIT_ATTENTION_CARDS['mfaTurnedOff'] === ['mfa_revoked', 'mfa_reset_by_dean'] && str_contains($audit, "'mfa_revoked','mfa_reset_by_dean')"), 'A Dean 2FA reset counts in the 2FA turned off attention card');
+$invited = people_json(['user_id' => '9', 'display_name' => 'Inv', 'login_email' => 'i@x.test', 'kind' => 'student', 'status' => 'Pending Activation', 'disabled_at' => null, 'two_factor' => false,
+    'last_activity_at' => null, 'student_id' => '4', 'student_number' => '2026-9', 'face_enrolled' => true, 'invited_at' => '2026-11-01 00:00:00', 'invitation_expires_at' => '2026-11-08 00:00:00'], []);
+assert_superadmin($invited['status'] === 'invited' && $invited['invitation']['expired'] === true && $invited['invitation']['sentAt'] === '2026-11-01T08:00:00+08:00'
+    && $invited['studentId'] === 4 && $invited['faceEnrolled'] === true && $invited['twoFactor'] === false && $invited['lastActivityAt'] === null, 'An invited Student carries the invitation, studentId and faceEnrolled');
+assert_superadmin(!array_key_exists('invitation', $student) && $student['faceEnrolled'] === false, 'An active person has no invitation block');
+foreach (["'sign-out' => people_sign_out", "'reset-2fa' => people_reset_2fa", "'afterCommit'", "'two_factor_off'", "'no_pending_invitation'", "'invitation_class_unavailable'"] as $needle) {
+    assert_superadmin(str_contains($controller, $needle), "The controller handles {$needle}");
+}

@@ -227,9 +227,9 @@ export const Profile: React.FC = () => {
                 </span>
               </div>
 
-              <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50 space-y-2">
-                <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-bold">
-                  <ShieldCheck className="w-4 h-4" />
+              <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
+                  <ShieldCheck className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
                   <span>Data Privacy Act of 2012 (RA 10173) Compliance</span>
                 </div>
                 <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11px]">

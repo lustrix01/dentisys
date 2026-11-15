@@ -1690,22 +1690,18 @@ const handleSendAllStudentInvites = async () => {
     <div className="space-y-6">
 
       {fetchError && (
-        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in">
-          <div className="flex items-center gap-2.5">
-            <Info className="w-4 h-4 text-rose-500 flex-shrink-0" />
-            <span>{fetchError}</span>
-          </div>
+        <div className="flex items-start gap-3 rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 animate-fade-in">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="flex-1">{fetchError}</span>
           <button onClick={() => void fetchData()} className="px-3 py-1 bg-rose-600 text-white rounded-lg hover:bg-rose-700 font-bold text-xs">Retry</button>
         </div>
       )}
 
       {notification && (
-        <div className={`p-4 rounded-2xl border text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in ${notification.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300' : 'bg-amber-500/10 border-amber-500/20 text-amber-800 dark:text-amber-300'}`}>
-          <div className="flex items-center gap-2.5">
-            {notification.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />}
-            <span>{notification.message}</span>
-          </div>
-          <button onClick={() => setNotification(null)} className="text-slate-500 dark:text-slate-400 hover:text-slate-600 text-xs cursor-pointer">Dismiss</button>
+        <div className={`flex items-start gap-3 rounded-xl border p-3 text-xs animate-fade-in ${notification.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200' : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200'}`}>
+          {notification.type === 'success' ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+          <span className="flex-1">{notification.message}</span>
+          <button onClick={() => setNotification(null)} className="text-xs font-semibold cursor-pointer">Dismiss</button>
         </div>
       )}
 
@@ -1777,21 +1773,19 @@ const handleSendAllStudentInvites = async () => {
       {activeTab === 'classes' && (
         <>
           {loading ? (
-            <div className="py-16 text-center text-slate-500 dark:text-slate-400 text-xs font-semibold">
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3 text-emerald-600" />
-              Loading assigned classes from server...
-            </div>
+            <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Loading assigned classes…</div>
           ) : filteredClasses.length === 0 ? (
-            <Card className="p-8 text-center space-y-3">
-              <BookMarked className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
-              <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">No assigned classes found</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+            <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
+              <BookMarked className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+              <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No assigned classes found</h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 mx-auto max-w-sm">
                 {searchQuery
                   ? 'No class sections match your search query.'
                   : (selectedSchoolYear !== 'all' && selectedSchoolYear !== newSchoolYear)
                     ? `Viewing past school year (S.Y. ${selectedSchoolYear}). Past school-year records are view-only. Class creation is only permitted for the current school year (S.Y. ${newSchoolYear}).`
                     : 'You do not have any class sections assigned for the selected criteria. Create a class section to get started.'}
               </p>
+              {searchQuery && <button type="button" onClick={() => setSearchQuery('')} className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40"><X className="h-3.5 w-3.5" />Clear filters</button>}
               {!searchQuery && (selectedSchoolYear === 'all' || selectedSchoolYear === newSchoolYear) && (
                 <button
                   onClick={handleOpenCreateClassModal}
@@ -1802,7 +1796,7 @@ const handleSendAllStudentInvites = async () => {
                   <span>Create class section</span>
                 </button>
               )}
-            </Card>
+            </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
               {filteredClasses.map(renderClassCard)}
@@ -1817,7 +1811,7 @@ const handleSendAllStudentInvites = async () => {
             <p className="text-slate-600 dark:text-slate-300">{archiveTarget.courseCode} ({archiveTarget.block}) · {archiveTarget.courseName} · {studentsLabel(archiveTarget.enrolledCount)}</p>
             <p className="text-slate-500 dark:text-slate-400">Choose why you are archiving this class.</p>
             {archiveRemedialOnly && (
-              <div className="rounded-xl px-3 py-2.5 bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900 font-semibold">
+              <div className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                 A Student in this class has a pending remedial, so it can only be archived as finished.
               </div>
             )}
@@ -1888,10 +1882,7 @@ const handleSendAllStudentInvites = async () => {
       {activeTab === 'archived' && (
         <>
           {loading ? (
-            <div className="py-16 text-center text-slate-500 dark:text-slate-400 text-xs font-semibold">
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3 text-emerald-600" />
-              Loading archived classes from server...
-            </div>
+            <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Loading archived classes…</div>
           ) : (
             <div className="space-y-6">
               {([
@@ -1904,10 +1895,10 @@ const handleSendAllStudentInvites = async () => {
                     <p className="text-xs text-slate-500 dark:text-slate-400">{group.note}</p>
                   </div>
                   {group.list.length === 0 ? (
-                    <Card className="p-8 text-center space-y-3">
-                      <Archive className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
-                      <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">{group.empty}</h3>
-                    </Card>
+                    <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
+                      <Archive className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                      <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{group.empty}</h3>
+                    </div>
                   ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
                       {group.list.map(renderClassCard)}
@@ -2011,7 +2002,7 @@ const handleSendAllStudentInvites = async () => {
             />
 
           {/* Phones (<768px): each table row is shown as a stacked block (name first, then ID, year, email, section, actions). */}
-          <div className="overflow-x-auto min-h-[220px]">
+          <div className="table-pin table-pin-first table-pin-blocks min-h-[220px]">
             <table className="w-full text-left text-xs border-collapse max-md:block">
               <thead className="max-md:hidden">
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
@@ -2026,20 +2017,20 @@ const handleSendAllStudentInvites = async () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
                 {loading ? (
                   <tr className="max-md:block">
-                    <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400 font-semibold max-md:block">
-                      <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-emerald-600" />
-                      Loading student roster...
+                    <td role="status" colSpan={6} className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400 max-md:block">
+                      Loading student roster…
                     </td>
                   </tr>
                 ) : filteredStudents.length === 0 ? (
                   <tr className="max-md:block">
-                    <td colSpan={6} className="py-12 text-center text-slate-500 dark:text-slate-400 font-semibold max-md:block">
-                      <Users className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <td colSpan={6} className="px-6 py-14 text-center max-md:block">
+                      <Users className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                      <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">
                         {searchQuery
                           ? 'No students match your search criteria.'
                           : 'No students are currently enrolled in this class section.'}
-                      </p>
+                      </h3>
+                      {searchQuery && <button type="button" onClick={() => setSearchQuery('')} className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40"><X className="h-3.5 w-3.5" />Clear filters</button>}
                       {classes.length > 0 && !searchQuery && (
                         <button
                           onClick={() => handleOpenAddStudent()}
@@ -2429,7 +2420,7 @@ const handleSendAllStudentInvites = async () => {
         <Modal isOpen={isCreateClassOpen} onClose={() => setIsCreateClassOpen(false)} title="Create New Class Section">
           <form onSubmit={handleCreateClass} noValidate className="space-y-4 text-xs">
             {/* Academic School Year (Strictly current year only) */}
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-emerald-800 dark:text-emerald-200 flex items-center justify-between gap-2">
+            <div className="rounded-xl border p-3 text-xs border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <span className="font-bold text-xs">
@@ -2441,7 +2432,7 @@ const handleSendAllStudentInvites = async () => {
               </span>
             </div>
 
-            {academicTerms.length === 0 && <p role="status" className="rounded-xl bg-amber-50 dark:bg-amber-950/30 p-3 text-amber-800 dark:text-amber-200">No open term. Ask the Dean to add the terms for {newSchoolYear}.</p>}
+            {academicTerms.length === 0 && <p role="status" className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">No open term. Ask the Dean to add the terms for {newSchoolYear}.</p>}
             {/* Course Code & Title */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -2737,15 +2728,15 @@ const handleSendAllStudentInvites = async () => {
 
             {/* Conflict Error Banner (its missing room/day text is already shown inline after Save) */}
             {scheduleConflict && (createAttempted || !scheduleConflict.startsWith('Please ')) && !shownProblems.some(p => p.key.startsWith('room-') || p.key.startsWith('days-')) && (
-              <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-semibold flex items-start gap-2.5 animate-fade-in">
-                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-3 rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 animate-fade-in">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{scheduleConflict}</span>
               </div>
             )}
 
             {shownProblems.length > 0 && (
-              <div role="alert" className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-semibold flex items-start gap-2.5 animate-fade-in">
-                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+              <div role="alert" className="flex items-start gap-3 rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 animate-fade-in">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <div>
                   <p>{shownProblems.length === 1 ? '1 detail needs' : `${shownProblems.length} details need`} attention before saving:</p>
                   <ul className="mt-1 list-disc pl-4 font-medium">
@@ -2878,8 +2869,8 @@ const handleSendAllStudentInvites = async () => {
 
             {editStudentEmail.includes('@') && !isOfficialBicolEmail(editStudentEmail) && <p role="alert" className="text-xs font-medium text-rose-600 dark:text-rose-300">Use an official @bicol-u.edu.ph email address.</p>}
             {editStudentError && (
-              <div role="alert" className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl text-red-700 dark:text-red-300 text-xs font-semibold flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <div role="alert" className="flex items-start gap-3 rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{editStudentError}</span>
               </div>
             )}
@@ -3019,7 +3010,7 @@ const handleSendAllStudentInvites = async () => {
             </p>
 
             {/* Course components and units: same choices as Create Class */}
-            <div className={`p-3.5 rounded-2xl border space-y-2.5 ${editCodeIsNew && editCodeChanged ? 'border-amber-200 dark:border-amber-900/60 bg-amber-50/60 dark:bg-amber-950/30' : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50'}`}>
+            <div className={`rounded-xl border p-3 space-y-2.5 ${editCodeIsNew && editCodeChanged ? 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30' : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50'}`}>
               <span className="font-bold text-slate-700 dark:text-slate-300 block">Course Components *</span>
               <div role="radiogroup" aria-label="Course components" className="grid grid-cols-3 gap-2">
                 {([
@@ -3238,8 +3229,8 @@ const handleSendAllStudentInvites = async () => {
             )}
 
             {editError && (
-              <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl text-red-700 dark:text-red-300 text-xs font-semibold flex items-start gap-2 animate-fade-in">
-                <Info className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="flex items-start gap-3 rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 animate-fade-in">
+                <Info className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{editError}</span>
               </div>
             )}

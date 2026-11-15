@@ -428,7 +428,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
   const totalCell = 'px-2 py-2 text-center font-mono font-bold text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-800/60';
 
   if (!configLoaded) {
-    return <p className="p-6 text-xs text-slate-500 dark:text-slate-400">Loading the grading matrix…</p>;
+    return <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading the grading matrix…</div>;
   }
 
   return (
@@ -596,7 +596,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
 
       {draftOffer.length > 0 && (
         <div className="px-5">
-          <div role="status" className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+          <div role="status" className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
             <span>{draftOffer.length} unsaved {draftOffer.length === 1 ? 'score' : 'scores'} from your last session {draftOffer.length === 1 ? 'was' : 'were'} kept in this tab.</span>
             <button type="button" onClick={restoreDraft} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40 border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40">Restore</button>
             <button type="button" onClick={discardDraft} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40 border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40">Discard</button>
@@ -742,7 +742,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
             {filteredStudents.length === 0 ? (
-              <tr><td colSpan={99} className="py-12 text-center text-slate-500 dark:text-slate-400 font-semibold">No matching student records found.</td></tr>
+              <tr><td colSpan={99} className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No matching student records found.</h3></td></tr>
             ) : filteredStudents.map((student, studentIndex) => {
               const result = results[student.id] as { status?: string; percentage?: number; gwa?: number } | undefined;
               const computed = result?.status === 'computed';

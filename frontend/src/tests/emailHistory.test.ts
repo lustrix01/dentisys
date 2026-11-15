@@ -73,6 +73,7 @@ test('invitation history matches by invitation id, and falls back to the email f
 
 test('email history table stacks into row cards below 768px without changing desktop classes', () => {
   const table = read('../components/email/EmailHistoryTable.tsx');
+  assert.match(table, /className="table-pin table-pin-first table-pin-blocks"/);
   assert.match(table, /<table className="w-full text-left text-xs max-md:block">/);
   assert.match(table, /<thead className="[^"]*max-md:hidden">/);
   assert.match(table, /<tr className="hover:bg-slate-50\/50 dark:hover:bg-slate-900\/30 max-md:flex max-md:flex-wrap/);

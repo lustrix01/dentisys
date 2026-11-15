@@ -6,7 +6,8 @@ import test from 'node:test';
 for (const file of ['../pages/faculty/AttendanceMonitoring.tsx', '../pages/secretary/AttendanceList.tsx']) {
   test(`${file} roll-call table has a bounded scroll box and an opaque sticky header`, () => {
     const src = readFileSync(new URL(file, import.meta.url), 'utf8');
-    assert.match(src, /max-h-\[560px\] overflow-y-auto overflow-x-auto[^"]*">\s*<table/);
+    const box = /table-pin table-pin-first[^"]*">\s*<table/;
+    assert.match(src, box);
     assert.match(src, /<thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 /);
     assert.doesNotMatch(src, /backdrop-blur-xs/);
   });

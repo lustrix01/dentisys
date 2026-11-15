@@ -2581,19 +2581,21 @@ export function restoreCourseApi(id: number): Promise<{ course: CatalogCourse }>
 }
 export type PersonClass = { csId: number; label: string; schoolYear: string; current: boolean };
 export type AdminPerson = {
-  userId: number; name: string; email: string; kind: 'faculty' | 'student'; status: 'active' | 'deactivated';
+  userId: number; name: string; email: string; kind: 'faculty' | 'student'; status: 'active' | 'deactivated' | 'invited';
+  invitation?: { sentAt: string | null; expiresAt: string | null; expired: boolean }; faceEnrolled?: boolean; studentId?: number;
   disabledAt: string | null; twoFactor: boolean; lastActivityAt: string | null;
   classes?: PersonClass[]; studentNo?: string; enrolledClasses?: PersonClass[];
 };
 // Filters run on the server so the total and every page agree. classes is Faculty-only; secretary and face are Student-only.
 export type AdminPeopleFilters = {
-  twoFactor?: 'on' | 'off'; activity?: 'never' | 'inactive30'; classes?: 'current' | 'none'; secretary?: boolean; face?: 'enrolled' | 'not_enrolled';
+  courseId?: number; classId?: number; twoFactor?: 'on' | 'off'; activity?: 'never' | 'inactive30'; classes?: 'current' | 'none'; secretary?: boolean; face?: 'enrolled' | 'not_enrolled';
 };
-export function getAdminPeopleApi(params: { kind: 'faculty' | 'student'; status?: 'active' | 'deactivated' | 'all'; q?: string; page?: number } & AdminPeopleFilters): Promise<{ status: string; people: AdminPerson[]; total: number; page: number; pageSize: number }> {
+export function getAdminPeopleApi(params: { kind: 'faculty' | 'student'; status?: 'active' | 'deactivated' | 'invited' | 'all'; q?: string; page?: number } & AdminPeopleFilters): Promise<{ status: string; people: AdminPerson[]; total: number; page: number; pageSize: number }> {
   const search = new URLSearchParams({ kind: params.kind, status: params.status ?? 'all', page: String(params.page ?? 1) });
   if (params.q) search.set('q', params.q);
   for (const key of ['twoFactor', 'activity', 'classes', 'face'] as const) if (params[key]) search.set(key, params[key] as string);
   if (params.secretary) search.set('secretary', '1');
+  for (const key of ['courseId', 'classId'] as const) if (params[key]) search.set(key, String(params[key]));
   return request('GET', `/admin/people?${search.toString()}`);
 }
 export function deactivatePersonApi(userId: number, reason?: string): Promise<{ person: AdminPerson }> {
@@ -2601,6 +2603,22 @@ export function deactivatePersonApi(userId: number, reason?: string): Promise<{ 
 }
 export function reactivatePersonApi(userId: number): Promise<{ person: AdminPerson }> {
   return request('POST', '/admin/people/reactivate', { userId });
+}
+export type PeopleFilterOptions = { status?: string; courses: Array<{ id: number; courseCode: string; name: string }>; classes: Array<{ csId: number; label: string; courseId: number }> };
+export function getAdminPeopleFiltersApi(): Promise<PeopleFilterOptions> {
+  return request('GET', '/admin/people/filters');
+}
+export function signOutPersonApi(userId: number, reason?: string): Promise<{ person: AdminPerson }> {
+  return request('POST', '/admin/people/sign-out', { userId, reason });
+}
+export function resetPersonTwoFactorApi(userId: number, reason?: string): Promise<{ person: AdminPerson }> {
+  return request('POST', '/admin/people/reset-2fa', { userId, reason });
+}
+export function resendInvitationApi(userId: number): Promise<{ person: AdminPerson; delivery: 'Sent' | 'Failed' }> {
+  return request('POST', '/admin/people/invitation/resend', { userId });
+}
+export function revokeInvitationApi(userId: number): Promise<{ person: null }> {
+  return request('POST', '/admin/people/invitation/revoke', { userId });
 }
 
 export function getRoomsApi(): Promise<{ status: string; rooms: RoomOption[] }> {

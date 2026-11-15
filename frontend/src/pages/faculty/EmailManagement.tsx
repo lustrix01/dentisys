@@ -13,7 +13,8 @@ import {
   BookMarked,
   UserPlus,
   CalendarDays,
-  Filter
+  Filter,
+  Inbox
 } from 'lucide-react';
 import { Card } from '../../components/Card';
 import Tabs from '../../components/Tabs';
@@ -693,7 +694,7 @@ export const EmailManagement: React.FC = () => {
           </div>
 
           {/* Phones (<768px): each row is shown as a stacked block (name first, then section, status and preview). */}
-          <div className="overflow-x-auto">
+          <div className="table-pin table-pin-first table-pin-blocks">
             <table className="w-full text-left text-xs border-collapse max-md:block">
               <thead className="max-md:block">
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] max-md:block">
@@ -718,8 +719,9 @@ export const EmailManagement: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
                 {filteredStudents.length === 0 ? (
                   <tr className="max-md:block">
-                    <td colSpan={5} className="py-10 text-center text-slate-500 dark:text-slate-400 max-md:block">
-                      No enrolled students match current section filter.
+                    <td colSpan={5} className="px-6 py-14 text-center max-md:block">
+                      <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                      <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No enrolled students match current section filter.</h3>
                     </td>
                   </tr>
                 ) : (
@@ -827,7 +829,7 @@ export const EmailManagement: React.FC = () => {
           </div>
 
           {/* Student selection for Secretary appointment */}
-          <div className="overflow-x-auto">
+          <div className="table-pin table-pin-first table-pin-blocks">
             <table className="w-full text-left text-xs border-collapse max-md:block">
               <thead className="max-md:hidden">
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
@@ -898,7 +900,7 @@ export const EmailManagement: React.FC = () => {
             </h3>
 
             {secretaryInvs.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">No pending Secretary invitations.</p>
+              <div className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No pending Secretary invitations.</h3></div>
             ) : (
               <div className="space-y-2">
                 {secretaryInvs.map(inv => (
@@ -977,16 +979,17 @@ export const EmailManagement: React.FC = () => {
           </div>
 
           {loadingRetention ? (
-            <p role="status" className="py-8 text-center text-sm text-slate-500">Loading current eligibility…</p>
+            <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading current eligibility…</div>
           ) : noticeRows.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center dark:border-slate-700">
-              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <div className="px-6 py-14 text-center">
+              <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+              <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">
                 {tab === 'midterm_advisory' ? 'No students currently qualify for a Midterm Advisory.' : 'No scheduled pending remedial attempts match these filters.'}
-              </p>
+              </h3>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Try another class, school year, or search term.</p>
             </div>
           ) : tab === 'midterm_advisory' ? (
-            <div className="overflow-x-auto">
+            <div className="table-pin table-pin-first table-pin-blocks">
               <table className="w-full text-left text-xs border-collapse max-md:block">
                 <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 max-md:block">
                   <tr className="max-md:block">
@@ -1047,7 +1050,7 @@ export const EmailManagement: React.FC = () => {
               </table>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="table-pin table-pin-first table-pin-blocks">
               <table className="w-full text-left text-xs border-collapse max-md:block">
                 <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 max-md:block">
                   <tr className="max-md:block">

@@ -680,7 +680,7 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(row.getByText('2026-0042')).toBeVisible();
     await expect(row.getByText('Course grade')).toBeVisible();
     await expect(row.getByTitle('Schedule remedial exam')).toBeVisible();
-    const wrapper = page.locator('div.overflow-x-auto').filter({ has: row });
+    const wrapper = page.locator('div.table-pin').filter({ has: row });
     expect(await wrapper.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     await page.setViewportSize({ width: 1280, height: 900 });
     await expect(page.getByRole('columnheader', { name: 'Course Grade' })).toBeVisible();

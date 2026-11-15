@@ -4,8 +4,7 @@ import {
   BookOpen,
   Clock,
   User,
-  RefreshCw,
-  AlertCircle,
+    AlertCircle,
   ShieldCheck,
   GraduationCap,
   Building,
@@ -208,10 +207,7 @@ export const Classes: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[400px] flex items-center justify-center p-8 text-center text-sm font-semibold text-slate-500">
-        <RefreshCw className="w-5 h-5 animate-spin mr-2 text-blue-600" />
-        Loading enrolled classes and schedule…
-      </div>
+      <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Loading enrolled classes and schedule…</div>
     );
   }
 
@@ -251,7 +247,7 @@ export const Classes: React.FC = () => {
       <p className="text-xs text-slate-500 dark:text-slate-400">Course grades and retention status come from official academic records. Missing grades remain pending.</p>
 
       {currentClasses.some(cls => cls.retentionState?.toLowerCase() === 'remedial') && (
-        <div role="status" className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs font-semibold">Retention standing warning: review your flagged courses with Faculty.</div>
+        <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">Retention standing warning: review your flagged courses with Faculty.</div>
       )}
 
       {/* 2. Top Stats & Navigation Bar */}
@@ -332,10 +328,10 @@ export const Classes: React.FC = () => {
       <div className="space-y-4">
         {activeTab === 'current' ? (
           currentClasses.length === 0 ? (
-            <div className="p-10 text-center text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-2">
-              <BookOpen className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
-              <p className="font-bold text-slate-600 dark:text-slate-300 text-sm">{currentSchoolYear ? `No active classes for S.Y. ${currentSchoolYear}` : 'Current school year unavailable'}</p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
+              <BookOpen className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+              <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{currentSchoolYear ? `No active classes for S.Y. ${currentSchoolYear}` : 'Current school year unavailable'}</h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 You do not have any registered enrollments for the current academic year. Check the Archived Classes tab for past coursework.
               </p>
             </div>
@@ -441,10 +437,10 @@ export const Classes: React.FC = () => {
           )
         ) : (
           archivedClasses.length === 0 ? (
-            <div className="p-10 text-center text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-2">
-              <Archive className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
-              <p className="font-bold text-slate-600 dark:text-slate-300 text-sm">No archived classes found</p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
+              <Archive className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+              <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No archived classes found</h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 No enrollments from previous academic school years are available.
               </p>
             </div>

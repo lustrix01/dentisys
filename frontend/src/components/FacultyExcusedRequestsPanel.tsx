@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Filter as FilterIcon, Search } from 'lucide-react';
+import { Filter as FilterIcon, Inbox, Search } from 'lucide-react';
 import { Card } from './Card';
 import { Modal } from './Modal';
 import { formatManilaWhen } from '../services/auditService';
@@ -162,8 +162,8 @@ export const FacultyExcusedRequestsPanel: React.FC<{
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Secretary Requests · {pending.length} waiting</h2>
       </div>
-      {error && <p role="alert" className="text-xs text-rose-600">{error}</p>}
-      {message && <p role="status" className="text-xs text-emerald-700 dark:text-emerald-400">{message}</p>}
+      {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">{error}</p>}
+      {message && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">{message}</p>}
       <>
           <p className="text-[11px] text-slate-500">Sent by class Secretaries. Approving applies the requested status; rejecting leaves the record unchanged.</p>
           <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5">
@@ -234,9 +234,9 @@ export const FacultyExcusedRequestsPanel: React.FC<{
               >Approve selected</button>
             </div>
           )}
-          {filter === 'pending' && shown.length === 0 && <p className="text-xs text-slate-500">{pending.length === 0 ? 'Nothing waiting for you.' : 'No pending requests match the filters.'}</p>}
-          {filter !== 'pending' && !hasHistory && <p className="text-xs text-slate-500">History not available.</p>}
-          {filter !== 'pending' && hasHistory && shown.length === 0 && <p className="text-xs text-slate-500">No {filter} requests.</p>}
+          {filter === 'pending' && shown.length === 0 && <div className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{pending.length === 0 ? 'Nothing waiting for you.' : 'No pending requests match the filters.'}</h3></div>}
+          {filter !== 'pending' && !hasHistory && <div className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">History not available.</h3></div>}
+          {filter !== 'pending' && hasHistory && shown.length === 0 && <div className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No {filter} requests.</h3></div>}
           <div className="space-y-3">
             {groups.map(({ key, rows }) => {
               const first = rows[0];
@@ -320,7 +320,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
     <Modal isOpen={!!confirm} onClose={() => setConfirm(null)} title={confirm ? `${confirm.decision === 'approve' ? 'Approve' : 'Reject'} all ${count(confirm.ids.length)}?` : ''} size="sm">
       {confirm && (
         <div className="space-y-4">
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
             {confirm.label}: {confirm.decision === 'approve' ? 'every student gets the status that was requested.' : 'the attendance records stay as they are. No note is sent.'}
           </p>
           <div className="flex justify-end gap-2">

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { AlertCircle, AlertTriangle, Calendar, Clock, RefreshCw, CheckCircle2, ChevronDown, ChevronUp, BookOpen, History } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Calendar, Clock, CheckCircle2, ChevronDown, ChevronUp, BookOpen, History } from 'lucide-react';
 import { Card } from '../../components/Card';
 import Tabs from '../../components/Tabs';
 import { useApp } from '../../context/AppContext';
@@ -329,10 +329,7 @@ export const RetentionMonitoring: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[300px] flex items-center justify-center p-8 text-center text-sm font-semibold text-slate-500">
-        <RefreshCw className="w-5 h-5 animate-spin mr-2 text-blue-600" />
-        Loading retention data…
-      </div>
+      <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Loading retention data…</div>
     );
   }
 
@@ -406,7 +403,10 @@ export const RetentionMonitoring: React.FC = () => {
         <Card className="overflow-hidden border border-slate-200 dark:border-slate-800 max-md:p-0">
           <div className="space-y-2 p-3 md:hidden">
             {currentRecords.length === 0 ? (
-              <p className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">No courses enrolled for the active term.</p>
+              <div className="px-6 py-14 text-center">
+                <BookOpen className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No courses enrolled for the active term.</h3>
+              </div>
             ) : currentRecords.map(cls => {
               const isPending = cls.grade === null;
               const isAtRisk = (cls.retentionState || '').toLowerCase() === 'remedial';
@@ -424,7 +424,7 @@ export const RetentionMonitoring: React.FC = () => {
               );
             })}
           </div>
-          <div className="hidden overflow-x-auto md:block">
+          <div className="hidden table-pin table-pin-first md:block">
             <table className="w-full min-w-[560px] text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-50/50 dark:bg-slate-800/40">
@@ -437,8 +437,11 @@ export const RetentionMonitoring: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {currentRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-10 text-center text-slate-500 dark:text-slate-400">
-                      No courses enrolled for the active term.
+                    <td colSpan={4}>
+                      <div className="px-6 py-14 text-center">
+                        <BookOpen className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                        <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No courses enrolled for the active term.</h3>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -565,13 +568,13 @@ export const RetentionMonitoring: React.FC = () => {
 
                   <p className="text-[10px] text-slate-500">{semesterLabel(cls.semester)} · {cls.schoolYear} · {progression.stage.replaceAll('_', ' ')}</p>
                   {/* Scheduled Exam Date */}
-                  <div className="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 flex items-center gap-3">
-                    <Clock className="w-5 h-5 text-blue-600 shrink-0" />
+                  <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                    <Clock className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
                     <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300 block">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
                         {progression.stage === 'passed' ? 'Passed Exam Date' : isCostRecovery ? 'Remedial Exam History' : activeAttempt?.status === 'pending' ? 'Scheduled Exam Date' : 'Exam Schedule'}
                       </span>
-                      <span className="text-sm font-mono font-extrabold text-blue-950 dark:text-blue-100">
+                      <span className="text-sm font-mono font-extrabold text-slate-800 dark:text-slate-100">
                         {isCostRecovery ? 'Both remedial attempts completed' : progression.stage === 'passed' ? activeAttempt?.scheduledDate || 'Date unavailable' : activeAttempt?.status === 'pending' ? activeAttempt.scheduledDate || 'Schedule to be announced by faculty' : 'Schedule to be announced by faculty'}
                       </span>
                     </div>
@@ -616,7 +619,7 @@ export const RetentionMonitoring: React.FC = () => {
 
                   {/* Cost Recovery Warning */}
                   {isCostRecovery && (
-                    <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200 text-xs font-semibold">
+                    <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
                       {progression.stage === 'cost_recovery_passed' ? 'Cost recovery passed · Course cleared.' : progression.stage === 'cost_recovery_failed' ? 'Cost recovery failed · Course remains unresolved.' : 'Cost recovery required (both remedial attempts completed without passing).'}
                     </div>
                   )}
@@ -636,14 +639,17 @@ export const RetentionMonitoring: React.FC = () => {
               Waiting for all midterm scores in {record.courseCode} ({record.midtermEvaluation?.gradedCount ?? 0} of {record.midtermEvaluation?.totalCount ?? 0} graded).
             </p>
           ))}
-          <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 text-amber-900 dark:text-amber-200 text-xs">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
             <strong>Advisory Reminder:</strong> Remedial exams are not held at midterm. This is an early notification to consult your Faculty before final exams.
           </div>
 
           <Card className="overflow-hidden border border-slate-200 dark:border-slate-800 max-md:p-0">
             <div className="space-y-2 p-3 md:hidden">
               {midtermRiskRecords.length === 0 ? (
-                <div className="py-6 text-center text-xs text-slate-500 dark:text-slate-400"><CheckCircle2 className="mx-auto mb-1 h-6 w-6 text-emerald-500" />{currentRecords.length === 0 ? 'No current courses available for a midterm advisory.' : 'No courses are on the Midterm Advisory.'}</div>
+                <div className="px-6 py-14 text-center">
+                  <CheckCircle2 className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                  <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{currentRecords.length === 0 ? 'No current courses available for a midterm advisory.' : 'No courses are on the Midterm Advisory.'}</h3>
+                </div>
               ) : midtermRiskRecords.map(cls => (
                 <article key={cls.enrollmentId} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs dark:border-slate-800 dark:bg-slate-950/40">
                   <h3 className="font-bold text-slate-800 dark:text-slate-100"><span className="font-mono text-blue-600 dark:text-blue-400">{cls.courseCode}</span> · {cls.courseName}</h3>
@@ -656,7 +662,7 @@ export const RetentionMonitoring: React.FC = () => {
                 </article>
               ))}
             </div>
-            <div className="hidden overflow-x-auto md:block">
+            <div className="hidden table-pin table-pin-first md:block">
               <table className="w-full min-w-[620px] text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-50/50 dark:bg-slate-800/40">
@@ -669,9 +675,11 @@ export const RetentionMonitoring: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                   {midtermRiskRecords.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="py-8 text-center text-slate-500 dark:text-slate-400">
-                        <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
-                        {currentRecords.length === 0 ? 'No current courses available for a midterm advisory.' : 'No courses are on the Midterm Advisory.'}
+                      <td colSpan={4}>
+                        <div className="px-6 py-14 text-center">
+                          <CheckCircle2 className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                          <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{currentRecords.length === 0 ? 'No current courses available for a midterm advisory.' : 'No courses are on the Midterm Advisory.'}</h3>
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -753,7 +761,7 @@ export const RetentionMonitoring: React.FC = () => {
                         </li>
                       ))}
                     </ul>
-                    <div className="hidden overflow-x-auto border-t border-slate-100 p-3 dark:border-slate-800 md:block">
+                    <div className="hidden table-pin table-pin-first border-t border-slate-100 p-3 dark:border-slate-800 md:block">
                       <table className="w-full min-w-[520px] text-left text-xs border-collapse">
                         <thead>
                           <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">

@@ -551,7 +551,7 @@ export const FacultyInvitation: React.FC = () => {
             ))
           )}
         </div>
-        <div className="hidden md:block overflow-x-auto">
+        <div className="table-pin table-pin-first hidden md:block">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">

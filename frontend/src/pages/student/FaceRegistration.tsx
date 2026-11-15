@@ -682,12 +682,7 @@ export const FaceRegistration: React.FC = () => {
   // --- LOADING SCREEN ---
   if (isAuthoritative && authLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-        <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-          Loading biometric enrollment status…
-        </p>
-      </div>
+      <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Loading biometric enrollment status…</div>
     );
   }
 
@@ -699,8 +694,8 @@ export const FaceRegistration: React.FC = () => {
     || (isAuthoritative && (cameraLoading || Boolean(cameraError) || !livenessChallenge));
 
   const errorBanner = authError && (
-    <div role="alert" className="text-left p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-3 animate-fade-in">
-      <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+    <div role="alert" className="flex items-start gap-3 text-left rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 animate-fade-in">
+      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
       <div>
         <strong className="block font-bold">Registration Message</strong>
         <p className="mt-0.5 leading-relaxed">{authError}</p>
@@ -713,8 +708,8 @@ export const FaceRegistration: React.FC = () => {
 
       {/* Expired Status Banner */}
       {isAuthoritative && profile?.enrollmentStatus === 'expired' && currentStep === 1 && (
-        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <strong className="block font-bold">Enrollment expired for current semester</strong>
             <p className="mt-0.5 leading-relaxed">
@@ -814,7 +809,7 @@ export const FaceRegistration: React.FC = () => {
           </div>
 
           {/* Mandatory Agreement Checkbox */}
-          <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50 flex items-start gap-3">
+          <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
             <input
               type="checkbox"
               id="privacy-consent-checkbox"
@@ -886,8 +881,8 @@ export const FaceRegistration: React.FC = () => {
 
           <div className="space-y-4">
               {cameraError && (
-                <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div>
                     <strong className="block font-bold">{cameraErrorIsChallenge ? 'Liveness check unavailable' : 'Camera access required'}</strong>
                     <p className="mt-0.5 leading-relaxed">{cameraError}</p>
@@ -902,8 +897,8 @@ export const FaceRegistration: React.FC = () => {
               )}
 
               {cameraLoading && (
-                <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-xs text-blue-800 dark:text-blue-300 flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                  <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-blue-600 dark:text-blue-400" />
                   <span>Requesting camera access and preparing the liveness challenge…</span>
                 </div>
               )}
@@ -996,9 +991,9 @@ export const FaceRegistration: React.FC = () => {
 
               {/* Preserved Retry Upload Card */}
               {isAuthoritative && canRetryUpload && pendingPayload && (
-                <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-3">
-                  <div className="flex items-start gap-2.5">
-                    <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                     <div>
                       <strong className="block font-bold">Network or biometric service disruption</strong>
                       <p className="mt-0.5 leading-relaxed">

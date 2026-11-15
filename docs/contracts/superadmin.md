@@ -125,6 +125,8 @@ Example update: `{"id":12,"courseCode":"DENT 101","name":"Dental Anatomy","lectu
 | POST | `/api/admin/people/deactivate` | `{userId, reason?}` | updated person |
 | POST | `/api/admin/people/reactivate` | `{userId}` | updated person |
 
+Parts of this list changed in Part D (invited people, course and class filters, `studentId`, `faceEnrolled`, more account actions).
+
 Person: `{userId, name, email, kind, status:"active"|"deactivated", disabledAt, twoFactor:boolean, lastActivityAt, classes:[{csId,label,schoolYear,current}] (Faculty), studentNo, enrolledClasses:[...] (Student)}`. Faculty list shows **each member's classes** (current school year first). Only people whose account role is Faculty or Student (not Dean, not Secretary-only accounts) are listed.
 
 Refusal example (409):
@@ -224,3 +226,59 @@ One-line edits to existing sections (each needs approval):
 4. **Defaults accepted:** opening class-work rows is not audited (SA11); a deactivated sign-in shows the existing message plus "Contact the Dean." (SA20); the Class Sections preview stays in the normal Dean view only (SA3); the superadmin can restore a retired course (SA17).
 
 As built, the shapes differ from the examples above in these ways, none of them a change of rule: responses are flat; the person has no `program` (Students have no program field); `scope` outside `overview`/`class_work` is a 422 on field `scope` (code `VALIDATION_ERROR`); a Dean's `scope=class_work` also accepts `lookup=students&q=` (2+ characters, 20 results) for the Student filter.
+
+## 11. Part D - Account actions, invitations and filters (backlog 9.16, 9.17)
+
+Same auth, response style and error shape as Part C (Dean role, flat `{status:"ok", ...}`, errors `{status:"error", code, message}`). No migration.
+
+### Routes
+
+| Method | Path | Body / query | Success |
+|---|---|---|---|
+| GET | `/api/admin/people` | New `status=invited`; `all` now includes invited people. New filters `courseId` (both kinds) and `classId` (Students only). Non-integer, `0` or more than 9 digits is a 422; `classId` for Faculty is a 422 on field `classId`; a `classId` that is not a class of the current school year (or is archived) is a 422 on `classId`; an unknown `courseId` is an empty list. | `people[]`, `total`, `page`, `pageSize` |
+| GET | `/api/admin/people/filters` | none | `{courses:[{id, courseCode, name}], classes:[{csId, label, courseId}]}` |
+| POST | `/api/admin/people/sign-out` | `{userId, reason?}` | `{person}` |
+| POST | `/api/admin/people/reset-2fa` | `{userId, reason?}` | `{person}` |
+| POST | `/api/admin/people/invitation/resend` | `{userId}` | `{person, delivery:"Sent"\|"Failed"}` |
+| POST | `/api/admin/people/invitation/revoke` | `{userId}` | `{person:null}` (the person leaves the Invited list) |
+
+Person additions: `status:"invited"`, `invitation:{sentAt, expiresAt, expired}` (Manila ISO; only when invited), `studentId` (Students, the id the existing `POST /api/admin/biometrics/revoke` takes) and `faceEnrolled:boolean` (Students, same rule as the `face` filter). An invited person has `twoFactor:false`, `lastActivityAt:null` and `disabledAt:null`.
+
+Examples:
+
+```json
+POST /api/admin/people/sign-out  {"userId": 41, "reason": "Shared laptop"}
+200 {"status":"ok","person":{"userId":41,"name":"Ana Reyes","email":"ana@bicol-u.edu.ph","kind":"student","status":"active","disabledAt":null,"twoFactor":true,"lastActivityAt":"2026-11-15T09:12:00+08:00","studentId":7,"studentNo":"2026-0007","faceEnrolled":false,"enrolledClasses":[]}}
+
+POST /api/admin/people/invitation/resend  {"userId": 58}
+200 {"status":"ok","person":{"userId":58,"name":"Ben Cruz","kind":"student","status":"invited","invitation":{"sentAt":"2026-11-15T10:00:00+08:00","expiresAt":"2026-11-22T10:00:00+08:00","expired":false},"twoFactor":false,"lastActivityAt":null,"studentId":9,"studentNo":"2026-0009","faceEnrolled":false,"enrolledClasses":[]},"delivery":"Sent"}
+
+409 {"status":"error","code":"invitation_class_unavailable","message":"The class for this invitation is no longer active. Ask the Faculty member to invite the Student again."}
+```
+
+### Rules
+
+| # | Rule |
+|---|---|
+| SA26 | **Invited** = a `user_accounts` row with `status = 'Pending Activation'` (the status the invitation flows write; not `Pending`) whose newest invitation token is not used and not revoked (it may be expired: `invitation.expired`). Faculty: newest `faculty_invitation` token of the account. Student: newest `student_activation` token issued to the Student's own account (`students.student_account_user_id`, the same account the token's `user_id` names). The list shows Faculty and Students separately by `kind`, as before. |
+| SA27 | **Sign out everywhere** and **Reset 2FA** apply to an Active Faculty or Student only (`people_fetch` rules): unknown, Dean, Secretary-only or invited -> 404 `person_not_found`; deactivated -> 409 `account_deactivated`. Both end the account in one shared helper (`people_end_sessions`): `token_version + 1` and every live session and refresh token revoked (reasons "Signed out by the Dean" / "2FA reset by the Dean"). The account stays Active. Sign out always writes its audit row. |
+| SA28 | **Reset 2FA**, one transaction: revokes the `mfa_credential` and `mfa_recovery` tokens (reason "Reset by the Dean"), ends the sessions, writes `mfa_reset_by_dean`. When there is nothing to revoke: 409 `two_factor_off`, no row. After commit the person is emailed (the Dean reset your 2FA, sign in with your password, set 2FA up again in your profile, contact the Dean if unexpected); a send failure is logged and does not fail the request. The audit row never holds secrets. |
+| SA29 | **Resend** reissues the pending invitation and sends the email. Faculty: the same code as `POST /api/admin/faculty-invitations/reissue` (`faculty_invitation_reissue_core`; audit `faculty_invited`, "Dean reissued Faculty invitation"). Student: the latest `student_activation` token's Student and class (`related_cs_id`) are kept (the original Faculty authorization), the old token is revoked ("Replaced by a Dean resend"), a new 7-day token is issued (same function as the Faculty invitation, `student_invitation_issue_token`), the email is the existing Student invitation template naming that class and its Faculty member, recorded in the email outbox with the Dean as sender; audit `student_invitation_resent_by_dean` (target the new token). 409 `invitation_class_unavailable` when the class is not Active, is archived or not of the current school year, or the Student's enrolment or record is not Active. |
+| SA30 | **Revoke** revokes the live invitation. Faculty: `faculty_invitation_revoke_core`, same audit `faculty_invitation_revoked`, reason "Revoked by the Dean". Student: the token is revoked ("Revoked by the Dean"), audit `student_invitation_revoked_by_dean` (target the account). The account row stays Pending Activation; Faculty can invite the Student again. |
+| SA31 | No live invitation (account not pending, or its newest token used or revoked), for resend or revoke: 409 `no_pending_invitation` "This person has no pending invitation." The existing `/api/admin/faculty-invitations*` routes behave as before. |
+| SA32 | **Filters** (9.17) count only this school year's classes that are not archived (`archived_at IS NULL`): Faculty teach one (`instructor_user_id`) of the course; a Student has an Active enrolment in one. `courseId` and `classId` combine with the other filters by AND. The options route lists those classes and the courses that have at least one. |
+
+### Errors
+
+| Code | HTTP | Message |
+|---|---|---|
+| `person_not_found` | 404 | "Account not found." |
+| `account_deactivated` | 409 | "This account is deactivated." |
+| `two_factor_off` | 409 | "This person does not use 2FA." |
+| `no_pending_invitation` | 409 | "This person has no pending invitation." |
+| `invitation_class_unavailable` | 409 | "The class for this invitation is no longer active. Ask the Faculty member to invite the Student again." |
+| `VALIDATION_ERROR` | 422 | Reason over 500 characters; bad `courseId` / `classId` (field named). |
+
+### Audit events
+
+`sessions_ended_by_dean` ("Signed out everywhere", People & accounts), `mfa_reset_by_dean` ("2FA reset by the Dean", Sign-in & security; counts in the Dean's "2FA turned off" attention card with `mfa_revoked`), `student_invitation_resent_by_dean`, `student_invitation_revoked_by_dean` (People & accounts). All Dean-visible; see `docs/contracts/audit-logging.md` section 5.

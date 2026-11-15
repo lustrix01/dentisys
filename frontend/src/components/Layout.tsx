@@ -191,6 +191,16 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const config = useRuntimeConfig();
   const studentPrototypeEnabled = isStudentPrototypeAllowed(user, config, 'dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Pinned table columns (index.css .table-pin-first): the first column gets its solid background only while
+  // its table is scrolled sideways, so a table at rest looks the same on glass cards.
+  useEffect(() => {
+    const onScroll = (e: Event) => {
+      const el = e.target;
+      if (el instanceof HTMLElement && el.classList.contains('table-pin-first')) el.toggleAttribute('data-pinned-x', el.scrollLeft > 0);
+    };
+    document.addEventListener('scroll', onScroll, true);
+    return () => document.removeEventListener('scroll', onScroll, true);
+  }, []);
   useEffect(() => {
     if (!isSidebarOpen) return undefined;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsSidebarOpen(false); };

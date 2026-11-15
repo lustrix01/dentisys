@@ -22,7 +22,7 @@ const AUDIT_PAGE_SIZE = 50;
 const AUDIT_ATTENTION_CARDS = [
     'failedSignIns' => ['login_failed', 'google_login_denied'],
     'securityAlerts' => ['refresh_reuse_detected', 'mfa_verification_failed'],
-    'mfaTurnedOff' => ['mfa_revoked'],
+    'mfaTurnedOff' => ['mfa_revoked', 'mfa_reset_by_dean'],
 ];
 const AUDIT_TIMEZONE = 'Asia/Manila';
 // shortcut: a batch lists at most 500 members, larger batches still report the full count; raise if a roster ever exceeds it.
@@ -60,6 +60,7 @@ function audit_catalogue(): array
         'mfa_verification_failed' => ['Wrong 2FA or recovery code', $S, true, true],
         'mfa_recovery_codes_regenerated' => ['Recovery codes regenerated', $S, true, false],
         'mfa_revoked' => ['2FA turned off', $S, true, false],
+        'mfa_reset_by_dean' => ['2FA reset by the Dean', $S, true, false],
         'refresh_reuse_detected' => ['Stolen sign-in token blocked', $S, true, true],
         'profile_updated' => ['Name changed', $S, true, false],
         // Old steps that are no longer written (R13): labelled, own view only, behind the Sign-ins chip.
@@ -92,6 +93,9 @@ function audit_catalogue(): array
         'class_restore' => ['Class restored', $P, true, false],
         'account_deactivated' => ['Account deactivated', $P, true, false],
         'account_reactivated' => ['Account reactivated', $P, true, false],
+        'sessions_ended_by_dean' => ['Signed out everywhere', $P, true, false],
+        'student_invitation_resent_by_dean' => ['Student invitation resent by the Dean', $P, true, false],
+        'student_invitation_revoked_by_dean' => ['Student invitation revoked by the Dean', $P, true, false],
         // 5.3 Settings and terms
         'system_settings_updated' => ['System settings changed', $T, true, false],
         'academic_term_created' => ['Term added', $T, true, false],
@@ -448,14 +452,14 @@ function audit_read_entries(PDO $pdo, array $viewer, array $p): array
     }
     if ($role === 'admin') {
         // Attention cards: same date range, every Dean-visible failure/alert (not narrowed by the other filters).
-        $attWhere = array_merge(["e.action_code IN ('login_failed','google_login_denied','refresh_reuse_detected','mfa_verification_failed','mfa_revoked')"], $dateWhere);
+        $attWhere = array_merge(["e.action_code IN ('login_failed','google_login_denied','refresh_reuse_detected','mfa_verification_failed','mfa_revoked','mfa_reset_by_dean')"], $dateWhere);
         $att = $pdo->prepare('SELECT e.action_code, COUNT(*) FROM audit_events e WHERE ' . implode(' AND ', $attWhere) . ' GROUP BY 1');
         $att->execute($dateParams);
         $c = $att->fetchAll(PDO::FETCH_KEY_PAIR);
         $result['attention'] = [
             'failedSignIns' => (int) ($c['login_failed'] ?? 0) + (int) ($c['google_login_denied'] ?? 0),
             'securityAlerts' => (int) ($c['refresh_reuse_detected'] ?? 0) + (int) ($c['mfa_verification_failed'] ?? 0),
-            'mfaTurnedOff' => (int) ($c['mfa_revoked'] ?? 0),
+            'mfaTurnedOff' => (int) ($c['mfa_revoked'] ?? 0) + (int) ($c['mfa_reset_by_dean'] ?? 0),
         ];
     }
 

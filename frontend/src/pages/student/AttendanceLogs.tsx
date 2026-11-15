@@ -9,8 +9,8 @@ import {
   ClipboardCheck,
   AlertCircle,
   RefreshCw,
-  Loader2,
   History,
+  X,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -178,8 +178,8 @@ export const AttendanceLogs: React.FC = () => {
 
       {/* Error Banner */}
       {authError && (
-        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+        <div role="alert" className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <p className="leading-relaxed">{authError}</p>
         </div>
       )}
@@ -285,17 +285,19 @@ export const AttendanceLogs: React.FC = () => {
           <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono hidden sm:block">Student: {studentName} ({studentIdNum})</span>
         </div>
         {authLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 space-y-3 text-slate-500">
-            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-            <p className="text-xs font-semibold">Loading attendance logs…</p>
-          </div>
+          <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading attendance logs…</div>
         ) : displayRecords.length === 0 ? (
-          <div className="py-20 text-center space-y-2">
-            <History className="w-8 h-8 text-slate-300 mx-auto" />
-            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No attendance records found</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+          <div className="px-6 py-14 text-center">
+            <History className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+            <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No attendance records found</h3>
+            <p className="mx-auto mt-1 max-w-sm text-xs text-slate-500 dark:text-slate-400">
               No matching attendance logs were found for the selected search and filter criteria.
             </p>
+            {(searchQuery.trim() !== '' || selectedSubject !== 'all' || selectedStatus !== 'all') && (
+              <button type="button" onClick={() => { setSearchQuery(''); setSelectedSubject('all'); setSelectedStatus('all'); }} className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/40">
+                <X className="h-3.5 w-3.5" />Clear filters
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -350,7 +352,7 @@ export const AttendanceLogs: React.FC = () => {
               ))}
             </ul>
           )}
-          <div className="hidden overflow-x-auto md:block">
+          <div className="hidden table-pin table-pin-first md:block">
             <table className="w-full min-w-[680px] text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">

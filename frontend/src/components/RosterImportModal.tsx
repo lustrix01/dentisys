@@ -92,9 +92,9 @@ const PDF_NO_ROWS_ERROR = 'No students were read from this PDF. Check that it is
 const CSV_LAYOUT_ERROR = "This file's columns do not match the roster layout, so no students were read. Use the sample CSV or the official class list PDF.";
 // Amber warning, not an error: the rows were read by column position (headerless CSV support is kept).
 const CSV_POSITIONAL_WARNING = 'No column headings were recognised, so this file was read by column position. Check the preview against your file, or use the sample CSV.';
-const fileErrorNoteCls = 'p-3 rounded-xl border text-[11px] leading-relaxed';
-const fileErrorRoseCls = `${fileErrorNoteCls} bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/30 text-rose-700 dark:text-rose-400`;
-const fileErrorAmberCls = `${fileErrorNoteCls} bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/30 text-amber-700 dark:text-amber-400`;
+const fileErrorNoteCls = 'rounded-xl border p-3 text-xs';
+const fileErrorRoseCls = `${fileErrorNoteCls} border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200`;
+const fileErrorAmberCls = `${fileErrorNoteCls} border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200`;
 
 const NAME_FIELDS: (keyof ParsedRosterStudent)[] = ['firstName', 'middleName', 'lastName', 'prefix', 'suffix'];
 
@@ -561,7 +561,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
           </div>
         )}
         {matchPrompt && !studentsOnly && (
-          <div role="alert" className="p-2.5 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
+          <div role="alert" className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
             This file matches <b>{matchPrompt}</b>. Import into it?
             <div className="mt-1.5 flex flex-wrap gap-2">
               <button type="button" onClick={() => setMatchPrompt('')} className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs cursor-pointer">Import into this class</button>
@@ -621,7 +621,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
               </label>
             </div>
             {unitsNote
-              ? <div role="alert" className="p-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{unitsNote}</div>
+              ? <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{unitsNote}</div>
               : Number(labUnits) === 0 && Number(lectureUnits) > 0 && <p className="text-xs text-slate-500 dark:text-slate-400">Laboratory units 0: this class is graded <b>Lecture only</b>.</p>}
             <h4 className="pt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">Meetings</h4>
             {draft.meetings.map((meeting, index) => {
@@ -651,13 +651,13 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
               </div>
               );
             })}
-            {isNewClass && scheduleGuidance && !problemFor('Every meeting needs a room.') && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{scheduleGuidance}</p>}
+            {isNewClass && scheduleGuidance && !problemFor('Every meeting needs a room.') && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">{scheduleGuidance}</p>}
             <button type="button" onClick={() => setDraft(previous => previous && { ...previous, meetings: [...previous.meetings, newMeeting('Lecture', 'Mon', '08:00 AM', '09:00 AM', '')] })} className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer">
               <Plus className="w-3.5 h-3.5" />
               Add meeting
             </button>
             {draft.notRead.length > 0 && (
-              <div role="alert" className="p-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                 {draft.notRead.map(line => <div key={line}>Not read: <b>{line}</b></div>)}
                 Add it as a meeting by hand if it is needed.
               </div>
@@ -729,10 +729,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
 
         {/* Loading Spinner during parse */}
         {isParsing && (
-          <div className="p-6 text-center text-slate-500 space-y-2">
-            <RefreshCw className="w-6 h-6 animate-spin mx-auto text-emerald-600" />
-            <p className="font-bold text-xs">Extracting and analyzing registrar student records...</p>
-          </div>
+          <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Extracting and analyzing registrar student records...</div>
         )}
 
         {!isParsing && positionalCsv && parsedStudents.length > 0 && (
@@ -780,9 +777,9 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
             </div>
             {pdfInfo?.total != null && (pdfInfo.total === pdfInfo.read
               ? <p role="status" className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">✓ {pdfInfo.read} of {pdfInfo.total} students read</p>
-              : <p role="alert" className="p-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">The file lists {pdfInfo.total} students, but {pdfInfo.read} {pdfInfo.read === 1 ? 'was' : 'were'} read. Check the PDF before saving.</p>)}
+              : <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">The file lists {pdfInfo.total} students, but {pdfInfo.read} {pdfInfo.read === 1 ? 'was' : 'were'} read. Check the PDF before saving.</p>)}
             {headerDiffs.length > 0 && (
-              <div role="alert" className="p-2.5 rounded-xl border border-amber-200 bg-amber-50 text-xs leading-5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                 <strong>This file may be for a different class. Check you chose the right file.</strong>
                 <ul className="mt-1 list-disc space-y-0.5 pl-4">{headerDiffs.map(diff => <li key={diff}>{diff}</li>)}</ul>
               </div>
@@ -852,12 +849,12 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
         )}
 
         {parsedStudents.length > 0 && <label className="flex items-start gap-2 text-xs leading-5 text-slate-700 dark:text-slate-300"><input type="checkbox" checked={targetReviewed} onChange={event => setTargetReviewed(event.target.checked)} />{isNewClass ? 'I reviewed the class details and student rows from this file.' : studentsOnly ? 'I reviewed the student rows for this class.' : 'I reviewed the source course, section, semester and school year against the selected target class.'}</label>}
-        {classNotice && <p role="alert" className="text-rose-600 font-bold">{classNotice}</p>}
-        {importErrors.length > 0 && <div role="alert" className="text-rose-600"><strong>Rows Requiring Correction</strong><ul>{importErrors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>}
+        {classNotice && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">{classNotice}</p>}
+        {importErrors.length > 0 && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200"><strong>Rows Requiring Correction</strong><ul>{importErrors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>}
 
         {/* Progress Bar during import */}
         {isImporting && importProgress && (
-          <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 space-y-2">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200 space-y-2">
             <div className="flex items-center justify-between text-xs font-bold text-emerald-800 dark:text-emerald-200">
               <span className="flex items-center gap-1.5">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />

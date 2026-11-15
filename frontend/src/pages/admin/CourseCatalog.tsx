@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Archive, ArchiveRestore, BookOpen, Pencil, Search, X } from 'lucide-react';
+import { Archive, ArchiveRestore, BookOpen, Download, Pencil, Search, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Tabs from '../../components/Tabs';
 import { filterCourses } from './courseCatalogFilters';
@@ -7,6 +7,9 @@ import type { CourseFilters } from './courseCatalogFilters';
 import { ListToolbar, SearchField } from '../../components/FilterBars';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
+import { useAuth } from '../../context/AuthContext';
+import { downloadXlsx } from '../../utils/xlsxDownload';
+import { buildReportSheet } from '../../utils/reportWorkbook';
 import { getAdminCoursesApi, restoreCourseApi, retireCourseApi, updateCourseApi } from '../../services/apiClient';
 import type { CatalogCourse } from '../../services/apiClient';
 
@@ -23,6 +26,7 @@ const shownUnits = (value: number | null) => (value === null ? '—' : String(va
 const used = (course: CatalogCourse) => `Used by ${course.classCount} ${course.classCount === 1 ? 'class' : 'classes'} (${course.currentClassCount} this school year)`;
 
 export const CourseCatalog: React.FC = () => {
+  const { user } = useAuth();
   const [courses, setCourses] = useState<CatalogCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -49,6 +53,19 @@ export const CourseCatalog: React.FC = () => {
   const clearFilters = () => { setSearch(''); setUnits('all'); setUse('all'); };
   const activeCount = courses.filter(course => course.status === 'active').length;
   const retiredCount = courses.length - activeCount;
+
+  const exportExcel = async () => {
+    try {
+      await downloadXlsx('Course Catalog.xlsx', [buildReportSheet({
+        sheet: 'Courses', title: 'COURSE CATALOG', filter: `${tab === 'active' ? 'Active' : 'Retired'} courses${search ? ` · Search: ${search}` : ''}`, term: `${filtered.length} ${filtered.length === 1 ? 'course' : 'courses'}`,
+        by: user?.display_name ?? "Dean's Office",
+        columns: [{ header: 'Course Code', width: 16 }, { header: 'Course Title', width: 40 }, { header: 'Lecture Units', width: 14 }, { header: 'Laboratory Units', width: 16 }, { header: 'Total Units', width: 12 }, { header: 'Classes', width: 24 }],
+        rows: filtered.map(c => [c.courseCode, c.name, shownUnits(c.lectureUnits), shownUnits(c.labUnits), c.units, `${c.classCount} (${c.currentClassCount} this year)`]),
+      })]);
+    } catch (err) {
+      showFeedback(err instanceof Error ? err.message : 'Export failed.', 'error');
+    }
+  };
 
   const openEdit = (course: CatalogCourse) => {
     setFormError('');
@@ -102,6 +119,18 @@ export const CourseCatalog: React.FC = () => {
             { id: 'retired', label: 'Retired Courses', icon: <Archive className="h-4 w-4" />, count: retiredCount },
           ]} />
         )}
+        right={(
+          <div className="no-print inline-flex flex-shrink-0 items-center rounded-xl border border-slate-200/90 bg-white p-0.5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+            <button
+              type="button"
+              onClick={() => void exportExcel()}
+              className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-700 dark:text-slate-200 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-300"
+            >
+              <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Export Excel</span>
+            </button>
+          </div>
+        )}
         below={(
           <>
             <SearchField value={search} onChange={setSearch} placeholder="Search course code or title…" color="accent" />
@@ -136,7 +165,7 @@ export const CourseCatalog: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className="hidden overflow-x-auto rounded-3xl border border-slate-200/80 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900 sm:block">
+          <div className="table-pin table-pin-first hidden rounded-3xl border border-slate-200/80 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900 sm:block">
             <table className="w-full min-w-[760px] text-left text-xs">
               <thead className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400"><tr>
                 <th className="px-5 py-3.5">Course Code</th><th className="px-4 py-3.5">Course Title</th><th className="px-4 py-3.5">Lecture Units</th><th className="px-4 py-3.5">Laboratory Units</th><th className="px-4 py-3.5">Total Units</th><th className="px-4 py-3.5">Classes</th><th className="px-4 py-3.5 text-right">Actions</th>

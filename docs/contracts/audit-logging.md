@@ -122,6 +122,7 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | Wrong 2FA or recovery code | mfa_verification_failed | which kind; never the code | yes | Sign-ins filter | **NEW** |
 | Recovery codes regenerated | mfa_recovery_codes_regenerated | never the codes | yes | yes | **NEW** |
 | 2FA turned off | mfa_revoked | reason | yes | yes | KEEP |
+| 2FA reset by the Dean | mfa_reset_by_dean | reason, never secrets; counts in the "2FA turned off" attention card | yes | — | **NEW** |
 | Stolen sign-in token blocked | refresh_reuse_detected | session | yes | Sign-ins filter | KEEP |
 | Name changed | profile_updated | name before → after | yes | yes | CHANGE (add before) |
 | Token refreshed | refresh_rotation | — | — | — | **STOP** |
@@ -145,6 +146,8 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | Class created / changed | class_create, class_update | Faculty | changed fields before → after | yes | yes | KEEP |
 | Class schedule saved over an overlap | class_schedule_overlap_confirmed | Faculty | who confirmed, other classes | yes | yes | KEEP |
 | Account deactivated / reactivated | account_deactivated, account_reactivated | Dean (Superadmin mode) | status Active ↔ Disabled, kind (Faculty or Student), reason on deactivation; a Student who is a Class Secretary is the same account, so one row | yes | — | **NEW** |
+| Signed out everywhere | sessions_ended_by_dean | Dean (Superadmin mode) | reason | yes | — | **NEW** |
+| Student invitation resent / revoked by the Dean | student_invitation_resent_by_dean, student_invitation_revoked_by_dean | Dean (Superadmin mode) | the resend targets the new token, the revoke the account; reason on revoke | yes | — | **NEW** |
 
 ### 5.3 Settings and terms (actor: Dean)
 

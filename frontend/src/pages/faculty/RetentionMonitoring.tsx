@@ -810,21 +810,21 @@ export const RetentionMonitoring: React.FC = () => {
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
 
       {notification && (
-        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in">
-          <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /><span>{notification.message}</span></div>
-          <button type="button" onClick={() => setNotification(null)} className="text-slate-500 dark:text-slate-400 hover:text-slate-600 text-xs cursor-pointer">Dismiss</button>
+        <div className="flex items-start gap-3 rounded-xl border p-3 text-xs border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200 animate-fade-in">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /><span className="flex-1">{notification.message}</span>
+          <button type="button" onClick={() => setNotification(null)} className="text-xs font-semibold cursor-pointer">Dismiss</button>
         </div>
       )}
 
       {loadError && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-xs font-semibold flex items-center justify-between gap-3">
-          <span>{loadError}</span>
+        <div className="flex items-start gap-3 rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <span className="flex-1">{loadError}</span>
           <button type="button" onClick={() => { void refreshRetention(); }} className="px-3 py-1.5 rounded-lg bg-amber-600 text-white font-bold">Retry</button>
         </div>
       )}
 
       {unavailableRecordCount > 0 && !loadError && (
-        <div className="p-4 rounded-2xl bg-slate-500/10 border border-slate-500/20 text-slate-700 dark:text-slate-300 text-xs font-semibold">{unavailableRecordCount} retention record(s) are unavailable because the server did not provide all persisted identifiers required for actions.</div>
+        <div className="rounded-xl border p-3 text-xs border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">{unavailableRecordCount} retention record(s) are unavailable because the server did not provide all persisted identifiers required for actions.</div>
       )}
 
       <div className="flex flex-col gap-4">
@@ -890,9 +890,9 @@ export const RetentionMonitoring: React.FC = () => {
       </div>
 
       {selectedSchoolYear !== currentSchoolYear && currentSchoolYear && selectedSchoolYear !== 'all' && (
-        <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
-            <CalendarDays className="w-4 h-4 text-amber-600 shrink-0" />
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <div className="flex items-start gap-3">
+            <CalendarDays className="mt-0.5 h-4 w-4 shrink-0" />
             <span>You are viewing archived records for <strong>S.Y. {selectedSchoolYear}</strong>. Historical classes are view-only.</span>
           </div>
           <button
@@ -905,7 +905,7 @@ export const RetentionMonitoring: React.FC = () => {
         </div>
       )}
 
-      {!isLoading && !loadError && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+      {!isLoading && !loadError && <div className="rounded-xl border p-3 text-xs border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
         <p className="font-bold">Showing {visibleStudentCount} student{visibleStudentCount === 1 ? '' : 's'} across {filteredRecords.length} course enrollment{filteredRecords.length === 1 ? '' : 's'} · {selectedSchoolYear === 'all' ? 'All school years' : `S.Y. ${selectedSchoolYear}`}</p>
         <p className="mt-1">{currentAttentionStudents} student{currentAttentionStudents === 1 ? ' needs' : 's need'} attention in the current school year ({currentSchoolYear || 'unavailable'}). Course enrollments and pending exams are counted separately in the tabs.</p>
         {currentAttentionStudents > 0 && <button type="button" onClick={() => { setSelectedSchoolYear(currentSchoolYear); setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); setActiveTab('watchlist'); }} className="mt-2 font-bold text-emerald-700 dark:text-emerald-400">View current-year students needing attention</button>}
@@ -949,7 +949,7 @@ export const RetentionMonitoring: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="table-pin table-pin-first table-pin-blocks">
             <table className="w-full text-left text-xs max-md:block">
               <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 max-md:hidden">
                 <tr>
@@ -1000,22 +1000,27 @@ export const RetentionMonitoring: React.FC = () => {
             </table>
           </div>
           {midtermDisplayRecords.length === 0 && (
-            <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1">
+            isLoading ? (
+              <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading records…</div>
+            ) : (
+            <div className="px-6 py-14 text-center">
+              <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
               {showAtRiskOnly ? (
                 <>
-                  <p className="font-semibold text-slate-600 dark:text-slate-300">No students are currently on the Midterm Watchlist (no fully graded midterm of 2.5 or worse).</p>
+                  <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No students are currently on the Midterm Watchlist (no fully graded midterm of 2.5 or worse).</h3>
                   <button
                     type="button"
                     onClick={() => setShowAtRiskOnly(false)}
-                    className="text-emerald-600 hover:underline font-bold"
+                    className="mt-3 text-emerald-600 hover:underline font-bold text-xs"
                   >
                     Show all computed students
                   </button>
                 </>
               ) : (
-                <p>{isLoading ? 'Loading records...' : 'No students have computed midterm grades matching these filters.'}</p>
+                <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No students have computed midterm grades matching these filters.</h3>
               )}
             </div>
+            )
           )}
           <p className="text-[11px] text-slate-500">Midterm scores provide an early review. Final retention decisions appear in Retention Status.</p>
         </Card>
@@ -1028,9 +1033,9 @@ export const RetentionMonitoring: React.FC = () => {
           </div>
           {watchlistRecords.length === 0 ? (
             // Outside the table so the message is not centred across a table wider than a phone screen.
-            <p className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">{isLoading ? 'Loading authoritative retention records...' : (selectedClassId !== 'all' || selectedSubjectCode !== 'all' || searchQuery.trim() ? 'No students needing retention action match these filters.' : 'No students need retention action in this school year.')}</p>
+            isLoading ? <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading retention records…</div> : <div className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{selectedClassId !== 'all' || selectedSubjectCode !== 'all' || searchQuery.trim() ? 'No students needing retention action match these filters.' : 'No students need retention action in this school year.'}</h3></div>
           ) : (
-          <div className="overflow-x-auto">
+          <div className="table-pin table-pin-first table-pin-blocks">
             <table className="w-full text-left text-xs border-collapse max-md:block">
               <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Student Number</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center">Course Grade</th><th className="py-3 px-4">State</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
@@ -1059,9 +1064,9 @@ export const RetentionMonitoring: React.FC = () => {
           </div>
           {remedialRows.length === 0 ? (
             // Outside the table so the message is not centred across a table wider than a phone screen.
-            <p className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">{isLoading ? 'Loading authoritative remedial records...' : 'No remedial records match the selected filters.'}</p>
+            isLoading ? <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading remedial records…</div> : <div className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No remedial records match the selected filters.</h3></div>
           ) : (
-          <div className="overflow-x-auto">
+          <div className="table-pin table-pin-first table-pin-blocks">
             <table className="w-full text-left text-xs border-collapse max-md:block">
               <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Original Grade</th><th className="py-3 px-4">Attempts</th><th className="py-3 px-4">Current Stage</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
@@ -1294,7 +1299,7 @@ export const RetentionMonitoring: React.FC = () => {
 
             {/* Optional Re-attempt schedule date for Attempt 1 */}
             {resolveOutcome === 'fail' && resolveAttemptNumber === 1 && (
-              <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20 space-y-2">
+              <div className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 space-y-2">
                 <label className="font-bold text-amber-900 dark:text-amber-200 block text-xs">
                   Schedule Re-Attempt Date <span className="font-normal text-amber-700 dark:text-amber-400">(optional)</span>
                 </label>
@@ -1313,7 +1318,7 @@ export const RetentionMonitoring: React.FC = () => {
 
             {/* Cost recovery notification for Attempt 2 */}
             {resolveOutcome === 'fail' && resolveAttemptNumber === 2 && (
-              <div className="p-3 rounded-xl border border-rose-200 bg-rose-50/60 dark:border-rose-900/50 dark:bg-rose-950/20">
+              <div className="rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
                 <p className="font-bold text-rose-900 dark:text-rose-200 text-xs">
                   Cost Recovery Progression
                 </p>
@@ -1415,7 +1420,7 @@ export const RetentionMonitoring: React.FC = () => {
             </div>
             {selectedPolicyProgression && (
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                <div className="flex items-center justify-between gap-3 rounded-xl border p-3 text-xs border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
                   <div><p className="font-bold text-emerald-800 dark:text-emerald-200">{stageLabel(selectedPolicyProgression.stage)}</p><p className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80">Server-authoritative remedial stage</p></div>
                   {selectedPolicyProgression.stage === 'passed' && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
                 </div>
@@ -1432,7 +1437,7 @@ export const RetentionMonitoring: React.FC = () => {
                     <p className="text-[10px] text-slate-500 dark:text-slate-400">Final grade {selectedPolicyProgression.costRecoveryGrade.toFixed(2)} · {selectedPolicyProgression.stage === 'cost_recovery_passed' ? 'Passed' : 'Failed'}{selectedPolicyProgression.costRecoveryRecordedAt ? ` · Recorded ${formatRecordDate(selectedPolicyProgression.costRecoveryRecordedAt)}` : ''}</p>
                   </div>
                 )}
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">Original final grade remains unchanged. A remedial pass changes progression readiness only. Legacy records are not interpreted as a new attempt.</p>
+                <p className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">Original final grade remains unchanged. A remedial pass changes progression readiness only. Legacy records are not interpreted as a new attempt.</p>
               </div>
             )}
           </div>

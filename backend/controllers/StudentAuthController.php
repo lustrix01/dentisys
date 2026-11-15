@@ -67,6 +67,56 @@ function student_auth_credentials_response(array $credentials): void
     auth_controller_emit($response);
 }
 
+/** Revokes the account's live student_activation tokens and issues a new 7-day one for the same Student and class. */
+function student_invitation_issue_token(PDO $pdo, int $accountId, int $studentId, int $classId, string $revokeReason): array
+{
+    $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+    $nowSql = $now->format('Y-m-d H:i:s.u');
+    $expiresSql = $now->add(new DateInterval('P7D'))->format('Y-m-d H:i:s.u');
+    $revoke = $pdo->prepare(
+        "UPDATE security_tokens SET revoked_at = ?, revocation_reason = ?
+          WHERE purpose = 'student_activation' AND user_id = ? AND used_at IS NULL AND revoked_at IS NULL"
+    );
+    $revoke->execute([$nowSql, $revokeReason, $accountId]);
+    $rawToken = student_auth_activation_raw_token();
+    $tokenStmt = $pdo->prepare(
+        "INSERT INTO security_tokens (purpose, user_id, related_student_id, related_cs_id, token_digest, issued_at, expires_at)
+         VALUES ('student_activation', ?, ?, ?, ?, ?, ?) RETURNING token_id"
+    );
+    $tokenStmt->bindValue(1, $accountId, PDO::PARAM_INT);
+    $tokenStmt->bindValue(2, $studentId, PDO::PARAM_INT);
+    $tokenStmt->bindValue(3, $classId, PDO::PARAM_INT);
+    pdo_bind_binary($tokenStmt, 4, hash('sha256', $rawToken, true));
+    $tokenStmt->bindValue(5, $nowSql, PDO::PARAM_STR);
+    $tokenStmt->bindValue(6, $expiresSql, PDO::PARAM_STR);
+    $tokenStmt->execute();
+    return ['tokenId' => (int) $tokenStmt->fetchColumn(), 'rawToken' => $rawToken, 'nowSql' => $nowSql, 'expiresSql' => $expiresSql];
+}
+
+function student_invitation_outbox_insert(PDO $pdo, int $senderId, string $email, string $name, string $subject, string $body, string $actionUuid): int
+{
+    $outbox = $pdo->prepare(
+        "INSERT INTO email_outbox
+         (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid, action_uuid)
+         VALUES (?, ?, ?, ?, 'Student Invitation', ?, 'Pending', ?, ?) RETURNING email_id"
+    );
+    $outbox->execute([$senderId, $email, $name, $subject, $body, uuid_v4_string(), $actionUuid]);
+    return (int) $outbox->fetchColumn();
+}
+
+/** Sends the queued invitation email (after commit) and records the result in the outbox. */
+function student_invitation_outbox_send(PDO $pdo, array $config, int $emailId, string $email, string $subject, string $body): bool
+{
+    $sent = send_email($email, $subject, $body, $config, true);
+    $pdo->prepare('UPDATE email_outbox SET status = ?, sent_at = ?, failure_reason = ? WHERE email_id = ?')->execute([
+        $sent ? 'Sent' : 'Failed',
+        $sent ? (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u') : null,
+        $sent ? null : 'SMTP delivery failed or is not configured.',
+        $emailId,
+    ]);
+    return $sent;
+}
+
 function handle_student_invitation_create(): void
 {
     $context = student_auth_context();
@@ -247,43 +297,13 @@ function handle_student_invitation_create(): void
             }
 
             $accountId = (int) $account['user_id'];
-            $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
-            $nowSql = $now->format('Y-m-d H:i:s.u');
-            $expiresSql = $now->add(new DateInterval('P7D'))->format('Y-m-d H:i:s.u');
-            $revoke = $pdo->prepare(
-                "UPDATE security_tokens SET revoked_at = ?, revocation_reason = 'Replaced by a Faculty-authorized Student invitation'
-                  WHERE purpose = 'student_activation' AND user_id = ? AND used_at IS NULL AND revoked_at IS NULL"
-            );
-            $revoke->execute([$nowSql, $accountId]);
-            $rawToken = student_auth_activation_raw_token();
-            $digest = hash('sha256', $rawToken, true);
-            $tokenStmt = $pdo->prepare(
-                "INSERT INTO security_tokens (purpose, user_id, related_student_id, related_cs_id, token_digest, issued_at, expires_at)
-                 VALUES ('student_activation', ?, ?, ?, ?, ?, ?) RETURNING token_id"
-            );
-            $tokenStmt->bindValue(1, $accountId, PDO::PARAM_INT);
-            $tokenStmt->bindValue(2, (int) $student['student_id'], PDO::PARAM_INT);
-            $tokenStmt->bindValue(3, (int) $classId, PDO::PARAM_INT);
-            pdo_bind_binary($tokenStmt, 4, $digest);
-            $tokenStmt->bindValue(5, $nowSql, PDO::PARAM_STR);
-            $tokenStmt->bindValue(6, $expiresSql, PDO::PARAM_STR);
-            $tokenStmt->execute();
-            $tokenId = (int) $tokenStmt->fetchColumn();
+            ['tokenId' => $tokenId, 'rawToken' => $rawToken, 'expiresSql' => $expiresSql]
+                = student_invitation_issue_token($pdo, $accountId, (int) $student['student_id'], (int) $classId, 'Replaced by a Faculty-authorized Student invitation');
 
             $invitationLink = app_url($config, '/activate-student', ['token' => $rawToken]);
             $subject = 'DentiSYS Student Invitation';
             $messageBody = student_auth_activation_email($student, $invitationLink, (string) ($authCtx['display_name'] ?? ''));
-            $outbox = $pdo->prepare(
-                "INSERT INTO email_outbox
-                 (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid, action_uuid)
-                 VALUES (?, ?, ?, ?, 'Student Invitation', ?, 'Pending', ?, ?) RETURNING email_id"
-            );
-            $outbox->execute([
-                $authCtx['user_id'], $email,
-                student_auth_student_display_name($student),
-                $subject, $messageBody, uuid_v4_string(), email_action_uuid($data),
-            ]);
-            $emailId = (int) $outbox->fetchColumn();
+            $emailId = student_invitation_outbox_insert($pdo, (int) $authCtx['user_id'], $email, student_auth_student_display_name($student), $subject, $messageBody, email_action_uuid($data));
 
             $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
             $auditContext = audit_begin_operation($pdo);
@@ -303,16 +323,7 @@ function handle_student_invitation_create(): void
             throw $e;
         }
 
-        $sent = send_email($email, $subject, $messageBody, $config, true);
-        $finish = $pdo->prepare(
-            'UPDATE email_outbox SET status = ?, sent_at = ?, failure_reason = ? WHERE email_id = ?'
-        );
-        $finish->execute([
-            $sent ? 'Sent' : 'Failed',
-            $sent ? (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u') : null,
-            $sent ? null : 'SMTP delivery failed or is not configured.',
-            $emailId,
-        ]);
+        $sent = student_invitation_outbox_send($pdo, $config, $emailId, $email, $subject, $messageBody);
         $link = $invitationLink;
         $showDevLink = !empty($config['show_dev_invitation_link']);
         student_auth_success_response([

@@ -28,11 +28,11 @@ interface Props {
   onImport: (plan: GradeSheetImportPlan) => Promise<void>;
 }
 
-const noteBase = 'p-3 rounded-xl border text-[11px] leading-relaxed';
+const noteBase = 'rounded-xl border p-3 text-xs';
 const note = {
-  amber: `${noteBase} bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/30 text-amber-700 dark:text-amber-400`,
-  rose: `${noteBase} bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/30 text-rose-700 dark:text-rose-400`,
-  green: `${noteBase} bg-clinical-50 dark:bg-clinical-950/30 border-clinical-200 dark:border-clinical-900/40 text-clinical-700 dark:text-clinical-300`,
+  amber: `${noteBase} border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200`,
+  rose: `${noteBase} border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200`,
+  green: `${noteBase} border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200`,
 };
 const chip = 'inline-flex items-center px-2.5 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-700 dark:text-slate-300';
 const statChip = (tone: 'green' | 'amber' | 'rose' | 'plain') => ({
@@ -240,9 +240,9 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
     return (
       <div className="space-y-2">
         <h4 className={sectionTitle}>Students · {sv.sheet.name}{sv.component ? ` · ${sv.component}` : ''}</h4>
-        <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-auto max-h-96">
+        <div className="table-pin table-pin-first border border-slate-200 dark:border-slate-800 rounded-2xl">
           <table className="min-w-full divide-y dark:divide-slate-800 text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10">
+            <thead className="bg-slate-50 dark:bg-slate-800">
               <tr className="text-left font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400 tracking-wider">
                 <th className="px-3 py-2">Row</th>
                 <th className="px-3 py-2">Name in Sheet</th>
@@ -334,7 +334,10 @@ export const GradeSheetImportPanel: React.FC<Props> = ({
           {fileName && <button type="button" className={btnCls} onClick={reset}>Remove</button>}
         </div>
 
-        {configProblem && (
+        {configStatus === 'loading' && (
+          <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">{configProblem}</div>
+        )}
+        {configProblem && configStatus !== 'loading' && (
           <div className={note.amber}>
             <p>{configProblem}</p>
             <div className="mt-2 flex gap-2">

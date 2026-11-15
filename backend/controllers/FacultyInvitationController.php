@@ -677,6 +677,55 @@ function handle_admin_faculty_invitation_update(): void
     }
 }
 
+/** Revokes the live Faculty invitation (own transaction). False when no live invitation exists. Throws DomainException. */
+function faculty_invitation_revoke_core(PDO $pdo, array $config, array $actor, array $context, int $userId, string $reason = 'Revoked by administrator'): bool
+{
+    $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
+    $pdo->beginTransaction();
+    $account = $pdo->prepare('SELECT user_id, role, status, display_name, login_email FROM user_accounts WHERE user_id = ? FOR UPDATE');
+    $account->execute([$userId]);
+    $row = $account->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($row) || $row['role'] !== 'faculty' || $row['status'] !== 'Pending Activation') {
+        $pdo->rollBack();
+        throw new DomainException('Only a pending Faculty invitation can be revoked.');
+    }
+    $revoke = $pdo->prepare(
+        "UPDATE security_tokens
+            SET revoked_at = ?, revocation_reason = ?
+          WHERE purpose = 'faculty_invitation' AND user_id = ?
+            AND used_at IS NULL AND revoked_at IS NULL"
+    );
+    $revoke->execute([$nowSql, $reason, $userId]);
+    if ($revoke->rowCount() === 0) {
+        $pdo->rollBack();
+        return false;
+    }
+    $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+    $auditContext = audit_begin_operation($pdo);
+    audit_finish_operation($pdo, $auditContext, [
+        'module_code' => 'admin',
+        'action_code' => 'faculty_invitation_revoked',
+        'event_status' => 'Success',
+        'actor_user_id' => $actor['user_id'],
+        'actor_username' => $actor['login_email'],
+        'actor_role' => $actor['role'],
+        'actor_display_name' => $actor['display_name'],
+        'session_id' => $actor['session_id'],
+        'target_type' => 'user_account',
+        'target_id' => (string) $userId,
+        'description' => "Revoked pending Faculty invitation for {$row['display_name']} ({$row['login_email']}).",
+        'reason' => $reason,
+        'http_method' => $context['http_method'],
+        'endpoint' => $context['endpoint'],
+        'request_id' => $context['request_id'],
+        'ip_address' => $context['ip_address'],
+        'user_agent' => $context['user_agent'],
+    ], $macKey);
+    $pdo->commit();
+
+    return true;
+}
+
 function handle_admin_faculty_invitation_revoke(): void
 {
     $context = [
@@ -697,49 +746,10 @@ function handle_admin_faculty_invitation_revoke(): void
         if ($userId < 1) {
             throw new ValidationException([['field' => 'id', 'message' => 'A valid Faculty account is required.']]);
         }
-        $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
-        $pdo->beginTransaction();
-        $account = $pdo->prepare('SELECT user_id, role, status, display_name, login_email FROM user_accounts WHERE user_id = ? FOR UPDATE');
-        $account->execute([$userId]);
-        $row = $account->fetch(PDO::FETCH_ASSOC);
-        if (!is_array($row) || $row['role'] !== 'faculty' || $row['status'] !== 'Pending Activation') {
-            $pdo->rollBack();
-            throw new DomainException('Only a pending Faculty invitation can be revoked.');
-        }
-        $revoke = $pdo->prepare(
-            "UPDATE security_tokens
-                SET revoked_at = ?, revocation_reason = 'Revoked by administrator'
-              WHERE purpose = 'faculty_invitation' AND user_id = ?
-                AND used_at IS NULL AND revoked_at IS NULL"
-        );
-        $revoke->execute([$nowSql, $userId]);
-        if ($revoke->rowCount() === 0) {
-            $pdo->rollBack();
+        if (!faculty_invitation_revoke_core($pdo, $config, $actor, $context, $userId)) {
             safe_error_response('No live Faculty invitation exists for this account.', 404);
             return;
         }
-        $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
-        $auditContext = audit_begin_operation($pdo);
-        audit_finish_operation($pdo, $auditContext, [
-            'module_code' => 'admin',
-            'action_code' => 'faculty_invitation_revoked',
-            'event_status' => 'Success',
-            'actor_user_id' => $actor['user_id'],
-            'actor_username' => $actor['login_email'],
-            'actor_role' => $actor['role'],
-            'actor_display_name' => $actor['display_name'],
-            'session_id' => $actor['session_id'],
-            'target_type' => 'user_account',
-            'target_id' => (string) $userId,
-            'description' => "Revoked pending Faculty invitation for {$row['display_name']} ({$row['login_email']}).",
-            'reason' => 'Revoked by administrator',
-            'http_method' => $context['http_method'],
-            'endpoint' => $context['endpoint'],
-            'request_id' => $context['request_id'],
-            'ip_address' => $context['ip_address'],
-            'user_agent' => $context['user_agent'],
-        ], $macKey);
-        $pdo->commit();
         json_response(['status' => 'ok', 'id' => (string) $userId, 'statusValue' => 'Revoked'], 200);
     } catch (ValidationException $e) {
         if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
@@ -755,6 +765,106 @@ function handle_admin_faculty_invitation_revoke(): void
         error_log('Faculty invitation revoke error: ' . sanitize_for_log($e));
         safe_error_response('Unable to revoke Faculty invitation.', 500);
     }
+}
+
+/** Emails the link of a reissued Faculty invitation (after commit) and records it in the outbox. */
+function faculty_invitation_send_reissued(PDO $pdo, array $config, array $actor, array $issued): bool
+{
+    $account = $issued['account'];
+    $name = account_identity_display_name($account);
+    $email = (string) $account['login_email'];
+    $link = app_url($config, '/activate-faculty', ['token' => $issued['token']]);
+    return faculty_invitation_send_recorded($pdo, $config, (int) $actor['user_id'], $email, $name, 'DentiSYS Faculty Invitation', 'Faculty Invitation (reissued)',
+        email_faculty_invitation_html($name, $email, $link), (int) $account['user_id']);
+}
+
+/** Reissues a Faculty invitation (own transaction). Returns what the caller needs to email the link. Throws DomainException. */
+function faculty_invitation_reissue_core(PDO $pdo, array $config, array $actor, array $context, int $userId): array
+{
+    $token = faculty_invitation_token();
+    $digest = hash('sha256', $token, true);
+    $passwordHash = password_hash(faculty_invitation_token(), PASSWORD_DEFAULT);
+    $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+    $nowSql = $now->format('Y-m-d H:i:s.u');
+    $expiresSql = $now->add(new DateInterval('P7D'))->format('Y-m-d H:i:s.u');
+
+    $pdo->beginTransaction();
+    try {
+        $accountStmt = $pdo->prepare(
+            'SELECT ua.user_id, ua.login_email, ua.display_name, ua.role, ua.status,
+                    pi.name_prefix AS canonical_name_prefix,
+                    pi.first_name AS canonical_first_name,
+                    pi.middle_name AS canonical_middle_name,
+                    pi.last_name AS canonical_last_name,
+                    pi.name_suffix AS canonical_name_suffix
+               FROM user_accounts ua
+               JOIN person_identities pi ON pi.person_id = ua.person_id
+              WHERE ua.user_id = ?
+              FOR UPDATE OF ua, pi'
+        );
+        $accountStmt->execute([$userId]);
+        $account = $accountStmt->fetch(PDO::FETCH_ASSOC);
+        if ($account === false
+            || $account['role'] !== 'faculty'
+            || !in_array($account['status'], ['Pending Approval', 'Pending Activation', 'Pending', 'Rejected'], true)) {
+            throw new DomainException('This Faculty account cannot be re-invited. Manual reconciliation is required.');
+        }
+
+        $auditContext = audit_begin_operation($pdo);
+        $update = $pdo->prepare(
+            "UPDATE user_accounts
+                SET password_hash = ?, status = 'Pending Activation', updated_at = ?,
+                    approved_at = ?, rejected_at = NULL, google_subject = NULL
+              WHERE user_id = ?"
+        );
+        $update->execute([$passwordHash, $nowSql, $nowSql, $userId]);
+
+        $revoke = $pdo->prepare(
+            "UPDATE security_tokens
+                SET revoked_at = ?, revocation_reason = 'Replaced by a new Admin-authorized Faculty invitation'
+              WHERE purpose = 'faculty_invitation' AND user_id = ?
+                AND used_at IS NULL AND revoked_at IS NULL"
+        );
+        $revoke->execute([$nowSql, $userId]);
+        $insertToken = $pdo->prepare(
+            "INSERT INTO security_tokens (purpose, user_id, token_digest, issued_at, expires_at)
+             VALUES ('faculty_invitation', ?, ?, ?, ?) RETURNING token_id"
+        );
+        $insertToken->bindValue(1, $userId, PDO::PARAM_INT);
+        pdo_bind_binary($insertToken, 2, $digest);
+        $insertToken->bindValue(3, $nowSql, PDO::PARAM_STR);
+        $insertToken->bindValue(4, $expiresSql, PDO::PARAM_STR);
+        $insertToken->execute();
+        $tokenId = (int) $insertToken->fetchColumn();
+
+        $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+        audit_finish_operation($pdo, $auditContext, [
+            'module_code' => 'admin',
+            'action_code' => 'faculty_invited',
+            'event_status' => 'Success',
+            'actor_user_id' => $actor['user_id'],
+            'actor_username' => $actor['login_email'],
+            'actor_role' => $actor['role'],
+            'actor_display_name' => $actor['display_name'],
+            'session_id' => $actor['session_id'],
+            'target_type' => 'security_token',
+            'target_id' => (string) $tokenId,
+            'description' => 'Dean reissued Faculty invitation for '
+                . account_identity_display_name($account) . " ({$account['login_email']}).",
+            'reason' => null,
+            'http_method' => $context['http_method'],
+            'endpoint' => $context['endpoint'],
+            'request_id' => $context['request_id'],
+            'ip_address' => $context['ip_address'],
+            'user_agent' => $context['user_agent'],
+        ], $macKey);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        throw $e;
+    }
+
+    return ['account' => $account, 'token' => $token, 'nowSql' => $nowSql, 'expiresSql' => $expiresSql];
 }
 
 function handle_admin_faculty_invitation_reissue(): void
@@ -782,95 +892,16 @@ function handle_admin_faculty_invitation_reissue(): void
             throw new ValidationException([['field' => 'id', 'message' => 'A valid Faculty account is required.']]);
         }
 
-        $token = faculty_invitation_token();
-        $digest = hash('sha256', $token, true);
-        $passwordHash = password_hash(faculty_invitation_token(), PASSWORD_DEFAULT);
-        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
-        $nowSql = $now->format('Y-m-d H:i:s.u');
-        $expiresSql = $now->add(new DateInterval('P7D'))->format('Y-m-d H:i:s.u');
-
-        $pdo->beginTransaction();
-        try {
-            $accountStmt = $pdo->prepare(
-                'SELECT ua.user_id, ua.login_email, ua.display_name, ua.role, ua.status,
-                        pi.name_prefix AS canonical_name_prefix,
-                        pi.first_name AS canonical_first_name,
-                        pi.middle_name AS canonical_middle_name,
-                        pi.last_name AS canonical_last_name,
-                        pi.name_suffix AS canonical_name_suffix
-                   FROM user_accounts ua
-                   JOIN person_identities pi ON pi.person_id = ua.person_id
-                  WHERE ua.user_id = ?
-                  FOR UPDATE OF ua, pi'
-            );
-            $accountStmt->execute([$userId]);
-            $account = $accountStmt->fetch(PDO::FETCH_ASSOC);
-            if ($account === false
-                || $account['role'] !== 'faculty'
-                || !in_array($account['status'], ['Pending Approval', 'Pending Activation', 'Pending', 'Rejected'], true)) {
-                throw new DomainException('This Faculty account cannot be re-invited. Manual reconciliation is required.');
-            }
-
-            $auditContext = audit_begin_operation($pdo);
-            $update = $pdo->prepare(
-                "UPDATE user_accounts
-                    SET password_hash = ?, status = 'Pending Activation', updated_at = ?,
-                        approved_at = ?, rejected_at = NULL, google_subject = NULL
-                  WHERE user_id = ?"
-            );
-            $update->execute([$passwordHash, $nowSql, $nowSql, $userId]);
-
-            $revoke = $pdo->prepare(
-                "UPDATE security_tokens
-                    SET revoked_at = ?, revocation_reason = 'Replaced by a new Admin-authorized Faculty invitation'
-                  WHERE purpose = 'faculty_invitation' AND user_id = ?
-                    AND used_at IS NULL AND revoked_at IS NULL"
-            );
-            $revoke->execute([$nowSql, $userId]);
-            $insertToken = $pdo->prepare(
-                "INSERT INTO security_tokens (purpose, user_id, token_digest, issued_at, expires_at)
-                 VALUES ('faculty_invitation', ?, ?, ?, ?) RETURNING token_id"
-            );
-            $insertToken->bindValue(1, $userId, PDO::PARAM_INT);
-            pdo_bind_binary($insertToken, 2, $digest);
-            $insertToken->bindValue(3, $nowSql, PDO::PARAM_STR);
-            $insertToken->bindValue(4, $expiresSql, PDO::PARAM_STR);
-            $insertToken->execute();
-            $tokenId = (int) $insertToken->fetchColumn();
-
-            $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
-            audit_finish_operation($pdo, $auditContext, [
-                'module_code' => 'admin',
-                'action_code' => 'faculty_invited',
-                'event_status' => 'Success',
-                'actor_user_id' => $actor['user_id'],
-                'actor_username' => $actor['login_email'],
-                'actor_role' => $actor['role'],
-                'actor_display_name' => $actor['display_name'],
-                'session_id' => $actor['session_id'],
-                'target_type' => 'security_token',
-                'target_id' => (string) $tokenId,
-                'description' => 'Dean reissued Faculty invitation for '
-                    . account_identity_display_name($account) . " ({$account['login_email']}).",
-                'reason' => null,
-                'http_method' => $context['http_method'],
-                'endpoint' => $context['endpoint'],
-                'request_id' => $context['request_id'],
-                'ip_address' => $context['ip_address'],
-                'user_agent' => $context['user_agent'],
-            ], $macKey);
-            $pdo->commit();
-        } catch (Throwable $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
-            throw $e;
-        }
+        $issued = faculty_invitation_reissue_core($pdo, $config, $actor, $context, $userId);
+        $account = $issued['account'];
+        $token = $issued['token'];
+        $nowSql = $issued['nowSql'];
+        $expiresSql = $issued['expiresSql'];
 
         $name = account_identity_display_name($account);
         $email = (string) $account['login_email'];
         $link = app_url($config, '/activate-faculty', ['token' => $token]);
-        $subject = 'DentiSYS Faculty Invitation';
-        $message = email_faculty_invitation_html($name, $email, $link);
-        $sent = faculty_invitation_send_recorded($pdo, $config, (int) $actor['user_id'], $email, $name, $subject, 'Faculty Invitation (reissued)', $message, $userId);
+        $sent = faculty_invitation_send_reissued($pdo, $config, $actor, $issued);
         $showDevLink = !empty($config['show_dev_invitation_link']);
         json_response([
             'status' => 'ok',

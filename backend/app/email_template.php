@@ -243,6 +243,25 @@ function email_password_reset_html(string $name, string $email, string $link): s
     ]);
 }
 
+/** AUTH-006: the Dean reset this person's authenticator 2FA. */
+function email_two_factor_reset_html(string $name, string $email): string
+{
+    return email_render([
+        'preheader' => 'The Dean reset your DentiSYS two-factor authentication.',
+        'greeting' => $name !== '' ? "Hello {$name}," : 'Hello,',
+        'intro' => ['The Dean reset your DentiSYS two-factor authentication. Your authenticator app and recovery codes no longer work, and you were signed out on every device.'],
+        'details' => [
+            'title' => 'Account',
+            'rows' => [
+                ['Email', $email],
+            ],
+        ],
+        'action_text' => 'Sign in with your password. You can set up two-factor authentication again in your profile.',
+        'notice' => 'If you did not expect this change, contact the Dean.',
+        'signature' => ['name' => 'DentiSYS Support', 'lines' => ['Bicol University College of Dental Medicine']],
+    ]);
+}
+
 /** A message a Faculty member writes in Email Management, wrapped in the DentiSys layout. */
 function email_faculty_message_html(string $recipientName, string $facultyName, string $messageText): string
 {

@@ -693,9 +693,9 @@ export const DeanReports: React.FC = () => {
                   Student Information & Academic Standing
                 </CardTitle>
               </CardHeader>
-              <CardContent className="overflow-x-auto max-h-[480px] overflow-y-auto">
+              <CardContent className="table-pin table-pin-first">
                 <table className="w-full text-left text-xs min-w-[640px]">
-                  <thead className="sticky top-0 bg-white dark:bg-slate-950 z-10">
+                  <thead>
                     <tr className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                       <th className="py-2.5 px-3">Student No.</th>
                       <th className="py-2.5 px-3">Name</th>
@@ -1032,9 +1032,9 @@ export const DeanReports: React.FC = () => {
                   Retention Status Report
                 </CardTitle>
               </CardHeader>
-              <CardContent className="overflow-x-auto max-h-[480px] overflow-y-auto">
+              <CardContent className="table-pin table-pin-first">
                 <table className="w-full text-left text-xs min-w-[640px]">
-                  <thead className="sticky top-0 bg-white dark:bg-slate-950 z-10">
+                  <thead>
                     <tr className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                       <th className="py-2.5 px-3">Student</th>
                       <th className="py-2.5 px-3">Class</th>
@@ -1386,9 +1386,9 @@ export const DeanReports: React.FC = () => {
                   Student Attendance History
                 </CardTitle>
               </CardHeader>
-              <CardContent className="overflow-x-auto max-h-[480px] overflow-y-auto">
+              <CardContent className="table-pin table-pin-first">
                 <table className="w-full text-left text-xs min-w-[560px]">
-                  <thead className="sticky top-0 bg-white dark:bg-slate-950 z-10">
+                  <thead>
                     <tr className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                       <th className="py-2.5 px-3">Date</th>
                       <th className="py-2.5 px-3">Student No.</th>

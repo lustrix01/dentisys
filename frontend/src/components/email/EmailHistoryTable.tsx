@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Mail, ChevronRight } from 'lucide-react';
+import { Search, Mail, ChevronRight, Inbox, X } from 'lucide-react';
 import { formatManilaWhen } from '../../services/auditService';
 import { EmailAction, EmailStatus, filterEmailActions, recipientsLabel, summarizeStatuses } from './emailHistory';
 
@@ -69,9 +69,9 @@ export const EmailHistoryTable: React.FC<EmailHistoryTableProps> = ({
         )}
       </div>
 
-      <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+      <div className="table-pin table-pin-first table-pin-blocks">
         <table className="w-full text-left text-xs max-md:block">
-          <thead className="sticky top-0 bg-white dark:bg-slate-900 z-10 shadow-sm max-md:hidden">
+          <thead className="max-md:hidden">
             <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               <th className="p-3">Action</th>
               <th className="p-3">Recipients</th>
@@ -136,9 +136,17 @@ export const EmailHistoryTable: React.FC<EmailHistoryTableProps> = ({
           </tbody>
         </table>
         {visible.length === 0 && (
-          <p className="text-center py-8 text-slate-500 dark:text-slate-400">
-            {search.trim() === '' && (filter ?? 'all') === 'all' ? 'No emails sent yet.' : 'No email records match your filters.'}
-          </p>
+          <div className="px-6 py-14 text-center">
+            {search.trim() === '' && (filter ?? 'all') === 'all' ? <Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /> : <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />}
+            <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">
+              {search.trim() === '' && (filter ?? 'all') === 'all' ? 'No emails sent yet.' : 'No email records match your filters.'}
+            </h3>
+            {(search.trim() !== '' || (filter ?? 'all') !== 'all') && (
+              <button type="button" onClick={() => { onSearch(''); onFilter?.('all'); }} className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-clinical-700 hover:bg-clinical-50 dark:text-clinical-300 dark:hover:bg-clinical-950/40">
+                <X className="h-3.5 w-3.5" />Clear filters
+              </button>
+            )}
+          </div>
         )}
       </div>
     </>

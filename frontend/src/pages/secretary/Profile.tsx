@@ -86,17 +86,14 @@ export const Profile: React.FC = () => {
       </div>
 
       {error && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {loading ? (
-        <div className="py-16 text-center">
-          <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-xs text-slate-500 dark:text-slate-400">Loading profile details...</p>
-        </div>
+        <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Loading profile details…</div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <div className="lg:col-span-4 space-y-5">
@@ -176,9 +173,9 @@ export const Profile: React.FC = () => {
             </span>
           </div>
 
-          <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 space-y-2">
-            <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-bold">
-              <ShieldCheck className="w-4 h-4" />
+          <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+            <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
               <span>Data Privacy Act of 2012 (RA 10173) Compliance</span>
             </div>
             <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11px]">
