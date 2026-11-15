@@ -381,7 +381,7 @@ foreach ([['Faculty', $seedFacultyAccessToken, 403], ['Secretary', $secretaryAcc
     expect_same($saWant, integration_http_get_json('/api/admin/overview', $saToken)[0], "{$saWho} gets {$saWant} on GET /api/admin/overview");
 }
 [$saOvStatus, $saOv] = $saGet('/api/admin/overview');
-expect_true($saOvStatus === 200 && ($saOv['status'] ?? '') === 'ok' && array_keys($saOv) === ['status', 'attention', 'accounts', 'signIns', 'security', 'yearLevels', 'sectionsByCourse', 'setup'], 'The overview answers one flat object with every section');
+expect_true($saOvStatus === 200 && ($saOv['status'] ?? '') === 'ok' && array_keys($saOv) === ['status', 'faceFlagsOpen', 'attention', 'accounts', 'signIns', 'security', 'yearLevels', 'sectionsByCourse', 'setup'], 'The overview answers one flat object with every section');
 $saTotal = static fn(string $query): int => (int) ($saGet('/api/admin/people?' . $query)[1]['total'] ?? -1);
 foreach (['faculty' => 'faculty', 'student' => 'students'] as $saKind => $saKey) {
     expect_same([$saTotal("kind={$saKind}&status=active"), $saTotal("kind={$saKind}&status=invited"), $saTotal("kind={$saKind}&status=deactivated")],

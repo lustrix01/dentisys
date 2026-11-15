@@ -3,10 +3,9 @@
 declare(strict_types=1);
 
 /*
- * BIO-005 cleanup sweep. Deletes usable biometric references that must no
- * longer exist:
- *   - the enrollment's semester validity has ended (status becomes expired);
- *   - the Student is no longer active (status becomes revoked).
+ * BIO-005 cleanup sweep. Deletes the usable biometric references of Students who
+ * are no longer active (status becomes revoked). Enrollments do not expire at the
+ * end of a term (backlog 12.2).
  * Each deletion goes through the biometric sidecar and is audited; consent is
  * kept so the Student can re-enroll. Recorded attendance is never touched.
  *
@@ -22,7 +21,6 @@ require __DIR__ . '/../app/bootstrap.php';
 $dryRun = in_array('--dry-run', $argv, true);
 $config = app_config();
 $pdo = create_pdo($config);
-$today = app_local_date($config, attendance_session_now_utc());
 
 $systemActor = [
     'user_id' => null,
@@ -41,11 +39,11 @@ $context = [
 ];
 
 $candidates = $pdo->prepare(
-    "SELECT bp.student_id, s.student_number, bp.reference_expires_on,
-            LOWER(COALESCE(s.status, '')) <> 'active' AS student_inactive
+    "SELECT bp.student_id, s.student_number
        FROM biometric_profiles bp
        JOIN students s ON s.student_id = bp.student_id
       WHERE bp.enrollment_status IN ('active', 'enrolling')
+        AND LOWER(COALESCE(s.status, '')) <> 'active'
       ORDER BY bp.student_id"
 );
 $candidates->execute();
@@ -55,10 +53,8 @@ $done = 0;
 $wouldDelete = 0;
 $failed = 0;
 foreach ($rows as $row) {
-    $inactive = in_array($row['student_inactive'], [true, 't', '1', 1], true);
-    if (!$inactive && !student_biometric_expiry_due($pdo, (int) $row['student_id'], $row['reference_expires_on'], $today)) continue;
     $label = sprintf('%s (student #%d)', $row['student_number'], (int) $row['student_id']);
-    $why = $inactive ? 'Student is not active' : "validity ended {$row['reference_expires_on']}";
+    $why = 'Student is not active';
     if ($dryRun) {
         $wouldDelete++;
         echo "WOULD DELETE: {$label}: {$why}\n";
@@ -67,18 +63,10 @@ foreach ($rows as $row) {
     $pdo->beginTransaction();
     try {
         academic_terms_lock($pdo);
-        $profile = student_biometric_profile($pdo, (int) $row['student_id'], true);
-        if (!$inactive && ($profile === null || !student_biometric_expiry_due($pdo, (int) $row['student_id'], $profile['reference_expires_on'], $today))) {
-            $pdo->commit();
-            continue;
-        }
         student_biometric_invalidate(
             $pdo, $config, $systemActor, $context, (int) $row['student_id'],
-            $inactive ? 'revoked' : 'expired',
-            $inactive ? 'biometric_enrollment_revoked_inactive' : 'biometric_enrollment_expired',
-            $inactive
-                ? 'Biometric enrollment deleted because the Student is no longer active.'
-                : 'Biometric enrollment expired at the end of its academic validity period.',
+            'revoked', 'biometric_enrollment_revoked_inactive',
+            'Biometric enrollment deleted because the Student is no longer active.',
             $why
         );
         $pdo->commit();

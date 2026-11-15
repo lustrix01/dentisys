@@ -755,7 +755,7 @@ function overview_data(PDO $pdo, array $config): array
     $counts = $pdo->query("SELECT (SELECT COUNT(*) FROM courses WHERE status = 'active') AS ca, (SELECT COUNT(*) FROM courses WHERE status = 'retired') AS cr,
         (SELECT COUNT(*) FROM rooms WHERE status = 'active') AS ra, (SELECT COUNT(*) FROM rooms WHERE status = 'retired') AS rr")->fetch(PDO::FETCH_ASSOC);
 
-    return ['attention' => $attention, 'accounts' => $accounts, 'signIns' => array_values($weeks),
+    return ['faceFlagsOpen' => face_flags_open_count($pdo), 'attention' => $attention, 'accounts' => $accounts, 'signIns' => array_values($weeks),
         'security' => ['twoFactor' => $twoFactor, 'failedSignIns' => array_values($days)],
         'yearLevels' => array_map(static fn(array $r): array => ['yearLevel' => (int) $r['year_level'], 'students' => (int) $r['n']], $yearLevels),
         'sectionsByCourse' => array_map(static fn(array $r): array => ['courseCode' => $r['course_code'], 'sections' => (int) $r['n']], $sections->fetchAll(PDO::FETCH_ASSOC)),
@@ -873,5 +873,59 @@ function handle_admin_people(): void
         if ($pdo instanceof PDO && $pdo->inTransaction()) $pdo->rollBack();
         error_log('Admin people error: ' . sanitize_for_log($e));
         safe_error_response('Unable to update the account.', 500);
+    }
+}
+
+// ---- 12.2: Face Enrolment Flags (docs/contracts/face-reenrolment.md section 4) ----
+
+function handle_admin_face_flags(): void
+{
+    $pdo = null;
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $actor = admin_verify_auth($pdo, $config);
+        if (request_method() === 'GET') {
+            $status = (string) ($_GET['status'] ?? 'open');
+            $page = (string) ($_GET['page'] ?? '1');
+            $q = trim((string) ($_GET['q'] ?? ''));
+            $errors = [];
+            $filters = ['status' => $status, 'q' => $q];
+            if (!in_array($status, ['open', 'dismissed', 'all'], true)) $errors['status'] = 'Status must be open, dismissed or all.';
+            if (preg_match('/^[1-9]\d{0,5}$/', $page) !== 1) $errors['page'] = 'Page must be a positive whole number.';
+            if (mb_strlen($q) > 100) $errors['q'] = 'Search must be 100 characters or fewer.';
+            if (isset($_GET['kind'])) {
+                if (!in_array((string) $_GET['kind'], ['F1', 'F2'], true)) $errors['kind'] = 'Kind must be F1 or F2.';
+                else $filters['kind'] = (string) $_GET['kind'];
+            }
+            foreach (['courseId', 'classId'] as $key) {
+                if (!isset($_GET[$key])) continue;
+                if (preg_match('/^[1-9]\d{0,8}$/', (string) $_GET[$key]) !== 1) $errors[$key] = "Invalid {$key} filter.";
+                else $filters[$key] = (int) $_GET[$key];
+            }
+            if (isset($filters['classId'])) { // like People: only a class of this school year, not archived
+                $known = $pdo->prepare('SELECT 1 FROM class_sections WHERE cs_id = ? AND school_year = ? AND archived_at IS NULL');
+                $known->execute([$filters['classId'], academic_current_school_year($pdo)]);
+                if ($known->fetchColumn() === false) $errors['classId'] = 'Choose a class of this school year.';
+            }
+            if ($errors !== []) throw new ValidationException($errors);
+            json_response(['status' => 'ok'] + face_flags_list($pdo, $filters, (int) $page));
+            return;
+        }
+        $body = request_body();
+        if (!$body['has_body']) { safe_error_response('Request body required.', 400); return; }
+        $pdo->beginTransaction();
+        $result = face_flag_dismiss($pdo, $config, $actor, $body['data']);
+        $pdo->commit();
+        json_response(['status' => 'ok'] + $result);
+    } catch (ValidationException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) $pdo->rollBack();
+        validation_error_response($e->getErrors());
+    } catch (SuperadminConflict $e) {
+        superadmin_conflict_response($pdo, $e);
+    } catch (Throwable $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) $pdo->rollBack();
+        error_log('Admin face flags error: ' . sanitize_for_log($e));
+        safe_error_response('Unable to update the face enrolment flags.', 500);
     }
 }

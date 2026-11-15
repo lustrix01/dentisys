@@ -517,7 +517,16 @@ def enrollment():
     finally:
         if temporary.exists():
             temporary.unlink()
-    return jsonify({"ok": True, "protectedObjectReference": reference, "usableSampleCount": usable})
+    # Optional one-time comparison with the face being replaced (backlog 12.2). Only yes/no leaves this function.
+    matches_previous = None
+    previous_reference = request.form.get("previousReference", "")
+    if previous_reference.startswith("sface/"):
+        try:
+            previous = template_from_bytes(decrypt_model(model_reference_path(previous_reference).read_bytes(), previous_reference))
+            matches_previous = bool(float(np.dot(previous, template.astype(np.float32))) >= config.sface_cosine_threshold)
+        except Exception:
+            matches_previous = None
+    return jsonify({"ok": True, "protectedObjectReference": reference, "usableSampleCount": usable, "matchesPrevious": matches_previous})
 
 
 @app.post("/v1/verify")

@@ -36,7 +36,7 @@ foreach ([
 ] as [$method, $path, $handler]) {
     assert_superadmin(str_contains($routes, "['method' => '{$method}', 'path' => '{$path}', 'handler' => '{$handler}']"), "{$method} {$path} is registered");
 }
-assert_superadmin(substr_count($controller, 'admin_verify_auth($pdo, $config)') === 3, 'The courses, people and overview handlers require the Dean role through admin_verify_auth');
+assert_superadmin(substr_count($controller, 'admin_verify_auth($pdo, $config)') === 4, 'The courses, people, overview and face flag handlers require the Dean role through admin_verify_auth');
 assert_superadmin(!str_contains($controller, 'request_header(') && !str_contains($controller, '$_SERVER'), 'The server reads no mode header (SA5)');
 
 // Migration 060 copies the rooms status pattern and defaults every course to active.

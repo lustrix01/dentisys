@@ -104,17 +104,17 @@ expect_same('term-fixture-protected-object', $readTermProfile()['protected_objec
 expect_true(student_biometric_expiry_due($pdo, $termStudentId, $pastTermEnd, $todayTerm), 'Shared sweep decision expires the shortened reference');
 try { student_biometric_reference_expiry($pdo, $termStudentId); expect_true(false, 'Ended term must refuse enrollment'); }
 catch (StudentBiometricException $e) { expect_same('This term has ended.', $e->getMessage(), 'Ended-term enrollment error is clear'); }
-// The executable sweep resolves legacy active classes even when a stored date
-// is stale. No provider object was created for this synthetic profile.
+// 12.2: enrollments no longer expire at term end, so the sweep leaves an active Student alone even after the Dean term ended.
+// No provider object was created for this synthetic profile.
 $pdo->prepare("UPDATE biometric_profiles SET enrollment_status = 'enrolling', face_enrolled = 0, protected_object_reference = NULL, reference_expires_on = '2099-12-31', reference_term_id = NULL, reference_cs_id = NULL WHERE student_id = ?")->execute([$termStudentId]);
 $termSweepCommand = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/../../backend/bin/expire-biometrics.php');
 exec($termSweepCommand . ' --dry-run 2>&1', $termDrySweepOutput, $termDrySweepExit);
 expect_same(0, $termDrySweepExit, 'Expiry dry-run executes successfully: ' . implode(' | ', $termDrySweepOutput));
-expect_true(str_contains(implode(' | ', $termDrySweepOutput), 'student #' . $termStudentId), 'Dry-run finds an ended Dean term through shared resolution');
+expect_true(!str_contains(implode(' | ', $termDrySweepOutput), 'student #' . $termStudentId), 'Dry-run ignores an active Student whose term ended');
 expect_same('enrolling', $readTermProfile()['enrollment_status'], 'Dry-run preserves enrollment state');
 exec($termSweepCommand . ' 2>&1', $termSweepOutput, $termSweepExit);
 expect_same(0, $termSweepExit, 'Expiry sweep executes successfully: ' . implode(' | ', $termSweepOutput));
-expect_same('expired', $readTermProfile()['enrollment_status'], 'Sweep expires a legacy enrollment using the Dean date');
+expect_same('enrolling', $readTermProfile()['enrollment_status'], 'Sweep keeps the enrollment of an active Student after the term ended');
 // Restore the isolated term, retire the synthetic reference, and verify Summer
 // canonical linkage without calling a disabled real biometric provider.
 integration_http_json('/api/admin/academic-terms', $adminAccessToken, $termPayload + ['id' => $termId]);

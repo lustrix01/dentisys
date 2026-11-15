@@ -132,6 +132,9 @@ export const FaceRegistration: React.FC = () => {
 
   // Revocation Modal
   const [showRevokeModal, setShowRevokeModal] = useState(false);
+  // Update my face: capture again without the consent step (consent stands); the new face replaces the old one.
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updatedNotice, setUpdatedNotice] = useState(false);
   const [isRevoking, setIsRevoking] = useState(false);
 
   // --- SIMULATION (MOCK) STATE ---
@@ -386,6 +389,8 @@ export const FaceRegistration: React.FC = () => {
           expiresAt: result.expiresAt || null,
           usableSampleCount: result.usableSampleCount,
         } : null);
+        if (isUpdating) setUpdatedNotice(true);
+        setIsUpdating(false);
         setAuthStep(3); setScrollToStep3(true);
       } else {
         setAuthError(result.message || 'Verification could not accept sufficient usable frames. Adjust lighting and try again, or seek manual attendance check-in from your Secretary or Faculty.');
@@ -577,6 +582,8 @@ export const FaceRegistration: React.FC = () => {
           expiresAt: result.expiresAt || prev.expiresAt,
           usableSampleCount: result.usableSampleCount,
         } : prev);
+        if (isUpdating) setUpdatedNotice(true);
+        setIsUpdating(false);
         setAuthStep(3); setScrollToStep3(true);
         stopCamera();
         return true;
@@ -589,7 +596,7 @@ export const FaceRegistration: React.FC = () => {
       setCapturePhase('idle');
     }
     return false;
-  }, [pendingPayload, stopCamera]);
+  }, [pendingPayload, stopCamera, isUpdating]);
 
   useEffect(() => {
     const reconcileOnReturn = (): void => {
@@ -623,6 +630,8 @@ export const FaceRegistration: React.FC = () => {
         enrolledAt: null,
         expiresAt: null,
       } : null);
+      setIsUpdating(false);
+      setUpdatedNotice(false);
       setAuthStep(1);
       setHasAgreed(false);
     } catch (err) {
@@ -631,6 +640,15 @@ export const FaceRegistration: React.FC = () => {
     } finally {
       setIsRevoking(false);
     }
+  };
+
+  const handleStartUpdate = () => {
+    setAuthError(null);
+    setUpdatedNotice(false);
+    setPendingPayload(null);
+    setCanRetryUpload(false);
+    setIsUpdating(true);
+    setAuthStep(2);
   };
 
   // --- MOCK PROTOTYPE HANDLERS ---
@@ -711,16 +729,16 @@ export const FaceRegistration: React.FC = () => {
         <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <strong className="block font-bold">Enrollment expired for current semester</strong>
+            <strong className="block font-bold">Enrollment ended</strong>
             <p className="mt-0.5 leading-relaxed">
-              Biometric enrollment expires at the end of each semester per institutional policy. Complete consent and re-enroll your facial reference below.
+              Complete consent and re-enroll your facial reference below.
             </p>
           </div>
         </div>
       )}
 
       {/* 3-Step Visual Progress Bar (hidden once registered) */}
-      {currentStep !== 3 && (
+      {currentStep !== 3 && !isUpdating && (
       <div className="sm:hidden flex items-center gap-3 text-xs font-bold text-slate-600 dark:text-slate-300">
         <span>Step {currentStep} of 3 · {currentStep === 1 ? 'Privacy Agreement' : 'Liveness & Capture'}</span>
         <span className="flex gap-1" aria-hidden="true">
@@ -730,7 +748,7 @@ export const FaceRegistration: React.FC = () => {
         </span>
       </div>
       )}
-      {currentStep !== 3 && (
+      {currentStep !== 3 && !isUpdating && (
       <div className="hidden sm:grid grid-cols-3 gap-3">
         <div className={`p-3 rounded-2xl border text-center transition-all ${currentStep === 1
           ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20'
@@ -791,10 +809,10 @@ export const FaceRegistration: React.FC = () => {
                 <strong>No raw images kept:</strong> Camera captures are processed temporarily and then discarded. Raw photos and video frames are never stored.
               </li>
               <li>
-                <strong>Protected reference:</strong> An encrypted reference derived from your enrollment is kept so attendance can be checked. It expires every semester, and you must re-enroll to keep using face check-in.
+                <strong>Protected reference:</strong> An encrypted reference derived from your enrollment is kept so attendance can be checked, while you are an active Student.
               </li>
               <li>
-                <strong>Revocation and deletion:</strong> You may revoke at any time on this page. Your reference is deleted when you revoke, when the Dean revokes your enrollment, when you re-enroll (the old reference is replaced), when it expires at the end of the semester, when your Student account becomes inactive, or when your account is deleted.
+                <strong>Revocation and deletion:</strong> You may revoke at any time on this page. Your reference is deleted when you revoke, when the Dean revokes your enrollment, when you re-enroll (the old reference is replaced), when your Student account becomes inactive, or when your account is deleted.
               </li>
               <li>
                 <strong>Who can see your enrollment status:</strong> You, the Faculty of your classes, and the Dean can see whether you are enrolled. No one can see your reference or camera captures.
@@ -859,7 +877,7 @@ export const FaceRegistration: React.FC = () => {
               </div>
               <div>
                 <span className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 uppercase tracking-widest block">
-                  Step 2 of 3
+                  {isUpdating ? 'Update my face' : 'Step 2 of 3'}
                 </span>
                 <h2 className="text-lg font-extrabold text-slate-800 dark:text-slate-100">
                   Facial Alignment & Active Liveness
@@ -870,12 +888,13 @@ export const FaceRegistration: React.FC = () => {
             <button
               onClick={() => {
                 stopCamera();
-                if (isAuthoritative) setAuthStep(1);
+                if (isAuthoritative && isUpdating) { abortCaptureRef.current = true; captureRunRef.current += 1; guidanceAbortRef.current?.abort(); setCapturePhase('idle'); setIsUpdating(false); setAuthError(null); setAuthStep(3); }
+                else if (isAuthoritative) setAuthStep(1);
                 else setMockStep(1);
               }}
               className="shrink-0 whitespace-nowrap text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
             >
-              Back to terms
+              {isUpdating ? 'Cancel update' : 'Back to terms'}
             </button>
           </div>
 
@@ -1096,7 +1115,7 @@ export const FaceRegistration: React.FC = () => {
                 Your face is registered for attendance
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                No further action is needed. To register again, revoke this registration first.
+                No further action is needed.
               </p>
             </div>
           </div>
@@ -1119,15 +1138,18 @@ export const FaceRegistration: React.FC = () => {
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
-              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Semester Expiration</span>
-              <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block">
-                {isAuthoritative
-                  ? (profile?.expiresAt ? new Date(profile.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'End of semester')
-                  : 'End of semester'}
-              </span>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400">Expires seasonally</span>
+              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Validity</span>
+              <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block">While you are an active Student</span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400">Kept until you revoke</span>
             </div>
           </div>
+
+          {updatedNotice && (
+            <div role="status" className="flex items-start gap-3 text-left rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200 animate-fade-in">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+              <p className="font-bold">Your face was updated.</p>
+            </div>
+          )}
 
           {errorBanner}
 
@@ -1144,6 +1166,13 @@ export const FaceRegistration: React.FC = () => {
             <div className="flex items-center gap-3 flex-wrap max-sm:justify-center">
               {isAuthoritative ? (
                 <>
+                  <button
+                    onClick={handleStartUpdate}
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer flex-shrink-0"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Update my face
+                  </button>
                   <button
                     onClick={() => setShowRevokeModal(true)}
                     className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 font-bold text-xs transition-all cursor-pointer flex-shrink-0"

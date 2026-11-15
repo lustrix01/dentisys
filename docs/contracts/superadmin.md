@@ -243,6 +243,8 @@ Same auth, response style and error shape as Part C (Dean role, flat `{status:"o
 | POST | `/api/admin/people/name` | `{userId, name:{prefix, firstName, middleName, lastName, suffix}, reason}` (`name_unchanged` 422 when nothing changes) | `{person}` |
 | POST | `/api/admin/people/invitation/resend` | `{userId}` | `{person, delivery:"Sent"\|"Failed"}` |
 | POST | `/api/admin/people/invitation/revoke` | `{userId}` | `{person:null}` (the person leaves the Invited list) |
+| GET | `/api/admin/face-flags` | `?status=open\|dismissed\|all` (default open), `kind=F1\|F2`, `q`, `courseId`, `classId` (this school year, like People), `page`; unknown values 422 | `{flags:[{flagId, kind, status, student:{studentId, userId, name, studentNo}, classes:[{csId, label, current}], detail, createdAt, updatedAt, closedAt, closedBy:{name}\|null, closedNote}], total, page, pageSize}`; 50 per page, newest `updatedAt` first; `detail` F1 `{withdrawnAt, enrolledAt}`, F2 `{enrolledAt}` (backlog 12.2, `docs/contracts/face-reenrolment.md`) |
+| POST | `/api/admin/face-flags/dismiss` | `{flagId, note}` (note 8 to 240 characters) | `{flag}`; 404 `flag_not_found`, 409 `flag_closed` |
 
 Person also carries `nameParts: {prefix, firstName, middleName, lastName, suffix}` (strings or null, the canonical identity columns Change Name uses) for the Edit Name dialog.
 
@@ -305,7 +307,7 @@ Ties always break by `display_name`, then `user_id`. `lastActivity` is `NULLS LA
 ### `GET /api/admin/overview` (Dean only, not audited, flat response)
 
 ```json
-{"status":"ok",
+{"status":"ok","faceFlagsOpen":1,
  "attention":{"expiredInvitations":{"faculty":1,"students":2},"facultyWithoutClasses":3,"inactive30":{"faculty":1,"students":4},"nextTermMissing":false},
  "accounts":{"faculty":{"active":10,"invited":1,"deactivated":0},"students":{"active":120,"invited":5,"deactivated":2}},
  "signIns":[{"weekStart":"2026-08-24","faculty":7,"students":80}],
@@ -315,6 +317,7 @@ Ties always break by `display_name`, then `user_id`. `lastActivity` is `NULLS LA
  "setup":{"currentTerm":{"semester":"1ST","schoolYear":"2026-2027","endDate":"2026-12-18"},"courses":{"active":30,"retired":2},"rooms":{"active":8,"retired":1}}}
 ```
 
+- `faceFlagsOpen` is the number of open face enrolment flags (backlog 12.2); the Revoke face enrollment action of People & Accounts or this page closes them.
 - `accounts` use the same status rules as the People list. `twoFactor.total` and `inactive30` count Active accounts only; 2FA "on" uses the `twoFactor=on` rule, `inactive30` the `activity=inactive30` rule (people who never signed in are not counted).
 - `signIns`: 12 Monday-start Asia/Manila weeks ending with the current one, zero-filled; distinct users per role with a `login_success` or `google_login_success` audit event that week (Faculty vs Student and Class Secretary accounts). `failedSignIns`: 14 Manila days ending today, zero-filled, `login_failed` plus `google_login_denied`.
 - `expiredInvitations` is per kind so each count links to its People tab. `facultyWithoutClasses` = Active Faculty with no current-year non-archived class.

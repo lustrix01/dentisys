@@ -140,7 +140,7 @@ Site: https://<ip-with-dashes>.sslip.io
 | Google Sign-In | Profile → link Google (asks the password once), sign out, sign in with Google | Same account |
 | Grading | Set grade weights, enter scores | Grades compute; remedial flag at 2.50 or worse |
 | Attendance session | Secretary/Faculty starts a session (map geofence) | Session is live |
-| Face enrollment | Student → face registration on a phone | Profile active until the term end |
+| Face enrollment | Student → face registration on a phone | Profile active while the Student is active |
 | Face attendance | Student checks in during the session | Marked present |
 | Manual attendance | Secretary/Faculty marks a Student | Record and audit entry |
 | Email | Invitations, remedial notices | Arrive in the inbox |

@@ -249,7 +249,7 @@ test.describe('P03 Student identity and authentication', () => {
     }
   });
 
-  test('an enrolled Student sees a Registered screen that only offers revoking', async ({ page }) => {
+  test('an enrolled Student sees a Registered screen that offers updating the face or revoking', async ({ page }) => {
     const student = {
       user_id: 27,
       login_email: 'enrolled.student@bicol-u.edu.ph',
@@ -294,6 +294,8 @@ test.describe('P03 Student identity and authentication', () => {
     const main = page.getByRole('main');
     await expect(main.getByText('Your face is registered for attendance')).toBeVisible();
     await expect(main.getByText('Privacy Agreement')).toHaveCount(0);
+    await expect(main.getByRole('button', { name: 'Update my face' })).toBeVisible();
+    await expect(main.getByText('While you are an active Student')).toBeVisible();
     await expect(main.getByRole('button', { name: /Re-Enroll|Re-Register|Continue to camera scan/i })).toHaveCount(0);
 
     await main.getByRole('button', { name: 'Revoke registration' }).click();

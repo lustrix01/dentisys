@@ -38,11 +38,12 @@ test('SA2 only the Dean sees the Dean / Superadmin switch; it copies the Secreta
   assert.match(secretary, /\{user\?\.role === 'secretary' && \(/); // the Secretary switcher is still Secretary-only
 });
 
-test('SA3 the Superadmin sidebar has three pages: Overview, People & Accounts, Audit Trail', () => {
+test('SA3 the Superadmin sidebar has four pages: Overview, People & Accounts, Face Enrolment Flags, Audit Trail', () => {
   const nav = between(layout, 'if (superadminView) {', "if (currentUser.role === 'admin') {");
   assert.deepEqual([...nav.matchAll(/name: '([^']+)', path: '([^']+)'/g)].map(m => [m[1], m[2]]), [
     ['Overview', '/superadmin/overview'],
     ['People & Accounts', '/superadmin/people'],
+    ['Face Enrolment Flags', '/superadmin/face-flags'],
     ['Audit Trail', '/superadmin/audit-trail'],
   ]);
   assert.doesNotMatch(nav, /Classes/); // Class Sections stays a Dean-view preview (answer 4)

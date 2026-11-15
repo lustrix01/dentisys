@@ -16,7 +16,7 @@ import type { AdminPerson, PeopleFilterOptions, PersonClass } from '../../servic
 import { formatManilaWhen } from '../../services/auditService';
 import { downloadXlsx } from '../../utils/xlsxDownload';
 import { buildReportSheet } from '../../utils/reportWorkbook';
-import { ATTENTION_OPTIONS, DEFAULT_PEOPLE_SORT, PEOPLE_EXPORT_HEADERS, attentionFromUrl, attentionParams, classesOf, emailParts, lastActivityText, peopleExportRow, personActions, statusLabel, yearLevelLabel } from './peopleHelpers';
+import { ATTENTION_OPTIONS, DEFAULT_PEOPLE_SORT, PEOPLE_EXPORT_HEADERS, REVOKE_FACE_BULLETS, attentionFromUrl, attentionParams, classesOf, emailParts, lastActivityText, peopleExportRow, personActions, statusLabel, yearLevelLabel } from './peopleHelpers';
 import type { Attention, PeopleSortKey, PersonAction } from './peopleHelpers';
 import { PersonNameFields, composePersonName, emptyNameParts } from '../../components/PersonNameFields';
 import type { PersonNameParts } from '../../components/PersonNameFields';
@@ -52,7 +52,7 @@ const ACTIONS: Record<PersonAction, ActionInfo> = {
   'reset-2fa': { label: 'Reset 2FA', Icon: KeyRound, title: 'Reset 2FA', confirm: 'Reset 2FA', reason: 'optional', done: '2FA reset',
     bullets: () => ['Their authenticator and recovery codes are removed.', 'Signed out on every device now.', 'They get an email; next sign-in is with their password only, and they can set up 2FA again in their profile.'] },
   'revoke-face': { label: 'Revoke face enrollment', Icon: ScanFace, destructive: true, title: 'Revoke Face Enrollment', confirm: 'Revoke enrollment', reason: 'required', done: 'face enrollment revoked',
-    bullets: () => ['Their face check-in enrollment is deleted; they must re-enroll to use face check-in.', 'Manual attendance stays available.', 'They get a notification with your reason.'] },
+    bullets: () => REVOKE_FACE_BULLETS },
   deactivate: { label: 'Deactivate', Icon: CircleAlert, destructive: true, title: 'Deactivate Account', confirm: 'Deactivate account', reason: 'optional', done: 'deactivated',
     bullets: p => ['Signed out on every device now, and sign-in is refused until you reactivate.', 'Records, classes and enrollments are kept.', ...(p.kind === 'student' ? ['If this Student is a Class Secretary, the Secretary sign-in is blocked too.'] : [])] },
   reactivate: { label: 'Reactivate', Icon: RotateCcw, title: 'Reactivate Account', confirm: 'Reactivate account', reason: 'none', done: 'reactivated',

@@ -24,6 +24,7 @@ import { FacultyInvitation } from './pages/admin/FacultyInvitation';
 import { AcademicTerms } from './pages/admin/AcademicTerms';
 import { Rooms } from './pages/admin/Rooms';
 import { PeopleAndAccounts } from './pages/admin/PeopleAndAccounts';
+import { FaceEnrolmentFlags } from './pages/admin/FaceEnrolmentFlags';
 import { Classes } from './pages/admin/Classes';
 import { CourseCatalog } from './pages/admin/CourseCatalog';
 
@@ -266,6 +267,7 @@ function App() {
                   <Route path="/superadmin" element={<Navigate to="/superadmin/overview" replace />} />
                   <Route path="/superadmin/overview" element={<SuperadminOverview />} />
                   <Route path="/superadmin/people" element={<PeopleAndAccounts />} />
+<Route path="/superadmin/face-flags" element={<FaceEnrolmentFlags />} />
                   <Route path="/superadmin/audit-trail" element={<SuperadminAuditTrail />} />
                   <Route path="/superadmin/terms" element={<Navigate to="/admin/terms" replace />} />
                   <Route path="/superadmin/rooms" element={<Navigate to="/admin/rooms" replace />} />

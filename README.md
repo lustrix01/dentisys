@@ -415,7 +415,7 @@ Keep `backups/` private; the files contain all DentiSYS data. The Linux start sc
 
 ### B7. Daily maintenance
 
-Biometric enrollments expire each semester (BIO-005). The start script removes expired ones, but a server that runs for months should also run the sweep daily. On Linux, add a cron entry (`crontab -e`) such as:
+Biometric enrollments stay valid while the Student is active (BIO-005). The start script deletes the references of Students who are no longer active, but a server that runs for months should also run the sweep daily. On Linux, add a cron entry (`crontab -e`) such as:
 
 ```cron
 0 2 * * * cd /path/to/dentisys && docker compose --env-file .env.single-server -p dentisys-single-server -f docker-compose.web.yml -f docker-compose.database.yml exec -T web php /var/www/html/backend/bin/expire-biometrics.php

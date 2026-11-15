@@ -10,6 +10,9 @@ export const emailParts = (email: string): string[] => {
   return at < 0 ? name : [...name, email.slice(at)];
 };
 
+/** Dialog bullets of Revoke face enrollment; also used by Face Enrolment Flags. */
+export const REVOKE_FACE_BULLETS = ['Their face check-in enrollment is deleted; they must re-enroll to use face check-in.', 'Manual attendance stays available.', 'They get a notification with your reason.'];
+
 export type PersonAction = 'edit-name' | 'move-email' | 'sign-out' | 'reset-2fa' | 'revoke-face' | 'deactivate' | 'reactivate' | 'resend' | 'revoke-invite';
 
 /** Row menu items by account state (9.16). */

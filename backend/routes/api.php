@@ -31,6 +31,8 @@ return [
     ['method' => 'POST', 'path' => '/api/admin/courses/retire', 'handler' => 'handle_admin_courses'],
     ['method' => 'POST', 'path' => '/api/admin/courses/restore', 'handler' => 'handle_admin_courses'],
     ['method' => 'GET', 'path' => '/api/admin/overview', 'handler' => 'handle_admin_overview'],
+    ['method' => 'GET', 'path' => '/api/admin/face-flags', 'handler' => 'handle_admin_face_flags'],
+    ['method' => 'POST', 'path' => '/api/admin/face-flags/dismiss', 'handler' => 'handle_admin_face_flags'],
     ['method' => 'GET', 'path' => '/api/admin/people', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/deactivate', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/reactivate', 'handler' => 'handle_admin_people'],

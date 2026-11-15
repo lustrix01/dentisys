@@ -26,6 +26,8 @@ require_once $root . '/backend/app/attendance_sessions.php';
 require_once $root . '/backend/app/account_identity.php';
 require_once $root . '/backend/app/student_auth.php';
 require_once $root . '/backend/app/student_biometrics.php';
+require_once $root . '/backend/app/audit_catalogue.php';
+require_once $root . '/backend/app/face_flags.php';
 require_once $root . '/backend/app/google_auth.php';
 require_once $root . '/backend/controllers/GoogleAuthController.php';
 require_once $root . '/backend/controllers/FacultyInvitationController.php';
@@ -301,6 +303,7 @@ $expectedMigrations = [
     '060_course_retire.sql',
     '061_name_degree_comma.sql',
     '062_retired_emails.sql',
+    '063_face_enrolment_flags.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -7326,7 +7329,7 @@ expect_true(($auditPageOne['entries'][0]['id'] ?? null) !== ($auditPageTwo['entr
 expect_same(422, $auditBadDateStatus, 'Audit trail rejects a malformed date');
 
 // BIO-002 / BIO-005: the Dean can revoke an enrollment, an inactive Student's
-// enrollment is deleted, and the sweep expires ended references. Fixtures use
+// enrollment is deleted, and the sweep no longer expires references by date. Fixtures use
 // "enrolling" profiles (no stored reference); the biometric sidecar is off in
 // the test environment, so a stored reference cannot be deleted here.
 $bioStudentStmt = $pdo->prepare(
@@ -7387,9 +7390,9 @@ expect_same('revoked', $bioStatusStmt->fetch(PDO::FETCH_ASSOC)['enrollment_statu
 
 exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/../../backend/bin/expire-biometrics.php') . ' 2>&1', $bioSweepOutput);
 $bioStatusStmt->execute([$bioStudents['Expired']]);
-expect_same('expired', $bioStatusStmt->fetch(PDO::FETCH_ASSOC)['enrollment_status'] ?? null, 'The sweep expires an enrollment whose validity ended: ' . implode(' | ', array_slice($bioSweepOutput, -3)));
+expect_same('enrolling', $bioStatusStmt->fetch(PDO::FETCH_ASSOC)['enrollment_status'] ?? null, 'The sweep no longer expires an enrollment by date (12.2): ' . implode(' | ', array_slice($bioSweepOutput, -3)));
 $bioAuditStmt = $pdo->prepare('SELECT COUNT(*) FROM audit_events WHERE action_code = ?');
-foreach (['biometric_enrollment_revoked_by_dean', 'biometric_enrollment_revoked_inactive', 'biometric_enrollment_expired'] as $bioAction) {
+foreach (['biometric_enrollment_revoked_by_dean', 'biometric_enrollment_revoked_inactive'] as $bioAction) {
     $bioAuditStmt->execute([$bioAction]);
     expect_true((int) $bioAuditStmt->fetchColumn() > 0, "Biometric deletion is audited ({$bioAction})");
 }
@@ -7748,6 +7751,7 @@ require __DIR__ . '/grouped_grading_integration.php';
 require __DIR__ . '/lecture_only_grading_integration.php';
 require __DIR__ . '/audit_read_integration.php';
 require __DIR__ . '/superadmin_integration.php';
+require __DIR__ . '/face_flags_integration.php';
 require __DIR__ . '/audit_chain_integration.php';
 
 echo "ALL POSTGRESQL INTEGRATION TESTS PASSED.\n";

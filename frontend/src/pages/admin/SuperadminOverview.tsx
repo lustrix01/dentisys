@@ -88,6 +88,7 @@ export const SuperadminOverview: React.FC = () => {
     { label: 'Current Term', value: term ? semesterLabel(term.semester) : 'No current term', sub: term ? `${schoolYearText(term.schoolYear)}${term.endDate ? ` · ends ${shortDate(term.endDate)}` : ''}` : 'Add the term dates', to: '/admin/terms' },
     { label: 'Courses', value: String(data.setup.courses.active), sub: `${data.setup.courses.retired} retired`, to: '/admin/course-catalog' },
     { label: 'Rooms', value: String(data.setup.rooms.active), sub: `${data.setup.rooms.retired} retired`, to: '/admin/rooms' },
+    { label: 'Face enrolment flags', value: String(data.faceFlagsOpen ?? 0), sub: 'open', to: '/superadmin/face-flags' },
   ];
 
   return (
@@ -230,7 +231,7 @@ export const SuperadminOverview: React.FC = () => {
         </section>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-4">
         {tiles.map(t => (
           <button
             key={t.label}

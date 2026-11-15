@@ -208,6 +208,7 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | Face enrollment started / succeeded / failed | biometric_enrollment_started, _succeeded, _failed | Student | status; failure code | no | KEEP |
 | Face enrollment deleted | biometric_enrollment_revoked, _revoked_by_dean, _revoked_inactive, _expired | Student, Dean, system | status before → after; never biometric data | yes | KEEP |
 | Face check failed | biometric_verification_failed | Student | error code only, no score | no | KEEP |
+| Face enrolment flagged / flag dismissed | face_flag_raised, face_flag_dismissed | System, Dean | flag kind (F1, F2) and dates only; the Dean's note on dismissal; never a score | yes | **NEW** |
 
 **O3 — Dean and biometrics.** The Dean sees consent changes and enrollment deletions (proof under the Data Privacy Act), not enrollment attempts or failed face checks.
 

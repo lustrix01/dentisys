@@ -2611,6 +2611,23 @@ export type PeopleFilterOptions = { status?: string; yearLevels?: number[]; cour
 export function getAdminPeopleFiltersApi(): Promise<PeopleFilterOptions> {
   return request('GET', '/admin/people/filters');
 }
+export type FaceFlag = {
+  flagId: number; kind: 'F1' | 'F2'; status: 'open' | 'dismissed' | 'revoked';
+  student: { studentId: number; userId: number; name: string; studentNo: string };
+  classes: Array<{ csId: number; label: string; current: boolean }>;
+  detail: { withdrawnAt?: string; enrolledAt: string };
+  createdAt: string; updatedAt: string; closedAt: string | null; closedBy: { name: string } | null; closedNote: string | null;
+};
+export function getAdminFaceFlagsApi(params: { status?: 'open' | 'dismissed' | 'all'; kind?: 'F1' | 'F2'; q?: string; courseId?: number; classId?: number; page?: number }): Promise<{ status: string; flags: FaceFlag[]; total: number; page: number; pageSize: number }> {
+  const search = new URLSearchParams({ status: params.status ?? 'open', page: String(params.page ?? 1) });
+  if (params.kind) search.set('kind', params.kind);
+  if (params.q) search.set('q', params.q);
+  for (const key of ['courseId', 'classId'] as const) if (params[key]) search.set(key, String(params[key]));
+  return request('GET', `/admin/face-flags?${search.toString()}`);
+}
+export function dismissFaceFlagApi(flagId: number, note: string): Promise<{ flag: FaceFlag }> {
+  return request('POST', '/admin/face-flags/dismiss', { flagId, note });
+}
 export type AdminOverview = {
   attention: { expiredInvitations: { faculty: number; students: number }; facultyWithoutClasses: number; inactive30: { faculty: number; students: number }; nextTermMissing: boolean };
   accounts: { faculty: { active: number; invited: number; deactivated: number }; students: { active: number; invited: number; deactivated: number } };
@@ -2618,6 +2635,7 @@ export type AdminOverview = {
   security: { twoFactor: { faculty: { on: number; total: number }; students: { on: number; total: number } }; failedSignIns: Array<{ day: string; count: number }> };
   yearLevels: Array<{ yearLevel: number; students: number }>;
   sectionsByCourse: Array<{ courseCode: string; sections: number }>;
+  faceFlagsOpen: number;
   setup: { currentTerm: { semester: string; schoolYear: string; endDate: string | null } | null; courses: { active: number; retired: number }; rooms: { active: number; retired: number } };
 };
 export function getAdminOverviewApi(): Promise<AdminOverview> {

@@ -330,7 +330,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(page.locator('body')).toContainText(/Audit Trail|Activity Log/i);
   });
 
-  test('Dean view has the 8 setup/watch pages; Superadmin has 3; old paths redirect', async ({ page }) => {
+  test('Dean view has the 8 setup/watch pages; Superadmin has 4; old paths redirect', async ({ page }) => {
     for (const p of ['/', '/admin/reports', '/admin/classes', '/admin/faculty-invite', '/admin/course-catalog', '/admin/terms', '/admin/rooms', '/admin/audit-trail']) {
       await expect(page.locator(`a[href="${p}"]`).first()).toBeAttached();
     }
@@ -341,7 +341,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     }
     await expect(page.getByRole('tablist', { name: 'Audit views' })).toHaveCount(0); // Dean Audit Trail: Activity only
     await page.goto('/superadmin/overview');
-    for (const p of ['/superadmin/overview', '/superadmin/people', '/superadmin/audit-trail']) await expect(page.locator(`a[href="${p}"]`).first()).toBeAttached();
+    for (const p of ['/superadmin/overview', '/superadmin/people', '/superadmin/face-flags', '/superadmin/audit-trail']) await expect(page.locator(`a[href="${p}"]`).first()).toBeAttached();
     await page.goto('/superadmin/audit-trail');
     await expect(page.getByRole('tablist', { name: 'Audit views' })).toBeVisible();
   });

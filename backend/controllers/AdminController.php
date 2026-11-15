@@ -606,6 +606,7 @@ function handle_admin_biometric_revoke(): void
                 safe_error_response('This Student has no active biometric enrollment.', 409);
                 return;
             }
+            face_flags_close_for_revoke($pdo, (int) $studentId, $authCtx['user_id'] ?? null);
             $recipientStmt = $pdo->prepare('SELECT COALESCE(student_account_user_id, user_id) FROM students WHERE student_id = ?');
             $recipientStmt->execute([(int) $studentId]);
             $recipientUserId = (int) $recipientStmt->fetchColumn();

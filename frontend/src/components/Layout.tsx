@@ -31,6 +31,7 @@ import {
   Loader2,
   DoorOpen,
   ShieldCheck,
+  ScanFace,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
@@ -279,6 +280,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       return [
         { name: 'Overview', path: '/superadmin/overview', icon: LayoutDashboard, short: 'Overview' },
         { name: 'People & Accounts', path: '/superadmin/people', icon: Users, short: 'People' },
+        { name: 'Face Enrolment Flags', path: '/superadmin/face-flags', icon: ScanFace, short: 'Flags' },
         { name: 'Audit Trail', path: '/superadmin/audit-trail', icon: ListChecks, short: 'Audit' },
       ];
     }
@@ -553,6 +555,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'Course Catalog', path: '/admin/course-catalog' });
     } else if (path === '/superadmin/people') {
       crumbs.push({ name: 'People & Accounts', path: '/superadmin/people' });
+    } else if (path === '/superadmin/face-flags') {
+      crumbs.push({ name: 'Face Enrolment Flags', path: '/superadmin/face-flags' });
     } else if (path === '/admin/classes') {
       crumbs.push({ name: 'Classes', path: '/admin/classes' });
     } else if (path === '/secretary/profile') {
