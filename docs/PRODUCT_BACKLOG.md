@@ -33,7 +33,7 @@ Requested by the Owner; none has an agreed contract yet. Each starts with the co
 
 - **12.3** Simplify attendance session creation.
 - **12.4** Join a class by code. Faculty generate a class code and share it; Students enter it to enrol. This is added next to the current invitation: the invitation still sends onboarding, and a Student who already has an account can join through the link or the code.
-- **12.5** Check-out time with geofencing, so Students cannot leave mid-class unnoticed.
+- **12.5** Dropped (Owner, 2026-11-15): check-out with geofencing. In a classroom a Student who leaves is noticed, and a second check would double the time attendance takes; face enrolment flags (12.2) cover the real abuse.
 
 ---
 
