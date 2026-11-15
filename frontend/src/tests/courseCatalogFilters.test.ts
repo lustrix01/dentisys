@@ -11,7 +11,7 @@ const data = [
   c(3, 'DENT 3', 'Biology', 0, 3, 0),
   c(4, 'DENT 4', 'Old course', 0, 1, 0, 'retired'),
 ];
-const base: CourseFilters = { tab: 'active', search: '', units: 'all', use: 'all', sort: 'code' };
+const base: CourseFilters = { tab: 'active', search: '', units: 'all', use: 'all', sort: { key: 'code', dir: 'asc' } };
 const ids = (f: Partial<CourseFilters>) => filterCourses(data, { ...base, ...f }).map(x => x.id);
 
 test('tab and search', () => {
@@ -28,11 +28,16 @@ test('use', () => {
   assert.deepEqual(ids({ use: 'unused' }), [2]);
 });
 test('sort', () => {
-  assert.deepEqual(ids({ sort: 'title' }), [1, 3, 2]);
-  assert.deepEqual(ids({ sort: 'classes' }), [1, 3, 2]);
-  assert.deepEqual(filterCourses([c(5, 'B', 'x', 0, 1, 0), c(6, 'A', 'y', 0, 1, 0)], { ...base, sort: 'classes' }).map(x => x.id), [6, 5]);
+  const sorted = (key: CourseFilters['sort']['key'], dir: 'asc' | 'desc') => ids({ sort: { key, dir } });
+  assert.deepEqual(sorted('title', 'asc'), [1, 3, 2]);
+  assert.deepEqual(sorted('title', 'desc'), [2, 3, 1]);
+  assert.deepEqual(sorted('classes', 'desc'), [1, 3, 2]);
+  assert.deepEqual(sorted('classes', 'asc'), [2, 3, 1]);
+  assert.deepEqual(sorted('code', 'desc'), [1, 3, 2]);
+  assert.deepEqual(sorted('units', 'asc'), [2, 3, 1]); // equal units fall back to course code
+  assert.deepEqual(filterCourses([c(5, 'B', 'x', 0, 1, 0), c(6, 'A', 'y', 0, 1, 0)], { ...base, sort: { key: 'classes', dir: 'desc' } }).map(x => x.id), [6, 5]);
 });
 test('combination', () => {
-  assert.deepEqual(ids({ units: 'lecture', use: 'unused', search: 'zoo', sort: 'title' }), [2]);
+  assert.deepEqual(ids({ units: 'lecture', use: 'unused', search: 'zoo', sort: { key: 'title', dir: 'asc' } }), [2]);
   assert.deepEqual(ids({ units: 'lab', use: 'unused' }), []);
 });

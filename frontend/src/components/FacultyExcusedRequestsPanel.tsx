@@ -3,7 +3,7 @@ import { Filter as FilterIcon, Inbox, Search } from 'lucide-react';
 import { Card } from './Card';
 import { Modal } from './Modal';
 import { formatManilaWhen } from '../services/auditService';
-import { formatSessionDate } from '../utils/sessionDate';
+import { formatShortDate } from '../utils/sessionDate';
 import { formatVisibleTime } from '../utils/timeDisplay.ts';
 import { AttendanceExcusedRequest, FacultyClassItem, decideFacultyExcusedRequestApi, getFacultyExcusedRequestsApi } from '../services/apiClient';
 
@@ -95,7 +95,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
         setRequests(rows);
         onLoaded?.(rows);
       })
-      .catch(err => { if (active) setError(err instanceof Error ? err.message : 'Unable to load Secretary requests.'); });
+      .catch(err => { if (active) setError(err instanceof Error ? err.message : 'Could not load Secretary requests.'); });
     return () => { active = false; };
   }, [reloadKey]);
 
@@ -137,7 +137,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
       setReloadKey(key => key + 1);
       onDecided?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to save the decision.');
+      setError(err instanceof Error ? err.message : 'Could not save the decision.');
     } finally {
       setBusy(false);
     }
@@ -240,7 +240,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
           <div className="space-y-3">
             {groups.map(({ key, rows }) => {
               const first = rows[0];
-              const label = `${first.courseCode} ${first.className} · ${formatSessionDate(first.sessionDate)}`;
+              const label = `${first.courseCode} ${first.className} · ${formatShortDate(first.sessionDate)}`;
               const ids = rows.map(row => row.id);
               return (
                 <div key={key} className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">

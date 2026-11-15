@@ -388,7 +388,7 @@ export const FaceRegistration: React.FC = () => {
         } : null);
         setAuthStep(3); setScrollToStep3(true);
       } else {
-        setAuthError(result.message || 'Verification could not accept sufficient usable frames. Please adjust lighting and try again, or seek manual attendance check-in from your Secretary or Faculty.');
+        setAuthError(result.message || 'Verification could not accept sufficient usable frames. Adjust lighting and try again, or seek manual attendance check-in from your Secretary or Faculty.');
         setPendingPayload(null);
         setCanRetryUpload(false);
         void startCameraAndChallenge(undefined, true);
@@ -410,7 +410,7 @@ export const FaceRegistration: React.FC = () => {
         setPendingPayload(null);
         setCanRetryUpload(false);
         const msg = err instanceof Error ? err.message : 'Facial enrollment failed.';
-        setAuthError(`${msg} Please adjust lighting, face the camera directly, and start a fresh capture, or contact your Faculty/Secretary for manual attendance.`);
+        setAuthError(`${msg} Adjust lighting, face the camera directly, and start a fresh capture, or contact your Faculty/Secretary for manual attendance.`);
         void startCameraAndChallenge(undefined, true);
       }
     } finally {
@@ -515,7 +515,7 @@ export const FaceRegistration: React.FC = () => {
     } catch (err) {
       if (!isRunActive()) return;
       const msg = err instanceof Error ? err.message : 'Live camera guidance is temporarily unavailable.';
-      setAuthError(`${msg} Please retry the guided capture or use manual attendance assistance.`);
+      setAuthError(`${msg} Retry the guided capture or use manual attendance assistance.`);
       setCapturePhase('idle');
       setPhaseInstruction('');
     } finally {
@@ -713,7 +713,7 @@ export const FaceRegistration: React.FC = () => {
           <div>
             <strong className="block font-bold">Enrollment expired for current semester</strong>
             <p className="mt-0.5 leading-relaxed">
-              Biometric enrollment expires at the end of each semester per institutional policy. Please complete consent and re-enroll your facial reference below.
+              Biometric enrollment expires at the end of each semester per institutional policy. Complete consent and re-enroll your facial reference below.
             </p>
           </div>
         </div>
@@ -1112,7 +1112,7 @@ export const FaceRegistration: React.FC = () => {
               <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Registration Date</span>
               <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block">
                 {isAuthoritative
-                  ? (profile?.enrolledAt ? new Date(profile.enrolledAt).toLocaleDateString() : 'Active')
+                  ? (profile?.enrolledAt ? new Date(profile.enrolledAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Active')
                   : (mockRegisteredAt || 'Active session')}
               </span>
               <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Status: Active ✓</span>
@@ -1122,7 +1122,7 @@ export const FaceRegistration: React.FC = () => {
               <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Semester Expiration</span>
               <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block">
                 {isAuthoritative
-                  ? (profile?.expiresAt ? new Date(profile.expiresAt).toLocaleDateString() : 'End of semester')
+                  ? (profile?.expiresAt ? new Date(profile.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'End of semester')
                   : 'End of semester'}
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400">Expires seasonally</span>

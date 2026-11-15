@@ -778,7 +778,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     });
 
     await page.goto('/secretary/attendance');
-    await expect(page.getByText('A server error occurred. Please try again later.')).toBeVisible();
+    await expect(page.getByText('A server error occurred. Try again later.')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Start Session' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Retry/i })).toBeVisible();
   });

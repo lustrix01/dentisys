@@ -10,4 +10,4 @@ if ($rawEnvironment === false || trim($rawEnvironment) === '') {
 }
 
 app_config();
-fwrite(STDOUT, "DentiSys runtime configuration is valid.\n");
+fwrite(STDOUT, "DentiSYS runtime configuration is valid.\n");

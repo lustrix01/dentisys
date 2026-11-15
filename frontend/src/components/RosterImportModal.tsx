@@ -1,3 +1,4 @@
+import { formatSchoolYear } from '../utils/schoolYear';
 import { normalizeNameAffix } from '../utils/nameNormalization';
 import { normalizePhMobile } from '../utils/phMobile';
 import { filterPersonNameInput, preventInvalidPersonNameKey } from '../utils/personNameValidation';
@@ -155,10 +156,10 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
   const selectedTerm = academicTerms.find(term => term.id !== null && String(term.id) === termId);
   const selectedTermYear = selectedTerm?.schoolYear.replace(/\s/g, '');
   const pastTermProblem = selectedTerm && selectedTermYear !== currentSchoolYear.replace(/\s/g, '')
-    ? `Selected academic term is for AY ${selectedTermYear}. Choose a term for the current school year (AY ${currentSchoolYear}) to create this class.`
+    ? `Selected academic term is for ${formatSchoolYear(selectedTermYear)}. Choose a term for the current school year (${formatSchoolYear(currentSchoolYear)}) to create this class.`
     : undefined;
   const termOverrideNotice = pdfInfo?.header.schoolYear && selectedTerm && selectedTermYear !== pdfInfo.header.schoolYear
-    ? `The file says AY ${pdfInfo.header.schoolYear}; this class will use the selected term for AY ${selectedTerm.schoolYear}.`
+    ? `The file says ${formatSchoolYear(pdfInfo.header.schoolYear)}; this class will use the selected term for ${formatSchoolYear(selectedTerm.schoolYear)}.`
     : undefined;
   const scheduleError = checkScheduleConflicts(slots, classes, currentSchoolYear);
   const newClassProblems = isNewClass && draft ? newClassBlockers({
@@ -305,17 +306,17 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
   const handleExecuteImport = async (confirmOverlap = false) => {
     if (isImporting || runtime.loading) return;
     if (!targetReviewed) {
-      showFeedback(studentsOnly ? 'Please review the student rows before importing.' : 'Please select and review a target class section before importing.', 'error');
+      showFeedback(studentsOnly ? 'Review the student rows before importing.' : 'Select and review a target class section before importing.', 'error');
       return;
     }
     if (isNewClass ? newClassProblems.length > 0 : !availableClasses.some(cls => cls.csId === selectedClassId)) {
-      showFeedback('Please select a target class section to import students into.', 'error');
+      showFeedback('Select a target class section to import students into.', 'error');
       return;
     }
 
     const validStudents = readyStudents;
     if (validStudents.length === 0) {
-      showFeedback('No valid students to import. Please check for errors in the preview list.', 'error');
+      showFeedback('No valid students to import. Check the preview list for errors.', 'error');
       return;
     }
 
@@ -612,7 +613,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
               <label className={`${labelCls} col-span-2 sm:col-span-3`}>Academic Term
                 <select value={termId} onChange={e => updateDraft({ termChoice: e.target.value })} aria-invalid={Boolean(termProblem)} className={`mt-1 cursor-pointer ${fieldCls} ${termProblem ? invalidFieldCls : ''}`}>
                   <option value="">Choose a term</option>
-                  {academicTerms.filter(term => term.id !== null).map(term => <option key={term.id} value={String(term.id)}>{term.semester} {term.schoolYear}{term.schoolYear.replace(/\s/g, '') === currentSchoolYear.replace(/\s/g, '') ? ' (Current year)' : ''} ({term.startDate} – {term.endDate})</option>)}
+                  {academicTerms.filter(term => term.id !== null).map(term => <option key={term.id} value={String(term.id)}>{term.semester} {formatSchoolYear(term.schoolYear)}{term.schoolYear.replace(/\s/g, '') === currentSchoolYear.replace(/\s/g, '') ? ' (Current year)' : ''} ({term.startDate} – {term.endDate})</option>)}
                 </select>
                 {termProblem && <span role="alert" className="mt-1 block text-xs font-medium text-rose-700 dark:text-rose-300">
                   {termProblem}

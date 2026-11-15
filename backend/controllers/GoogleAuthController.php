@@ -159,7 +159,7 @@ function handle_google_login(): void
 
         $matching = google_auth_user_by_email($pdo, $claims['email']);
         if ($matching === null) {
-            google_auth_audit($pdo, $config, $context, 'google_login_denied', 'Failed', null, 'No existing DentiSys account matched the verified Google identity.');
+            google_auth_audit($pdo, $config, $context, 'google_login_denied', 'Failed', null, 'No existing DentiSYS account matched the verified Google identity.');
             google_auth_error('NO_EXISTING_ACCOUNT', 'No existing DentiSYS account was found.', 404);
             return;
         }
@@ -449,7 +449,7 @@ function handle_google_profile_link(): void
         google_auth_error('GOOGLE_LINK_PASSWORD_INVALID', 'Incorrect ownership password.', 401);
     } catch (AuthException | ChallengeException $e) {
         google_auth_profile_link_audit_failure($pdo, $config, $context, isset($authContext['user_id']) ? (int) $authContext['user_id'] : null, 'Authenticated profile session was invalid or expired.');
-        google_auth_error('AUTHENTICATION_REQUIRED', 'Your session has expired. Please log in again.', 401);
+        google_auth_error('AUTHENTICATION_REQUIRED', 'Your session has expired. Log in again.', 401);
     } catch (InactiveAccountException $e) {
         google_auth_profile_link_audit_failure($pdo, $config, $context, isset($authContext['user_id']) ? (int) $authContext['user_id'] : null, 'Account is inactive.');
         google_auth_error('ACCOUNT_INACTIVE', 'This account is not active.', 403);
@@ -484,7 +484,7 @@ function handle_google_link_status(): void
             'linked' => is_string($subject) && $subject !== '',
         ], 200));
     } catch (AuthException | ChallengeException $e) {
-        google_auth_error('AUTHENTICATION_REQUIRED', 'Your session has expired. Please log in again.', 401);
+        google_auth_error('AUTHENTICATION_REQUIRED', 'Your session has expired. Log in again.', 401);
     } catch (Throwable $e) {
         error_log('Google link status error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));
         google_auth_error('AUTHENTICATION_ERROR', 'Authentication could not be completed.', 500);

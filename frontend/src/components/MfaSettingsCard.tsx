@@ -48,7 +48,7 @@ export const MfaSettingsCard: React.FC<{
         || typeof twoFactor.authenticator_enabled !== 'boolean'
         || !Number.isInteger(twoFactor.recovery_code_count)
         || twoFactor.recovery_code_count < 0) {
-        throw new Error('Unable to read the current 2FA settings.');
+        throw new Error('Could not read the current 2FA settings. Reload the page.');
       }
       setAuthenticatorEnabled(twoFactor.authenticator_enabled);
       onAuthenticatorStatusChange?.(twoFactor.authenticator_enabled);
@@ -59,7 +59,7 @@ export const MfaSettingsCard: React.FC<{
       setAuthenticatorEnabled(false);
       onAuthenticatorStatusChange?.(false);
       setRecoveryCount(0);
-      setError(requestError instanceof Error ? requestError.message : 'Unable to load 2FA settings.');
+      setError(requestError instanceof Error ? requestError.message : 'Could not load 2FA settings. Reload the page.');
     } finally {
       setLoading(false);
     }
@@ -81,7 +81,7 @@ export const MfaSettingsCard: React.FC<{
       });
       setCode('');
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to begin authenticator setup.');
+      setError(requestError instanceof Error ? requestError.message : 'Could not begin authenticator setup. Try again.');
     } finally { startingRef.current = false; setWorking(false); }
   };
 
@@ -101,7 +101,7 @@ export const MfaSettingsCard: React.FC<{
         setEnrollment(null); setCode('');
         setError(SETUP_EXPIRED);
       } else {
-        setError(requestError instanceof Error ? requestError.message : 'Unable to confirm authenticator.');
+        setError(requestError instanceof Error ? requestError.message : 'Could not confirm the authenticator. Try again.');
       }
     } finally { setWorking(false); }
   };
@@ -115,7 +115,7 @@ export const MfaSettingsCard: React.FC<{
       onAuthenticatorStatusChange?.(false);
       setSuccess(response.message);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to disable authenticator.');
+      setError(requestError instanceof Error ? requestError.message : 'Could not disable the authenticator. Try again.');
     } finally { setWorking(false); }
   };
 
@@ -128,7 +128,7 @@ export const MfaSettingsCard: React.FC<{
       setRecoveryCount(response.recovery_codes.length);
       setCode(''); setSuccess(response.message);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to regenerate recovery codes.');
+      setError(requestError instanceof Error ? requestError.message : 'Could not regenerate recovery codes. Try again.');
     } finally { setWorking(false); }
   };
 

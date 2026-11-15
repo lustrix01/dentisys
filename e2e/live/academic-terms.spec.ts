@@ -41,11 +41,11 @@ test('Dean term dates persist and Faculty selects only current-year Dean terms',
     await facultyPage.getByRole('button', { name: 'Create class', exact: true }).first().click();
     const dropdown = facultyPage.getByLabel('Academic Term *');
     await expect(dropdown).toBeEnabled();
-    await expect(dropdown).toContainText('1st Semester 2026-2027');
-    await expect(dropdown).toContainText('2nd Semester 2026-2027');
-    await expect(dropdown).toContainText('Summer 2026-2027');
-    await expect(dropdown).not.toContainText('2087-2088');
-    await dropdown.selectOption({ label: await dropdown.locator('option').filter({ hasText: 'Summer 2026-2027' }).innerText() });
+    await expect(dropdown).toContainText('1st Semester S.Y. 2026–2027');
+    await expect(dropdown).toContainText('2nd Semester S.Y. 2026–2027');
+    await expect(dropdown).toContainText('Summer S.Y. 2026–2027');
+    await expect(dropdown).not.toContainText('2087–2088');
+    await dropdown.selectOption({ label: await dropdown.locator('option').filter({ hasText: 'Summer S.Y. 2026–2027' }).innerText() });
     await expect(dropdown).not.toHaveValue('');
   } finally { await facultyContext.close(); }
 });

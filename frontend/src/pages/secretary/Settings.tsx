@@ -19,7 +19,7 @@ export const Settings: React.FC = () => {
         setAssignedClassName(res.settings?.assignedClassName || '');
       })
       .catch(err => {
-        setError(err instanceof Error ? err.message : 'Unable to load preferences from server.');
+        setError(err instanceof Error ? err.message : 'Could not load preferences. Reload the page.');
       })
       .finally(() => setLoading(false));
   }, []);

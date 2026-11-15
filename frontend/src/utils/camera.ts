@@ -25,8 +25,8 @@ export function describeCameraError(error: unknown): string {
       return 'The camera start was interrupted. Choose Retry camera access.';
     default:
       return error instanceof Error && error.message
-        ? `Unable to start the camera: ${error.message}`
-        : 'Unable to start the camera. Check camera access and choose Retry camera access.';
+        ? `Could not start the camera: ${error.message}`
+        : 'Could not start the camera. Check camera access and choose Retry camera access.';
   }
 }
 

@@ -234,17 +234,23 @@ function people_json(array $r, array $classes): array
     return $json;
 }
 
-/** Page of people. Classes: Faculty teach them, Students are enrolled in them (current school year first). */
-function people_list(PDO $pdo, string $kind, string $status, string $q, int $page, ?int $onlyUserId = null, array $f = []): array
+/** FROM/WHERE of the People list and the Overview counts, and the SQL test for "invited" (a pending account whose latest invitation is live). */
+function people_base_sql(string $kind): array
 {
-    $cur = academic_current_school_year($pdo);
     // The newest invitation token of the account (Faculty: faculty_invitation, Student: student_activation, issued to the Student's own account).
     $latest = " LEFT JOIN LATERAL (SELECT issued_at, expires_at, used_at, revoked_at FROM security_tokens WHERE purpose = '"
         . ($kind === 'faculty' ? 'faculty_invitation' : 'student_activation') . "' AND user_id = ua.user_id ORDER BY issued_at DESC, token_id DESC LIMIT 1) inv ON TRUE";
     $from = $kind === 'faculty'
         ? "FROM user_accounts ua{$latest} WHERE ua.role = 'faculty'"
         : "FROM user_accounts ua JOIN students s ON s.student_account_user_id = ua.user_id{$latest} WHERE ua.role IN ('student', 'secretary')";
-    $invited = "(ua.status = 'Pending Activation' AND inv.issued_at IS NOT NULL AND inv.used_at IS NULL AND inv.revoked_at IS NULL)";
+    return [$from, "(ua.status = 'Pending Activation' AND inv.issued_at IS NOT NULL AND inv.used_at IS NULL AND inv.revoked_at IS NULL)"];
+}
+
+/** Page of people. Classes: Faculty teach them, Students are enrolled in them (current school year first). */
+function people_list(PDO $pdo, string $kind, string $status, string $q, int $page, ?int $onlyUserId = null, array $f = []): array
+{
+    $cur = academic_current_school_year($pdo);
+    [$from, $invited] = people_base_sql($kind);
     $where = [match ($status) {
         'active' => "ua.status = 'Active'", 'deactivated' => "ua.status = 'Disabled'", 'invited' => $invited,
         default => "(ua.status IN ('Active', 'Disabled') OR {$invited})",
@@ -266,6 +272,11 @@ function people_list(PDO $pdo, string $kind, string $status, string $q, int $pag
     if (($f['twoFactor'] ?? '') === 'off') $where[] = "NOT {$mfa}";
     if (($f['activity'] ?? '') === 'never') $where[] = 'NOT EXISTS (SELECT 1 FROM auth_sessions a WHERE a.user_id = ua.user_id)';
     if (($f['activity'] ?? '') === 'inactive30') $where[] = "(SELECT MAX(a.last_seen_at) FROM auth_sessions a WHERE a.user_id = ua.user_id) < NOW() - INTERVAL '30 days'";
+    if (isset($f['yearLevel'])) {
+        $where[] = 's.year_level = ?';
+        $params[] = $f['yearLevel'];
+    }
+    if (($f['invitation'] ?? '') === 'expired') $where[] = "{$invited} AND inv.expires_at <= (NOW() AT TIME ZONE 'UTC')";
     if (isset($f['classes'])) {
         $where[] = ($f['classes'] === 'none' ? 'NOT ' : '') . 'EXISTS (SELECT 1 FROM class_sections c WHERE c.instructor_user_id = ua.user_id AND c.school_year = ? AND c.archived_at IS NULL)';
         $params[] = $cur;
@@ -289,13 +300,24 @@ function people_list(PDO $pdo, string $kind, string $status, string $q, int $pag
         array_push($params, $f[$key], $cur);
     }
     $whereSql = ' AND ' . implode(' AND ', $where);
+    // Sort keys are whitelisted by the handler; NULLS LAST keeps people who never signed in at the bottom in both directions.
+    $dir = ($f['dir'] ?? 'asc') === 'desc' ? 'DESC' : 'ASC';
+    $classCount = $kind === 'faculty'
+        ? '(SELECT COUNT(*) FROM class_sections c WHERE c.instructor_user_id = ua.user_id AND c.school_year = ' . $pdo->quote($cur) . ' AND c.archived_at IS NULL)'
+        : "(SELECT COUNT(*) FROM enrollments e JOIN class_sections c ON c.cs_id = e.cs_id WHERE e.student_id = s.student_id AND e.status = 'Active' AND c.school_year = " . $pdo->quote($cur) . ' AND c.archived_at IS NULL)';
+    $orderBy = match ($f['sort'] ?? 'name') {
+        'studentNo' => "s.student_number {$dir}, ua.display_name, ua.user_id",
+        'lastActivity' => "(SELECT MAX(a.last_seen_at) FROM auth_sessions a WHERE a.user_id = ua.user_id) {$dir} NULLS LAST, ua.display_name, ua.user_id",
+        'classes' => "{$classCount} {$dir}, ua.display_name, ua.user_id",
+        default => "ua.display_name {$dir}, ua.user_id",
+    };
     $total = $pdo->prepare("SELECT COUNT(*) {$from}{$whereSql}");
     $total->execute($params);
     $stmt = $pdo->prepare("SELECT ua.user_id, ua.display_name, ua.login_email, ua.status, ua.disabled_at, '{$kind}' AS kind, inv.issued_at AS invited_at, inv.expires_at AS invitation_expires_at"
         . ($kind === 'student' ? ", s.student_id, s.student_number, {$faceSql} AS face_enrolled" : ', NULL AS student_id, NULL AS student_number') . ",
         EXISTS (SELECT 1 FROM security_tokens t WHERE t.user_id = ua.user_id AND t.purpose = 'mfa_credential' AND t.mfa_status = 'enabled') AS two_factor,
         (SELECT MAX(a.last_seen_at) FROM auth_sessions a WHERE a.user_id = ua.user_id) AS last_activity_at
-        {$from}{$whereSql} ORDER BY ua.display_name, ua.user_id LIMIT " . PEOPLE_PAGE_SIZE . ' OFFSET ' . (($page - 1) * PEOPLE_PAGE_SIZE));
+        {$from}{$whereSql} ORDER BY {$orderBy} LIMIT " . PEOPLE_PAGE_SIZE . ' OFFSET ' . (($page - 1) * PEOPLE_PAGE_SIZE));
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -519,7 +541,99 @@ function people_filter_options(PDO $pdo): array
         $courses[(int) $r['course_id']] ??= ['id' => (int) $r['course_id'], 'courseCode' => $r['course_code'], 'name' => $r['name']];
         $classes[] = ['csId' => (int) $r['cs_id'], 'label' => $r['cs_name'], 'courseId' => (int) $r['course_id']];
     }
-    return ['courses' => array_values($courses), 'classes' => $classes];
+    $levels = $pdo->query("SELECT DISTINCT s.year_level FROM students s JOIN user_accounts ua ON ua.user_id = s.student_account_user_id
+        WHERE ua.role IN ('student', 'secretary') AND s.year_level IS NOT NULL ORDER BY s.year_level")->fetchAll(PDO::FETCH_COLUMN);
+    return ['courses' => array_values($courses), 'classes' => $classes, 'yearLevels' => array_map('intval', $levels)];
+}
+
+/** Part D: one request for the Superadmin Overview (Dean only, not audited). Flat shape documented in docs/contracts/superadmin.md section 12. */
+function overview_data(PDO $pdo, array $config): array
+{
+    $cur = academic_current_school_year($pdo);
+    $manila = new DateTimeZone('Asia/Manila');
+    $now = new DateTimeImmutable('now', $manila);
+    $today = $now->format('Y-m-d');
+    $mfa = "EXISTS (SELECT 1 FROM security_tokens t WHERE t.user_id = ua.user_id AND t.purpose = 'mfa_credential' AND t.mfa_status = 'enabled')";
+    $accounts = [];
+    $attention = ['expiredInvitations' => ['faculty' => 0, 'students' => 0], 'facultyWithoutClasses' => 0, 'inactive30' => ['faculty' => 0, 'students' => 0], 'nextTermMissing' => false];
+    $twoFactor = [];
+    foreach (['faculty' => 'faculty', 'student' => 'students'] as $kind => $key) {
+        [$from, $invited] = people_base_sql($kind);
+        $teaches = $kind === 'faculty' ? 'EXISTS (SELECT 1 FROM class_sections c WHERE c.instructor_user_id = ua.user_id AND c.school_year = ' . $pdo->quote($cur) . ' AND c.archived_at IS NULL)' : 'TRUE';
+        $row = $pdo->query("SELECT COUNT(*) FILTER (WHERE st = 'active') AS active, COUNT(*) FILTER (WHERE st = 'invited') AS invited,
+                COUNT(*) FILTER (WHERE st = 'deactivated') AS deactivated, COUNT(*) FILTER (WHERE expired) AS expired,
+                COUNT(*) FILTER (WHERE st = 'active' AND two_factor) AS mfa_on,
+                COUNT(*) FILTER (WHERE st = 'active' AND last_seen < NOW() - INTERVAL '30 days') AS inactive30,
+                COUNT(*) FILTER (WHERE st = 'active' AND NOT has_class) AS no_class
+            FROM (SELECT CASE WHEN ua.status = 'Active' THEN 'active' WHEN ua.status = 'Disabled' THEN 'deactivated' WHEN {$invited} THEN 'invited' END AS st,
+                    ({$invited} AND inv.expires_at <= (NOW() AT TIME ZONE 'UTC')) AS expired, {$mfa} AS two_factor,
+                    (SELECT MAX(a.last_seen_at) FROM auth_sessions a WHERE a.user_id = ua.user_id) AS last_seen, {$teaches} AS has_class
+                {$from}) x")->fetch(PDO::FETCH_ASSOC);
+        $accounts[$key] = ['active' => (int) $row['active'], 'invited' => (int) $row['invited'], 'deactivated' => (int) $row['deactivated']];
+        $twoFactor[$key] = ['on' => (int) $row['mfa_on'], 'total' => (int) $row['active']];
+        $attention['expiredInvitations'][$key] = (int) $row['expired'];
+        $attention['inactive30'][$key] = (int) $row['inactive30'];
+        if ($kind === 'faculty') $attention['facultyWithoutClasses'] = (int) $row['no_class'];
+    }
+
+    // Asia/Manila weeks start on Monday: 12 weeks ending with the current one, zero-filled.
+    $monday = $now->setTime(0, 0)->modify('monday this week');
+    $weeks = [];
+    for ($i = 11; $i >= 0; $i--) $weeks[$monday->modify("-{$i} weeks")->format('Y-m-d')] = ['weekStart' => $monday->modify("-{$i} weeks")->format('Y-m-d'), 'faculty' => 0, 'students' => 0];
+    $stmt = $pdo->prepare("SELECT to_char(date_trunc('week', (e.occurred_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Manila'), 'YYYY-MM-DD') AS week_start,
+            CASE WHEN ua.role = 'faculty' THEN 'faculty' ELSE 'students' END AS kind, COUNT(DISTINCT e.actor_user_id) AS users
+        FROM audit_events e JOIN user_accounts ua ON ua.user_id = e.actor_user_id
+        WHERE e.action_code IN ('login_success', 'google_login_success') AND ua.role IN ('faculty', 'student', 'secretary')
+          AND e.occurred_at >= ? GROUP BY 1, 2");
+    $stmt->execute([$monday->modify('-11 weeks')->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s')]);
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        if (isset($weeks[$r['week_start']])) $weeks[$r['week_start']][$r['kind']] = (int) $r['users'];
+    }
+
+    $days = [];
+    for ($i = 13; $i >= 0; $i--) $days[$now->modify("-{$i} days")->format('Y-m-d')] = ['day' => $now->modify("-{$i} days")->format('Y-m-d'), 'count' => 0];
+    $stmt = $pdo->prepare("SELECT to_char((e.occurred_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Manila', 'YYYY-MM-DD') AS day, COUNT(*) AS n
+        FROM audit_events e WHERE e.action_code IN ('login_failed', 'google_login_denied') AND e.occurred_at >= ? GROUP BY 1");
+    $stmt->execute([$now->setTime(0, 0)->modify('-13 days')->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s')]);
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        if (isset($days[$r['day']])) $days[$r['day']]['count'] = (int) $r['n'];
+    }
+
+    // The current term is the one whose dates contain today; the next is missing when no term starts after the current one ends.
+    $terms = academic_terms_read($pdo);
+    $current = null;
+    foreach ($terms as $t) if ($t['start_date'] <= $today && $t['end_date'] >= $today) { $current = $t; break; }
+    if ($current !== null) {
+        $attention['nextTermMissing'] = array_filter($terms, static fn(array $t): bool => $t['start_date'] > $current['end_date']) === [];
+    }
+
+    $yearLevels = $pdo->query("SELECT s.year_level AS year_level, COUNT(*) AS n FROM students s JOIN user_accounts ua ON ua.user_id = s.student_account_user_id
+        WHERE ua.role IN ('student', 'secretary') AND ua.status = 'Active' AND s.year_level IS NOT NULL GROUP BY 1 ORDER BY 1")->fetchAll(PDO::FETCH_ASSOC);
+    $sections = $pdo->prepare('SELECT c.course_code, COUNT(*) AS n FROM class_sections cs JOIN courses c ON c.course_id = cs.course_id
+        WHERE cs.school_year = ? AND cs.archived_at IS NULL GROUP BY c.course_id, c.course_code ORDER BY n DESC, c.course_code LIMIT 10');
+    $sections->execute([$cur]);
+    $counts = $pdo->query("SELECT (SELECT COUNT(*) FROM courses WHERE status = 'active') AS ca, (SELECT COUNT(*) FROM courses WHERE status = 'retired') AS cr,
+        (SELECT COUNT(*) FROM rooms WHERE status = 'active') AS ra, (SELECT COUNT(*) FROM rooms WHERE status = 'retired') AS rr")->fetch(PDO::FETCH_ASSOC);
+
+    return ['attention' => $attention, 'accounts' => $accounts, 'signIns' => array_values($weeks),
+        'security' => ['twoFactor' => $twoFactor, 'failedSignIns' => array_values($days)],
+        'yearLevels' => array_map(static fn(array $r): array => ['yearLevel' => (int) $r['year_level'], 'students' => (int) $r['n']], $yearLevels),
+        'sectionsByCourse' => array_map(static fn(array $r): array => ['courseCode' => $r['course_code'], 'sections' => (int) $r['n']], $sections->fetchAll(PDO::FETCH_ASSOC)),
+        'setup' => ['currentTerm' => $current === null ? null : ['semester' => $current['semester'], 'schoolYear' => $current['school_year'], 'endDate' => $current['end_date']],
+            'courses' => ['active' => (int) $counts['ca'], 'retired' => (int) $counts['cr']], 'rooms' => ['active' => (int) $counts['ra'], 'retired' => (int) $counts['rr']]]];
+}
+
+function handle_admin_overview(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        admin_verify_auth($pdo, $config);
+        json_response(['status' => 'ok'] + overview_data($pdo, $config));
+    } catch (Throwable $e) {
+        error_log('Admin overview error: ' . sanitize_for_log($e));
+        safe_error_response('Unable to load the overview.', 500);
+    }
 }
 
 function handle_admin_people(): void
@@ -555,6 +669,22 @@ function handle_admin_people(): void
                 if ($kind !== 'student' || (string) $_GET['secretary'] !== '1') $errors['secretary'] = 'Invalid secretary filter.';
                 else $filters['secretary'] = true;
             }
+            if (isset($_GET['yearLevel'])) {
+                $value = (string) $_GET['yearLevel'];
+                if ($kind !== 'student') $errors['yearLevel'] = 'The year level filter is for Students only.';
+                elseif (preg_match('/^[1-9]\d?$/', $value) !== 1) $errors['yearLevel'] = 'Invalid yearLevel filter.';
+                else $filters['yearLevel'] = (int) $value;
+            }
+            if (isset($_GET['invitation'])) {
+                if ((string) $_GET['invitation'] !== 'expired' || !in_array($status, ['invited', 'all'], true)) $errors['invitation'] = 'The invitation filter is expired, with status invited or all.';
+                else $filters['invitation'] = 'expired';
+            }
+            $sort = (string) ($_GET['sort'] ?? 'name');
+            if (!in_array($sort, $kind === 'student' ? ['name', 'studentNo', 'lastActivity', 'classes'] : ['name', 'lastActivity', 'classes'], true)) $errors['sort'] = 'Sort must be name, studentNo (Students), lastActivity or classes.';
+            else $filters['sort'] = $sort;
+            $dir = (string) ($_GET['dir'] ?? 'asc');
+            if (!in_array($dir, ['asc', 'desc'], true)) $errors['dir'] = 'Direction must be asc or desc.';
+            else $filters['dir'] = $dir;
             foreach (['courseId', 'classId'] as $key) {
                 if (!isset($_GET[$key])) continue;
                 $value = (string) $_GET[$key];

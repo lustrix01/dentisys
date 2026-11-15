@@ -1,7 +1,7 @@
-# Deploying DentiSys from scratch
+# Deploying DentiSYS from scratch
 
 This guide takes a developer from an empty VPS provider account to a running,
-verified DentiSys server with **one command**. Both servers (demo and
+verified DentiSYS server with **one command**. Both servers (demo and
 production) live on **Vultr** (spec DEL-001); any provider that meets
 [hosting-requirements.md](hosting-requirements.md) works. Sections 1–5 set up the **demo**; the production server is in
 [Production VPS](#production-vps). Reference details for every step are in

@@ -110,34 +110,34 @@ export function isTransportOrBiometricUnavailable(err: unknown): boolean {
 
 const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
   400: {
-    'Validation failed.': 'Please check your input and try again.',
-    'Verification code required.': 'Please enter a verification code.',
-    'Invalid verification code.': 'Invalid verification code. Please try again.',
-    'Recovery code required.': 'Please enter a recovery code.',
+    'Validation failed.': 'Check your input and try again.',
+    'Verification code required.': 'Enter a verification code.',
+    'Invalid verification code.': 'Invalid verification code. Try again.',
+    'Recovery code required.': 'Enter a recovery code.',
     'Consent required.': 'Biometric consent is required before proceeding.',
     'Biometric not enrolled.': 'Face registration is required before taking session attendance.',
-    'Enrollment expired.': 'Your face registration has expired for this semester. Please re-enroll.',
+    'Enrollment expired.': 'Your face registration has expired for this semester. Re-enroll.',
     'Session not active.': 'This attendance session is not currently open for check-in.',
-    'Liveness failed.': 'Liveness check could not be verified. Please follow the instructions and try again.',
-    'Biometric verification failed.': 'Face could not be verified. Please try again or seek manual attendance.',
+    'Liveness failed.': 'Liveness check could not be verified. Follow the instructions and try again.',
+    'Biometric verification failed.': 'Face could not be verified. Try again or seek manual attendance.',
     'Geofence failed.': 'You are outside the designated attendance area for this session.',
     'Already recorded.': 'Attendance has already been recorded for this session.',
-    'Challenge expired.': 'Liveness challenge expired. Please try again.',
-    'Challenge invalid.': 'Liveness challenge is invalid. Please try again.',
+    'Challenge expired.': 'Liveness challenge expired. Try again.',
+    'Challenge invalid.': 'Liveness challenge is invalid. Try again.',
   },
   401: {
     'Invalid credentials.': 'The university email or password is incorrect.',
     'Incorrect ownership password.': 'Incorrect account password.',
     'Invalid Google identity.': 'Google identity could not be verified.',
-    'Invalid enrollment stage.': 'Enrollment session expired. Please log in again.',
-    'Authentication required.': 'Your session has expired. Please log in again.',
+    'Invalid enrollment stage.': 'Enrollment session expired. Sign in again.',
+    'Authentication required.': 'Your session has expired. Sign in again.',
   },
   429: {
-    'Too many requests.': 'Too many attempts. Please wait and try again.',
+    'Too many requests.': 'Too many attempts. Wait and try again.',
   },
   404: {
     'No existing DentiSYS account was found.': 'No existing DentiSYS account was found.',
-    'Biometric profile not found.': 'Face registration profile not found. Please complete enrollment first.',
+    'Biometric profile not found.': 'Face registration profile not found. Complete enrollment first.',
     'Attendance session not found.': 'Attendance session not found or has ended.',
   },
   409: {
@@ -148,7 +148,7 @@ const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
     'Biometric enrollment already active.': 'Biometric profile is already enrolled.',
   },
   503: {
-    'Biometric service unavailable.': 'Biometric service is temporarily unavailable. Please request manual attendance.',
+    'Biometric service unavailable.': 'Biometric service is temporarily unavailable. Request manual attendance.',
   },
 };
 
@@ -202,7 +202,7 @@ function formatValidationErrors(rawErrors: unknown): string | null {
   });
   const remaining = unique.length - visible.length;
   const more = remaining > 0 ? ` ${remaining} more field${remaining === 1 ? ' needs' : 's need'} attention.` : '';
-  return `Please correct these fields, then submit again: ${visible.join(' ')}${more}`;
+  return `Correct these fields, then submit again: ${visible.join(' ')}${more}`;
 }
 
 function mapError(status: number, backendMessage: string, responseData?: unknown): string {
@@ -223,20 +223,20 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
         INVALID_GOOGLE_IDENTITY: 'Google identity could not be verified. Choose Google again and retry.',
         GOOGLE_LINK_CHALLENGE_EXPIRED: 'The Google linking session expired. Choose Google again and retry.',
         INVALID_LINK_CHALLENGE: 'The Google linking session expired. Choose Google again and retry.',
-        AUTHENTICATION_REQUIRED: 'Your session has expired. Please log in again.',
+        AUTHENTICATION_REQUIRED: 'Your session has expired. Sign in again.',
         consent_required: 'Biometric consent is required before proceeding.',
         biometric_not_enrolled: 'Face registration is required before taking session attendance.',
         not_enrolled: 'Face registration is required before taking session attendance.',
-        enrollment_expired: 'Your face registration has expired for this semester. Please re-enroll.',
+        enrollment_expired: 'Your face registration has expired for this semester. Re-enroll.',
         session_not_active: 'This attendance session is not currently open for check-in.',
-        challenge_expired: 'Liveness challenge expired. Please try again.',
-        challenge_invalid: 'Liveness challenge is invalid. Please try again.',
-        challenge_used: 'Liveness challenge already used. Please request a new challenge.',
-        liveness_failed: 'Liveness check could not be verified. Please follow the instructions and try again.',
-        biometric_verification_failed: 'Face could not be verified. Please try again or seek manual attendance.',
+        challenge_expired: 'Liveness challenge expired. Try again.',
+        challenge_invalid: 'Liveness challenge is invalid. Try again.',
+        challenge_used: 'Liveness challenge already used. Request a new challenge.',
+        liveness_failed: 'Liveness check could not be verified. Follow the instructions and try again.',
+        biometric_verification_failed: 'Face could not be verified. Try again or seek manual attendance.',
         geofence_failed: 'You are outside the designated attendance area for this session.',
         already_recorded: 'Attendance has already been recorded for this session.',
-        biometric_service_unavailable: 'Biometric verification is temporarily unavailable. Please request manual attendance.',
+        biometric_service_unavailable: 'Biometric verification is temporarily unavailable. Request manual attendance.',
       };
       if (codeMessages[code]) {
         return codeMessages[code];
@@ -262,19 +262,19 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
   if (status === 403) {
     return backendMessage;
   }
-  if (status === 400) return 'Please check your input and try again.';
+  if (status === 400) return 'Check your input and try again.';
   if (status === 422) return backendMessage && backendMessage !== 'Validation failed.'
     ? `${backendMessage} Review the information and try again.`
     : 'Some information needs correction. Review the fields and try again.';
   if (status === 404) return backendMessage || 'The requested record was not found.';
   if (status === 409) return backendMessage || 'This request conflicts with the current account state.';
-  if (status === 401) return 'Authentication failed. Please log in again.';
+  if (status === 401) return 'Authentication failed. Sign in again.';
   if (status === 403) return 'Access denied. Contact the Dean.';
   if (status === 429 && backendMessage) return backendMessage;
-  if (status === 429) return 'Too many sign-in attempts. Please wait before trying again.';
-  if (status === 503) return 'Service is temporarily unavailable. Please try again later.';
-  if (status >= 500) return 'A server error occurred. Please try again later.';
-  return 'An unexpected error occurred. Please try again.';
+  if (status === 429) return 'Too many sign-in attempts. Wait before trying again.';
+  if (status === 503) return 'Service is temporarily unavailable. Try again later.';
+  if (status >= 500) return 'A server error occurred. Try again later.';
+  return 'An unexpected error occurred. Try again.';
 }
 
 // Sign-in and MFA endpoints answer 401 for bad input (wrong password, wrong
@@ -358,7 +358,7 @@ async function request<T>(
     if (signal?.aborted) {
       throw new ApiError(0, 'Request cancelled.');
     }
-    throw new ApiError(0, 'Unable to connect to the server. Check your connection.');
+    throw new ApiError(0, 'Could not connect to the server. Check your connection.');
   } finally {
     clearTimeout(timeoutId);
     if (signal) {
@@ -2589,13 +2589,15 @@ export type AdminPerson = {
 // Filters run on the server so the total and every page agree. classes is Faculty-only; secretary and face are Student-only.
 export type AdminPeopleFilters = {
   courseId?: number; classId?: number; twoFactor?: 'on' | 'off'; activity?: 'never' | 'inactive30'; classes?: 'current' | 'none'; secretary?: boolean; face?: 'enrolled' | 'not_enrolled';
+  yearLevel?: number; invitation?: 'expired'; sort?: 'name' | 'studentNo' | 'lastActivity' | 'classes'; dir?: 'asc' | 'desc';
 };
 export function getAdminPeopleApi(params: { kind: 'faculty' | 'student'; status?: 'active' | 'deactivated' | 'invited' | 'all'; q?: string; page?: number } & AdminPeopleFilters): Promise<{ status: string; people: AdminPerson[]; total: number; page: number; pageSize: number }> {
   const search = new URLSearchParams({ kind: params.kind, status: params.status ?? 'all', page: String(params.page ?? 1) });
   if (params.q) search.set('q', params.q);
   for (const key of ['twoFactor', 'activity', 'classes', 'face'] as const) if (params[key]) search.set(key, params[key] as string);
   if (params.secretary) search.set('secretary', '1');
-  for (const key of ['courseId', 'classId'] as const) if (params[key]) search.set(key, String(params[key]));
+  for (const key of ['courseId', 'classId', 'yearLevel'] as const) if (params[key]) search.set(key, String(params[key]));
+  for (const key of ['invitation', 'sort', 'dir'] as const) if (params[key]) search.set(key, params[key] as string);
   return request('GET', `/admin/people?${search.toString()}`);
 }
 export function deactivatePersonApi(userId: number, reason?: string): Promise<{ person: AdminPerson }> {
@@ -2604,9 +2606,21 @@ export function deactivatePersonApi(userId: number, reason?: string): Promise<{ 
 export function reactivatePersonApi(userId: number): Promise<{ person: AdminPerson }> {
   return request('POST', '/admin/people/reactivate', { userId });
 }
-export type PeopleFilterOptions = { status?: string; courses: Array<{ id: number; courseCode: string; name: string }>; classes: Array<{ csId: number; label: string; courseId: number }> };
+export type PeopleFilterOptions = { status?: string; yearLevels?: number[]; courses: Array<{ id: number; courseCode: string; name: string }>; classes: Array<{ csId: number; label: string; courseId: number }> };
 export function getAdminPeopleFiltersApi(): Promise<PeopleFilterOptions> {
   return request('GET', '/admin/people/filters');
+}
+export type AdminOverview = {
+  attention: { expiredInvitations: { faculty: number; students: number }; facultyWithoutClasses: number; inactive30: { faculty: number; students: number }; nextTermMissing: boolean };
+  accounts: { faculty: { active: number; invited: number; deactivated: number }; students: { active: number; invited: number; deactivated: number } };
+  signIns: Array<{ weekStart: string; faculty: number; students: number }>;
+  security: { twoFactor: { faculty: { on: number; total: number }; students: { on: number; total: number } }; failedSignIns: Array<{ day: string; count: number }> };
+  yearLevels: Array<{ yearLevel: number; students: number }>;
+  sectionsByCourse: Array<{ courseCode: string; sections: number }>;
+  setup: { currentTerm: { semester: string; schoolYear: string; endDate: string | null } | null; courses: { active: number; retired: number }; rooms: { active: number; retired: number } };
+};
+export function getAdminOverviewApi(): Promise<AdminOverview> {
+  return request('GET', '/admin/overview');
 }
 export function signOutPersonApi(userId: number, reason?: string): Promise<{ person: AdminPerson }> {
   return request('POST', '/admin/people/sign-out', { userId, reason });

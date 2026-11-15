@@ -12,7 +12,7 @@ function mfa_totp_service(): TwoFactorAuth
     if (!$service instanceof TwoFactorAuth) {
         $service = new TwoFactorAuth(
             new BaconQrCodeProvider(4, '#ffffff', '#000000', 'svg'),
-            'DentiSys',
+            'DentiSYS',
             6,
             30,
             Algorithm::Sha1
@@ -24,7 +24,7 @@ function mfa_totp_service(): TwoFactorAuth
 function mfa_compute_totp(string $base32Secret, int $step, string $algorithm = 'sha1', int $digits = 6, int $period = 30): array
 {
     if ($algorithm !== 'sha1' || $digits !== 6 || $period !== 30) {
-        throw new \InvalidArgumentException('DentiSys authenticator credentials use SHA-1, six digits, and a 30-second period.');
+        throw new \InvalidArgumentException('DentiSYS authenticator credentials use SHA-1, six digits, and a 30-second period.');
     }
     return ['step' => $step, 'code' => mfa_totp_service()->getCode($base32Secret, $step * $period)];
 }
@@ -103,7 +103,7 @@ function mfa_generate_secret(): string
 
 function mfa_provisioning_payload(string $accountEmail, string $secret): array
 {
-    $label = 'DentiSys:' . $accountEmail;
+    $label = 'DentiSYS:' . $accountEmail;
     $service = mfa_totp_service();
     return [
         'provisioning_uri' => $service->getQRText($label, $secret),

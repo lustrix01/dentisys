@@ -175,5 +175,7 @@ html {
    default tooltip follows dark mode instead of a white box. */
 .recharts-legend-item-text { color: #475569 !important; }
 .dark .recharts-legend-item-text { color: #cbd5e1 !important; }
+.recharts-default-tooltip .recharts-tooltip-item { color: #334155 !important; }
 .dark .recharts-default-tooltip { background-color: #0f172a !important; border-color: #334155 !important; }
+.dark .recharts-default-tooltip .recharts-tooltip-item { color: #e2e8f0 !important; }
 .dark .recharts-default-tooltip .recharts-tooltip-label { color: #e2e8f0 !important; }

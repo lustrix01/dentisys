@@ -9,7 +9,7 @@ Server setup itself is in [deploy-from-scratch.md](deploy-from-scratch.md). The 
 |---|---|---|
 | Localhost | `http://localhost:5173` (Docker stack on the PC) | Building new features and changing existing ones. Code changes show up here immediately. |
 | Demo | `https://demo.bu-dentisys.com` (`DEMO_BASE_URL` in `~\.dentisys\demo.env`) | Testing the finished, pushed version live in the cloud, with fictional data, to catch defects before production. The Owner and Claude approve it here. |
-| Production | `https://bu-dentisys.com` | A public test site: invited users try DentiSys there, but it is not used for real attendance, grades or retention. It only receives versions approved on the demo. |
+| Production | `https://bu-dentisys.com` | A public test site: invited users try DentiSYS there, but it is not used for real attendance, grades or retention. It only receives versions approved on the demo. |
 
 Nothing is edited directly on the demo or production. They only receive versions that came through localhost. Colleagues work up to pushing their own branch; only the Owner's PC merges, publishes images and operates the demo.
 

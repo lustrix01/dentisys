@@ -177,7 +177,7 @@ function rate_limit_login_message(int $retryAfterSeconds): string
 {
     $minutes = max(1, (int) ceil($retryAfterSeconds / 60));
     $unit = $minutes === 1 ? 'minute' : 'minutes';
-    return "Too many sign-in attempts. Please try again in {$minutes} {$unit}.";
+    return "Too many sign-in attempts. Try again in {$minutes} {$unit}.";
 }
 
 function rate_limit_assert_not_blocked(array $storage, string $scopeHex, string $endpointCode, int $windowSeconds, int $maxAttempts): void
@@ -442,7 +442,7 @@ function rate_limit_allow(array $config, string $scopeKey, string $endpointCode,
     try {
         rate_limit_check($storage, $scopeHex, $endpointCode, $windowSeconds, $maxRequests);
     } catch (RateLimitException $e) {
-        safe_error_response('Too many attempts. Please wait a few minutes and try again.', 429);
+        safe_error_response('Too many attempts. Wait a few minutes and try again.', 429);
         return false;
     }
     return true;

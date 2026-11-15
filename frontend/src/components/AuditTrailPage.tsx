@@ -383,7 +383,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent, superadmi
           {classWork && (
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
               <select aria-label="Faculty" value={facultyId} onChange={e => change(() => setFacultyId(e.target.value))} className={`${control} w-full sm:w-48`}>
-                <option value="">All Faculty</option>
+                <option value="">All faculty</option>
                 {(data?.facultyOptions ?? []).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
               <select aria-label="Class" value={classId} onChange={e => change(() => setClassId(e.target.value))} className={`${control} w-full sm:w-56`}>

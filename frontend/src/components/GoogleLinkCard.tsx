@@ -61,7 +61,7 @@ export const GoogleLinkCard: React.FC = () => {
       .then(response => setLinked(response.linked))
       .catch(requestError => {
         setLinked(false);
-        setError(requestError instanceof Error ? requestError.message : 'Unable to load Google link status.');
+        setError(requestError instanceof Error ? requestError.message : 'Could not load the Google link status. Reload the page.');
       });
   }, [enabled]);
 
@@ -143,7 +143,7 @@ export const GoogleLinkCard: React.FC = () => {
       if (requestError instanceof ApiError && requestError.code === 'INVALID_GOOGLE_IDENTITY') {
         setCredential('');
       }
-      setError(requestError instanceof Error ? requestError.message : 'Unable to link Google Sign-In.');
+      setError(requestError instanceof Error ? requestError.message : 'Could not link Google Sign-In. Try again.');
     } finally {
       setWorking(false);
     }

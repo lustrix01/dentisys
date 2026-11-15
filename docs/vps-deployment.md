@@ -17,7 +17,7 @@ for that case. This VPS uses GHCR images built by hand from a tested commit,
 Traefik with Let's Encrypt, Watchtower for web/frontend/biometric,
 internal PostgreSQL, and pgAdmin on loopback. No source checkout or CI/CD runs on the VPS.
 
-> New here? Start with [Deploying DentiSys from scratch](deploy-from-scratch.md); this page is the detailed reference.
+> New here? Start with [Deploying DentiSYS from scratch](deploy-from-scratch.md); this page is the detailed reference.
 
 ## Quick start
 
@@ -431,7 +431,7 @@ Set `GOOGLE_CLIENT_ID` in the server `.env` and rerun deployment; an empty value
 disables Google Sign-In. Invitation acceptance and activation remain
 password-only. After activation, users link the matching institutional Google
 account from their profile, confirming password and MFA when enabled (REG-003).
-Google sign-in never replaces the DentiSys password or authorizes public signup.
+Google sign-in never replaces the DentiSYS password or authorizes public signup.
 
 ## Verify and operate
 

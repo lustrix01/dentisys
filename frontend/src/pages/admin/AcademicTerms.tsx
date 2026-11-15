@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { newTermDefaults, semesterLabel } from '../../utils/academicTermDefaults';
+import { formatSchoolYear as schoolYearText } from '../../utils/schoolYear';
 import {
   getAcademicTermsApi,
   saveAcademicTermApi,
@@ -61,7 +62,7 @@ export const AcademicTermsSettings: React.FC = () => {
         setToday(result.today);
       })
       .catch((err) => {
-        if (!ignore) setError(err instanceof Error ? err.message : 'Unable to load academic terms.');
+        if (!ignore) setError(err instanceof Error ? err.message : 'Could not load academic terms. Reload the page.');
       })
       .finally(() => {
         if (!ignore) setLoading(false);
@@ -72,7 +73,7 @@ export const AcademicTermsSettings: React.FC = () => {
   }, []);
 
   const reportError = (err: unknown) => {
-    setError(err instanceof Error ? err.message : 'Unable to save academic terms.');
+    setError(err instanceof Error ? err.message : 'Could not save academic terms. Try again.');
     if (err instanceof ApiError && Array.isArray(err.errors)) {
       setFields(
         Object.fromEntries(
@@ -190,7 +191,7 @@ export const AcademicTermsSettings: React.FC = () => {
         </p>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-            <span>Current School Year <b className="text-slate-800 dark:text-slate-100">{currentYear || 'Not configured'}</b></span>
+            <span>Current School Year <b className="text-slate-800 dark:text-slate-100">{currentYear ? schoolYearText(currentYear) : 'Not configured'}</b></span>
             <span>{currentTermObj ? `${semesterLabel(currentTermObj.semester)} active` : 'No active semester today'}</span>
             <span><b className="text-slate-800 dark:text-slate-100">{years.length}</b> {years.length === 1 ? 'school year' : 'school years'} · {definedTerms.length} {definedTerms.length === 1 ? 'term' : 'terms'}</span>
             <span><b className="text-slate-800 dark:text-slate-100">{totalClassesCount}</b> {totalClassesCount === 1 ? 'class' : 'classes'} linked</span>
@@ -244,7 +245,7 @@ export const AcademicTermsSettings: React.FC = () => {
         <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
           <CalendarDays className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
           <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No academic terms defined</h3>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Add the terms for {currentYear}.</p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Add the terms for {schoolYearText(currentYear)}.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -271,7 +272,7 @@ export const AcademicTermsSettings: React.FC = () => {
                   onClick={() => setExpanded({ ...expanded, [year]: !isOpen })}
                 >
                   <ChevronRight className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} aria-hidden="true" />
-                  <span className="whitespace-nowrap text-sm font-extrabold tracking-tight text-slate-800 dark:text-slate-100">{year}</span>
+                  <span className="whitespace-nowrap text-sm font-extrabold tracking-tight text-slate-800 dark:text-slate-100">{schoolYearText(year)}</span>
                   <span className="whitespace-nowrap rounded-full bg-white px-2.5 max-[359px]:px-2 py-1 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-700">
                     {yearSet.length === 0 && past
                       ? 'No dates set'
@@ -279,7 +280,7 @@ export const AcademicTermsSettings: React.FC = () => {
                   </span>
                   {isCurrentYear && (
                     <span className="ml-auto whitespace-nowrap rounded-full border border-accent-200/60 bg-white px-2.5 max-[359px]:px-2 py-1 text-[10px] font-extrabold text-accent-700 dark:border-accent-900/60 dark:bg-slate-900 dark:text-accent-300">
-                      Current S.Y.
+                      (Current)
                     </span>
                   )}
                 </button>
@@ -319,8 +320,8 @@ export const AcademicTermsSettings: React.FC = () => {
                             <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              aria-label={`${slot ? 'Add dates for' : 'Edit'} ${semesterLabel(semester)} ${year}`}
-                              title={`${slot ? 'Add dates for' : 'Edit'} ${semesterLabel(semester)} ${year}`}
+                              aria-label={`${slot ? 'Add dates for' : 'Edit'} ${semesterLabel(semester)} ${schoolYearText(year)}`}
+                              title={`${slot ? 'Add dates for' : 'Edit'} ${semesterLabel(semester)} ${schoolYearText(year)}`}
                               className={`inline-flex h-10 w-10 items-center justify-center rounded-xl transition-all disabled:opacity-40 ${slot ? 'bg-accent-600 text-white shadow-xs hover:bg-accent-700' : 'border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'}`}
                               disabled={busy}
                               onClick={() => open(term ?? { id: null, schoolYear: year, semester, startDate: null, endDate: null, classCount: 0 })}
@@ -336,7 +337,7 @@ export const AcademicTermsSettings: React.FC = () => {
                                 title={
                                   term.classCount > 0
                                   ? 'A term used by a class cannot be deleted.'
-                                    : `Delete unused ${semesterLabel(semester)} ${year} term`
+                                    : `Delete unused ${semesterLabel(semester)} ${schoolYearText(year)} term`
                                 }
                                 onClick={() => {
                                   setError('');
@@ -386,7 +387,7 @@ export const AcademicTermsSettings: React.FC = () => {
                   {confirmation} unexpired biometric {confirmation === 1 ? 'enrollment will' : 'enrollments will'} expire with this change. A term ending today remains valid through today; past dates expire at the next expiry run. Biometric material is removed by the expiry run.
                 </p>
                 <p className="text-sm font-bold text-amber-950 dark:text-amber-100">
-                  Save end date {draft.endDate} for the {semesterLabel(draft.semester)} of {draft.schoolYear}?
+                  Save end date {draft.endDate} for the {semesterLabel(draft.semester)} of {schoolYearText(draft.schoolYear)}?
                 </p>
               </div>
             ) : (
@@ -472,7 +473,7 @@ export const AcademicTermsSettings: React.FC = () => {
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-700 dark:text-slate-200">
-            Delete the {deleteTerm ? semesterLabel(deleteTerm.semester) : ''} of {deleteTerm?.schoolYear}?
+            Delete the {deleteTerm ? semesterLabel(deleteTerm.semester) : ''} of {deleteTerm ? schoolYearText(deleteTerm.schoolYear) : ''}?
           </p>
           <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
             <button
@@ -519,7 +520,7 @@ export const AcademicTermsSettings: React.FC = () => {
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
-            Copy the latest defined school year ({latestYear}) into the next school year, shifting dates by one year? February 29 becomes February 28. Existing terms are kept. Review and adjust the copied dates afterwards.
+            Copy the latest defined school year ({latestYear ? schoolYearText(latestYear) : ''}) into the next school year, shifting dates by one year? February 29 becomes February 28. Existing terms are kept. Review and adjust the copied dates afterwards.
           </p>
           <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
             <button
@@ -539,7 +540,7 @@ export const AcademicTermsSettings: React.FC = () => {
                 try {
                   const result = await copyAcademicTermsApi();
                   setCopying(false);
-                  setMessage('Created ' + result.created + ' terms for ' + result.schoolYear + '. Review and adjust their dates.');
+                  setMessage('Created ' + result.created + ' terms for ' + schoolYearText(result.schoolYear) + '. Review and adjust their dates.');
                   await load();
                 } catch (err) {
                   reportError(err);

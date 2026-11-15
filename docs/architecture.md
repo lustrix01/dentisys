@@ -1,4 +1,4 @@
-# DentiSys Architecture
+# DentiSYS Architecture
 
 The development stack is a Compose application: Vite serves the React frontend, Apache/PHP serves the API, PostgreSQL stores application data, a private Python biometric sidecar handles face detection and verification, Mailpit captures development email, and pgAdmin is available on loopback for database administration.
 

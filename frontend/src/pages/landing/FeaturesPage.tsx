@@ -126,7 +126,7 @@ export function FeaturesPage() {
                     {activeIndex === 3 && 'Academic Retention & Clinical Milestone Analytics'}
                   </h3>
                   <p className="mt-0.5 break-words text-xs text-slate-500 lg:truncate">
-                    {activeIndex === 0 && 'S.Y. 2026-2027 • 1st Semester • Block A • 38 Enrolled Students'}
+                    {activeIndex === 0 && 'S.Y. 2026–2027 • 1st Semester • Block A • 38 Enrolled Students'}
                     {activeIndex === 1 && 'Room 204 Clinic Hall • Geofence Radius: 150m • Start: 8:00 AM'}
                     {activeIndex === 2 && '100% Validated Matrix: Term Exam (50%), Quiz (20%), Outputs (20%), Participation (10%)'}
                     {activeIndex === 3 && 'Evaluated Status: 92% Good Standing • 5% Academic Warning • 3% Remedial Priority'}

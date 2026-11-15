@@ -2,7 +2,7 @@
 
 Status: **Current contract**, implemented. Scope: imports plus the official grade math; exports are in [official-exports.md](official-exports.md).
 
-Owner rule: Faculty upload the school's files exactly as the school gives them. DentiSys adapts to the layout; it never asks Faculty to change a file.
+Owner rule: Faculty upload the school's files exactly as the school gives them. DentiSYS adapts to the layout; it never asks Faculty to change a file.
 
 Sample files (kept outside the repo, they hold real student data): four "Official List of Enrolled Students" PDFs (DMD-1A, 2A, 3A, 4A) and one grade sheet workbook (`SAMPLE.xlsx`, Operative Dentistry 1, 2nd Sem AY 2025-2026). Tests use made-up rows in the same layout.
 
@@ -52,11 +52,11 @@ Where: Grade Computation → Import Grade Sheets.
 
 | # | Rule |
 |---|---|
-| G1 | Only raw scores are imported: one score per student per used item (max > 0). `RECITATION` and `LAB PERFORMANCE` have no max: they are read as a percentage out of 100. Computed columns, the summary sheet and `DATA` are never imported. DentiSys computes grades with its own rules (GRD-001/002, BUCDM conversion). |
-| G2 | Each used item maps to one DentiSys assessment in the matching period, component and category, matched by title (e.g. "Quiz 1"). If it does not exist yet, the preview lists it as "New in the sheet" (title from the header, max from row 9, transmutation 50–100% as the sheet does). Each one is created only if the Faculty ticks it and confirms. Nothing is created automatically. |
-| G2a | An assessment that exists in DentiSys for that period and component but is not in the sheet is listed as "Not in the sheet". Default: keep. The Faculty may tick it for removal; the confirmation names each one and how many saved scores it holds ("Quiz 4 (Midterm) · 38 saved scores will be deleted"). Removal uses the existing assessment delete (its permissions, audit and grade recomputation). Unticked ones stay unchanged. |
-| G2b | When the item max in row 9 differs from the existing assessment's max, the preview shows `old max → sheet max` and blocks that item until the Faculty chooses: keep the DentiSys max (scores above it stay blocked) or update the max (existing assessment edit rules apply). |
-| G2c | Items without their own name in the sheet are named by position: "Outputs 1, 2…", "Lab Exercise 1, 2…". Every sheet item has a choice: **Create new** or **Use existing: [DentiSys assessment of that period and component]**, so a differently named assessment can be linked instead of duplicated. |
+| G1 | Only raw scores are imported: one score per student per used item (max > 0). `RECITATION` and `LAB PERFORMANCE` have no max: they are read as a percentage out of 100. Computed columns, the summary sheet and `DATA` are never imported. DentiSYS computes grades with its own rules (GRD-001/002, BUCDM conversion). |
+| G2 | Each used item maps to one DentiSYS assessment in the matching period, component and category, matched by title (e.g. "Quiz 1"). If it does not exist yet, the preview lists it as "New in the sheet" (title from the header, max from row 9, transmutation 50–100% as the sheet does). Each one is created only if the Faculty ticks it and confirms. Nothing is created automatically. |
+| G2a | An assessment that exists in DentiSYS for that period and component but is not in the sheet is listed as "Not in the sheet". Default: keep. The Faculty may tick it for removal; the confirmation names each one and how many saved scores it holds ("Quiz 4 (Midterm) · 38 saved scores will be deleted"). Removal uses the existing assessment delete (its permissions, audit and grade recomputation). Unticked ones stay unchanged. |
+| G2b | When the item max in row 9 differs from the existing assessment's max, the preview shows `old max → sheet max` and blocks that item until the Faculty chooses: keep the DentiSYS max (scores above it stay blocked) or update the max (existing assessment edit rules apply). |
+| G2c | Items without their own name in the sheet are named by position: "Outputs 1, 2…", "Lab Exercise 1, 2…". Every sheet item has a choice: **Create new** or **Use existing: [DentiSYS assessment of that period and component]**, so a differently named assessment can be linked instead of duplicated. |
 | G2d | An item with a max in row 9 but no scores yet is listed as "No scores yet" and is not ticked for creation by default. |
 | G2f | One "Create all N new items that have scores" tick above the list ticks every new item with scores at once; items without scores stay unticked (G2d) and each item can still be changed. |
 | G2e | Lowering a max below a score already saved is refused, as assessment edit does today ("Maximum score cannot be lower than a score already saved…"). |
@@ -76,23 +76,23 @@ Where: Grade Computation → Import Grade Sheets.
 | G10 | Saving uses the existing score batch save (`POST /faculty/scores`, as Full Matrix View): with its existing validation and audit rules (all-or-nothing save and one audit batch, see G13). The file is read in the browser and never uploaded. |
 | G11 | Accepted file: `.xlsx`. The current `Student ID, Score` CSV import is replaced by this. |
 
-### Known difference between the sheet and DentiSys
+### Known difference between the sheet and DentiSYS
 
-DentiSys follows the sheet's calculation (section 4b). One difference remains: the sheet counts a blank score as 0 (grade 50% → 5.0); DentiSys leaves the grade incomplete.
+DentiSYS follows the sheet's calculation (section 4b). One difference remains: the sheet counts a blank score as 0 (grade 50% → 5.0); DentiSYS leaves the grade incomplete.
 
 ## 3. Questions and answers
 
 1. **Names in real sheets.** Answered: real sheets have names; the sample was emptied for privacy. Name format unknown, so G5 accepts `Last, First Middle`, `Last, First M.`, `First Middle Last` and any letter case, and flags every row that does not match exactly one Student.
-2. **Sheet grade vs DentiSys grade.** Owner: the sheet is closer to the truth; explore options before deciding. See section 3a; decided: option B.
+2. **Sheet grade vs DentiSYS grade.** Owner: the sheet is closer to the truth; explore options before deciding. See section 3a; decided: option B.
 3. **Missing and extra assessments.** Answered: agreed G2, G2a, G2b; needs a demo.
 4. **File type.** Answered: `.xlsx` only; a `.xls` file gets a clear message.
 5. **New library.** Answered: approved, one small `.xlsx` reader, frontend only.
 
-## 3a. How the sheet calculates vs DentiSys before option B (for question 2)
+## 3a. How the sheet calculates vs DentiSYS before option B (for question 2)
 
 Worked on sample student 1, Midterm Lecture: Recitation 88, Outputs 34/50, Quiz 1 14/20, Quiz 2 20/30, Major Exam 49/75.
 
-| Step | Sheet | DentiSys before option B |
+| Step | Sheet | DentiSYS before option B |
 |---|---|---|
 | Items inside a category | Plain average of item % (Quiz 1 85%, Quiz 2 83.33% → 84.17%) | Weighted by max points (→ 84.00%) |
 | Period result | 83.77 → rounded to whole: **84 → 2.5** | 83.73 → truncated: **83 → 2.6** |
@@ -105,20 +105,20 @@ Note: the Lecture and Laboratory sheets of the same file round differently, so t
 Options:
 - **A. Match the sheet completely**, blanks as 0 included. Grades would equal the sheet. Risk: a score not yet entered silently becomes a failing grade, and remediation flags appear early.
 - **B. Match the sheet's math, keep blanks as incomplete (recommended).** Plain average inside categories, whole-number rounding, the sheet's conversion table, the same intermediate rounding. Missing scores still show "incomplete" instead of failing.
-- **C. Save the sheet's own grades** as the official grade, next to DentiSys's. Two sources of truth that can disagree; scores entered later in DentiSys would not change the grade.
-- **D. Keep DentiSys's rules**, only show the difference in the preview.
+- **C. Save the sheet's own grades** as the official grade, next to DentiSYS's. Two sources of truth that can disagree; scores entered later in DentiSYS would not change the grade.
+- **D. Keep DentiSYS's rules**, only show the difference in the preview.
 
 Any of A–C changes GRD-002 and applies to every class, not only imports.
 
 **Owner decision: Option B.** The sheet is the Dean's official calculation for every Faculty. Blanks stay incomplete. Exact wording to approve is in section 4b.
 
-**Owner decision: lecture-only courses are a future iteration.** DentiSys has none today: GRD-002/GRD-003 require positive Lecture and Laboratory contributions. The course grade follows the summary (TFG) sheet: `round(round(Midterm × 30%) + round(Final × 70%))`. Note for later: the workbook's Lecture tab rounds once instead (`round(Midterm × 30% + Final × 70%)`; sample student 1: 89.6 → 90 → 1.9 vs 25 + 64 = 89 → 2.0). Ask the Dean which is right before lecture-only courses are added.
+**Owner decision: lecture-only courses are a future iteration.** DentiSYS has none today: GRD-002/GRD-003 require positive Lecture and Laboratory contributions. The course grade follows the summary (TFG) sheet: `round(round(Midterm × 30%) + round(Final × 70%))`. Note for later: the workbook's Lecture tab rounds once instead (`round(Midterm × 30% + Final × 70%)`; sample student 1: 89.6 → 90 → 1.9 vs 25 + 64 = 89 → 2.0). Ask the Dean which is right before lecture-only courses are added.
 
 ## 4. Spec change (applied to IMP-001)
 
 Replace in IMP-001 the sentences "The interface MUST state "Official format not confirmed"; a sample does not establish official Registrar compatibility." and "Official Registrar compatibility and grade-sheet importing remain unconfirmed." with:
 
-> Owner decision: The BU College of Dental Medicine "Official List of Enrolled Students" PDF and the official grade sheet workbook (.xlsx) are the official import layouts. Faculty upload them unchanged; DentiSys adapts to them. The CSV template stays provisional and keeps the "Official format not confirmed" label. Grade sheet import saves raw scores only, never computed grades, through the existing score rules; it never changes Grade Weights, never turns a blank into zero, and never overwrites a saved score without the Faculty's confirmation. File headers are checked against the selected class and differences are warnings.
+> Owner decision: The BU College of Dental Medicine "Official List of Enrolled Students" PDF and the official grade sheet workbook (.xlsx) are the official import layouts. Faculty upload them unchanged; DentiSYS adapts to them. The CSV template stays provisional and keeps the "Official format not confirmed" label. Grade sheet import saves raw scores only, never computed grades, through the existing score rules; it never changes Grade Weights, never turns a blank into zero, and never overwrites a saved score without the Faculty's confirmation. File headers are checked against the selected class and differences are warnings.
 
 ## 4b. Grading spec change for option B (applied to spec.md)
 

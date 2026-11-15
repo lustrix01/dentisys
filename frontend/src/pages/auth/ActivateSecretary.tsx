@@ -61,7 +61,7 @@ export function ActivateSecretary() {
       }
 
       if (inv.status === 'Expired') {
-        setInvitationError('This Class Secretary invitation link has expired. Please contact your faculty member to request a new invitation.');
+        setInvitationError('This Class Secretary invitation link has expired. Contact your faculty member to request a new invitation.');
         return;
       }
 
@@ -295,7 +295,7 @@ export function ActivateSecretary() {
                     Appointed by: <strong>{invitation.facultyName}</strong> (Dental Faculty Member)
                   </p>
                   <p className="text-[10px] text-slate-500 dark:text-slate-500 flex items-center gap-1">
-                    <Clock className="w-3 h-3" /> Link expires: {new Date(invitation.expiresAt).toLocaleDateString('en-PH')}
+                    <Clock className="w-3 h-3" /> Link expires: {new Date(invitation.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </p>
                 </div>
 

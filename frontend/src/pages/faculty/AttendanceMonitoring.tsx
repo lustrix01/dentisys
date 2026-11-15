@@ -49,6 +49,9 @@ import {
   FacultyManagedAttendanceSession,
 } from '../../services/apiClient';
 
+import { SortableHeader, ariaSort, compareValues, type SortState } from '../../components/SortableHeader';
+import { formatShortDate } from '../../utils/sessionDate';
+import { formatSchoolYear } from '../../utils/schoolYear';
 import { isViewOnlyClass, isArchivedCurrentYear, orderCurrentYearClasses } from '../../utils/classArchiving';
 import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../../utils/geofenceRadius';
 import { SessionTimeFields } from '../../components/SessionTimeFields';
@@ -121,7 +124,7 @@ const formatStartsIn = (startMs: number, nowMs: number, sessionDate?: string, op
   if (diffDays === 1) {
     return timeLabel ? `Starts tomorrow at ${timeLabel}` : 'Starts tomorrow';
   }
-  return timeLabel ? `Starts in ${diffDays} days (${sessionDate} at ${timeLabel})` : `Starts in ${diffDays} days (${sessionDate})`;
+  return timeLabel ? `Starts in ${diffDays} days (${formatShortDate(sessionDate)} at ${timeLabel})` : `Starts in ${diffDays} days (${formatShortDate(sessionDate)})`;
 };
 
 const semesterLabel = (s: string | undefined | null) => {
@@ -487,7 +490,7 @@ export const AttendanceMonitoring: React.FC = () => {
     } catch (err) {
       if (request === worksheetRequest.current) {
         setWorksheet(null);
-        setWorksheetError(err instanceof Error ? err.message : 'Unable to load attendance worksheet.');
+        setWorksheetError(err instanceof Error ? err.message : 'Could not load the attendance worksheet.');
       }
     } finally {
       if (request === worksheetRequest.current) setLoadingWorksheet(false);
@@ -760,7 +763,7 @@ export const AttendanceMonitoring: React.FC = () => {
       const found = overlapsFrom(err, 'SESSION_OVERLAP');
       if (found) { setEditOverlaps(found); return; }
       setEditOverlaps(null);
-      setEditError(err instanceof Error ? err.message : 'Unable to update attendance session.');
+      setEditError(err instanceof Error ? err.message : 'Could not update the attendance session.');
     } finally {
       setSubmittingEdit(false);
       finishWorksheetMutation(writeScope);
@@ -875,7 +878,7 @@ export const AttendanceMonitoring: React.FC = () => {
         confirmOverlap: confirmOverlap || undefined,
       });
       setIsStartSessionOpen(false);
-      setNotification({ type: 'success', message: response.session.status === 'scheduled' ? `Attendance session scheduled for ${sessionDate} at ${formatVisibleTime(openingTime)} (Asia/Manila).` : 'Attendance session started. The class roll call is now live.' });
+      setNotification({ type: 'success', message: response.session.status === 'scheduled' ? `Attendance session scheduled for ${formatShortDate(sessionDate)} at ${formatVisibleTime(openingTime)} (Asia/Manila).` : 'Attendance session started. The class roll call is now live.' });
       if (worksheetScope.current === writeScope) {
         setSelectedDate(sessionDate);
         setSelectedSessionId(response.session.sessionId);
@@ -912,9 +915,10 @@ export const AttendanceMonitoring: React.FC = () => {
   }, [worksheet]);
 
   // Filtered Roster for large classes
+  const [rosterSort, setRosterSort] = useState<SortState<'default' | 'studentName' | 'status'>>({ key: 'default', dir: 'asc' });
   const filteredRoster = useMemo(() => {
     if (!worksheet) return [];
-    return worksheet.roster.filter(item => {
+    const matching = worksheet.roster.filter(item => {
       const matchesSearch =
         !searchQuery.trim() ||
         item.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -927,7 +931,10 @@ export const AttendanceMonitoring: React.FC = () => {
 
       return matchesSearch && matchesStatus && matchesRollCallFilters(item, overriddenFilter, recordedByFilter);
     });
-  }, [worksheet, searchQuery, statusFilter, overriddenFilter, recordedByFilter]);
+    if (rosterSort.key === 'default') return matching;
+    const key = rosterSort.key;
+    return [...matching].sort((a, b) => compareValues(a[key], b[key], rosterSort.dir));
+  }, [worksheet, searchQuery, statusFilter, overriddenFilter, recordedByFilter, rosterSort]);
 
   const revokedSessionCount = countRevokedSessions(worksheet?.attendanceSessions ?? []);
   const shownSessions = visibleSessions(worksheet?.attendanceSessions ?? [], showRevoked);
@@ -1089,10 +1096,10 @@ export const AttendanceMonitoring: React.FC = () => {
               }}
               className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
             >
-              <option value="current">{currentSchoolYear ? `${currentSchoolYear} (Current)` : 'Current school year'}</option>
+              <option value="current">{currentSchoolYear ? `${formatSchoolYear(currentSchoolYear)} (Current)` : 'Current school year'}</option>
               <option value="all">All school years</option>
               {availableSchoolYears.filter(year => year !== currentSchoolYear).map(year => (
-                <option key={year} value={year}>{year}</option>
+                <option key={year} value={year}>{formatSchoolYear(year)}</option>
               ))}
             </select>
           </div>
@@ -1167,7 +1174,7 @@ export const AttendanceMonitoring: React.FC = () => {
                     <div className="space-y-1.5 text-xs text-slate-500 dark:text-slate-400">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>{semesterLabel(c.semester)} &bull; {c.schoolYear || currentSchoolYear || '2026-2027'}</span>
+                        <span>{semesterLabel(c.semester)} &bull; {formatSchoolYear(c.schoolYear || currentSchoolYear || '2026-2027')}</span>
                       </div>
                       <div className="flex items-start gap-2">
                         <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
@@ -1323,7 +1330,7 @@ export const AttendanceMonitoring: React.FC = () => {
                     <span className="inline-flex max-w-full flex-col items-start gap-0.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3.5 py-1.5 text-indigo-700 dark:text-indigo-300">
                       <span className="text-[10px] font-extrabold uppercase tracking-wider">Scheduled session</span>
                       <span className="mt-0.5 flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] font-semibold text-indigo-700/90 dark:text-indigo-200/90">
-                        {scheduledWorksheetSession.sessionDate && <span>{scheduledWorksheetSession.sessionDate}</span>}
+                        {scheduledWorksheetSession.sessionDate && <span>{formatShortDate(scheduledWorksheetSession.sessionDate)}</span>}
                         <span>{formatVisibleTime(scheduledWorksheetSession.openingTime)}&ndash;{formatVisibleTime(scheduledWorksheetSession.classEndTime)}</span>
                       </span>
                     </span>
@@ -1519,7 +1526,7 @@ export const AttendanceMonitoring: React.FC = () => {
         <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
           <Layers className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
           <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">
-            Please click &ldquo;View attendance&rdquo; on one of your class cards above to view the roll call worksheet.
+            Select &ldquo;View attendance&rdquo; on one of your class cards above to open the roll call worksheet.
           </h3>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             Attendance records are loaded directly from the authoritative database.
@@ -1619,7 +1626,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   setSelectedSessionId(session.sessionId);
                 }}
               >
-                {session.sessionDate} · {session.openingTime ? formatVisibleTime(session.openingTime) : 'Unconfigured'}–{formatVisibleTime(session.classEndTime)} · {session.status === 'scheduled' ? 'Scheduled' : 'Open'} · {session.sessionCode}
+                {formatShortDate(session.sessionDate)} · {session.openingTime ? formatVisibleTime(session.openingTime) : 'Unconfigured'}–{formatVisibleTime(session.classEndTime)} · {session.status === 'scheduled' ? 'Scheduled' : 'Open'} · {session.sessionCode}
               </button>
             ))}
           </div>
@@ -1705,10 +1712,10 @@ export const AttendanceMonitoring: React.FC = () => {
             <table className="w-full min-w-[640px] text-left text-xs border-collapse">
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
                 <tr>
-                  <th className="py-3 px-4 sm:py-4 sm:px-6">Student Details</th>
+                  <th className="py-3 px-4 sm:py-4 sm:px-6" aria-sort={ariaSort(rosterSort, 'studentName')}><SortableHeader label="Student Details" sortKey="studentName" sort={rosterSort} onSort={setRosterSort} /></th>
                   <th className="py-3 px-4 sm:py-4 sm:px-6">Check-In Time</th>
                   <th className="py-3 px-4 sm:py-4 sm:px-6">Verification Method</th>
-                  <th className="py-3 px-4 sm:py-4 sm:px-6">Attendance Status</th>
+                  <th className="py-3 px-4 sm:py-4 sm:px-6" aria-sort={ariaSort(rosterSort, 'status')}><SortableHeader label="Attendance Status" sortKey="status" sort={rosterSort} onSort={setRosterSort} /></th>
                   <th className="py-3 px-4 sm:py-4 sm:px-6 text-right">Actions</th>
                 </tr>
               </thead>
@@ -1797,7 +1804,7 @@ export const AttendanceMonitoring: React.FC = () => {
         >
           <div className="space-y-4 text-xs">
             <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-              Record <strong>{worksheet.roster.filter(r => r.status === null).length}</strong> student(s) with no attendance for {selectedDate} as <strong>Present</strong>?
+              Record <strong>{worksheet.roster.filter(r => r.status === null).length}</strong> student(s) with no attendance for {formatShortDate(selectedDate)} as <strong>Present</strong>?
               Students who already have a status are not changed.
             </p>
             <div className="flex justify-end gap-2">
@@ -2096,7 +2103,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 {editingSession.sessionCode} · Status: <span className="capitalize">{editingSession.status}</span>
               </p>
               <p className="mt-0.5 text-[11px] text-slate-500">
-                Date: {editingSession.sessionDate || selectedDate} (Asia/Manila)
+                Date: {formatShortDate(editingSession.sessionDate || selectedDate)} (Asia/Manila)
               </p>
             </div>
 
@@ -2281,7 +2288,7 @@ export const AttendanceMonitoring: React.FC = () => {
                             {liveCurrentSession.sessionCode}
                           </span>
                           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                            ({liveCurrentSession.sessionDate})
+                            ({formatShortDate(liveCurrentSession.sessionDate)})
                           </span>
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
@@ -2418,7 +2425,7 @@ export const AttendanceMonitoring: React.FC = () => {
                           <div className="space-y-1.5">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-extrabold text-[11px]">
-                                {session.sessionDate}
+                                {formatShortDate(session.sessionDate)}
                               </span>
                               <span className="font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
                                 {session.sessionCode}

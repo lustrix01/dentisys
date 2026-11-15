@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Archive, ArchiveRestore, BookOpen, Download, Pencil, Search, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Tabs from '../../components/Tabs';
-import { filterCourses } from './courseCatalogFilters';
+import { DEFAULT_COURSE_SORT, filterCourses } from './courseCatalogFilters';
 import type { CourseFilters } from './courseCatalogFilters';
+import { SortableHeader, ariaSort } from '../../components/SortableHeader';
 import { ListToolbar, SearchField } from '../../components/FilterBars';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
@@ -35,7 +36,7 @@ export const CourseCatalog: React.FC = () => {
   const [search, setSearch] = useState('');
   const [units, setUnits] = useState<CourseFilters['units']>('all');
   const [use, setUse] = useState<CourseFilters['use']>('all');
-  const [sort, setSort] = useState<CourseFilters['sort']>('code');
+  const [sort, setSort] = useState<CourseFilters['sort']>(DEFAULT_COURSE_SORT);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [formError, setFormError] = useState('');
   const [retiring, setRetiring] = useState<CatalogCourse | null>(null);
@@ -44,7 +45,7 @@ export const CourseCatalog: React.FC = () => {
   const load = async () => setCourses((await getAdminCoursesApi('all')).courses);
   useEffect(() => {
     load()
-      .catch(err => showFeedback(err instanceof Error ? err.message : 'Unable to load courses.', 'error'))
+      .catch(err => showFeedback(err instanceof Error ? err.message : 'Could not load courses. Reload the page.', 'error'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -79,7 +80,7 @@ export const CourseCatalog: React.FC = () => {
       showFeedback(done, 'success');
       await load();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to save the course.';
+      const message = err instanceof Error ? err.message : 'Could not save the course. Try again.';
       if (draft) setFormError(message); else { close(); showFeedback(message, 'error'); }
     } finally {
       setBusy(false);
@@ -141,12 +142,7 @@ export const CourseCatalog: React.FC = () => {
             </label>
             <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Use</span>
               <select aria-label="Use" value={use} onChange={event => setUse(event.target.value as CourseFilters['use'])} className={filterClass}>
-                <option value="all">Any use</option><option value="current">Used this school year</option><option value="unused">Not used</option>
-              </select>
-            </label>
-            <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Sort</span>
-              <select aria-label="Sort" value={sort} onChange={event => setSort(event.target.value as CourseFilters['sort'])} className={filterClass}>
-                <option value="code">Code A–Z</option><option value="title">Title A–Z</option><option value="classes">Most classes</option>
+                <option value="all">All courses</option><option value="current">Used this school year</option><option value="unused">Not used</option>
               </select>
             </label>
             <button type="button" onClick={clearFilters} className="min-h-10 rounded-lg px-3 text-xs font-bold text-accent-700 hover:bg-accent-50 dark:text-accent-300 dark:hover:bg-accent-950/40">Clear filters</button>
@@ -168,7 +164,7 @@ export const CourseCatalog: React.FC = () => {
           <div className="table-pin table-pin-first hidden rounded-3xl border border-slate-200/80 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900 sm:block">
             <table className="w-full min-w-[760px] text-left text-xs">
               <thead className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400"><tr>
-                <th className="px-5 py-3.5">Course Code</th><th className="px-4 py-3.5">Course Title</th><th className="px-4 py-3.5">Lecture Units</th><th className="px-4 py-3.5">Laboratory Units</th><th className="px-4 py-3.5">Total Units</th><th className="px-4 py-3.5">Classes</th><th className="px-4 py-3.5 text-right">Actions</th>
+                <th scope="col" aria-sort={ariaSort(sort, 'code')} className="px-5 py-3.5"><SortableHeader label="Course Code" sortKey="code" sort={sort} onSort={setSort} /></th><th scope="col" aria-sort={ariaSort(sort, 'title')} className="px-4 py-3.5"><SortableHeader label="Course Title" sortKey="title" sort={sort} onSort={setSort} /></th><th className="px-4 py-3.5">Lecture Units</th><th className="px-4 py-3.5">Laboratory Units</th><th scope="col" aria-sort={ariaSort(sort, 'units')} className="px-4 py-3.5"><SortableHeader label="Total Units" sortKey="units" sort={sort} onSort={setSort} /></th><th scope="col" aria-sort={ariaSort(sort, 'classes')} className="px-4 py-3.5"><SortableHeader label="Classes" sortKey="classes" first="desc" sort={sort} onSort={setSort} /></th><th className="px-4 py-3.5 text-right">Actions</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">{filtered.map(course => (
                 <tr key={course.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30">

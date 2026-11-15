@@ -299,6 +299,7 @@ $expectedMigrations = [
     '058_remedial_completed_at.sql',
     '059_email_outbox_invitation.sql',
     '060_course_retire.sql',
+    '061_name_degree_comma.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -2154,7 +2155,7 @@ $acceptedFacultyStmt->execute([$acceptFacultyId]);
 $acceptedFaculty = $acceptedFacultyStmt->fetch(PDO::FETCH_ASSOC);
 expect_same('faculty', $acceptedFaculty['role'] ?? null, 'Faculty acceptance preserves the invited role');
 expect_same('Active', $acceptedFaculty['status'] ?? null, 'Faculty acceptance requires no second approval');
-expect_true(password_verify('FacultyInvitePass123!', (string) ($acceptedFaculty['password_hash'] ?? '')), 'Faculty acceptance stores the created DentiSys password');
+expect_true(password_verify('FacultyInvitePass123!', (string) ($acceptedFaculty['password_hash'] ?? '')), 'Faculty acceptance stores the created DentiSYS password');
 [$facultyReplayStatus] = integration_http_json('/api/auth/faculty/activate', '', ['token' => $knownFacultyToken, 'password' => 'AnotherFacultyPass123!']);
 expect_same(400, $facultyReplayStatus, 'Consumed Faculty invitation cannot be reused');
 [$unknownFacultyTokenStatus] = integration_http_json('/api/auth/faculty/activate', '', ['token' => base64url_encode(random_bytes(32)), 'password' => 'AnotherFacultyPass123!']);
@@ -2667,7 +2668,7 @@ expect_same('Active', $acceptedStudent['status'] ?? null, 'Eligible invited Stud
 expect_same('active', $facultyRosterAccountStatus($facultyAccessToken, $invitedStudentId), 'Roster shows the Student as registered after acceptance');
 [$reinviteRegisteredStatus] = integration_http_json('/api/faculty/student-invitations', $facultyAccessToken, ['studentId' => (string) $invitedStudentId, 'classId' => (string) $studentClassId]);
 expect_same(409, $reinviteRegisteredStatus, 'A registered Student cannot be re-invited');
-expect_true(password_verify('StudentInvitePass123!', (string) ($acceptedStudent['password_hash'] ?? '')), 'Student acceptance stores the created DentiSys password');
+expect_true(password_verify('StudentInvitePass123!', (string) ($acceptedStudent['password_hash'] ?? '')), 'Student acceptance stores the created DentiSYS password');
 expect_same(null, $acceptedStudent['user_id'] ?? null, 'Student acceptance does not rewrite a Secretary link');
 expect_same((int) $pendingStudent['user_id'], (int) $acceptedStudent['student_account_user_id'], 'Student acceptance preserves its canonical account relationship');
 [$acceptedStudentLoginStatus, $acceptedStudentLoginBody] = integration_http_json('/api/auth/login', '', ['email' => $invitedStudentEmail, 'password' => 'StudentInvitePass123!']);

@@ -202,11 +202,11 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | What | Code | Actor | Stores | Dean | Change |
 |---|---|---|---|---|---|
 | Face-check consent given / withdrawn | biometric_consent_granted, biometric_consent_revoked | Student | consent before → after; **no row if unchanged** | yes | CHANGE |
-| Face enrolment started / succeeded / failed | biometric_enrollment_started, _succeeded, _failed | Student | status; failure code | no | KEEP |
-| Face enrolment deleted | biometric_enrollment_revoked, _revoked_by_dean, _revoked_inactive, _expired | Student, Dean, system | status before → after; never biometric data | yes | KEEP |
+| Face enrollment started / succeeded / failed | biometric_enrollment_started, _succeeded, _failed | Student | status; failure code | no | KEEP |
+| Face enrollment deleted | biometric_enrollment_revoked, _revoked_by_dean, _revoked_inactive, _expired | Student, Dean, system | status before → after; never biometric data | yes | KEEP |
 | Face check failed | biometric_verification_failed | Student | error code only, no score | no | KEEP |
 
-**O3 — Dean and biometrics.** The Dean sees consent changes and enrolment deletions (proof under the Data Privacy Act), not enrolment attempts or failed face checks.
+**O3 — Dean and biometrics.** The Dean sees consent changes and enrollment deletions (proof under the Data Privacy Act), not enrollment attempts or failed face checks.
 
 ### 5.8 Development only
 

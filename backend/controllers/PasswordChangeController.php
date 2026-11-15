@@ -28,7 +28,7 @@ function password_change_success_response(): void
     $response = auth_build_no_store_json_response([
         'status' => 'ok',
         'sign_in_again' => true,
-        'message' => 'Password changed successfully. Please sign in again.',
+        'message' => 'Password changed successfully. Sign in again.',
     ], 200);
     auth_controller_emit($response);
 }
@@ -132,9 +132,9 @@ function handle_password_change(): void
             ['field' => 'current_password', 'message' => 'Current password is incorrect.'],
         ]);
     } catch (RateLimitException $e) {
-        password_change_error_response('Too many password change attempts. Please try again later.', 429);
+        password_change_error_response('Too many password change attempts. Try again later.', 429);
     } catch (AuthException $e) {
-        password_change_error_response('Authentication required. Please sign in again.', 401);
+        password_change_error_response('Authentication required. Sign in again.', 401);
     } catch (\Throwable $e) {
         error_log('Password change error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));
         password_change_error_response('Internal server error.', 500);

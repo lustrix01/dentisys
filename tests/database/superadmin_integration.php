@@ -237,7 +237,7 @@ expect_same([[], []], [$saIds($saByOther), $saIds($saByGhost)], 'A course withou
 [, $saStuByCourse] = $saGet("/api/admin/people?kind=student&courseId={$saCourseId}&q=" . rawurlencode($saTag));
 [, $saStuByClass] = $saGet("/api/admin/people?kind=student&classId={$saBusyClass}&q=" . rawurlencode($saTag));
 [, $saStuByOtherClass] = $saGet("/api/admin/people?kind=student&classId={$saClassId}&q=" . rawurlencode($saTag));
-expect_same([[$saStudent], [$saStudent], []], [$saIds($saStuByCourse), $saIds($saStuByClass), $saIds($saStuByOtherClass)], 'Student course and class filters use the Active enrolment');
+expect_same([[$saStudent], [$saStudent], []], [$saIds($saStuByCourse), $saIds($saStuByClass), $saIds($saStuByOtherClass)], 'Student course and class filters use the Active enrollment');
 $saPast2 = $saGet("/api/admin/people?kind=student&classId={$saArchivedClass}")[0];
 $saBadFilters = [$saGet("/api/admin/people?kind=faculty&classId={$saBusyClass}")[0], $saGet('/api/admin/people?kind=student&classId=abc')[0], $saGet('/api/admin/people?kind=faculty&courseId=0')[0], $saGet('/api/admin/people?kind=faculty&courseId=1.5')[0], $saPast2];
 expect_same([422, 422, 422, 422, 422], $saBadFilters, 'classId for Faculty, a non-integer id and a class outside this school year are 422');
@@ -332,6 +332,105 @@ expect_true($saPendAgainStatus === 409 && ($saPendAgain['code'] ?? '') === 'no_p
 [, $saPendLeft] = $saGet('/api/admin/people?kind=student&status=invited&q=' . rawurlencode($saTag));
 expect_same([$saPendA['userId'], $saPendC['userId']], $saIds($saPendLeft), 'Only live invitations stay in the Invited list');
 
+// ---- Round 2 (docs/contracts/superadmin.md section 12): year level, expired invitations, sorting, Overview ----
+$pdo->prepare('UPDATE students SET year_level = 3 WHERE student_id = ?')->execute([$saStudentId]);
+$saQ = '&q=' . rawurlencode($saTag);
+[$saYlStatus, $saYl] = $saGet('/api/admin/people?kind=student&yearLevel=3' . $saQ);
+[, $saYlOther] = $saGet('/api/admin/people?kind=student&yearLevel=4' . $saQ);
+expect_true($saYlStatus === 200 && $saIds($saYl) === [$saStudent] && $saIds($saYlOther) === [], 'The yearLevel filter lists the Students of that year only');
+$saYlBad = [$saGet('/api/admin/people?kind=faculty&yearLevel=3'), $saGet('/api/admin/people?kind=student&yearLevel=0'), $saGet('/api/admin/people?kind=student&yearLevel=abc')];
+expect_same([422, 422, 422], array_column($saYlBad, 0), 'yearLevel for Faculty, zero and a non-number are 422');
+expect_same('yearLevel', $saYlBad[0][1]['errors'][0]['field'] ?? null, 'The yearLevel error names its field');
+[, $saOpts2] = $saGet('/api/admin/people/filters');
+expect_true(in_array(3, $saOpts2['yearLevels'] ?? [], true) && ($saOpts2['yearLevels'] ?? []) === array_values(array_unique($saOpts2['yearLevels'] ?? [])) && ($saOpts2['yearLevels'] ?? []) === (static function (array $l): array { sort($l); return $l; })($saOpts2['yearLevels'] ?? []), 'The filter options list the year levels ascending without repeats');
+
+$saPendD = $saPendingStudent('d', $saBusyClass, true);
+[$saExpStatus, $saExp] = $saGet('/api/admin/people?kind=student&status=invited&invitation=expired' . $saQ);
+[, $saExpAll] = $saGet('/api/admin/people?kind=student&status=all&invitation=expired' . $saQ);
+[, $saExpFac] = $saGet('/api/admin/people?kind=faculty&status=invited&invitation=expired' . $saQ);
+expect_true($saExpStatus === 200 && $saIds($saExp) === [$saPendD['userId']] && $saIds($saExpAll) === [$saPendD['userId']] && $saIds($saExpFac) === [], 'invitation=expired lists only invited people whose latest invitation expired');
+expect_same([422, 422], [$saGet('/api/admin/people?kind=student&status=active&invitation=expired')[0], $saGet('/api/admin/people?kind=student&invitation=soon')[0]], 'invitation=expired needs status invited or all; other values are 422');
+
+$saSorted = static fn(string $kind, string $sort, string $dir): array => $saGet("/api/admin/people?kind={$kind}&status=all&sort={$sort}&dir={$dir}" . $saQ)[1]['people'] ?? [];
+foreach ([['student', 'name'], ['student', 'studentNo'], ['faculty', 'name']] as [$saKind, $saSort]) {
+    $saAsc = array_column($saSorted($saKind, $saSort, 'asc'), 'userId');
+    $saDesc = array_column($saSorted($saKind, $saSort, 'desc'), 'userId');
+    expect_true(count($saAsc) > 1 && $saAsc === array_reverse($saDesc), "Sorting {$saKind}s by {$saSort} reverses with the direction");
+}
+$saClassCount = static fn(array $p): int => count(array_filter($p['classes'] ?? $p['enrolledClasses'] ?? [], static fn(array $c): bool => $c['current']));
+foreach (['faculty', 'student'] as $saKind) {
+    foreach (['asc', 'desc'] as $saDir) {
+        $saCounts = array_map($saClassCount, $saSorted($saKind, 'classes', $saDir));
+        $saWant = $saCounts;
+        $saDir === 'asc' ? sort($saWant) : rsort($saWant);
+        expect_true(count(array_unique($saCounts)) > 1 && $saCounts === $saWant, "Sorting {$saKind}s by classes {$saDir} orders by the current class count");
+        $saActs = array_column($saSorted($saKind, 'lastActivity', $saDir), 'lastActivityAt');
+        $saNulls = array_keys(array_filter($saActs, static fn($v): bool => $v === null));
+        $saNonNull = array_values(array_filter($saActs, static fn($v): bool => $v !== null));
+        $saNonNullSorted = $saNonNull;
+        $saDir === 'asc' ? sort($saNonNullSorted) : rsort($saNonNullSorted);
+        expect_true($saNulls !== [] && $saNulls === range(count($saNonNull), count($saActs) - 1) && $saNonNull === $saNonNullSorted, "Sorting {$saKind}s by lastActivity {$saDir} puts people who never signed in last");
+    }
+}
+$saBadSort = [$saGet('/api/admin/people?kind=student&sort=email')[1], $saGet('/api/admin/people?kind=student&dir=up')[1], $saGet('/api/admin/people?kind=faculty&sort=studentNo')[1]];
+expect_same([['sort'], ['dir'], ['sort']], array_map(static fn(array $b): array => array_column($b['errors'] ?? [], 'field'), $saBadSort), 'An unknown sort, direction or studentNo for Faculty is a 422 on that field');
+expect_same(422, $saGet('/api/admin/people?kind=faculty&sort=studentNo')[0], 'studentNo sorting is for Students only');
+
+// Overview: Dean only, one flat answer; its counts equal the People lists' totals.
+foreach ([['Faculty', $seedFacultyAccessToken, 403], ['Secretary', $secretaryAccessToken, 403], ['anonymous', '', 401]] as [$saWho, $saToken, $saWant]) {
+    expect_same($saWant, integration_http_get_json('/api/admin/overview', $saToken)[0], "{$saWho} gets {$saWant} on GET /api/admin/overview");
+}
+[$saOvStatus, $saOv] = $saGet('/api/admin/overview');
+expect_true($saOvStatus === 200 && ($saOv['status'] ?? '') === 'ok' && array_keys($saOv) === ['status', 'attention', 'accounts', 'signIns', 'security', 'yearLevels', 'sectionsByCourse', 'setup'], 'The overview answers one flat object with every section');
+$saTotal = static fn(string $query): int => (int) ($saGet('/api/admin/people?' . $query)[1]['total'] ?? -1);
+foreach (['faculty' => 'faculty', 'student' => 'students'] as $saKind => $saKey) {
+    expect_same([$saTotal("kind={$saKind}&status=active"), $saTotal("kind={$saKind}&status=invited"), $saTotal("kind={$saKind}&status=deactivated")],
+        array_values($saOv['accounts'][$saKey] ?? []), "Overview {$saKey} accounts equal the People totals by status");
+    expect_same(['on' => $saTotal("kind={$saKind}&status=active&twoFactor=on"), 'total' => $saTotal("kind={$saKind}&status=active")], $saOv['security']['twoFactor'][$saKey] ?? null, "Overview {$saKey} 2FA uses the People twoFactor rule over active accounts");
+    expect_same($saTotal("kind={$saKind}&status=active&activity=inactive30"), $saOv['attention']['inactive30'][$saKey] ?? null, "Overview inactive30 for {$saKey} uses the People activity rule");
+}
+expect_same(['faculty' => $saTotal('kind=faculty&status=invited&invitation=expired'), 'students' => $saTotal('kind=student&status=invited&invitation=expired')], $saOv['attention']['expiredInvitations'] ?? null, 'Overview expiredInvitations counts each kind');
+expect_same($saTotal('kind=faculty&status=active&classes=none'), $saOv['attention']['facultyWithoutClasses'] ?? null, 'Overview facultyWithoutClasses equals the People classes=none total');
+expect_true(is_bool($saOv['attention']['nextTermMissing'] ?? null) && array_key_exists('currentTerm', $saOv['setup'] ?? []) && isset($saOv['setup']['courses']['active'], $saOv['setup']['rooms']['retired']), 'The overview reports nextTermMissing and the setup strip');
+$saWeeks = array_column($saOv['signIns'] ?? [], 'weekStart');
+expect_true(count($saWeeks) === 12 && $saWeeks === (static function (array $w): array { sort($w); return $w; })($saWeeks)
+    && array_reduce($saWeeks, static fn(bool $ok, string $w): bool => $ok && date('N', strtotime($w)) === '1', true) && $saWeeks[11] === (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->modify('monday this week')->format('Y-m-d'), 'The overview has 12 Monday weeks ending with the current Manila week');
+expect_same(14, count($saOv['security']['failedSignIns'] ?? []), 'The overview has 14 days of failed sign-ins');
+$saTodayManila = (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d');
+expect_same($saTodayManila, ($saOv['security']['failedSignIns'][13]['day'] ?? null), 'The last failed-sign-in day is today in Manila');
+$saNewFac = $saAccount("sa-sif-{$saTag}@bicol-u.edu.ph", 'faculty', "Sa Signin Fac {$saTag}");
+$saNewStu = $saAccount("sa-sis-{$saTag}@bicol-u.edu.ph", 'student', "Sa Signin Stu {$saTag}", "SI-{$saTag}");
+$readWrite(['user_id' => $saNewFac, 'login_email' => "sa-sif-{$saTag}@bicol-u.edu.ph", 'role' => 'faculty', 'display_name' => 'Sa Signin Fac'], 'auth', 'login_success', 'Success', "Sa sign-in {$saTag}");
+$readWrite(['user_id' => $saNewStu, 'login_email' => "sa-sis-{$saTag}@bicol-u.edu.ph", 'role' => 'student', 'display_name' => 'Sa Signin Stu'], 'auth', 'google_login_success', 'Success', "Sa Google sign-in {$saTag}");
+$readWrite(null, 'auth', 'login_failed', 'Failed', "Sa failed {$saTag}");
+$readWrite(null, 'auth', 'google_login_denied', 'Failed', "Sa denied {$saTag}");
+[, $saOv2] = $saGet('/api/admin/overview');
+expect_same([1, 1, 2], [($saOv2['signIns'][11]['faculty'] ?? 0) - ($saOv['signIns'][11]['faculty'] ?? 0), ($saOv2['signIns'][11]['students'] ?? 0) - ($saOv['signIns'][11]['students'] ?? 0),
+    ($saOv2['security']['failedSignIns'][13]['count'] ?? 0) - ($saOv['security']['failedSignIns'][13]['count'] ?? 0)], 'New sign-ins count as distinct users per role in this week, and failures in today');
+
+// UI-001 rule 7: the stored display name carries the comma before degrees (identity trigger from migration 061).
+$saDegree = $saAccount("sa-deg-{$saTag}@bicol-u.edu.ph", 'faculty', "Sa Deg {$saTag}");
+$saSetDegree = static function (string $suffix) use ($pdo, $saDegree, $saTag): void {
+    $pdo->prepare("UPDATE person_identities SET first_name = 'Roberto', middle_name = 'Lim', last_name = ?, name_suffix = ? WHERE person_id = (SELECT person_id FROM user_accounts WHERE user_id = ?)")->execute(["Santos{$saTag}", $suffix, $saDegree]);
+    $pdo->prepare('UPDATE user_accounts SET display_name = display_name WHERE user_id = ?')->execute([$saDegree]); // fires the identity trigger
+};
+$saSetDegree('DMD');
+expect_same("Roberto Lim Santos{$saTag}, DMD", $pdo->query("SELECT display_name FROM user_accounts WHERE user_id = {$saDegree}")->fetchColumn(), 'The identity trigger puts a comma before a degree');
+$saSetDegree('Jr.');
+expect_same("Roberto Lim Santos{$saTag} Jr.", $pdo->query("SELECT display_name FROM user_accounts WHERE user_id = {$saDegree}")->fetchColumn(), 'The identity trigger adds no comma before Jr.');
+// The data migration recomposes only names equal to the old composition: simulate old rows, then run its UPDATE (the last statement of the file).
+$saMigration = (string) file_get_contents(__DIR__ . '/../../database/migrations/061_name_degree_comma.sql');
+$saUpdateSql = substr($saMigration, (int) strrpos($saMigration, "\nUPDATE user_accounts"));
+$saOld = $saAccount("sa-old-{$saTag}@bicol-u.edu.ph", 'faculty', "Ana Cruz{$saTag} DMD"); // old composition: no comma
+$saHand = $saAccount("sa-hand-{$saTag}@bicol-u.edu.ph", 'faculty', 'Dr. Ben (hand edited)');
+$saIdentity = $pdo->prepare('UPDATE person_identities SET first_name = ?, last_name = ?, name_suffix = ? WHERE person_id = (SELECT person_id FROM user_accounts WHERE user_id = ?)'); // does not fire the user_accounts trigger
+$saIdentity->execute(['Ana', "Cruz{$saTag}", 'DMD', $saOld]);
+$saIdentity->execute(['Ben', "Reyes{$saTag}", 'PhD', $saHand]);
+$pdo->exec($saUpdateSql);
+expect_same(["Ana Cruz{$saTag}, DMD", 'Dr. Ben (hand edited)'], [$pdo->query("SELECT display_name FROM user_accounts WHERE user_id = {$saOld}")->fetchColumn(), $pdo->query("SELECT display_name FROM user_accounts WHERE user_id = {$saHand}")->fetchColumn()], 'Migration 061 recomposes an old-style name and leaves a hand-edited one untouched');
+$pdo->exec($saUpdateSql);
+expect_same("Ana Cruz{$saTag}, DMD", $pdo->query("SELECT display_name FROM user_accounts WHERE user_id = {$saOld}")->fetchColumn(), 'Migration 061 is idempotent');
+
 // ---- Part A: class-work audit scope ----
 $saStudentRow = $pdo->prepare("INSERT INTO students (student_number, first_name, last_name, bu_email, status) VALUES (?, 'Sa', ?, ?, 'active') RETURNING student_id");
 $saStudentRow->execute(["SW-{$saTag}-1", "Fixture{$saTag}", "sw1-{$saTag}@bicol-u.edu.ph"]);
@@ -358,7 +457,7 @@ expect_true(($saWork['entries'][0]['classLabel'] ?? null) !== null && in_array((
 $saCount = static function (string $query) use ($saGet, $saTag): int {
     return (int) ($saGet('/api/admin/audit-logs?scope=class_work&q=' . rawurlencode($saTag) . $query)[1]['total'] ?? -1);
 };
-expect_same([2, 0], [$saCount('&studentId=' . $saWorkStudent), $saCount('&studentId=' . $saOtherStudent)], 'The Student filter finds rows by stored student and by enrolment, and no one else\'s');
+expect_same([2, 0], [$saCount('&studentId=' . $saWorkStudent), $saCount('&studentId=' . $saOtherStudent)], 'The Student filter finds rows by stored student and by enrollment, and no one else\'s');
 expect_same([2, 0], [$saCount('&classId=' . $readOwnClass), $saCount('&classId=' . $readOtherClass)], 'The class filter matches the row\'s class');
 expect_same([2, 0], [$saCount('&facultyId=' . $readFaculty['user_id']), $saCount('&facultyId=' . $saPast)], 'The Faculty filter matches work in that Faculty member\'s classes');
 expect_same([1, 1], [$saCount('&area=Grading'), $saCount('&area=Retention')], 'The area chips narrow the list');

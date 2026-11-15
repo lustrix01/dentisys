@@ -73,7 +73,7 @@ export const validateBicolUEmail = (
   const basicEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   if (!basicEmailRegex.test(trimmedEmail)) {
-    return { isValid: false, message: 'Please enter a valid email format.' };
+    return { isValid: false, message: 'Enter a valid email format.' };
   }
 
   if (Array.isArray(allowedDomains) && allowedDomains.length > 0) {
@@ -281,6 +281,6 @@ export const authenticateUser = (
   void pass;
   return {
     success: false,
-    message: 'Invalid email or password. Please check your credentials and try again.',
+    message: 'Invalid email or password. Check your credentials and try again.',
   };
 };

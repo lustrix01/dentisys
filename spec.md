@@ -1,10 +1,10 @@
-# DentiSys Product Specification
+# DentiSYS Product Specification
 
-> Authoritative product decisions and behavioral guardrails for DentiSys.
+> Authoritative product decisions and behavioral guardrails for DentiSYS.
 
 ## 0. Authority
 
-`spec.md` defines approved DentiSys product behavior.
+`spec.md` defines approved DentiSYS product behavior.
 
 Agents MUST read the relevant sections before planning or implementing work that affects them.
 
@@ -77,7 +77,7 @@ Use:
 
 **Status: CURRENT**
 
-DentiSys has four application roles:
+DentiSYS has four application roles:
 
 * Admin
 * Faculty
@@ -86,9 +86,9 @@ DentiSys has four application roles:
 
 Every Admin (Dean) account may use Superadmin mode (ADM-001); it is not a fifth role.
 
-Roles, permissions, approval, eligibility, and authorization are controlled by DentiSys.
+Roles, permissions, approval, eligibility, and authorization are controlled by DentiSYS.
 
-External identity providers MUST NOT assign or elevate DentiSys roles.
+External identity providers MUST NOT assign or elevate DentiSYS roles.
 
 ## SYS-002 — Preserve unrelated behavior
 
@@ -121,9 +121,9 @@ Do not introduce architecture, abstractions, or extensibility solely for hypothe
 
 **Status: APPROVED**
 
-DentiSys supports two normal primary authentication methods:
+DentiSYS supports two normal primary authentication methods:
 
-1. institutional email + DentiSys password;
+1. institutional email + DentiSYS password;
 2. Google Sign-In.
 
 Google Sign-In supplements password authentication; it does not replace it.
@@ -134,37 +134,37 @@ Conceptually:
 
 ```text
 Password ─┐
-          ├─> DentiSys account -> MFA decision -> DentiSys session
+          ├─> DentiSYS account -> MFA decision -> DentiSYS session
 Google ───┘
 ```
 
-## AUTH-002 — One DentiSys account
+## AUTH-002 — One DentiSYS account
 
 **Status: APPROVED**
 
-Password and Google authentication MUST resolve to the same logical DentiSys account.
+Password and Google authentication MUST resolve to the same logical DentiSYS account.
 
-Google integration MUST NOT create a second parallel account when the institutional identity already belongs to an existing DentiSys account.
+Google integration MUST NOT create a second parallel account when the institutional identity already belongs to an existing DentiSYS account.
 
-Google identity linking MUST prevent silent reassignment of an existing Google identity to another DentiSys account.
+Google identity linking MUST prevent silent reassignment of an existing Google identity to another DentiSYS account.
 
 ## AUTH-003 — Google identity verification
 
 **Status: APPROVED**
 
-Google identity MUST be verified by the backend before DentiSys authentication succeeds.
+Google identity MUST be verified by the backend before DentiSYS authentication succeeds.
 
 A browser-supplied email alone is not sufficient authentication.
 
-Google authentication MUST use a stable provider identity when persistently linking a Google account to DentiSys.
+Google authentication MUST use a stable provider identity when persistently linking a Google account to DentiSYS.
 
-Google verification proves identity only; DentiSys remains responsible for authorization and account eligibility.
+Google verification proves identity only; DentiSYS remains responsible for authorization and account eligibility.
 
 ## AUTH-004 — Institutional domains
 
 **Status: APPROVED**
 
-DentiSys accepts only official `@bicol-u.edu.ph` addresses for account identity, Student records, invitations, sign-in, password recovery and outgoing application email. Existing database records and active enrollments are not rewritten; a non-BU address cannot be used for a new or updated identity, class enrollment, activation, invitation, sign-in, recovery or outgoing email until corrected to an official address.
+DentiSYS accepts only official `@bicol-u.edu.ph` addresses for account identity, Student records, invitations, sign-in, password recovery and outgoing application email. Existing database records and active enrollments are not rewritten; a non-BU address cannot be used for a new or updated identity, class enrollment, activation, invitation, sign-in, recovery or outgoing email until corrected to an official address.
 
 Both password-based and Google-assisted workflows MUST obey this policy.
 
@@ -174,7 +174,7 @@ History: original multi-domain allowlist; 2026-11-09 single official domain only
 
 **Status: CURRENT**
 
-Email + password authentication remains a supported first-party DentiSys authentication method.
+Email + password authentication remains a supported first-party DentiSYS authentication method.
 
 Google support MUST NOT:
 
@@ -190,7 +190,7 @@ Owner-approved amendment (2026-11-13): Every flow that creates, changes or reset
 
 **Status: CURRENT**
 
-DentiSys uses optional authenticator-app/TOTP MFA with recovery codes.
+DentiSYS uses optional authenticator-app/TOTP MFA with recovery codes.
 
 Password and Google authentication MUST converge on the same existing MFA boundary.
 
@@ -200,7 +200,7 @@ Password ─┐
 Google ───┘
 ```
 
-Google Sign-In MUST NOT bypass required DentiSys MFA.
+Google Sign-In MUST NOT bypass required DentiSYS MFA.
 
 The Dean may reset a Faculty or Student account's 2FA (ADM-001); the reset ends the account's sessions and emails the person.
 
@@ -210,7 +210,7 @@ Email-code authentication/MFA is retired and MUST NOT be reintroduced unless exp
 
 **Status: CURRENT**
 
-DentiSys remains responsible for application sessions after primary authentication.
+DentiSYS remains responsible for application sessions after primary authentication.
 
 Existing session behavior includes:
 
@@ -225,13 +225,13 @@ The browser's session-refresh request MUST be allowed to complete when the page 
 
 Owner-approved amendment (2026-11-11): A session expires after 30 minutes without user activity, while the existing seven-day absolute session lifetime remains the maximum. The server checks the idle limit on authenticated requests and refresh, updates `auth_sessions.last_seen_at` while the session is active, and revokes the session and its refresh tokens when refresh finds it idle-expired. The frontend tracks user activity across open tabs, signs the user out at the idle limit, and clears authentication immediately when the server rejects an expired session. Access-token expiry alone refreshes the access token while the session is still active; it does not sign out an active user.
 
-Google credentials MUST NOT replace the DentiSys application-session model.
+Google credentials MUST NOT replace the DentiSYS application-session model.
 
 ## AUTH-008 — Authentication provenance
 
 **Status: APPROVED**
 
-DentiSys may record how the primary authentication occurred.
+DentiSYS may record how the primary authentication occurred.
 
 Recognized authentication sources include:
 
@@ -258,15 +258,15 @@ Adding Google authentication MUST NOT weaken existing mock-identity safeguards.
 ## AUTH-010 — Existing-account Google linking
 **Status: APPROVED**
 
-An existing DentiSys account MUST NOT be silently linked to a Google identity based only on a matching email address.
+An existing DentiSYS account MUST NOT be silently linked to a Google identity based only on a matching email address.
 
 On first Google sign-in for an existing unlinked account:
 
-1. DentiSys verifies the Google identity and approved institutional domain.
-2. DentiSys may locate the existing account using the verified institutional email.
-3. The user MUST confirm ownership of that DentiSys account using the existing DentiSys password.
+1. DentiSYS verifies the Google identity and approved institutional domain.
+2. DentiSYS may locate the existing account using the verified institutional email.
+3. The user MUST confirm ownership of that DentiSYS account using the existing DentiSYS password.
 4. Existing MFA MUST also be completed when enabled.
-5. Only after successful ownership confirmation may the verified Google `sub` be bound to the DentiSys account.
+5. Only after successful ownership confirmation may the verified Google `sub` be bound to the DentiSYS account.
 
 After binding:
 
@@ -294,15 +294,15 @@ Owner decision (2026-11-15): the Dean may resend or revoke a pending Student inv
 
 **Status: CURRENT**
 
-Faculty and Student invitation acceptance MUST require creation of a DentiSys password. Existing institutional email validation and role-specific identity and eligibility requirements remain authoritative.
+Faculty and Student invitation acceptance MUST require creation of a DentiSYS password. Existing institutional email validation and role-specific identity and eligibility requirements remain authoritative.
 
 ## REG-003 — Google linking after activation
 
 **Status: APPROVED**
 
-Invitation acceptance is password-only. Faculty and Students create their DentiSys password to activate the account.
+Invitation acceptance is password-only. Faculty and Students create their DentiSYS password to activate the account.
 
-Google Sign-In may be linked only after activation, from the user's profile. Linking follows the AUTH-010 ownership confirmation (password, plus MFA when enabled) and requires the verified Google email to match the account's institutional email. A completed Google-linked account MUST support both Google Sign-In and institutional email + DentiSys password.
+Google Sign-In may be linked only after activation, from the user's profile. Linking follows the AUTH-010 ownership confirmation (password, plus MFA when enabled) and requires the verified Google email to match the account's institutional email. A completed Google-linked account MUST support both Google Sign-In and institutional email + DentiSYS password.
 
 ## REG-004 — Google cannot bypass account controls
 
@@ -330,7 +330,7 @@ Only an Admin may invite a Faculty member. The Dean invitation itself is the Fac
 
 **Status: CURRENT**
 
-A Class Secretary is a Student appointed to a class section. Faculty appoint a Student of their own current-year section. A Student may be appointed Class Secretary of more than one current-year section, including sections of different Faculty. Each section has at most one Secretary, counting active and pending appointments together. The appointment uses the Student's existing DentiSys account. If the Student has no account yet, one invitation both activates the Student account (the Student sets a password) and records the appointment. Faculty may remove an appointment; removing or ending one appointment leaves the others, and the account returns to plain Student access only when no current appointment remains. An appointment ends automatically when its section is archived or its school year ends. Unenrolling a Student from a section also removes them as that section's Class Secretary; their appointments in other sections are unaffected.
+A Class Secretary is a Student appointed to a class section. Faculty appoint a Student of their own current-year section. A Student may be appointed Class Secretary of more than one current-year section, including sections of different Faculty. Each section has at most one Secretary, counting active and pending appointments together. The appointment uses the Student's existing DentiSYS account. If the Student has no account yet, one invitation both activates the Student account (the Student sets a password) and records the appointment. Faculty may remove an appointment; removing or ending one appointment leaves the others, and the account returns to plain Student access only when no current appointment remains. An appointment ends automatically when its section is archived or its school year ends. Unenrolling a Student from a section also removes them as that section's Class Secretary; their appointments in other sections are unaffected.
 
 History: 2026-09-29 one section per Secretary; 2026-10-18 several sections allowed; 2026-10-22 unenrolling ends the appointment. Records: docs/archive/.
 
@@ -348,7 +348,7 @@ Google cannot substitute for the Faculty invitation or Student eligibility; it m
 
 **Status: APPROVED**
 
-A person holds one kind of DentiSys identity: either a Student (who may also be appointed Class Secretary) or a staff member (Faculty, or the Dean/Admin). An email that belongs to a Faculty or Dean account cannot be used for a Student record, a Student invitation, or a Secretary appointment. An email that belongs to a Student record or a Student or Secretary account, or that belongs to the Dean, cannot be invited as Faculty.
+A person holds one kind of DentiSYS identity: either a Student (who may also be appointed Class Secretary) or a staff member (Faculty, or the Dean/Admin). An email that belongs to a Faculty or Dean account cannot be used for a Student record, a Student invitation, or a Secretary appointment. An email that belongs to a Student record or a Student or Secretary account, or that belongs to the Dean, cannot be invited as Faculty.
 
 ## REG-009 — Account email is permanent after activation
 
@@ -366,13 +366,13 @@ On a database with no Dean/Admin account, the first Dean invitation is created f
 
 # 4. Authorization and Security
 
-## SEC-001 — DentiSys authorization
+## SEC-001 — DentiSYS authorization
 
 **Status: CURRENT**
 
 Authentication establishes identity.
 
-DentiSys remains authoritative for:
+DentiSYS remains authoritative for:
 
 * RBAC;
 * account status;
@@ -382,7 +382,7 @@ DentiSys remains authoritative for:
 * Student eligibility;
 * application permissions.
 
-An authenticated external identity is not automatically an authorized DentiSys user.
+An authenticated external identity is not automatically an authorized DentiSYS user.
 
 ## SEC-002 — RBAC
 
@@ -396,7 +396,7 @@ Google-authenticated users receive no additional privilege solely because Google
 
 **Status: CURRENT**
 
-Password reset remains supported because password authentication remains supported for all normal DentiSys accounts, including Google-linked accounts.
+Password reset remains supported because password authentication remains supported for all normal DentiSYS accounts, including Google-linked accounts.
 
 ## SEC-004 — Rate limiting and audit
 
@@ -566,11 +566,11 @@ History: 2026-10-12 three tabs, At-Risk and Privacy Consent notices removed; 202
 
 **Status: APPROVED**
 
-When authorized Faculty creates or reactivates a class enrollment, DentiSys creates a persisted in-app notice for each active Student/Secretary account canonically linked to that Student. An email match does not establish a recipient. Enrollment, audit and notification commit or roll back together. An already-active enrollment creates no new notice. Each class/account pair receives at most one enrollment notice, including subsequent reactivations. A Student without an active linked account receives no notice, and account activation does not replay missed notices.
+When authorized Faculty creates or reactivates a class enrollment, DentiSYS creates a persisted in-app notice for each active Student/Secretary account canonically linked to that Student. An email match does not establish a recipient. Enrollment, audit and notification commit or roll back together. An already-active enrollment creates no new notice. Each class/account pair receives at most one enrollment notice, including subsequent reactivations. A Student without an active linked account receives no notice, and account activation does not replay missed notices.
 
 ---
 
-The following capabilities are currently part of DentiSys and MUST NOT be removed as incidental scope.
+The following capabilities are currently part of DentiSYS and MUST NOT be removed as incidental scope.
 
 | Capability                              | Status   |
 | --------------------------------------- | -------- |
@@ -603,7 +603,7 @@ Detailed implementation status belongs in `docs/features.md`, not here.
 
 **Status: CURRENT**
 
-PostgreSQL is the active DentiSys database.
+PostgreSQL is the active DentiSYS database.
 
 MariaDB material under the repository archive is historical and not active runtime state.
 
@@ -686,11 +686,11 @@ The biometric, attendance, and Secretary requirements in this section are approv
 
 **Implementation: research prototype implemented**
 
-Facial biometrics is used only for attendance verification. It MUST NOT be used for DentiSys login, password replacement, account authentication replacement, Student identity discovery, civil or institutional identity proofing, classroom-wide recognition, or general-purpose face recognition.
+Facial biometrics is used only for attendance verification. It MUST NOT be used for DentiSYS login, password replacement, account authentication replacement, Student identity discovery, civil or institutional identity proofing, classroom-wide recognition, or general-purpose face recognition.
 
-The Student MUST already be authenticated to their own DentiSys account. Biometric verification answers only whether the live face matches the protected reference enrolled for that authenticated Student. It MUST use strict 1:1 verification.
+The Student MUST already be authenticated to their own DentiSYS account. Biometric verification answers only whether the live face matches the protected reference enrolled for that authenticated Student. It MUST use strict 1:1 verification.
 
-DentiSys MUST NOT perform 1:N identification, search all Students, identify an unknown face, return another Student as a possible match, perform classroom-wide identification, or search the Student population for duplicate faces. If another person accesses a Student account and enrolls their own face, biometrics does not discover or establish that person's actual identity. This is an intentional privacy boundary.
+DentiSYS MUST NOT perform 1:N identification, search all Students, identify an unknown face, return another Student as a possible match, perform classroom-wide identification, or search the Student population for duplicate faces. If another person accesses a Student account and enrolls their own face, biometrics does not discover or establish that person's actual identity. This is an intentional privacy boundary.
 
 Facial detection MUST use the YuNet face detector through OpenCV. Facial verification MUST use the SFace face-recognition model through OpenCV, comparing face embeddings. SFace MUST remain restricted to strict authenticated-Student 1:1 verification and MUST NOT be used for 1:N identification or Student discovery.
 
@@ -704,13 +704,13 @@ Only the Student may enroll, revoke, or re-enroll their own facial biometric thr
 
 Explicit, voluntary Student consent MUST precede any biometric capture or processing. A valid enrollment becomes active automatically after consent, eligibility, capture-quality, liveness/PAD, and applicable provider checks pass. Faculty, Secretary, or Admin approval is not required for routine successful enrollment; a routine approval queue is excluded.
 
-Students may refuse biometric processing or later revoke consent. Refusal or inability to use biometrics MUST NOT block DentiSys access, normal Student functionality, or legitimate attendance credit. Authorized manual attendance, with Secretary-assisted manual attendance as the primary fallback, MUST remain available for refusal, revocation, inability to enroll, repeated failure, camera or accessibility limitations, geofence limitations, and unavailable biometric infrastructure.
+Students may refuse biometric processing or later revoke consent. Refusal or inability to use biometrics MUST NOT block DentiSYS access, normal Student functionality, or legitimate attendance credit. Authorized manual attendance, with Secretary-assisted manual attendance as the primary fallback, MUST remain available for refusal, revocation, inability to enroll, repeated failure, camera or accessibility limitations, geofence limitations, and unavailable biometric infrastructure.
 
 The consent disclosure MUST state the attendance-only purpose; the biometric material processed; that raw facial images are not retained; that a protected reference is retained and expires every semester; revocation and deletion behavior; who may access enrollment status; the manual attendance alternative; and that revocation does not erase historical attendance. This scope applies to adult university Students.
 
 Before real Student deployment, final privacy and consent wording MUST be reviewed and approved by the research team, adviser, relevant University authority, and University Data Protection Officer. This named review is the required institutional gate for real Student deployment; real deployment remains deferred until that gate and the remaining technical approvals in BIO-007 are complete.
 
-For the DEL-001 demonstration deployment, only DentiSys team members enroll facial biometrics. Enrolling volunteer Students requires the BIO-002 institutional review, or a later Owner-approved amendment.
+For the DEL-001 demonstration deployment, only DentiSYS team members enroll facial biometrics. Enrolling volunteer Students requires the BIO-002 institutional review, or a later Owner-approved amendment.
 
 ## BIO-003 — Temporary captures, protected reference, and infrastructure boundary
 
@@ -722,9 +722,9 @@ Raw photographs, enrollment images, camera frames, verification images, and fail
 
 Of the biometric material, only the protected reference required for future 1:1 verification may be retained. Retained facial references (SFace embeddings) are distinct from raw imagery and MUST be stored in dedicated biometric storage excluded from ordinary application/database backups. Normal UI and API access MUST NOT retrieve raw references, templates, embeddings, or equivalent biometric material.
 
-After collection by the authorized Student-owned browser/device, biometric data MUST remain within infrastructure controlled by the DentiSys deployment. The browser/device is an authorized capture endpoint and MAY hold a capture temporarily for transmission, but it MUST NOT persist biometric material beyond the active operation. Biometric processing MUST NOT be delegated to an unapproved third-party or cloud provider. The intended research deployment may use one server and a logically separate biometric component whose boundary permits later relocation to separate infrastructure without changing product behavior. This rule does not select a container, service protocol, database, filesystem, object store, or other storage engine.
+After collection by the authorized Student-owned browser/device, biometric data MUST remain within infrastructure controlled by the DentiSYS deployment. The browser/device is an authorized capture endpoint and MAY hold a capture temporarily for transmission, but it MUST NOT persist biometric material beyond the active operation. Biometric processing MUST NOT be delegated to an unapproved third-party or cloud provider. The intended research deployment may use one server and a logically separate biometric component whose boundary permits later relocation to separate infrastructure without changing product behavior. This rule does not select a container, service protocol, database, filesystem, object store, or other storage engine.
 
-All biometric captures, temporary facial images, protected references, and temporary location data transmitted between a Student device, DentiSys, and the biometric component MUST use protected transport before real Student deployment.
+All biometric captures, temporary facial images, protected references, and temporary location data transmitted between a Student device, DentiSYS, and the biometric component MUST use protected transport before real Student deployment.
 
 ## BIO-004 — Biometric information protection rationale
 
@@ -746,7 +746,7 @@ An enrollment expires every semester. "Semester end" is the end date of the Dean
 
 Usable biometric material MUST be invalidated and deleted when the enrollment expires at semester end, the Student revokes consent, Admin revokes enrollment, the linked Student account is deleted, the Student becomes inactive, or re-enrollment replaces the old enrollment. Re-enrollment MUST replace the previous usable reference; old usable templates MUST NOT be retained for historical audit. An audit record may retain that expiration, revocation, deletion, or replacement occurred without retaining the biometric material.
 
-Biometric templates MUST NOT be included in normal DentiSys application backups. If biometric storage is lost, Students MUST re-enroll. System-wide disabling of biometrics and deletion of biometric data are separate operations. Incompatible templates from a future biometric engine require Student re-enrollment; template migration is not authorized unless separately approved. Legitimate historical attendance MUST remain preserved.
+Biometric templates MUST NOT be included in normal DentiSYS application backups. If biometric storage is lost, Students MUST re-enroll. System-wide disabling of biometrics and deletion of biometric data are separate operations. Incompatible templates from a future biometric engine require Student re-enrollment; template migration is not authorized unless separately approved. Legitimate historical attendance MUST remain preserved.
 
 ## BIO-006 — Liveness, capture quality, outcomes, and retries
 
@@ -754,7 +754,7 @@ Biometric templates MUST NOT be included in normal DentiSys application backups.
 
 **Implementation: research prototype implemented**
 
-Production biometric attendance MUST use randomized active challenge-response liveness or presentation-attack detection. Challenges MUST be server-generated, short-lived, and single-use. Each enrollment attempt MUST request two distinct randomized actions in randomized order from blink, turn head left, and turn head right. Each attendance attempt MUST request one randomized action from the same set. The browser MAY display the challenge but MUST NOT be authoritative for pass/fail. The DentiSys biometric component MUST verify the action sequence using temporary frames. MediaPipe Face Landmarker is approved only for landmark, transformation, and blendshape analysis used for liveness; it MUST NOT replace YuNet detection or SFace verification. Raw liveness frames MUST NOT be retained. Numeric liveness, blink, head-pose, and timing thresholds remain deferred.
+Production biometric attendance MUST use randomized active challenge-response liveness or presentation-attack detection. Challenges MUST be server-generated, short-lived, and single-use. Each enrollment attempt MUST request two distinct randomized actions in randomized order from blink, turn head left, and turn head right. Each attendance attempt MUST request one randomized action from the same set. The browser MAY display the challenge but MUST NOT be authoritative for pass/fail. The DentiSYS biometric component MUST verify the action sequence using temporary frames. MediaPipe Face Landmarker is approved only for landmark, transformation, and blendshape analysis used for liveness; it MUST NOT replace YuNet detection or SFace verification. Raw liveness frames MUST NOT be retained. Numeric liveness, blink, head-pose, and timing thresholds remain deferred.
 
 The system MUST reasonably resist printed facial photographs, a face image displayed on another screen, prerecorded or displayed facial video, and straightforward replay attacks. It MUST continue to support ordinary browser-accessible phone, tablet, and desktop cameras and MUST NOT require depth, infrared, or Face ID-equivalent hardware or claim equivalent assurance.
 
@@ -770,21 +770,21 @@ Students may make legitimate retries while biometric attendance remains open. Th
 
 **Technical selections: APPROVED as stated below; remaining parameters: DEFERRED**
 
-Facial detection MUST use the YuNet face detector through OpenCV. Facial verification MUST use the SFace face-recognition model through OpenCV, comparing face embeddings. SFace MUST be restricted to strict authenticated-Student 1:1 verification; DentiSys MUST NOT perform 1:N identification, unknown-person identification, nearest-Student discovery, classroom-wide recognition, or searches across Student references.
+Facial detection MUST use the YuNet face detector through OpenCV. Facial verification MUST use the SFace face-recognition model through OpenCV, comparing face embeddings. SFace MUST be restricted to strict authenticated-Student 1:1 verification; DentiSYS MUST NOT perform 1:N identification, unknown-person identification, nearest-Student discovery, classroom-wide recognition, or searches across Student references.
 
-Haar Cascade detection and LBPH verification are retired: offline calibration on the LFW dataset, run through the DentiSys pipeline, showed LBPH accepted about 46% of impostor attempts at the provisional rule, and no LBPH threshold rejected impostors while passing genuine users reliably. The enrollment samples are combined into one averaged SFace template, which is the only retained facial reference. LBPH references expired when the switch was deployed, their encrypted files were deleted, and enrolled users re-enrolled.
+Haar Cascade detection and LBPH verification are retired: offline calibration on the LFW dataset, run through the DentiSYS pipeline, showed LBPH accepted about 46% of impostor attempts at the provisional rule, and no LBPH threshold rejected impostors while passing genuine users reliably. The enrollment samples are combined into one averaged SFace template, which is the only retained facial reference. LBPH references expired when the switch was deployed, their encrypted files were deleted, and enrolled users re-enrolled.
 
-Biometric processing MUST remain inside the same single-server DentiSys Docker deployment. The biometric component MAY be logically separable enough for future relocation, but this amendment does not authorize distributed architecture, Kubernetes, a cloud biometric provider, or multi-server deployment.
+Biometric processing MUST remain inside the same single-server DentiSYS Docker deployment. The biometric component MAY be logically separable enough for future relocation, but this amendment does not authorize distributed architecture, Kubernetes, a cloud biometric provider, or multi-server deployment.
 
 Normal enrollment MUST require 20 usable facial samples, and at most 30 usable samples MAY be accepted during one enrollment operation. Failed quality or liveness samples MUST NOT count. Raw enrollment samples MUST be discarded after protected-reference generation or an aborted enrollment.
 
-The SFace matching threshold MUST be server-controlled. Calibration MUST use the actual DentiSys camera, preprocessing, and enrollment pipeline and consider false acceptance and false rejection. End users MUST NOT configure the threshold. One matching frame MUST NOT authorize attendance; repeated consistent matching is required.
+The SFace matching threshold MUST be server-controlled. Calibration MUST use the actual DentiSYS camera, preprocessing, and enrollment pipeline and consider false acceptance and false rejection. End users MUST NOT configure the threshold. One matching frame MUST NOT authorize attendance; repeated consistent matching is required.
 
 The approved face-matching values are a YuNet detection score of at least 0.9, a minimum face size of 120 pixels, a sharpness (Laplacian variance) of at least 60 on the aligned face, an SFace cosine similarity of at least 0.44, and at least 3 matching frames in one attempt, counted among the attempt's frames (for attendance, the 8 forward-facing frames plus the action frame), at least 3 of which must be usable. A frame counts only when exactly one face meets the score and size limits. Enrollment is unchanged (20 to 30 usable samples, above). An attendance attempt uses one randomized action and 8 usable forward-facing frames plus the action frame. These values were calibrated so that no impostor attempt in the calibration set is accepted while at least 95% of genuine attempts pass on a good camera; the 8-frame attendance result of about 94% is accepted by the Owner, since a retry covers the difference. In offline calibration on 200 LFW people (about 185 genuine and 555 impostor attempts per camera profile), the values accepted no impostor attempt and passed about 95% of genuine attempts with up to 30 frames on both the good-camera and older-phone profiles, counting attempts with too few clear frames as not passing; with 8 usable frames they accepted no impostor attempt and passed about 94% of genuine attempts. The LFW set cannot show error rates below about 1 in 1,000. Team re-enrollment, live genuine and impostor tests on the demo server, and live testing on real cameras (which must also confirm that one action still resists printed photographs and on-screen replays) still follow.
 
 History: 2026-10-11 YuNet and SFace replace Haar and LBPH, matching values approved; 2026-10-13 attendance uses 8 frames and one action. Records: docs/archive/.
 
-Liveness/PAD MUST use randomized active challenge-response. Challenges MUST be server-generated, short-lived, and single-use. Each enrollment attempt MUST request two distinct randomized actions in randomized order from blink, turn head left, and turn head right. Each attendance attempt MUST request one randomized action from the same set. The browser MAY display the challenge but MUST NOT be authoritative for pass/fail. The DentiSys biometric component MUST verify the action sequence using temporary frames. MediaPipe Face Landmarker is approved only for landmark, transformation, and blendshape analysis used for liveness and MUST NOT replace YuNet detection or SFace verification. Raw liveness frames MUST NOT be retained.
+Liveness/PAD MUST use randomized active challenge-response. Challenges MUST be server-generated, short-lived, and single-use. Each enrollment attempt MUST request two distinct randomized actions in randomized order from blink, turn head left, and turn head right. Each attendance attempt MUST request one randomized action from the same set. The browser MAY display the challenge but MUST NOT be authoritative for pass/fail. The DentiSYS biometric component MUST verify the action sequence using temporary frames. MediaPipe Face Landmarker is approved only for landmark, transformation, and blendshape analysis used for liveness and MUST NOT replace YuNet detection or SFace verification. Raw liveness frames MUST NOT be retained.
 
 Retained facial references (SFace embeddings) MUST be distinct from raw imagery and stored in dedicated biometric storage excluded from ordinary application/database backups. Protected facial reference data MUST be encrypted at rest using AES-256-GCM. The encryption key MUST be server-controlled and MUST NOT be committed to Git, stored in the ordinary database, exposed through APIs, or sent to browser clients. PostgreSQL MAY contain biometric-profile metadata and an opaque protected-object reference, but MUST NOT contain raw photos or an unprotected facial reference. For the current research deployment, loss or intentional replacement of the encryption key MAY invalidate protected references and require Student re-enrollment.
 
@@ -798,13 +798,13 @@ The remaining deferred parameters require team research, technical validation, a
 
 **Implementation: research prototype implemented**
 
-The target is desktop/laptop browsers, Android browsers/devices, and iOS browsers/devices. Students use their own devices. Where supported, they may select an available camera, including front or rear cameras. Verification requires connectivity to the deployed DentiSys service. There is no offline biometric queue or later local synchronization; if the service cannot be reached, manual attendance applies.
+The target is desktop/laptop browsers, Android browsers/devices, and iOS browsers/devices. Students use their own devices. Where supported, they may select an available camera, including front or rear cameras. Verification requires connectivity to the deployed DentiSYS service. There is no offline biometric queue or later local synchronization; if the service cannot be reached, manual attendance applies.
 
 Docker remains the intended deployment model. No specific CPU/GPU is a product requirement, and the current research laptop is not a production requirement. The initial study supports classroom-scale use and multiple classrooms; school-wide event recognition is outside current scope. Verification SHOULD feel responsive, but no fixed maximum time is selected. Normal Faculty dashboard refresh is sufficient; live-update behavior is not required by this specification.
 
 After the BIO-002 institutional privacy/consent review and the remaining technical approvals required by BIO-007 are complete, real biometrics is available by default. Student enrollment and use remain voluntary and require consent. A development biometric mock MAY remain only behind explicit development configuration. Mock and real enrollment MUST remain separate; real biometric failure or unavailable infrastructure MUST fall back to manual attendance and MUST NOT silently use the mock.
 
-Before the BIO-002 review, real biometrics runs only in the two DEL-001 deployments. Demo: for the DEL-001 VPS demonstration deployment, real biometrics MAY be enabled by explicit server configuration (`BIOMETRIC_SIDECAR_ENABLED=true`), so the DentiSys team can test it. It then behaves as in local development, and only DentiSys team members enroll (BIO-002 note). Without that setting, real biometrics stays disabled. Production: production is a public test deployment. Accounts come only by invitation from the Dean or Faculty, with an official `@bicol-u.edu.ph` email. Invited Students and Faculty may test DentiSys there, but it is not used for real attendance, grades or retention decisions, and the site and the face-enrollment consent say so. Real biometrics are on by default in production, with the existing BIO-002 consent, revocation and manual alternative. This stands in for the BIO-002 institutional review for this test deployment only; real institutional use still requires BIO-002.
+Before the BIO-002 review, real biometrics runs only in the two DEL-001 deployments. Demo: for the DEL-001 VPS demonstration deployment, real biometrics MAY be enabled by explicit server configuration (`BIOMETRIC_SIDECAR_ENABLED=true`), so the DentiSYS team can test it. It then behaves as in local development, and only DentiSYS team members enroll (BIO-002 note). Without that setting, real biometrics stays disabled. Production: production is a public test deployment. Accounts come only by invitation from the Dean or Faculty, with an official `@bicol-u.edu.ph` email. Invited Students and Faculty may test DentiSYS there, but it is not used for real attendance, grades or retention decisions, and the site and the face-enrollment consent say so. Real biometrics are on by default in production, with the existing BIO-002 consent, revocation and manual alternative. This stands in for the BIO-002 institutional review for this test deployment only; real institutional use still requires BIO-002.
 
 History: 2026-10-09 demo opt-in; 2026-10-17 production off by default; 2026-11-02 production public test, biometrics on by default. Records: docs/archive/.
 
@@ -816,7 +816,7 @@ Meaningful audit events MUST cover consent granted and revoked; enrollment start
 
 Audit data MUST NOT contain face images, camera frames, templates, embeddings, provider secrets, credentials, precise Student GPS coordinates, or persistent similarity/confidence scores. An authenticated 1:1 verification failure MAY be associated with the claimed Student account. Biometric match results MUST NOT be persisted in browser storage or other persistent client-side storage.
 
-The study aims to reasonably resist obvious photo, display, video, and replay attacks but does not promise to defeat credential sharing, sophisticated GPS spoofing, sophisticated deepfakes, or compromised Student devices. The design MUST preserve accessibility and MUST NOT make biometric attendance less practical than the manual alternative without later approval. Faculty retains final academic authority over attendance outcomes; a normal successful biometric attendance does not require Faculty approval inside DentiSys.
+The study aims to reasonably resist obvious photo, display, video, and replay attacks but does not promise to defeat credential sharing, sophisticated GPS spoofing, sophisticated deepfakes, or compromised Student devices. The design MUST preserve accessibility and MUST NOT make biometric attendance less practical than the manual alternative without later approval. Faculty retains final academic authority over attendance outcomes; a normal successful biometric attendance does not require Faculty approval inside DentiSYS.
 
 1:N identification, classroom-wide recognition, unknown-person identification, shared kiosk/classroom architecture, biometric login, biometric identity proofing, school-wide event face recognition, advanced GPS anti-spoofing guarantees, guarantees against all sophisticated deepfakes, and guarantees against compromised devices are outside the approved current implementation. Kiosk or classroom architecture may be future research only.
 
@@ -856,7 +856,7 @@ A scheduled session may be edited until it opens. Editable fields are the same a
 
 The edit form opens showing the session's saved values, never blanks or default values. An edit updates only what the user changed. Every field the user did not change (date, times, room, biometric, geofence, location, radius) keeps its saved value; for example, changing the room and turning on biometric leaves geofence as it was, and changing geofence and the room leaves biometric as it was. The edit form sends only the changed fields, and the server keeps the saved value of any field an edit does not send. Geofence starting off (ATT-002) applies only to new sessions.
 
-Before a session is created or edited, DentiSys looks for overlaps with: (a) an open or scheduled session of another class in the same room; (b) an open or scheduled session of another class with the same Faculty; (c) a weekly meeting of another active class in the same room on that weekday within that class's term. These do not block. One pop-up lists each overlap (room, date or weekday, time, class code and title, Faculty name, and whether it is a booked session or a regular schedule) with Go back (default) and Book anyway. After Book anyway, the Faculty of each overlapped class gets an in-app notice (no email), and the confirmation is audited. Overlapping sessions of the same class stay rejected. Sessions that only touch (one ends when the next starts) do not overlap. Room names match ignoring case, spaces, dashes and dots. Existing bookings are not rechecked.
+Before a session is created or edited, DentiSYS looks for overlaps with: (a) an open or scheduled session of another class in the same room; (b) an open or scheduled session of another class with the same Faculty; (c) a weekly meeting of another active class in the same room on that weekday within that class's term. These do not block. One pop-up lists each overlap (room, date or weekday, time, class code and title, Faculty name, and whether it is a booked session or a regular schedule) with Go back (default) and Book anyway. After Book anyway, the Faculty of each overlapped class gets an in-app notice (no email), and the confirmation is audited. Overlapping sessions of the same class stay rejected. Sessions that only touch (one ends when the next starts) do not overlap. Room names match ignoring case, spaces, dashes and dots. Existing bookings are not rechecked.
 
 The overlap pop-up, the 12-hour limit and the room requirement apply to Faculty and Secretary when starting, scheduling or editing a session. Every save checks again and notifies again. Editing a session made before these rules applies them; sessions not edited are not rechecked.
 
@@ -930,7 +930,7 @@ For attendance rates, Excused and Late count as attended, the same as Present.
 
 History: 2026-10-22 approved Excused locked for Secretary; 2026-10-28 every Secretary change is a request; 2026-11-06 Secretary requests tab. Records: docs/archive/.
 
-Students contact Secretary or Faculty outside DentiSys. Current scope has no Student-facing in-system excuse or dispute submission, no supporting-document upload requirement, and no specified dispute deadline. Manual correction audit MUST preserve the old status, new status, actor, timestamp, reason where applicable, and the original biometric outcome.
+Students contact Secretary or Faculty outside DentiSYS. Current scope has no Student-facing in-system excuse or dispute submission, no supporting-document upload requirement, and no specified dispute deadline. Manual correction audit MUST preserve the old status, new status, actor, timestamp, reason where applicable, and the original biometric outcome.
 
 ## ATT-007 — Student upcoming sessions
 
@@ -942,13 +942,13 @@ Students see scheduled and open attendance sessions for their own active class e
 
 **Status: APPROVED (demonstration scope)**
 
-Two VPS environments are approved, on any VPS provider (currently Vultr, one account), for testing by the DentiSys team and invited volunteer Faculty and Students. **Demo** (this DEL-001 deployment): it is not a production deployment and not the BIO-002 real Student deployment. Claude builds and pushes `:demo` images through a dedicated GitHub bot account that can write only the demo image packages, and may operate the demo VPS, including a loopback-only test entrance reached by SSH tunnel. **Production**: a separate VPS set up with the same scripts and hardening, running separate image packages (`dentisys-*-prod`, tag `:prod`), with pgAdmin off by default; real biometrics follow BIO-008. Production images are never rebuilt: after the Owner and Claude both approve the demo, the Owner promotes the exact demo images of the approved commit with one script. Claude has no access to the production VPS, its credentials or the `-prod` packages. Both servers use their automatic `<ip>.sslip.io` address for now; production will move to its own domain later, which needs no amendment. Server requirements, versions, hardening and domains are in docs/hosting-requirements.md. Colleagues work up to pushing their own branch; only the Owner's PC merges, publishes images and operates the demo.
+Two VPS environments are approved, on any VPS provider (currently Vultr, one account), for testing by the DentiSYS team and invited volunteer Faculty and Students. **Demo** (this DEL-001 deployment): it is not a production deployment and not the BIO-002 real Student deployment. Claude builds and pushes `:demo` images through a dedicated GitHub bot account that can write only the demo image packages, and may operate the demo VPS, including a loopback-only test entrance reached by SSH tunnel. **Production**: a separate VPS set up with the same scripts and hardening, running separate image packages (`dentisys-*-prod`, tag `:prod`), with pgAdmin off by default; real biometrics follow BIO-008. Production images are never rebuilt: after the Owner and Claude both approve the demo, the Owner promotes the exact demo images of the approved commit with one script. Claude has no access to the production VPS, its credentials or the `-prod` packages. Both servers use their automatic `<ip>.sslip.io` address for now; production will move to its own domain later, which needs no amendment. Server requirements, versions, hardening and domains are in docs/hosting-requirements.md. Colleagues work up to pushing their own branch; only the Owner's PC merges, publishes images and operates the demo.
 
 Approved infrastructure, and nothing beyond it:
 
 * Traefik as the only public entry point (ports 80 and 443), with HTTP redirected to HTTPS and Let's Encrypt certificates for one hostname (the server's `<ip>.sslip.io` address or its own domain; changing the hostname needs no amendment).
 * Application images (web, frontend, biometric) published to GitHub Container Registry under the Owner's account, built and pushed from the Owner's PC from a tested commit (demo images by Claude through the bot account; production images by the Owner's promotion script). No CI/CD pipeline.
-* Watchtower updating only the labeled DentiSys application containers. A release that adds database migrations MUST be deployed with the deploy script or the database sync script, each of which backs up the database before migrating; Watchtower alone MUST NOT be relied on for such a release.
+* Watchtower updating only the labeled DentiSYS application containers. A release that adds database migrations MUST be deployed with the deploy script or the database sync script, each of which backs up the database before migrating; Watchtower alone MUST NOT be relied on for such a release.
 * A deploy script, a nightly PostgreSQL backup that the Owner can copy off the server, host firewall guidance (SSH, 80, 443 only), a runbook, and an optional host hardening script that applies the Owner's hardening guide (steps 1–6) exactly as written, except that the server provider's key replaces `ssh-copy-id` and the sudo account (`devops` by default) keeps a forwarding exception limited to the pgAdmin and Mailpit loopback ports.
 
 PostgreSQL, Mailpit and the biometric component stay internal to Docker. pgAdmin runs on the VPS by default for demonstration and verification, and can be switched off in the server environment (`PGADMIN_ENABLED=false`). It is bound to the server's loopback address and reached only through an SSH tunnel. The Mailpit UI, which runs only when `EMAIL_PROVIDER=custom`, is reached the same way. Neither is exposed through Traefik or any public port. Secrets live only in the server's environment file, never in Git or in images. Separate application/database servers, Kubernetes, other cloud services and public database access remain out of scope.
@@ -1018,7 +1018,7 @@ Retention and grading decisions remain server-authoritative through the existing
 ## IMP-001 - Provisional Student roster imports
 **Status: APPROVED**
 
-Faculty may import Student roster records into an existing assigned current-year class, or create the class from the file as described below. The BU College of Dental Medicine "Official List of Enrolled Students" PDF and the official grade sheet workbook (.xlsx) are the official import layouts. Faculty upload them unchanged; DentiSys adapts to them. Detailed rules: docs/contracts/official-imports.md.
+Faculty may import Student roster records into an existing assigned current-year class, or create the class from the file as described below. The BU College of Dental Medicine "Official List of Enrolled Students" PDF and the official grade sheet workbook (.xlsx) are the official import layouts. Faculty upload them unchanged; DentiSYS adapts to them. Detailed rules: docs/contracts/official-imports.md.
 Preserve complete Student numbers and supplied identity/contact values. Do not invent missing emails or year levels, overwrite existing Student identities, or silently resolve ambiguous name splits. Require preview and target-class confirmation before saving. Flag possible crossed-out rows and leave them unselected until reviewed; marking detection is best effort and the Faculty must review the source. Resolve existing Students through server identities and preserve permissions, historical-class restrictions, audit history, account eligibility and separate invitation authority. Process the original file locally and send only selected Student fields to existing APIs.
 
 Grade sheet import saves raw scores only, never computed grades, through the existing score rules; it never changes Grade Weights, never turns a blank into zero, and never overwrites a saved score without the Faculty's confirmation. File headers are checked against the selected class and differences are warnings. No import file shows an "Official format not confirmed" label.
@@ -1051,11 +1051,13 @@ Below 1280 px wide (phones, tablets and small laptops), every control, card and 
 
 Interface wording: buttons that start an attendance session say "Start session" (a future date says "Schedule session") and the session list is "Sessions", on Faculty and Secretary pages alike; a class with no grade yet shows the state "No grade yet" in a neutral grey pill, while a missing grade value reads "Pending"; school-year filters use "S.Y."; sign-in and password-reset forms label the field "University Email"; the roll-call filter for rows without attendance reads "Not recorded" on both roll calls.
 
-Interface casing. Text that names a place or a field uses Title Case: page titles, card and section headings, dialog titles, tabs, sidebar items, table column headers and form field labels (the same field has the same words in a form and in a table). Everything else uses sentence case: buttons, links, menu items, chips, pills and status values, placeholders, hints, tooltips, screen-reader labels, toasts, errors, empty states, confirmation text and option text. A heading that reads as a message (it would take a full stop, such as "Check your email" or "No assigned classes found") is sentence case. Role names (Faculty, Secretary, Dean, Student), names (DentiSys, Bicol University, BU, Google), the grading periods and components (Midterm, Finals, Lecture, Laboratory) and abbreviations (ID, PDF, CSV, 2FA) are always capitalised; other terms are lowercase inside sentences ("school year", "class section"), except that a page, tab or button name mentioned in other text keeps its own casing ("Open in Retention Monitoring", "Check the Archived Classes tab"). Semester names (1st Semester, 2nd Semester, Summer) are always capitalised. The product name shown to users is "DentiSYS"; developer documents and code keep "DentiSys". In Title Case, a, an, the, and, or, of, to, in, on, for, by, at, with, per and vs stay lowercase unless first or last; both halves of a hyphenated word are capitalised ("Check-In Time"); a bracketed note stays lowercase ("Middle Name (optional)"). Text is never typed in ALL CAPS; a style that shows capitals does it with CSS. The one exception is the printed class list, whose capitalised header copies the official form. This sets only casing; the words chosen in the wording rule above stay.
+Interface casing. Text that names a place or a field uses Title Case: page titles, card and section headings, dialog titles, tabs, sidebar items, table column headers and form field labels (the same field has the same words in a form and in a table). Everything else uses sentence case: buttons, links, menu items, chips, pills and status values, placeholders, hints, tooltips, screen-reader labels, toasts, errors, empty states, confirmation text and option text. A heading that reads as a message (it would take a full stop, such as "Check your email" or "No assigned classes found") is sentence case. Role names (Faculty, Secretary, Dean, Student), names (DentiSYS, Bicol University, BU, Google), the grading periods and components (Midterm, Finals, Lecture, Laboratory) and abbreviations (ID, PDF, CSV, 2FA) are always capitalised; other terms are lowercase inside sentences ("school year", "class section"), except that a page, tab or button name mentioned in other text keeps its own casing ("Open in Retention Monitoring", "Check the Archived Classes tab"). Semester names (1st Semester, 2nd Semester, Summer) are always capitalised. The product name shown to users is "DentiSYS"; developer documents and code keep "DentiSYS". In Title Case, a, an, the, and, or, of, to, in, on, for, by, at, with, per and vs stay lowercase unless first or last; both halves of a hyphenated word are capitalised ("Check-In Time"); a bracketed note stays lowercase ("Middle Name (optional)"). Text is never typed in ALL CAPS; a style that shows capitals does it with CSS. The one exception is the printed class list, whose capitalised header copies the official form. This sets only casing; the words chosen in the wording rule above stay.
+
+Interface wording rules. Owner decision (2026-11-15): the product name is written DentiSYS everywhere. On screens a school year is "S.Y. 2026–2027" ("AY" only in the official iBU exports). Spelling is US English ("enrollment"). Table headers say "Student No."; form labels and detail fields say "Student Number". A filter's "all" option reads "All <plural noun>" in sentence case (All statuses, All courses), never "Any …". Errors and notices are formal: no "Please" and no contractions; they say what happened and what to do ("Could not load accounts. Select Retry."). Names put a comma before academic degrees ("Roberto Lim Santos, DMD"), not before Jr., Sr. or II–V. The own-activity page of Faculty and Secretaries is "My Activity". On-screen dates use the short month ("Nov 15, 2026 · 10:48 AM"); native date pickers follow the browser.
 
 The source branch defines the interface, not automatic approval of its backend semantics. Explicit requirements below govern PDF/source differences. Unaffected authentication, permissions, privacy, history preservation, Docker/PostgreSQL, and authoritative-data rules remain in force. Unresolved behavior remains OPEN. Visual parity is not functional completion or proof of persistence.
 
-History: 2026-10-13 never merged below 1280 px; 2026-11-03 phone blocks below 768 px and wording rules; 2026-11-06 casing; 2026-11-11 all Student and Secretary tables; 2026-11-13 Retention Monitoring lists. Records: docs/archive/.
+History: 2026-10-13 never merged below 1280 px; 2026-11-03 phone blocks below 768 px and wording rules; 2026-11-06 casing; 2026-11-15 wording rules; 2026-11-11 all Student and Secretary tables; 2026-11-13 Retention Monitoring lists. Records: docs/archive/.
 
 ## UI-002 - Score entry, deadlines, and weights (PDF pages 1-3)
 
@@ -1079,7 +1081,7 @@ Retention uses final grades, scores, and applicable approved BUCDM policy. Click
 
 The Faculty retention page labels its computed final-grade view "Retention Status". "Midterm Watchlist" remains the separate early warning list.
 
-The 2.50 course-grade trigger is fixed college policy, is not an Admin setting, and applies to completed final course grades; on the BUCDM table it means 84% or below. Missing or incomplete grades remain unresolved. Completed final course grades 2.5 through 4.9 are eligible for DentiSys remedial attempts, for every course type. A grade of 5.0 is not eligible: irregular reenrollment is handled in person outside DentiSys, and the displayed retention status is "Irregular reenrollment", derived from the grade without changing saved records or schema. DentiSys records the first and second remedial attempts separately and offers no third. Each attempt passes at a raw score of 75% or higher, and Pass/Fail is derived from the stored percentage. Below 75% on attempt 1 permits attempt 2; failure of attempt 2 moves the student to cost recovery. Every course type shows remedial remarks. Cost recovery accepts a final grade from 1.0 to 5.0 in one-decimal increments; 1.0–2.4 passes and 2.5–5.0 fails; excess precision is rejected when submitted. Remedial and cost-recovery outcomes never replace the original course grade. The Faculty Remedial Record shows each attempt's notes and a completion date that is set once, when the result is recorded.
+The 2.50 course-grade trigger is fixed college policy, is not an Admin setting, and applies to completed final course grades; on the BUCDM table it means 84% or below. Missing or incomplete grades remain unresolved. Completed final course grades 2.5 through 4.9 are eligible for DentiSYS remedial attempts, for every course type. A grade of 5.0 is not eligible: irregular reenrollment is handled in person outside DentiSYS, and the displayed retention status is "Irregular reenrollment", derived from the grade without changing saved records or schema. DentiSYS records the first and second remedial attempts separately and offers no third. Each attempt passes at a raw score of 75% or higher, and Pass/Fail is derived from the stored percentage. Below 75% on attempt 1 permits attempt 2; failure of attempt 2 moves the student to cost recovery. Every course type shows remedial remarks. Cost recovery accepts a final grade from 1.0 to 5.0 in one-decimal increments; 1.0–2.4 passes and 2.5–5.0 fails; excess precision is rejected when submitted. Remedial and cost-recovery outcomes never replace the original course grade. The Faculty Remedial Record shows each attempt's notes and a completion date that is set once, when the result is recorded.
 
 Retention status comes only from system calculations: Active, Remedial (final grade 2.50 or worse, except that 5.0 shows "Irregular reenrollment"), Cleared, and Archived. Faculty cannot set or override it by hand. Warning and Critical are retired. Existing manual overrides reverted to the computed status; the audit log keeps their history. The Admin At-Risk Count is students who are Remedial or At Risk on a Midterm Watchlist.
 

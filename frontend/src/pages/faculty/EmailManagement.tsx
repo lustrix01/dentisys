@@ -33,6 +33,8 @@ import {
 } from '../../services/authService';
 import { createStudentInvitation, removeSecretaryAppointmentApi, getFacultyRetentionApi, saveFacultyRemedialApi, sendFacultyEmailApi, type FacultyRetentionRecord } from '../../services/apiClient';
 import { Student } from '../../types';
+import { SortableHeader, ariaSort, compareValues, type SortState } from '../../components/SortableHeader';
+import { formatSchoolYear } from '../../utils/schoolYear';
 import { courseOptions, sectionOptions, studentOptions } from '../../utils/emailRecipientFilter';
 import { getFacultyStudentsApi, getFacultyClassesApi, getFacultyEmailLogsApi } from '../../services/apiClient';
 
@@ -41,12 +43,17 @@ type Tab = 'student_invites' | 'secretary' | 'midterm_advisory' | 'remedial' | '
 const initialLogs: EmailAction[] = [];
 const isOfficialBicolEmail = (email: string): boolean => validateBicolUEmail(email, ['bicol-u.edu.ph']).isValid;
 
+type StudentSort = SortState<'default' | 'student'>;
+const sortByStudent = <T,>(rows: T[], sort: StudentSort, name: (row: T) => string | null | undefined): T[] => (
+  sort.key === 'default' ? rows : [...rows].sort((a, b) => compareValues(name(a), name(b), sort.dir))
+);
+
 const remedialDateLabel = (value?: string | null): string | undefined => {
   if (!value) return undefined;
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return value;
   const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12));
-  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }).format(date);
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 };
 
 const manilaToday = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
@@ -184,7 +191,7 @@ export const EmailManagement: React.FC = () => {
     try {
       setSecretaryInvs(await fetchSecretaryInvitations());
     } catch (err) {
-      setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Unable to load invitations.' });
+      setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Could not load invitations.' });
     }
   }, []);
 
@@ -217,7 +224,7 @@ export const EmailManagement: React.FC = () => {
       const response = await getFacultyRetentionApi();
       setRetentionRecords(Array.isArray(response.retention) ? response.retention : []);
     } catch (error) {
-      notify({ type: 'error', message: error instanceof Error ? error.message : 'Unable to load the current Midterm and Remedial eligibility list.' });
+      notify({ type: 'error', message: error instanceof Error ? error.message : 'Could not load the current Midterm and Remedial eligibility list.' });
     } finally {
       setLoadingRetention(false);
     }
@@ -285,6 +292,13 @@ export const EmailManagement: React.FC = () => {
   );
   const selectedNoticeRows = selectableNoticeRows.filter(row => selected.includes(row.enrollmentId));
 
+  const [secretarySort, setSecretarySort] = useState<StudentSort>({ key: 'default', dir: 'asc' });
+  const [studentSort, setStudentSort] = useState<StudentSort>({ key: 'default', dir: 'asc' });
+  const [noticeSort, setNoticeSort] = useState<StudentSort>({ key: 'default', dir: 'asc' });
+  const sortedSecretaryRows = sortByStudent(secretaryRows, secretarySort, row => row.student.name);
+  const sortedFilteredStudents = sortByStudent(filteredStudents, studentSort, student => student.name);
+  const sortedNoticeRows = sortByStudent(noticeRows, noticeSort, row => row.studentName);
+
   const toggleSelect = (id: string) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
@@ -320,7 +334,7 @@ export const EmailManagement: React.FC = () => {
   // Send Email Action (Student Invites & Secretary Invites)
   const handleSendEmails = async () => {
     if (!selected.length) {
-      notify({ type: 'error', message: 'Please select at least one student recipient.' });
+      notify({ type: 'error', message: 'Select at least one student recipient.' });
       return;
     }
 
@@ -442,7 +456,7 @@ export const EmailManagement: React.FC = () => {
       await Promise.all([fetchEmailLogs(), loadRetentionRecords()]);
       notify({ type: result.failedCount ? 'warning' : 'success', message: result.message });
     } catch (error) {
-      notify({ type: 'error', message: error instanceof Error ? error.message : 'Unable to send the selected student notices.' });
+      notify({ type: 'error', message: error instanceof Error ? error.message : 'Could not send the selected student notices.' });
       await loadRetentionRecords();
     } finally {
       setIsSending(false);
@@ -480,7 +494,7 @@ export const EmailManagement: React.FC = () => {
         message: delivery?.message ?? 'Remedial exam date saved successfully.',
       });
     } catch (error) {
-      notify({ type: 'error', message: error instanceof Error ? error.message : 'Unable to save the remedial exam date.' });
+      notify({ type: 'error', message: error instanceof Error ? error.message : 'Could not save the remedial exam date.' });
     } finally {
       setSavingRemedialId(null);
     }
@@ -497,7 +511,7 @@ export const EmailManagement: React.FC = () => {
       const refreshed = await getFacultyStudentsApi();
       if (Array.isArray(refreshed)) setDbStudents(refreshed as unknown as Student[]);
     } catch (error) {
-      notify({ type: 'error', message: error instanceof Error ? error.message : 'Unable to remove the appointment.' });
+      notify({ type: 'error', message: error instanceof Error ? error.message : 'Could not remove the appointment.' });
       try {
         const refreshed = await getFacultyStudentsApi();
         if (Array.isArray(refreshed)) setDbStudents(refreshed as unknown as Student[]);
@@ -632,7 +646,7 @@ export const EmailManagement: React.FC = () => {
               <option value="all">All school years</option>
               {availableSchoolYears.map(sy => (
                 <option key={sy} value={sy}>
-                  S.Y. {sy}{sy === currentSchoolYear ? ' (Current)' : ''}
+                  {formatSchoolYear(sy)}{sy === currentSchoolYear ? ' (Current)' : ''}
                 </option>
               ))}
             </select>
@@ -644,7 +658,7 @@ export const EmailManagement: React.FC = () => {
             <input
               type="text"
               placeholder="Search Student Number, name..."
-              aria-label="Search students by ID, name or email"
+              aria-label="Search students by Student Number, name or email"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-xs"
@@ -710,7 +724,7 @@ export const EmailManagement: React.FC = () => {
                       <span className="md:hidden">Select all</span>
                     </label>
                   </th>
-                  <th className="py-3 px-4 max-md:hidden">Student Details</th>
+                  <th className="py-3 px-4 max-md:hidden" aria-sort={ariaSort(secretarySort, 'student')}><SortableHeader label="Student Details" sortKey="student" sort={secretarySort} onSort={setSecretarySort} /></th>
                   <th className="py-3 px-4 max-md:hidden">Enrolled Class Section</th>
                   <th className="py-3 px-4 text-center max-md:hidden">Roster Invitation Status</th>
                   <th className="py-3 px-4 text-right max-md:hidden">Actions</th>
@@ -725,7 +739,7 @@ export const EmailManagement: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredStudents.map(student => {
+                  sortedFilteredStudents.map(student => {
                     const isChecked = selected.includes(student.id);
                     return (
                       <tr key={student.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:relative max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-2 max-md:py-3.5 max-md:pl-7">
@@ -834,13 +848,13 @@ export const EmailManagement: React.FC = () => {
               <thead className="max-md:hidden">
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                   <th className="py-3 px-4 w-10">Select</th>
-                  <th className="py-3 px-4">Student Details</th>
+                  <th className="py-3 px-4" aria-sort={ariaSort(studentSort, 'student')}><SortableHeader label="Student Details" sortKey="student" sort={studentSort} onSort={setStudentSort} /></th>
                   <th className="py-3 px-4">Class Section</th>
                   <th className="py-3 px-4 text-center">Role Standing</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
-                {secretaryRows.map(({ key, student, section }) => {
+                {sortedSecretaryRows.map(({ key, student, section }) => {
                   const isChecked = selected.includes(key);
                   const sectionTaken = sectionHasSecretary(section.classId, section.className);
                   return (
@@ -994,7 +1008,7 @@ export const EmailManagement: React.FC = () => {
                 <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 max-md:block">
                   <tr className="max-md:block">
                     <th className="w-24 border-b border-slate-200 px-4 py-4 dark:border-slate-800 max-md:hidden">Select</th>
-                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Student details</th>
+                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden" aria-sort={ariaSort(noticeSort, 'student')}><SortableHeader label="Student details" sortKey="student" sort={noticeSort} onSort={setNoticeSort} /></th>
                     <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Class section</th>
                     <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Midterm grade</th>
                     <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Midterm GWA</th>
@@ -1002,7 +1016,7 @@ export const EmailManagement: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="max-md:block">
-                  {noticeRows.map(row => {
+                  {sortedNoticeRows.map(row => {
                     const isChecked = selected.includes(row.enrollmentId);
                     return (
                       <tr key={row.enrollmentId} className="border-b border-slate-100 last:border-0 dark:border-slate-800 max-md:relative max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-2 max-md:py-3.5 max-md:pl-7">
@@ -1055,7 +1069,7 @@ export const EmailManagement: React.FC = () => {
                 <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 max-md:block">
                   <tr className="max-md:block">
                     <th className="w-24 border-b border-slate-200 px-4 py-4 dark:border-slate-800 max-md:hidden">Select</th>
-                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Student details</th>
+                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden" aria-sort={ariaSort(noticeSort, 'student')}><SortableHeader label="Student details" sortKey="student" sort={noticeSort} onSort={setNoticeSort} /></th>
                     <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Class section</th>
                     <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Attempt / date</th>
                     <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Email status</th>
@@ -1063,7 +1077,7 @@ export const EmailManagement: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="max-md:block">
-                  {noticeRows.map(row => {
+                  {sortedNoticeRows.map(row => {
                     const isChecked = selected.includes(row.enrollmentId);
                     const hasScheduledDate = Boolean(row.pendingAttempt?.scheduledDate);
                     const isEditing = editingRemedialId === row.enrollmentId;

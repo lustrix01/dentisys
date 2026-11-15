@@ -62,7 +62,7 @@ try {
 echo $result['message'] . "\n";
 if ($result['action'] === 'invited') {
     $link = app_url($config, '/activate-faculty', ['token' => $result['token']]);
-    $sent = send_email($result['email'], 'DentiSys Dean Invitation', email_dean_invitation_html($result['name'], $result['email'], $link), $config, true);
+    $sent = send_email($result['email'], 'DentiSYS Dean Invitation', email_dean_invitation_html($result['name'], $result['email'], $link), $config, true);
     if (!$sent) {
         try {
             $pdo->beginTransaction();

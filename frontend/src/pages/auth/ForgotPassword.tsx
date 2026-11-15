@@ -201,7 +201,7 @@ export function ForgotPassword() {
 
               <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl text-left space-y-2">
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Didn't receive the email? Check your spam folder or request a new one:
+                  Did not receive the email? Check your spam folder or request a new one:
                 </p>
                 <button
                   type="button"

@@ -42,7 +42,7 @@ export const Profile: React.FC = () => {
         }
       })
       .catch(err => {
-        setError(err instanceof Error ? err.message : 'Unable to fetch profile from server.');
+        setError(err instanceof Error ? err.message : 'Could not load the profile. Reload the page.');
       })
       .finally(() => setLoading(false));
   }, []);

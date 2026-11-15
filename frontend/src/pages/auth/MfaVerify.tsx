@@ -30,11 +30,11 @@ export function MfaVerify() {
     e.preventDefault();
     const trimmed = code.trim();
     if (!trimmed) {
-      setError(mode === 'totp' ? 'Please enter a verification code.' : 'Please enter a recovery code.');
+      setError(mode === 'totp' ? 'Enter a verification code.' : 'Enter a recovery code.');
       return;
     }
     if (mode === 'totp' && (trimmed.length !== 6 || !/^\d{6}$/.test(trimmed))) {
-      setError('Please enter a valid 6-digit code.');
+      setError('Enter a valid 6-digit code.');
       return;
     }
     setLoading(true);
@@ -55,7 +55,7 @@ export function MfaVerify() {
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 401) {
         clearAuth();
-        setContextError('Your session has expired. Please log in again.');
+        setContextError('Your session has expired. Sign in again.');
         navigate('/login', { replace: true });
       } else {
         const message = err instanceof Error ? err.message : 'An error occurred.';

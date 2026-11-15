@@ -21,6 +21,7 @@ import { getStudentAcademicClassesApi } from '../../services/apiClient';
 import type { StudentAcademicClass } from '../../types';
 import GradeValue, { lectureHoverSteps } from '../../components/GradeValue';
 import { formatGrade } from '../../utils/gradeHelper';
+import { formatSchoolYear } from '../../utils/schoolYear';
 import { semesterLabel } from '../../utils/academicTermDefaults';
 import { displayMeetingTime } from '../../utils/scheduleHelper';
 
@@ -160,7 +161,7 @@ export const Classes: React.FC = () => {
         setCurrentSchoolYear(res.currentSchoolYear ?? null);
       })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Unable to load course enrollments.');
+        setError(err instanceof Error ? err.message : 'Could not load course enrollments. Reload the page.');
       })
       .finally(() => {
         setLoading(false);
@@ -218,7 +219,7 @@ export const Classes: React.FC = () => {
           <div className="flex items-start gap-3">
             <AlertCircle className="w-6 h-6 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
             <div className="space-y-2">
-              <h2 className="font-bold text-base text-rose-950 dark:text-rose-100">Unable to load course enrollments</h2>
+              <h2 className="font-bold text-base text-rose-950 dark:text-rose-100">Could not load course enrollments</h2>
               <p className="text-xs text-rose-800 dark:text-rose-300">{error}</p>
               <button
                 type="button"
@@ -330,7 +331,7 @@ export const Classes: React.FC = () => {
           currentClasses.length === 0 ? (
             <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
               <BookOpen className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
-              <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{currentSchoolYear ? `No active classes for S.Y. ${currentSchoolYear}` : 'Current school year unavailable'}</h3>
+              <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{currentSchoolYear ? `No active classes for ${formatSchoolYear(currentSchoolYear)}` : 'Current school year unavailable'}</h3>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 You do not have any registered enrollments for the current academic year. Check the Archived Classes tab for past coursework.
               </p>
@@ -365,7 +366,7 @@ export const Classes: React.FC = () => {
                           {cls.courseName}
                         </h3>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                          {semesterLabel(cls.semester)} • S.Y. {cls.schoolYear}
+                          {semesterLabel(cls.semester)} • {formatSchoolYear(cls.schoolYear)}
                         </p>
                       </div>
 
@@ -470,7 +471,7 @@ export const Classes: React.FC = () => {
                             </span>
                           )}
                           <span className="whitespace-nowrap px-2 py-0.5 rounded-md font-bold text-[10px] uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                            S.Y. {cls.schoolYear}
+                            {formatSchoolYear(cls.schoolYear)}
                           </span>
                         </div>
                       </div>
@@ -559,7 +560,7 @@ export const Classes: React.FC = () => {
               <h3 className="font-bold text-slate-800 dark:text-slate-100">{cls.courseCode} · {cls.courseName}</h3>
               <p className="mt-0.5 text-slate-500 dark:text-slate-400">{cls.className}</p>
               <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
-                <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">School Year</dt><dd className="mt-0.5 font-semibold">{cls.schoolYear || 'Unavailable'}</dd></div>
+                <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">School Year</dt><dd className="mt-0.5 font-semibold">{formatSchoolYear(cls.schoolYear) || 'Unavailable'}</dd></div>
                 <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Grade</dt><dd className="mt-0.5 font-semibold">{cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage} grade={cls.grade} lecture={cls.gradingComponentMode === 'lecture' ? lectureHoverSteps(cls.gradeComponents) : null}>{formatGrade(cls.grade)}</GradeValue>}</dd></div>
                 <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Score %</dt><dd className="mt-0.5 font-semibold">{cls.percentage === null ? 'Pending' : `${cls.percentage}%`}</dd></div>
                 <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Clinical Hours</dt><dd className="mt-0.5 font-semibold">{cls.clinicHoursCompleted} hrs</dd></div>
@@ -572,7 +573,7 @@ export const Classes: React.FC = () => {
           <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400"><tr><th className="p-2">Course</th><th className="p-2">School Year</th><th className="p-2">Grade</th><th className="p-2">Score %</th><th className="p-2">Clinical Hours</th><th className="p-2">Retention</th></tr></thead>
           <tbody>{otherClasses.map(cls => <tr key={cls.enrollmentId}>
             <td className="p-2">{cls.courseCode} · {cls.courseName} · {cls.className}</td>
-            <td className="p-2">{cls.schoolYear || 'Unavailable'}</td>
+            <td className="p-2">{formatSchoolYear(cls.schoolYear) || 'Unavailable'}</td>
             <td className="p-2">{cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage} grade={cls.grade} lecture={cls.gradingComponentMode === 'lecture' ? lectureHoverSteps(cls.gradeComponents) : null}>{formatGrade(cls.grade)}</GradeValue>}</td>
             <td className="p-2">{cls.percentage === null ? 'Pending' : `${cls.percentage}%`}</td>
             <td className="p-2">{cls.clinicHoursCompleted} hrs</td>

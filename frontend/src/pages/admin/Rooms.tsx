@@ -90,7 +90,7 @@ export const Rooms: React.FC = () => {
   };
   useEffect(() => {
     load()
-      .catch(err => showFeedback(err instanceof Error ? err.message : 'Unable to load rooms.', 'error'))
+      .catch(err => showFeedback(err instanceof Error ? err.message : 'Could not load rooms. Reload the page.', 'error'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -120,7 +120,7 @@ export const Rooms: React.FC = () => {
       await load();
     } catch (err) {
       close();
-      showFeedback(err instanceof Error ? err.message : 'Unable to save the room.', 'error');
+      showFeedback(err instanceof Error ? err.message : 'Could not save the room. Try again.', 'error');
     } finally {
       setBusy(false);
     }
@@ -139,7 +139,7 @@ export const Rooms: React.FC = () => {
       setCatDraft(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to save the category.');
+      setError(err instanceof Error ? err.message : 'Could not save the category. Try again.');
     } finally {
       setBusy(false);
     }
@@ -160,7 +160,7 @@ export const Rooms: React.FC = () => {
         setDraft(d => d && { ...d, lat: pos.coords.latitude.toFixed(6), lng: pos.coords.longitude.toFixed(6) });
         setLocating(false);
       },
-      err => { setError(`Unable to get the device location: ${err.message}`); setLocating(false); },
+      err => { setError(`Could not get the device location: ${err.message}`); setLocating(false); },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
   };
@@ -211,7 +211,7 @@ export const Rooms: React.FC = () => {
         setConfirm({ kind: 'rename', room: draft.original, to: name, usage });
       } else {
         setConfirm(null);
-        setError(err instanceof Error ? err.message : 'Unable to save the room.');
+        setError(err instanceof Error ? err.message : 'Could not save the room. Try again.');
       }
     } finally {
       setBusy(false);

@@ -1,6 +1,6 @@
-# DentiSys
+# DentiSYS
 
-DentiSys is an academic and clinical management system for the Bicol University College of Dental Medicine. It runs entirely in Docker: a React/Vite frontend, a plain PHP API, PostgreSQL, a private face-recognition sidecar, and Mailpit for catching e-mail.
+DentiSYS is an academic and clinical management system for the Bicol University College of Dental Medicine. It runs entirely in Docker: a React/Vite frontend, a plain PHP API, PostgreSQL, a private face-recognition sidecar, and Mailpit for catching e-mail.
 
 | Runtime | Status | Use it for |
 | --- | --- | --- |
@@ -15,7 +15,7 @@ DentiSys is an academic and clinical management system for the Bicol University 
   - [A1. Install the prerequisites](#a1-install-the-prerequisites)
   - [A2. Get the code](#a2-get-the-code)
   - [A3. Create your `.env`](#a3-create-your-env)
-  - [A4. Start DentiSys](#a4-start-dentisys)
+  - [A4. Start DentiSYS](#a4-start-dentisys)
   - [A5. Open the services](#a5-open-the-services)
   - [A6. Get a first account](#a6-get-a-first-account)
   - [A7. Choose how e-mail is delivered](#a7-choose-how-e-mail-is-delivered)
@@ -28,7 +28,7 @@ DentiSys is an academic and clinical management system for the Bicol University 
 - [Validation rules for contributors](#validation-rules-for-contributors)
 - [Documentation](#documentation)
 
-> **Ground rules.** DentiSys runs through Docker Compose only; do not use XAMPP, native PHP, or MySQL/MariaDB. Never commit `.env` files. Never run `docker compose down -v` unless you mean to erase your local database.
+> **Ground rules.** DentiSYS runs through Docker Compose only; do not use XAMPP, native PHP, or MySQL/MariaDB. Never commit `.env` files. Never run `docker compose down -v` unless you mean to erase your local database.
 
 ---
 
@@ -48,8 +48,8 @@ pgAdmin (5050) -----------------------------------> PostgreSQL
 | Tool | Needed for | Notes |
 | --- | --- | --- |
 | [Git](https://git-scm.com/downloads) | Getting the code | Windows: keep the default "checkout Windows-style line endings". |
-| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Running DentiSys | Start it and wait until it says *Engine running*. `docker compose version` must work. |
-| [Node.js](https://nodejs.org/) 20.19 or newer (22 LTS recommended) | Only for running tests or building the frontend on your computer | Not needed just to run DentiSys. Node 18 does not work (Vite 8). |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Running DentiSYS | Start it and wait until it says *Engine running*. `docker compose version` must work. |
+| [Node.js](https://nodejs.org/) 20.19 or newer (22 LTS recommended) | Only for running tests or building the frontend on your computer | Not needed just to run DentiSYS. Node 18 does not work (Vite 8). |
 
 ### A2. Get the code
 
@@ -67,9 +67,9 @@ Copy-Item .env.example .env
 
 On macOS or Linux: `cp .env.example .env`.
 
-The example already contains safe development defaults, so DentiSys starts without editing it. `.env` is ignored by Git; keep it that way.
+The example already contains safe development defaults, so DentiSYS starts without editing it. `.env` is ignored by Git; keep it that way.
 
-### A4. Start DentiSys
+### A4. Start DentiSYS
 
 ```powershell
 .\scripts\start-dev.ps1
@@ -92,9 +92,9 @@ Starting never loads demo data, drops tables, or deletes records. Run the same s
 
 | Service | Address | What it is |
 | --- | --- | --- |
-| DentiSys | http://localhost:5173 | The application |
+| DentiSYS | http://localhost:5173 | The application |
 | API health | http://localhost:8080/api/health | Should report `"status": "ok"` |
-| Mailpit | http://localhost:8025 | Every e-mail DentiSys sends in development lands here |
+| Mailpit | http://localhost:8025 | Every e-mail DentiSYS sends in development lands here |
 | pgAdmin | http://127.0.0.1:5050 | Database browser (sign-in values are `PGADMIN_DEFAULT_*` in `.env`) |
 
 ### A6. Get a first account
@@ -134,7 +134,7 @@ FIRST_DEAN_LAST_NAME=Name
 
 ### A7. Choose how e-mail is delivered
 
-`EMAIL_PROVIDER` in `.env` controls every e-mail DentiSys sends (invitations, password resets, notices):
+`EMAIL_PROVIDER` in `.env` controls every e-mail DentiSYS sends (invitations, password resets, notices):
 
 | `EMAIL_PROVIDER` | Recipients on `EMAIL_TEST_ALLOWLIST` | Everyone else |
 | --- | --- | --- |
@@ -160,7 +160,7 @@ The allowlist is comma-separated, and `*` matches anything. In `custom` mode, Fa
 
 ### A8. Optional: face-recognition attendance
 
-DentiSys starts and works without this; biometric attendance just reports that it is unavailable, and manual attendance still works. To enable it:
+DentiSYS starts and works without this; biometric attendance just reports that it is unavailable, and manual attendance still works. To enable it:
 
 1. **Download the face-landmark model** (about 3.8 MB) to a folder **next to** the repository, not inside it:
 
@@ -221,7 +221,7 @@ If a plain PowerShell window refuses a script with "... is not digitally signed"
 
 ### A11. Upgrading an existing setup or switching branches
 
-Use this if you already ran an older DentiSys build (you have a `.env` and a database). Your data is kept.
+Use this if you already ran an older DentiSYS build (you have a `.env` and a database). Your data is kept.
 
 1. **Stop the stack, keeping its data:** `docker compose down` (never `-v`).
 
@@ -281,7 +281,7 @@ npx playwright install chromium
 
 ## Part B: Single-server mode (future)
 
-> **Status: unfinished prototype.** Single-server mode runs DentiSys on one server in a private network, using production-style images: Nginx serving the built frontend, the PHP API, PostgreSQL, and the face-recognition sidecar. It is **not ready for production or the public internet**. Use it only for controlled testing. The gaps are listed at the end of this part.
+> **Status: unfinished prototype.** Single-server mode runs DentiSYS on one server in a private network, using production-style images: Nginx serving the built frontend, the PHP API, PostgreSQL, and the face-recognition sidecar. It is **not ready for production or the public internet**. Use it only for controlled testing. The gaps are listed at the end of this part.
 
 ```text
 Browser -> Nginx frontend (APP_HTTP_PORT, default 8080) -> PHP API -> PostgreSQL
@@ -316,7 +316,7 @@ The start script refuses to run while any of eight settings is empty or still st
 | --- | --- |
 | `APP_BASE_URL` | The exact address users open, for example `http://dentisys.lan:8080`. Invitation and reset links use it. |
 | `APP_HTTP_PORT` | The published port (default `8080`). |
-| `APP_IS_HTTPS` | `true` only when users reach DentiSys over HTTPS. |
+| `APP_IS_HTTPS` | `true` only when users reach DentiSYS over HTTPS. |
 | `DB_PASS`, `DB_ADMIN_PASS` | Two different strong passwords. |
 | `JWT_SIGNING_KEY_B64`, `MFA_ENCRYPTION_KEY_B64`, `AUDIT_MAC_KEY_B64`, `BIOMETRIC_STORAGE_KEY_B64`, `BIOMETRIC_SIDECAR_SHARED_SECRET` | A different generated value for each (see below). |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Your SMTP account. Encryption (`starttls` or `tls`) and certificate checking are required. |
@@ -360,7 +360,7 @@ Check it: open `APP_BASE_URL`, and `APP_BASE_URL/api/health` should report `"sta
 
 ### B5. The first Dean
 
-Single-server mode never loads demo data. The first account is a Dean invited by e-mail. Before the first start, fill in `FIRST_DEAN_EMAIL`, `FIRST_DEAN_FIRST_NAME`, and `FIRST_DEAN_LAST_NAME` in `.env.single-server`. The address must be an `@bicol-u.edu.ph` address; existing non-BU records are not rewritten. The start script sends the invitation. The Dean opens the link, sets a password, and then invites Faculty from inside DentiSys.
+Single-server mode never loads demo data. The first account is a Dean invited by e-mail. Before the first start, fill in `FIRST_DEAN_EMAIL`, `FIRST_DEAN_FIRST_NAME`, and `FIRST_DEAN_LAST_NAME` in `.env.single-server`. The address must be an `@bicol-u.edu.ph` address; existing non-BU records are not rewritten. The start script sends the invitation. The Dean opens the link, sets a password, and then invites Faculty from inside DentiSYS.
 
 If the settings were empty on the first start, fill them in and run the start script again. Nothing happens once a Dean account is active.
 
@@ -395,7 +395,7 @@ printf 'Restore completed. Set DB_NAME=%s in .env.single-server before restartin
 
 Only after the restore succeeds, set `DB_NAME` in `.env.single-server` to the printed database name. In a fresh terminal, run the start script and verify `/api/health` and sign-in. If any restore command fails, leave the application stopped and investigate; do not restart against a partially restored database. Keep the previous database until the restored application has been verified. Do not remove a database or volume without Owner approval.
 
-Keep `backups/` private; the files contain all DentiSys data. The Linux start script enforces directory mode `0700` and backup mode `0600`. On Windows, restrict access to the backup directory to the operator and authorized administrators.
+Keep `backups/` private; the files contain all DentiSYS data. The Linux start script enforces directory mode `0700` and backup mode `0600`. On Windows, restrict access to the backup directory to the operator and authorized administrators.
 
 ### B7. Daily maintenance
 
@@ -435,7 +435,7 @@ Repository rules for contributors and coding agents are in [AGENTS.md](AGENTS.md
 - [Documentation index](docs/README.md): architecture, features, database, and guides.
 - [Development environment details](docs/development-environment.md)
 - [Single-server details](docs/single-server.md)
-- [Deploying DentiSys from scratch](docs/deploy-from-scratch.md): step-by-step guide from an empty VPS provider account to a verified server with one command.
+- [Deploying DentiSYS from scratch](docs/deploy-from-scratch.md): step-by-step guide from an empty VPS provider account to a verified server with one command.
 - [Release guide](docs/release-guide.md): demo release, testing and promotion to production.
 - [Hosting requirements](docs/hosting-requirements.md): what the demo and production servers need.
 - [VPS deployment reference](docs/vps-deployment.md): the approved DEL-001 cloud VPS runbook.

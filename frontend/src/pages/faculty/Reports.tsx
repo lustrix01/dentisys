@@ -38,6 +38,9 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Student, AttendanceRecord, Assessment, AssessmentScore } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
+import { SortableHeader, ariaSort, compareValues, type SortState } from '../../components/SortableHeader';
+import { formatShortDate } from '../../utils/sessionDate';
+import { formatSchoolYear } from '../../utils/schoolYear';
 import { effectiveAssessmentPercentage, formatGrade, gwaToDescription, percentageToGWA } from '../../utils/gradeHelper';
 import { extractPeriodEvaluation, type PeriodComponentEvaluation } from '../../utils/periodGradingHelper';
 
@@ -86,7 +89,7 @@ async function buildAnalyticsChartImage(rows: ReportAnalyticsRow[]): Promise<{ b
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext('2d');
-  if (!context) throw new Error('Unable to prepare the analytics charts.');
+  if (!context) throw new Error('Could not prepare the analytics charts.');
   context.fillStyle = '#ffffff';
   context.fillRect(0, 0, width, height);
   let y = 28;
@@ -113,7 +116,7 @@ async function buildAnalyticsChartImage(rows: ReportAnalyticsRow[]): Promise<{ b
     }
     y += 28;
   }
-  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Unable to render the analytics charts.')), 'image/png'));
+  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Could not render the analytics charts.')), 'image/png'));
   return { blob, height };
 }
 
@@ -221,7 +224,7 @@ export const Reports: React.FC = () => {
         }
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Unable to fetch report summary from server.');
+        setError(err instanceof Error ? err.message : 'Could not load the report summary from the server.');
         setDbStudents([]);
         setClasses([]);
       })
@@ -528,10 +531,12 @@ export const Reports: React.FC = () => {
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
+  const [gradeSort, setGradeSort] = useState<SortState<'default' | 'name' | 'grade'>>({ key: 'default', dir: 'asc' });
+  const [retentionSort, setRetentionSort] = useState<SortState<'default' | 'name' | 'grade'>>({ key: 'default', dir: 'asc' });
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedClassId, reportTab, search]);
+  }, [selectedClassId, reportTab, search, gradeSort]);
 
   // Filter students based on selected school year, class, and search
   const facultyStudents = useMemo(() => {
@@ -570,10 +575,21 @@ export const Reports: React.FC = () => {
       }),
   [selectedGradingConfiguration?.componentMode, studentsInSelectedSubject, selectedClassId, selectedSubjectCode]);
 
+  // Sorting applies to the on-screen table only; exports and print keep the roster order.
+  const sortedStudentsInSubject = useMemo(() => {
+    if (gradeSort.key === 'default') return studentsInSelectedSubject;
+    const value = (student: any) => gradeSort.key === 'name' ? student.name : courseEvaluation(subjectForSelection(student)).overallGwa;
+    return [...studentsInSelectedSubject].sort((a, b) => compareValues(value(a), value(b), gradeSort.dir));
+  }, [studentsInSelectedSubject, gradeSort, selectedClassId, selectedSubjectCode]);
+
+  const sortedFacultyStudents = retentionSort.key === 'default'
+    ? facultyStudents
+    : [...facultyStudents].sort((a, b) => compareValues(retentionSort.key === 'name' ? a.name : standingGwa(a), retentionSort.key === 'name' ? b.name : standingGwa(b), retentionSort.dir));
+
   const paginatedStudentsInSubject = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return studentsInSelectedSubject.slice(start, start + pageSize);
-  }, [studentsInSelectedSubject, currentPage, pageSize]);
+    return sortedStudentsInSubject.slice(start, start + pageSize);
+  }, [sortedStudentsInSubject, currentPage, pageSize]);
 
   const totalPagesInSubject = Math.ceil(studentsInSelectedSubject.length / pageSize) || 1;
 
@@ -601,7 +617,7 @@ export const Reports: React.FC = () => {
       try {
         await handleExportReportsBundle();
       } catch (err) {
-        showFeedback(err instanceof Error ? err.message : 'Unable to export the reports workbook.', 'error');
+        showFeedback(err instanceof Error ? err.message : 'Could not export the reports workbook.', 'error');
       } finally {
         setIsExportingAcademic(false);
       }
@@ -961,7 +977,7 @@ export const Reports: React.FC = () => {
         throw err;
       }
     } catch (err) {
-      showFeedback(err instanceof Error ? err.message : 'Unable to prepare the reports PDF.', 'error');
+      showFeedback(err instanceof Error ? err.message : 'Could not prepare the reports PDF.', 'error');
     } finally {
       setIsPreparingBundlePrint(false);
     }
@@ -1003,7 +1019,7 @@ export const Reports: React.FC = () => {
             <option value="all">All school years</option>
             {availableSchoolYears.map(sy => (
               <option key={sy} value={sy}>
-                S.Y. {sy}{sy === currentSchoolYear ? ' (Current)' : ''}
+                {formatSchoolYear(sy)}{sy === currentSchoolYear ? ' (Current)' : ''}
               </option>
             ))}
           </select>
@@ -1144,14 +1160,14 @@ export const Reports: React.FC = () => {
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
-                  <th className="px-5 py-3">Student Details</th>
+                  <th className="px-5 py-3" aria-sort={ariaSort(gradeSort, 'name')}><SortableHeader label="Student Details" sortKey="name" sort={gradeSort} onSort={setGradeSort} /></th>
                   {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Midterm Lecture</th>}
                   {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Midterm Laboratory</th>}
                   <th className="px-5 py-3 text-center">Midterm</th>
                   {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Finals Lecture</th>}
                   {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Finals Laboratory</th>}
                   <th className="px-5 py-3 text-center">{isLectureLaboratoryMode ? 'Finals' : 'Final'}</th>
-                  <th className="px-5 py-3 text-center">Grade</th>
+                  <th className="px-5 py-3 text-center" aria-sort={ariaSort(gradeSort, 'grade')}><SortableHeader label="Grade" sortKey="grade" sort={gradeSort} onSort={setGradeSort} /></th>
                   <th className="px-5 py-3">Remarks</th>
                 </tr>
               </thead>
@@ -1256,15 +1272,15 @@ export const Reports: React.FC = () => {
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
-                  <th className="px-5 py-3">Student Details</th>
-                  <th className="px-5 py-3 text-center">Standing Grade</th>
+                  <th className="px-5 py-3" aria-sort={ariaSort(retentionSort, 'name')}><SortableHeader label="Student Details" sortKey="name" sort={retentionSort} onSort={setRetentionSort} /></th>
+                  <th className="px-5 py-3 text-center" aria-sort={ariaSort(retentionSort, 'grade')}><SortableHeader label="Standing Grade" sortKey="grade" sort={retentionSort} onSort={setRetentionSort} /></th>
                   <th className="px-5 py-3 text-center">At-Risk Courses</th>
                   <th className="px-5 py-3 text-center">Risk Level</th>
                   <th className="px-5 py-3">Remedial Program Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium">
-                {facultyStudents.map((student: any) => {
+                {sortedFacultyStudents.map((student: any) => {
                   const warnings = retentionUnavailable ? [] : (student.enrolledSubjects || []).filter((sub: any) =>
                     assignedSubjects.includes(sub.code)
                     && retentionIsAtRisk(retentionForStudentSubject(student, sub))
@@ -1316,7 +1332,7 @@ export const Reports: React.FC = () => {
           <div className="px-5 py-4 border-b dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex flex-wrap gap-2 justify-between items-center">
             <div className="flex-1 basis-40">
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Authoritative Attendance Register</h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{selectedClass?.courseCode || 'Class unavailable'} · {attendanceDate}</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{selectedClass?.courseCode || 'Class unavailable'} · {formatShortDate(attendanceDate)}</p>
             </div>
             <div className="flex items-center gap-2">
               <input
@@ -1388,7 +1404,7 @@ export const Reports: React.FC = () => {
                 ) : attendanceRecords.map(record => {
                     return (
                       <tr key={record.enrollmentId} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
-                        <td className="px-5 py-3 font-mono">{record.date}</td>
+                        <td className="px-5 py-3 font-mono">{formatShortDate(record.date)}</td>
                         <td className="px-5 py-3">
                           <div className="font-bold text-slate-800 dark:text-slate-200">{record.studentName || 'Student name unavailable'}</div>
                           <span className="whitespace-nowrap text-[10px] text-slate-500 dark:text-slate-400 font-mono">{record.studentNumber || 'Student number unavailable'}</span>

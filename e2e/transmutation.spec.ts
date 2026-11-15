@@ -128,7 +128,7 @@ test.describe('Assessment transmutation UI coverage', () => {
         await route.fulfill({
           status: 500,
           contentType: 'application/json',
-          body: JSON.stringify({ status: 'error', message: 'A server error occurred. Please try again later.' }),
+          body: JSON.stringify({ status: 'error', message: 'A server error occurred. Try again later.' }),
         });
         return;
       }
@@ -188,7 +188,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     await page.getByLabel('Enable Auto-Save').uncheck();
     await reloadedScoreInput.fill('30');
     await page.getByRole('button', { name: 'Save scores sheet' }).click();
-    await expect(page.getByText('A server error occurred. Please try again later.')).toBeVisible();
+    await expect(page.getByText('A server error occurred. Try again later.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Scores saved successfully!' })).toHaveCount(0);
     await expect(reloadedScoreInput).toHaveValue('30');
     expect(computeRequestCount).toBe(0);

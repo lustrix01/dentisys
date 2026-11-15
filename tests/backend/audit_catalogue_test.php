@@ -52,7 +52,7 @@ $dean = array_keys(array_filter(audit_catalogue(), static fn(array $c): bool => 
 assert_audit_catalogue(
     array_intersect($dean, ['assessment_scores_saved', 'grades_recomputed', 'assessment_deleted', 'grading_config_update', 'attendance_session_started',
         'faculty_attendance_change', 'excused_approved', 'retention_remedial_save', 'watchlist_unlock', 'login_success', 'logout', 'biometric_enrollment_started']) === [],
-    'Class work, successful sign-ins and enrolment attempts are not Dean-visible'
+    'Class work, successful sign-ins and enrollment attempts are not Dean-visible'
 );
 assert_audit_catalogue(
     array_diff(['login_failed', 'google_login_denied', 'refresh_reuse_detected', 'mfa_verification_failed', 'mfa_revoked', 'password_changed',

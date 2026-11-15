@@ -74,13 +74,10 @@ function student_academic_profile(PDO $pdo, int $studentId): ?array
         'firstName' => (string) $row['first_name'],
         'middleName' => $row['middle_name'] !== null ? (string) $row['middle_name'] : null,
         'lastName' => (string) $row['last_name'],
-        'name' => trim(implode(' ', array_filter([
-            $row['name_prefix'],
-            $row['first_name'],
-            $row['middle_name'],
-            $row['last_name'],
-            $row['name_suffix'],
-        ], static fn(mixed $value): bool => $value !== null && trim((string) $value) !== ''))),
+        'name' => account_identity_composed_name([
+            'prefix' => $row['name_prefix'], 'firstName' => $row['first_name'], 'middleName' => $row['middle_name'],
+            'lastName' => $row['last_name'], 'suffix' => $row['name_suffix'],
+        ]),
         'email' => $row['bu_email'] !== null ? (string) $row['bu_email'] : null,
         'contact' => $row['contact'] !== null ? (string) $row['contact'] : null,
         'sex' => $row['sex'] !== null ? (string) $row['sex'] : null,

@@ -66,7 +66,7 @@ export function ActivateStudent() {
       await activateStudent(token, password);
       navigate('/login?activated=1', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to accept Student invitation.');
+      setError(err instanceof Error ? err.message : 'Could not accept the Student invitation. Try again.');
     } finally {
       setSubmitting(false);
     }

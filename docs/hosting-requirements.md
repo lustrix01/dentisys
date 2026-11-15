@@ -38,7 +38,7 @@ Pinned in the repository; change them there, not on the server.
 |---|---|
 | Docker Engine and Compose plugin | Docker's official Ubuntu repository (installed by the script) |
 | Web entry and HTTPS | Traefik v3.6.2, Let's Encrypt |
-| Automatic updates | Watchtower 1.7.1 (the three DentiSys application containers only) |
+| Automatic updates | Watchtower 1.7.1 (the three DentiSYS application containers only) |
 | Database | PostgreSQL 18 |
 | Application images | PHP 8.4 (Apache), Node 24 build served by nginx 1.27, Python 3.11 face service |
 | pgAdmin | 9.16 (off in production by default) |

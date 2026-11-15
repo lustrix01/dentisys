@@ -24,7 +24,7 @@ export const Dashboard: React.FC = () => {
         setApiData(res);
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Unable to connect to backend server.');
+        setError(err instanceof Error ? err.message : 'Could not load the dashboard.');
       })
       .finally(() => setLoading(false));
   };

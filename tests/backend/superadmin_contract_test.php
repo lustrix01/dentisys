@@ -5,6 +5,7 @@ declare(strict_types=1);
 // ADM-001 Superadmin mode, DB-free checks (docs/contracts/superadmin.md). The database behaviour is in
 // tests/database/superadmin_integration.php.
 require_once __DIR__ . '/../../backend/app/validation.php';
+require_once __DIR__ . '/../../backend/app/account_identity.php';
 require_once __DIR__ . '/../../backend/app/audit_catalogue.php';
 require_once __DIR__ . '/../../backend/app/auth_runtime.php';
 require_once __DIR__ . '/../../backend/controllers/SuperadminController.php';
@@ -35,7 +36,7 @@ foreach ([
 ] as [$method, $path, $handler]) {
     assert_superadmin(str_contains($routes, "['method' => '{$method}', 'path' => '{$path}', 'handler' => '{$handler}']"), "{$method} {$path} is registered");
 }
-assert_superadmin(substr_count($controller, 'admin_verify_auth($pdo, $config)') === 2, 'Both handlers require the Dean role through admin_verify_auth');
+assert_superadmin(substr_count($controller, 'admin_verify_auth($pdo, $config)') === 3, 'The courses, people and overview handlers require the Dean role through admin_verify_auth');
 assert_superadmin(!str_contains($controller, 'request_header(') && !str_contains($controller, '$_SERVER'), 'The server reads no mode header (SA5)');
 
 // Migration 060 copies the rooms status pattern and defaults every course to active.
@@ -118,4 +119,17 @@ assert_superadmin($invited['status'] === 'invited' && $invited['invitation']['ex
 assert_superadmin(!array_key_exists('invitation', $student) && $student['faceEnrolled'] === false, 'An active person has no invitation block');
 foreach (["'sign-out' => people_sign_out", "'reset-2fa' => people_reset_2fa", "'afterCommit'", "'two_factor_off'", "'no_pending_invitation'", "'invitation_class_unavailable'"] as $needle) {
     assert_superadmin(str_contains($controller, $needle), "The controller handles {$needle}");
+}
+
+// Round 2 (UI-001 wording, docs/contracts/superadmin.md section 12).
+assert_superadmin(str_contains($routes, "'/api/admin/overview', 'handler' => 'handle_admin_overview'"), 'GET /api/admin/overview is routed');
+$name = static fn(string $suffix): string => account_identity_composed_name(['prefix' => '', 'firstName' => 'Roberto', 'middleName' => 'Lim', 'lastName' => 'Santos', 'suffix' => $suffix]);
+assert_superadmin($name('DMD') === 'Roberto Lim Santos, DMD' && $name('DMD, PhD') === 'Roberto Lim Santos, DMD, PhD' && $name('DMD PhD') === 'Roberto Lim Santos, DMD PhD', 'Academic degrees get a comma before them');
+assert_superadmin($name('Jr.') === 'Roberto Lim Santos Jr.' && $name('Sr') === 'Roberto Lim Santos Sr' && $name('III') === 'Roberto Lim Santos III' && $name('IV') === 'Roberto Lim Santos IV' && $name('') === 'Roberto Lim Santos', 'Jr., Sr., II-V and no suffix get no comma');
+assert_superadmin(account_identity_composed_name(['prefix' => 'Dr.', 'firstName' => 'Ana', 'middleName' => null, 'lastName' => 'Cruz', 'suffix' => null]) === 'Dr. Ana Cruz', 'A prefix without a suffix is unchanged');
+$m061 = (string) file_get_contents(__DIR__ . '/../../database/migrations/061_name_degree_comma.sql');
+assert_superadmin(str_contains($m061, 'identity_composed_name') && str_contains($m061, 'identity_legacy_values_conflict') && str_contains($m061, 'ua.display_name = concat_ws'), 'The migration recomposes only names that equal the old composition');
+assert_superadmin(!str_contains($audit, 'Face enrolment') && !str_contains($audit, 'face enrolments') && str_contains($audit, "'Face enrollment deleted'"), 'Audit labels use US spelling');
+foreach (["'yearLevel'", "'invitation'", "'studentNo'", "'lastActivity'", "NULLS LAST", "'yearLevels'"] as $needle) {
+    assert_superadmin(str_contains($controller, $needle), "The people list handles {$needle}");
 }

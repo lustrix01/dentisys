@@ -67,7 +67,7 @@ export function ChangeNameDialog({
     } catch (requestError) {
       const apiError = requestError as { code?: string; message?: string };
       if (apiError?.code === 'TWO_FACTOR_REQUIRED') setRequiresCode(true);
-      setError(apiError?.message || 'Unable to change your name.');
+      setError(apiError?.message || 'Could not change your name. Try again.');
     } finally {
       setSaving(false);
     }

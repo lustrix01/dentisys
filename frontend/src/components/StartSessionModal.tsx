@@ -5,6 +5,7 @@ import { Modal } from './Modal';
 import { RoomSelector, RetiredRoomWarning, retiredRoomError, useRooms } from './RoomSelector';
 import { OverlapConfirmModal, overlapsFrom, type BookingOverlap } from './OverlapConfirmModal';
 
+import { formatShortDate } from '../utils/sessionDate';
 import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../utils/geofenceRadius';
 import type { ClassMeeting } from '../services/apiClient';
 import { SessionTimeFields } from './SessionTimeFields';
@@ -172,7 +173,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
         setLocating(false);
       },
       err => {
-        setError(`Unable to acquire the session location: ${err.message}`);
+        setError(`Could not get the session location: ${err.message}`);
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
@@ -214,7 +215,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
       const found = overlapsFrom(err, 'SESSION_OVERLAP');
       if (found) { setOverlaps(found); return; }
       setOverlaps(null);
-      setError(err instanceof Error ? err.message : 'Unable to start the attendance session.');
+      setError(err instanceof Error ? err.message : 'Could not start the attendance session.');
     } finally {
       setSubmitting(false);
     }
@@ -228,7 +229,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
     <>
       <Tag className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Selected class</Tag>
       <Tag className="mt-1 block font-bold text-slate-800 dark:text-slate-100">{summary}</Tag>
-      <Tag className="mt-0.5 block text-[11px] text-slate-500">Session date: {sessionDate} · Asia/Manila</Tag>
+      <Tag className="mt-0.5 block text-[11px] text-slate-500">Session date: {formatShortDate(sessionDate)} · Asia/Manila</Tag>
     </>
   );
 

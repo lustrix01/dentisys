@@ -10,6 +10,9 @@ import {
   saveFacultyRemedialApi,
   saveFacultyCostRecoveryApi,
 } from '../../services/apiClient';
+import { SortableHeader, ariaSort, compareValues, type SortState } from '../../components/SortableHeader';
+import { formatShortDate } from '../../utils/sessionDate';
+import { formatSchoolYear } from '../../utils/schoolYear';
 import { formatGrade, percentageToGWA } from '../../utils/gradeHelper';
 import { manilaDayKey } from '../../services/auditService';
 import type {
@@ -160,6 +163,11 @@ const readAttempt = (value: unknown): RemedialAttemptView | null => {
 
 // Timestamps arrive as 'YYYY-MM-DD HH:MM:SS.ffffff'; the T form parses in every browser.
 // Server timestamps are UTC without a zone; show the Manila day in the same YYYY-MM-DD form as the scheduled date.
+const sortRowsBy = <T,>(rows: T[], sort: SortState<string>, getters: Record<string, (row: T) => unknown>): T[] => {
+  const get = getters[sort.key];
+  return get ? [...rows].sort((a, b) => compareValues(get(a), get(b), sort.dir)) : rows;
+};
+
 const formatRecordDate = (value: string): string => {
   const date = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : `${value.replace(' ', 'T')}Z`);
   return Number.isNaN(date.getTime()) ? value : manilaDayKey(date);
@@ -305,6 +313,9 @@ export const RetentionMonitoring: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'watchlist' | 'midterm' | 'remedials'>('watchlist');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAtRiskOnly, setShowAtRiskOnly] = useState(true);
+  const [midSort, setMidSort] = useState<SortState<'default' | 'student' | 'grade'>>({ key: 'default', dir: 'asc' });
+  const [watchSort, setWatchSort] = useState<SortState<'default' | 'student' | 'grade' | 'state'>>({ key: 'default', dir: 'asc' });
+  const [remSort, setRemSort] = useState<SortState<'default' | 'student' | 'stage'>>({ key: 'default', dir: 'asc' });
 
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [selectedScheduleEnrollmentId, setSelectedScheduleEnrollmentId] = useState('');
@@ -534,6 +545,10 @@ export const RetentionMonitoring: React.FC = () => {
     return rows;
   }, [filteredRecords]);
 
+  const sortedMidterm = sortRowsBy(midtermDisplayRecords, midSort, { student: r => r.studentName, grade: r => r.midtermPercentage });
+  const sortedWatchlist = sortRowsBy(watchlistRecords, watchSort, { student: r => r.studentName, grade: r => r.gwa, state: r => r.state });
+  const sortedRemedials = sortRowsBy(remedialRows, remSort, { student: r => r.record.studentName, stage: r => r.progression.stage });
+
   const selectedScheduleRecord = useMemo(
     () => usableRecords.find(record => record.enrollmentId === selectedScheduleEnrollmentId) ?? null,
     [selectedScheduleEnrollmentId, usableRecords],
@@ -612,7 +627,7 @@ export const RetentionMonitoring: React.FC = () => {
         ? 'Cost recovery passed: the student is now cleared for this course.'
         : 'Cost recovery recorded as not passed.', result.outcome === 'passed' ? 'success' : 'info');
     } catch (error) {
-      showFeedback(error instanceof Error ? error.message : 'Unable to record the cost recovery result.', 'error');
+      showFeedback(error instanceof Error ? error.message : 'Could not record the cost recovery result.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -681,7 +696,7 @@ export const RetentionMonitoring: React.FC = () => {
           : `Remedial exam persisted, but the authoritative list could not be refreshed.${emailMessage}`,
       });
     } catch (requestError) {
-      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to persist the remedial exam.', 'error');
+      showFeedback(requestError instanceof Error ? requestError.message : 'Could not save the remedial exam.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -789,7 +804,7 @@ export const RetentionMonitoring: React.FC = () => {
           : `${outcomeMsg} (authoritative list could not be refreshed)`,
       });
     } catch (requestError) {
-      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to persist the remedial result.', 'error');
+      showFeedback(requestError instanceof Error ? requestError.message : 'Could not save the remedial result.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -855,7 +870,7 @@ export const RetentionMonitoring: React.FC = () => {
               <option value="all">All school years</option>
               {availableSchoolYears.map(sy => (
                 <option key={sy} value={sy}>
-                  S.Y. {sy}{sy === currentSchoolYear ? ' (Current)' : ''}
+                  {formatSchoolYear(sy)}{sy === currentSchoolYear ? ' (Current)' : ''}
                 </option>
               ))}
             </select>
@@ -893,21 +908,21 @@ export const RetentionMonitoring: React.FC = () => {
         <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
           <div className="flex items-start gap-3">
             <CalendarDays className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>You are viewing archived records for <strong>S.Y. {selectedSchoolYear}</strong>. Historical classes are view-only.</span>
+            <span>You are viewing archived records for <strong>{formatSchoolYear(selectedSchoolYear)}</strong>. Historical classes are view-only.</span>
           </div>
           <button
             type="button"
             onClick={() => { setSelectedSchoolYear(currentSchoolYear); setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); }}
             className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer"
           >
-            Switch to current S.Y. ({currentSchoolYear})
+            Switch to current school year ({formatSchoolYear(currentSchoolYear)})
           </button>
         </div>
       )}
 
       {!isLoading && !loadError && <div className="rounded-xl border p-3 text-xs border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-        <p className="font-bold">Showing {visibleStudentCount} student{visibleStudentCount === 1 ? '' : 's'} across {filteredRecords.length} course enrollment{filteredRecords.length === 1 ? '' : 's'} · {selectedSchoolYear === 'all' ? 'All school years' : `S.Y. ${selectedSchoolYear}`}</p>
-        <p className="mt-1">{currentAttentionStudents} student{currentAttentionStudents === 1 ? ' needs' : 's need'} attention in the current school year ({currentSchoolYear || 'unavailable'}). Course enrollments and pending exams are counted separately in the tabs.</p>
+        <p className="font-bold">Showing {visibleStudentCount} student{visibleStudentCount === 1 ? '' : 's'} across {filteredRecords.length} course enrollment{filteredRecords.length === 1 ? '' : 's'} · {selectedSchoolYear === 'all' ? 'All school years' : formatSchoolYear(selectedSchoolYear)}</p>
+        <p className="mt-1">{currentAttentionStudents} student{currentAttentionStudents === 1 ? ' needs' : 's need'} attention in the current school year ({currentSchoolYear ? formatSchoolYear(currentSchoolYear) : 'unavailable'}). Course enrollments and pending exams are counted separately in the tabs.</p>
         {currentAttentionStudents > 0 && <button type="button" onClick={() => { setSelectedSchoolYear(currentSchoolYear); setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); setActiveTab('watchlist'); }} className="mt-2 font-bold text-emerald-700 dark:text-emerald-400">View current-year students needing attention</button>}
         {activeTab === 'midterm' && <p className="mt-1">Current retention alerts appear in Retention Status. Midterm Watchlist shows students whose fully graded midterm is 2.5 or worse.</p>}
         {(selectedClassId !== 'all' || selectedSubjectCode !== 'all' || searchQuery.trim() !== '') && <button type="button" onClick={() => { setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); }} className="mt-2 font-bold text-emerald-700 dark:text-emerald-400">Clear course, section and search filters</button>}
@@ -953,15 +968,15 @@ export const RetentionMonitoring: React.FC = () => {
             <table className="w-full text-left text-xs max-md:block">
               <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 max-md:hidden">
                 <tr>
-                  <th className="p-3">Student</th>
+                  <th className="p-3" aria-sort={ariaSort(midSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={midSort} onSort={setMidSort} /></th>
                   <th className="p-3">Class</th>
-                  <th className="p-3">Final Midterm Grade</th>
+                  <th className="p-3" aria-sort={ariaSort(midSort, 'grade')}><SortableHeader label="Final Midterm Grade" sortKey="grade" sort={midSort} onSort={setMidSort} /></th>
                   <th className="p-3">Risk Standing</th>
                   <th className="p-3">Status</th>
                 </tr>
               </thead>
               <tbody className="max-md:block">
-                {midtermDisplayRecords.map(record => {
+                {sortedMidterm.map(record => {
                   return (
                     <tr key={record.enrollmentId} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
                       <td className="p-3 font-bold max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm">
@@ -1037,9 +1052,9 @@ export const RetentionMonitoring: React.FC = () => {
           ) : (
           <div className="table-pin table-pin-first table-pin-blocks">
             <table className="w-full text-left text-xs border-collapse max-md:block">
-              <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Student Number</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center">Course Grade</th><th className="py-3 px-4">State</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
+              <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4" aria-sort={ariaSort(watchSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={watchSort} onSort={setWatchSort} /></th><th className="py-3 px-4">Student No.</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center" aria-sort={ariaSort(watchSort, 'grade')}><SortableHeader label="Course Grade" sortKey="grade" sort={watchSort} onSort={setWatchSort} /></th><th className="py-3 px-4" aria-sort={ariaSort(watchSort, 'state')}><SortableHeader label="State" sortKey="state" sort={watchSort} onSort={setWatchSort} /></th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
-                {watchlistRecords.map(record => (
+                {sortedWatchlist.map(record => (
                   <tr key={record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm"><span className="sr-only md:hidden">Student: </span>{textOrUnavailable(record.studentName, 'Student name unavailable')}</td>
                     <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-mono max-md:order-2 max-md:p-0 max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student Number: </span>{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
@@ -1068,9 +1083,9 @@ export const RetentionMonitoring: React.FC = () => {
           ) : (
           <div className="table-pin table-pin-first table-pin-blocks">
             <table className="w-full text-left text-xs border-collapse max-md:block">
-              <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Original Grade</th><th className="py-3 px-4">Attempts</th><th className="py-3 px-4">Current Stage</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
+              <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4" aria-sort={ariaSort(remSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={remSort} onSort={setRemSort} /></th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Original Grade</th><th className="py-3 px-4">Attempts</th><th className="py-3 px-4" aria-sort={ariaSort(remSort, 'stage')}><SortableHeader label="Current Stage" sortKey="stage" sort={remSort} onSort={setRemSort} /></th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
-                {remedialRows.map(row => (
+                {sortedRemedials.map(row => (
                   <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm"><span className="sr-only md:hidden">Student: </span>{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-500 dark:text-slate-400 font-mono max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
                     <td className="py-3.5 px-4 max-md:order-2 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Subject / Class: </span><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-500 dark:text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
@@ -1103,7 +1118,7 @@ export const RetentionMonitoring: React.FC = () => {
                             </span>
                             {attempt?.scheduledDate && (
                               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                                {attempt.scheduledDate}
+                                {formatShortDate(attempt.scheduledDate)}
                               </span>
                             )}
                           </div>
@@ -1126,7 +1141,7 @@ export const RetentionMonitoring: React.FC = () => {
                         </span>
                         {row.progression.clearedAt && (
                           <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold">
-                            Cleared {new Date(row.progression.clearedAt).toLocaleDateString()}
+                            Cleared {formatShortDate(formatRecordDate(row.progression.clearedAt))}
                           </span>
                         )}
                         <button

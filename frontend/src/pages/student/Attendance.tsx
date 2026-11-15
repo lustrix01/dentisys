@@ -436,7 +436,7 @@ export const Attendance: React.FC = () => {
       errors.push(sessionsResult.reason instanceof Error ? sessionsResult.reason.message : 'Attendance sessions are unavailable.');
     }
     setAuthError(errors.length > 0
-      ? `${errors.join(' ')} Automated attendance is unavailable until the data can be loaded. Please use the authorized Secretary or Faculty manual attendance path.`
+      ? `${errors.join(' ')} Automated attendance is unavailable until the data can be loaded. Use the authorized Secretary or Faculty manual attendance path.`
       : null);
     setInitialLoading(false);
   }, [isAuthoritative, loadUpcoming]);
@@ -519,15 +519,15 @@ export const Attendance: React.FC = () => {
         if (check.result === 'imprecise') {
           impreciseRef.current.count += 1;
           setLocationProblem(impreciseRef.current.count >= 2
-            ? "Your phone can't get a precise enough location here. Ask your Class Secretary or Faculty to record your attendance."
+            ? "Your phone cannot get a precise enough location here. Ask your Class Secretary or Faculty to record your attendance."
             : reading.accuracy > 1000
               ? 'Precise location seems to be off. Turn on Precise Location for your browser (iPhone: Settings > Privacy > Location Services; Android: Location > Google Location Accuracy), then retry.'
-              : `Your location is too imprecise (±${formatMeters(reading.accuracy)} m). Turn on Wi-Fi (you don't need to connect), move near a window or doorway, then retry.`);
+              : `Your location is too imprecise (±${formatMeters(reading.accuracy)} m). Turn on Wi-Fi (connecting is not required), move near a window or doorway, then retry.`);
           return;
         }
       } catch {
         if (locateRunRef.current !== runId) return;
-        setLocationProblem('Your location could not be checked right now. Please retry.');
+        setLocationProblem('Your location could not be checked right now. Retry.');
         return;
       }
       setLocationCoords(reading);
@@ -718,7 +718,7 @@ export const Attendance: React.FC = () => {
         setPendingAttendancePayload(null);
         setCanRetryUpload(false);
         const msg = err instanceof Error ? err.message : 'Biometric verification failed.';
-        setFailureNotice(`${msg} Your attendance was not recorded. Please report to your Class Secretary or Faculty for authorized manual check-in.`);
+        setFailureNotice(`${msg} Your attendance was not recorded. Report to your Class Secretary or Faculty for authorized manual check-in.`);
         setCheckInStage('idle');
       }
     } finally {
@@ -827,7 +827,7 @@ export const Attendance: React.FC = () => {
     } catch (err) {
       if (!isRunActive()) return;
       const msg = err instanceof Error ? err.message : 'Live camera guidance is temporarily unavailable.';
-      setFailureNotice(`${msg} Please retry the guided check-in or use authorized manual attendance.`);
+      setFailureNotice(`${msg} Retry the guided check-in or use authorized manual attendance.`);
       setCapturePhase('idle');
       setPhaseInstruction('');
     } finally {
@@ -1035,7 +1035,7 @@ export const Attendance: React.FC = () => {
                 {profile?.enrollmentStatus === 'expired'
                   ? 'Your biometric enrollment expired for this semester. Face re-registration is required.'
                   : profile?.enrollmentStatus === 'revoked'
-                  ? 'Your biometric profile was revoked. Please consent and re-register.'
+                  ? 'Your biometric profile was revoked. Consent and re-register.'
                   : 'Face registration required before taking automated session attendance.'}
               </span>
             </div>
@@ -1277,7 +1277,7 @@ export const Attendance: React.FC = () => {
                                       `${profile?.enrollmentStatus === 'expired'
                                         ? 'Your biometric enrollment expired for this semester. Face re-registration is required.'
                                         : profile?.enrollmentStatus === 'revoked'
-                                        ? 'Your biometric profile was revoked. Please consent and re-register.'
+                                        ? 'Your biometric profile was revoked. Consent and re-register.'
                                         : 'Face registration required before taking automated session attendance.'} ${reEnroll ? 'Re-enroll now?' : 'Register now?'}`,
                                       'Face registration required',
                                       reEnroll ? 'Re-Enroll' : 'Register Face',
@@ -1628,7 +1628,7 @@ export const Attendance: React.FC = () => {
                 <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 animate-fade-in dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
                   Authoritative Verification in Progress…
                   <p className="mx-auto mt-2 max-w-sm text-xs font-normal leading-relaxed">
-                    Evaluating liveness challenge, 1:1 facial verification, and session parameters. Please do not close the browser.
+                    Evaluating liveness challenge, 1:1 facial verification, and session parameters. Do not close the browser.
                   </p>
                 </div>
               )}

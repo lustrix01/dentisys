@@ -528,7 +528,7 @@ test.describe('P03 Student identity and authentication', () => {
     await main.getByRole('button', { name: 'Take attendance' }).click();
     await expect(main.getByText(/Your location is too imprecise \(±25 m\)\. Turn on Wi-Fi/)).toBeVisible();
     await main.getByRole('button', { name: 'Retry' }).click();
-    await expect(main.getByText("Your phone can't get a precise enough location here. Ask your Class Secretary or Faculty to record your attendance.")).toBeVisible();
+    await expect(main.getByText("Your phone cannot get a precise enough location here. Ask your Class Secretary or Faculty to record your attendance.")).toBeVisible();
     await expect(main.getByRole('button', { name: 'Retry' })).toBeVisible();
     await expect(main.getByRole('heading', { name: 'Active Liveness & Face Verification' })).toHaveCount(0);
   });

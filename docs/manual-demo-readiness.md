@@ -1,6 +1,6 @@
-# DentiSys Manual Demo Readiness
+# DentiSYS Manual Demo Readiness
 
-This is the living checklist for a human demonstration of the supported local DentiSys development stack. It complements automated validation; it is not a second automated QA suite. Deterministic logic, API contracts, database persistence, RBAC, and ordinary error branches should be established through the automated coverage referenced below and should not be re-proven manually unless a human-visible presentation is the purpose of the step.
+This is the living checklist for a human demonstration of the supported local DentiSYS development stack. It complements automated validation; it is not a second automated QA suite. Deterministic logic, API contracts, database persistence, RBAC, and ordinary error branches should be established through the automated coverage referenced below and should not be re-proven manually unless a human-visible presentation is the purpose of the step.
 
 Use only the supported Docker Compose development runtime. The seeded credentials in this document are local development/demo-only credentials. Never use them outside development/testing, and never record real passwords, MFA codes, recovery codes, Google tokens, or other secrets in this document or in evidence.
 
@@ -49,7 +49,7 @@ The `Last reviewed` value is the repository commit set used to review this check
 1. Open `http://localhost:8080/api/health` and record the reported service/database health.
 2. Run `./scripts/smoke.ps1 -CheckPgAdmin` from the repository root.
 3. Open `http://127.0.0.1:5050` and sign in with `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD` from `.env`.
-4. Select the preconfigured **DentiSys PostgreSQL (development)** server and enter `DB_PASS` from `.env` when prompted.
+4. Select the preconfigured **DentiSYS PostgreSQL (development)** server and enter `DB_PASS` from `.env` when prompted.
 5. Confirm that the `dentisys` database can be browsed in pgAdmin.
 
 **Expected observations:** The health endpoint reports a healthy API/database state; the smoke check passes; pgAdmin loads, authenticates, and can reach the development PostgreSQL server. Do not treat a pgAdmin-only preference/session reset as a database reset.
@@ -77,7 +77,7 @@ The `Last reviewed` value is the repository commit set used to review this check
 3. Confirm that the query completes without schema changes, `DROP`, or `TRUNCATE` operations.
 4. Confirm that the accounts in [demo-accounts.md](demo-accounts.md) and their fixture records are present.
 5. If the seed is intentionally re-run, execute it a second time and confirm that it reports that it was skipped and that no rows were added.
-6. Stop the stack with `docker compose down` when needed, preserving volumes. Do not use `docker compose down -v` for an ordinary demo reset; it deletes the persisted PostgreSQL volume and all local DentiSys data.
+6. Stop the stack with `docker compose down` when needed, preserving volumes. Do not use `docker compose down -v` for an ordinary demo reset; it deletes the persisted PostgreSQL volume and all local DentiSYS data.
 
 **Expected observations:** Demo data appears only after this manual import; normal startup and migrations do not seed it. The seed is transaction-wrapped, non-destructive, safe to rerun, and preserves the normal development volume.
 
@@ -184,23 +184,23 @@ The `Last reviewed` value is the repository commit set used to review this check
 
 **Purpose:** Demonstrate the configured Google path without weakening password authentication, account linking, MFA, invitation controls, or institutional-domain policy.
 
-**Prerequisites:** First record whether Google is configured in the active runtime. If configured, use only a tester-controlled approved institutional Google Workspace account and an existing DentiSys account that the tester is authorized to link. Never record Google credentials, ID tokens, or secrets.
+**Prerequisites:** First record whether Google is configured in the active runtime. If configured, use only a tester-controlled approved institutional Google Workspace account and an existing DentiSYS account that the tester is authorized to link. Never record Google credentials, ID tokens, or secrets.
 
 **Steps when Google is configured:**
 
 1. Open `/login` and confirm that the Google Sign-In control is presented.
-2. Use the tester-controlled approved institutional account. For first-time linking, confirm the existing DentiSys password when prompted.
+2. Use the tester-controlled approved institutional account. For first-time linking, confirm the existing DentiSYS password when prompted.
 3. Complete the same MFA boundary used by password authentication when MFA is enabled.
 4. Confirm the user reaches the expected role surface, then log out.
 5. Repeat Google Sign-In and confirm that the established link is reused.
-6. Log out and verify that the same account can still sign in with its DentiSys email and password, including MFA when enabled.
+6. Log out and verify that the same account can still sign in with its DentiSYS email and password, including MFA when enabled.
 
 **Steps when Google is not configured:**
 
 1. Open `/login` and record the honest disabled/unavailable state for Google Sign-In.
 2. Sign in with the local demo account's password and confirm that password login remains available.
 
-**Expected observations:** Google is conditional on runtime configuration and an approved tester-controlled identity; first-time linking requires the existing DentiSys password and MFA when enabled; subsequent Google login and password fallback resolve to the same account. If unconfigured, the UI does not pretend Google is available and password login remains usable.
+**Expected observations:** Google is conditional on runtime configuration and an approved tester-controlled identity; first-time linking requires the existing DentiSYS password and MFA when enabled; subsequent Google login and password fallback resolve to the same account. If unconfigured, the UI does not pretend Google is available and password login remains usable.
 
 **Automated coverage:** [e2e/auth.spec.ts](../e2e/auth.spec.ts) covers mocked direct Google login, first-time linking, domain policy errors, and GIS load failure; [docs/development-environment.md](development-environment.md) documents the real-account constraints; [spec.md](../spec.md) AUTH-001 through AUTH-010 are authoritative.
 
@@ -338,8 +338,8 @@ The `Last reviewed` value is the repository commit set used to review this check
 2. Select an eligible Student from the assigned class roster and send the Student invitation.
 3. Open Mailpit at `http://localhost:8025` and confirm that the invitation arrives for the selected recipient with the expected invitation context.
 4. Open the activation link from the Mailpit message and confirm that it opens `/activate-student` for the intended invitation.
-5. Confirm the invitation details and create the required DentiSys password; do not use a Google identity as a substitute for the password or invitation.
-6. Sign in with the newly created Student email and DentiSys password.
+5. Confirm the invitation details and create the required DentiSYS password; do not use a Google identity as a substitute for the password or invitation.
+6. Sign in with the newly created Student email and DentiSYS password.
 7. Confirm that the resulting identity is Student and that only the Student's allowed surfaces are presented.
 8. Log out.
 

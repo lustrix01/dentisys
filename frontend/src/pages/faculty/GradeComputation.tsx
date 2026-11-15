@@ -16,7 +16,6 @@ import {
   Archive,
   Upload,
   Printer,
-  ArrowUpDown,
   Check,
   FileText,
   FileSpreadsheet,
@@ -38,6 +37,9 @@ import { flushSync } from 'react-dom';
 import { PrintStyle, PrintHeader, PrintLegend, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { SortableHeader, ariaSort, type SortState } from '../../components/SortableHeader';
+import { formatShortDate } from '../../utils/sessionDate';
+import { formatSchoolYear } from '../../utils/schoolYear';
 import { matrixDraftCellKey, matrixDraftKey, pruneSavedMatrixDraft, setMatrixDraftCell, sameMatrixScore } from '../../utils/matrixDraft';
 import { Student, EnrolledSubject, GradeComponents, Assessment, AssessmentScore } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
@@ -1011,15 +1013,15 @@ export const GradeComputation: React.FC = () => {
       return;
     }
     if (modalConfigStatus === 'loading') {
-      showFeedback('Please wait for grading configuration to load.', 'error');
+      showFeedback('Wait for the grading configuration to load.', 'error');
       return;
     }
     if (modalConfigStatus === 'error') {
-      showFeedback('Cannot save assessment while grading configuration is in an error state. Please retry loading configuration.', 'error');
+      showFeedback('Cannot save assessment while grading configuration is in an error state. Reload the page to load the configuration again.', 'error');
       return;
     }
     if (!assGradingCategoryId && !assType) {
-      showFeedback('Please select a valid grading category from the active configuration.', 'error');
+      showFeedback('Select a category from the active configuration.', 'error');
       return;
     }
     if (!editingAssessment && modalConfigStatus === 'unconfigured') {
@@ -1028,7 +1030,7 @@ export const GradeComputation: React.FC = () => {
     }
 
     if (assTransmutationEnabled && ((assAttendanceDate && !assAttendanceCode) || (!assAttendanceDate && assAttendanceCode))) {
-      showFeedback('Please select both session date and session code, or leave both blank for no attendance link.', 'error');
+      showFeedback('The attendance link is incomplete. Select both a session date and a session code, or leave both blank for no attendance link.', 'error');
       return;
     }
 
@@ -1090,14 +1092,14 @@ export const GradeComputation: React.FC = () => {
         || !persistedAssessment?.id
         || persistedAssessment.classId !== assClassId
         || persistedAssessment.title !== assTitle.trim()) {
-        throw new Error('The server did not confirm this assessment for the selected class. Please try again.');
+        throw new Error('The server did not confirm this assessment for the selected class. Try saving again.');
       }
       await refreshAssessments();
       setSelectedClassId(assClassId);
       showFeedback(response.message || 'Assessment saved successfully.', 'success');
       setIsAssessmentModalOpen(false);
     } catch (requestError) {
-      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save assessment.', 'error');
+      showFeedback(requestError instanceof Error ? requestError.message : 'Could not save the assessment.', 'error');
     }
   };
 
@@ -1362,7 +1364,7 @@ export const GradeComputation: React.FC = () => {
     } catch (requestError) {
       setSingleSaveStatus('error');
       if (isManual) {
-        showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save assessment scores.', 'error');
+        showFeedback(requestError instanceof Error ? requestError.message : 'Could not save the assessment scores.', 'error');
       }
     }
     finish();
@@ -1589,7 +1591,7 @@ export const GradeComputation: React.FC = () => {
     } catch (requestError) {
       setMatrixSaveStatus('error');
       if (isManual) {
-        showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save the score matrix.', 'error');
+        showFeedback(requestError instanceof Error ? requestError.message : 'Could not save the score matrix.', 'error');
       }
     }
     finish();
@@ -2891,7 +2893,7 @@ export const GradeComputation: React.FC = () => {
         if (err.status === 409) {
           if (err.code === 'GRADING_CONFIGURATION_VERSION_CONFLICT') {
             setConflictError(true);
-            showFeedback('Version conflict: another session updated these grade weights. Please reload the latest configuration.', 'error');
+            showFeedback('Version conflict: another session updated these grade weights. Reload the page to load the latest configuration.', 'error');
           } else if (err.code === 'GRADING_PERIOD_CONVERSION_REQUIRED') {
             const msg = err.message || 'Converting from overall grading requires explicit confirmation.';
             setSaveError(msg);
@@ -2938,8 +2940,8 @@ export const GradeComputation: React.FC = () => {
   // 4. GRADE SUMMARIES TAB STATE
   // ----------------------------------------------------
   const [summarySearch, setSummarySearch] = useState('');
-  const [sortField, setSortField] = useState<'name' | 'overall'>('name');
-  const [sortAsc, setSortAsc] = useState(true);
+  const [summarySort, setSummarySort] = useState<SortState<'name' | 'overall'>>({ key: 'name', dir: 'asc' });
+  const sortAsc = summarySort.dir === 'asc';
 
   // Recomputation State
   const [computeResultsByEnrollment, setComputeResultsByEnrollment] = useState<Map<string, FacultyGradeComputeResult>>(new Map());
@@ -2949,15 +2951,6 @@ export const GradeComputation: React.FC = () => {
     message: string;
     details?: string[];
   } | null>(null);
-
-  const toggleSort = (field: 'name' | 'overall') => {
-    if (sortField === field) {
-      setSortAsc(!sortAsc);
-    } else {
-      setSortField(field);
-      setSortAsc(true);
-    }
-  };
 
   const isPeriodMode = useMemo(() => {
     if (loadedConfig?.schemaMode === 'periods') return true;
@@ -3004,7 +2997,7 @@ export const GradeComputation: React.FC = () => {
     );
 
     return filtered.sort((a, b) => {
-      if (sortField === 'name') {
+      if (summarySort.key === 'name') {
         const lastA = getStudentLastName(a).toLowerCase();
         const lastB = getStudentLastName(b).toLowerCase();
         const cmp = lastA.localeCompare(lastB);
@@ -3023,7 +3016,7 @@ export const GradeComputation: React.FC = () => {
         return sortAsc ? gradeA - gradeB : gradeB - gradeA;
       }
     });
-  }, [activeStudents, summarySearch, sortField, sortAsc, selectedSubjectCode, computeResultsByEnrollment, isPeriodMode]);
+  }, [activeStudents, summarySearch, summarySort, sortAsc, selectedSubjectCode, computeResultsByEnrollment, isPeriodMode]);
 
   // "Lecture · " for the Scores Entry picker, only when the saved weights use both components.
   const scoreComponentPrefix = (a: Assessment) => {
@@ -3138,7 +3131,7 @@ export const GradeComputation: React.FC = () => {
         status: 'Success',
       });
     } catch (err) {
-      showFeedback(err instanceof Error ? err.message : 'Unable to export the grade sheet.', 'error');
+      showFeedback(err instanceof Error ? err.message : 'Could not export the grade sheet.', 'error');
     } finally {
       setIsExportingExcel(false);
     }
@@ -3177,7 +3170,7 @@ export const GradeComputation: React.FC = () => {
       setMatrixRefreshKey(key => key + 1);
       showFeedback(`Grade sheet imported: ${result.scoresSaved} score(s) saved.`, 'success');
     } catch (requestError) {
-      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to import the grade sheet.', 'error');
+      showFeedback(requestError instanceof Error ? requestError.message : 'Could not import the grade sheet.', 'error');
       throw requestError;
     }
   };
@@ -3274,7 +3267,7 @@ export const GradeComputation: React.FC = () => {
           >
             {availableSchoolYears.length === 0
               ? <option value="">No school years available</option>
-              : availableSchoolYears.map(year => <option key={year} value={year}>{year}</option>)}
+              : availableSchoolYears.map(year => <option key={year} value={year}>{formatSchoolYear(year)}</option>)}
           </select>
         </div>
 
@@ -3543,7 +3536,7 @@ export const GradeComputation: React.FC = () => {
                         </div>
 
                         {activeAssessments.length === 0 ? (
-                          <div className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No active assessments. Please create one under "Assessments Manager" first.</h3></div>
+                          <div className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No active assessments. Create one under "Assessments Manager" first.</h3></div>
                         ) : singleActivityFilteredAssessments.length === 0 ? (
                           <div className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No assessments match the active filters.</h3>
                             <button
@@ -3682,7 +3675,7 @@ export const GradeComputation: React.FC = () => {
 
                   <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
                     {!selectedAssessmentId ? (
-                      <div className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">Please select or create an assessment activity on the left pane.</h3></div>
+                      <div className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">Select or create an assessment activity on the left pane.</h3></div>
                     ) : filteredScoreStudents.length === 0 ? (
                       <div className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No matching student records found.</h3></div>
                     ) : (
@@ -3961,7 +3954,7 @@ export const GradeComputation: React.FC = () => {
                             </span>
                             {ass.attendanceSessionDate ? (
                               <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">
-                                Linked: {ass.attendanceSessionDate}
+                                Linked: {formatShortDate(ass.attendanceSessionDate)}
                               </span>
                             ) : (
                               <span className="text-[9px] text-slate-500 dark:text-slate-400">
@@ -4035,7 +4028,7 @@ export const GradeComputation: React.FC = () => {
                                   await refreshAssessments();
                                   showFeedback('Assessment archived.', 'success');
                                 } catch (requestError) {
-                                  showFeedback(requestError instanceof Error ? requestError.message : 'Unable to archive assessment.', 'error');
+                                  showFeedback(requestError instanceof Error ? requestError.message : 'Could not archive the assessment.', 'error');
                                 }
                               }
                             }}
@@ -4052,7 +4045,7 @@ export const GradeComputation: React.FC = () => {
                                   await refreshAssessments();
                                   showFeedback(response.message || 'Assessment deleted.', 'success');
                                 } catch (requestError) {
-                                  showFeedback(requestError instanceof Error ? requestError.message : 'Unable to delete assessment.', 'error');
+                                  showFeedback(requestError instanceof Error ? requestError.message : 'Could not delete the assessment.', 'error');
                                 }
                               }
                             }}
@@ -4202,7 +4195,7 @@ export const GradeComputation: React.FC = () => {
                   <div>
                     <div className="font-bold">Existing assessments require period category mappings</div>
                     <div className="text-[11px] mt-0.5">
-                      Every existing assessment must have a category mapping for its grading period during conversion. Please review the missing mappings below:
+                      Every existing assessment must have a category mapping for its grading period during conversion. Review the missing mappings below:
                     </div>
                   </div>
                 </div>
@@ -5288,12 +5281,7 @@ export const GradeComputation: React.FC = () => {
             <table className="min-w-full divide-y dark:divide-slate-800">
               <thead>
                 <tr className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">
-                  <th className="px-5 py-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => toggleSort('name')}>
-                    <div className="flex items-center gap-1">
-                      Student Details
-                      <ArrowUpDown className="w-3 h-3" />
-                    </div>
-                  </th>
+                  <th className="px-5 py-3" aria-sort={ariaSort(summarySort, 'name')}><SortableHeader label="Student Details" sortKey="name" sort={summarySort} onSort={setSummarySort} /></th>
                   {isPeriodMode ? (
                     <>
                       {isLectureLaboratoryMode ? (
@@ -5320,12 +5308,7 @@ export const GradeComputation: React.FC = () => {
                       <th className="px-5 py-3 text-center">Attendance</th>
                     </>
                   )}
-                  <th className="px-5 py-3 text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => toggleSort('overall')}>
-                    <div className="flex items-center justify-center gap-1">
-                      Final Grade
-                      <ArrowUpDown className="w-3 h-3" />
-                    </div>
-                  </th>
+                  <th className="px-5 py-3 text-center" aria-sort={ariaSort(summarySort, 'overall')}><SortableHeader label="Final Grade" sortKey="overall" sort={summarySort} onSort={setSummarySort} align="center" /></th>
                   <th className="px-5 py-3">Remarks</th>
                 </tr>
               </thead>
@@ -5984,7 +5967,7 @@ export const GradeComputation: React.FC = () => {
                         >
                           <option value="">No link (attendance not considered)</option>
                           {attendanceSessionOptions.map(option => (
-                            <option key={option.date} value={option.date}>{option.date}</option>
+                            <option key={option.date} value={option.date}>{formatShortDate(option.date)}</option>
                           ))}
                         </select>
                       </label>

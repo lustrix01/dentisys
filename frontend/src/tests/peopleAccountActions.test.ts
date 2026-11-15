@@ -37,9 +37,9 @@ test('export rows match the table columns, with the full class list and the show
   assert.deepEqual(peopleExportRow(invited, when).slice(3), ['', 'Invitation expired', '—', 'Invited at 2026-11-01']);
 });
 
-test('course, class and invited filters reach the API', () => {
+test('course, class, invited and year-level filters reach the API', () => {
   const api = read('../services/apiClient.ts');
-  assert.match(api, /for \(const key of \['courseId', 'classId'\] as const\)/);
+  assert.match(api, /for \(const key of \['courseId', 'classId', 'yearLevel'\] as const\)/);
   assert.match(api, /'active' \| 'deactivated' \| 'invited' \| 'all'/);
   assert.match(api, /'\/admin\/people\/filters'/);
   const page = read('../pages/admin/PeopleAndAccounts.tsx');

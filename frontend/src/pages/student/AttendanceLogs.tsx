@@ -20,6 +20,8 @@ import { StudentUnavailable } from './RealStudentSurfaces';
 import { getStudentAttendanceLogs } from '../../services/apiClient';
 import type { StudentAttendanceLogRecord, AttendanceVerificationMethod, AttendanceRecord } from '../../types';
 import { formatVisibleTime } from '../../utils/timeDisplay';
+import { formatShortDate } from '../../utils/sessionDate';
+import { SortableHeader, ariaSort, compareValues, type SortState } from '../../components/SortableHeader';
 
 // Non-authoritative records have no verification method of their own; the prototype
 // sets verificationType only on simulated check-ins. Anything else must stay blank.
@@ -98,6 +100,7 @@ export const AttendanceLogs: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [logSort, setLogSort] = useState<SortState<'none' | 'date' | 'subject' | 'status'>>({ key: 'none', dir: 'desc' });
 
   const loadAuthoritativeLogs = useCallback(async () => {
     if (!isAuthoritative) return;
@@ -132,7 +135,7 @@ export const AttendanceLogs: React.FC = () => {
   }
 
   // Filtered records for display
-  const displayRecords = isAuthoritative
+  const filteredRecords = isAuthoritative
     ? logs.filter(r => {
       const matchesSearch =
         r.courseCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -149,6 +152,11 @@ export const AttendanceLogs: React.FC = () => {
       const matchesStatus = selectedStatus === 'all' || r.status === selectedStatus;
       return matchesSearch && matchesSubject && matchesStatus;
     });
+
+  const sortValue = (r: StudentAttendanceLogRecord | AttendanceRecord) =>
+    logSort.key === 'date' ? r.date : logSort.key === 'subject' ? ('courseCode' in r ? r.courseCode : r.subjectCode) : r.status;
+  const displayRecords = (logSort.key === 'none' ? filteredRecords
+    : [...filteredRecords].sort((a, b) => compareValues(sortValue(a), sortValue(b), logSort.dir))) as typeof filteredRecords;
 
   // Metrics
   const totalCount = isAuthoritative ? logs.length : mockStudentRecords.length;
@@ -311,7 +319,7 @@ export const AttendanceLogs: React.FC = () => {
                   <li key={rec.id} className="py-3.5 space-y-1.5 text-xs">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <span className="sr-only">Date: </span><span className="font-bold text-slate-800 dark:text-slate-100">{rec.date}</span>
+                        <span className="sr-only">Date: </span><span className="font-bold text-slate-800 dark:text-slate-100">{formatShortDate(rec.date)}</span>
                         {rec.time && <span className="text-slate-500 dark:text-slate-400"> · <span className="sr-only">Check-In Time: </span>{rec.time}</span>}
                       </div>
                       <span className="shrink-0"><span className="sr-only">Status: </span><StatusPill status={rec.status} /></span>
@@ -337,7 +345,7 @@ export const AttendanceLogs: React.FC = () => {
                 <li key={rec.id} className="space-y-2.5 py-3.5 text-xs">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <span className="block font-bold text-slate-800 dark:text-slate-100">{rec.date}</span>
+                      <span className="block font-bold text-slate-800 dark:text-slate-100">{formatShortDate(rec.date)}</span>
                       <span className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400"><Clock className="h-3 w-3" />{formatVisibleTime(rec.verifiedAt)}</span>
                     </div>
                     <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider ${rec.status === 'present' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300' : rec.status === 'late' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300' : 'bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300'}`}><span className="sr-only">Attendance Status: </span>{rec.status}</span>
@@ -356,12 +364,12 @@ export const AttendanceLogs: React.FC = () => {
             <table className="w-full min-w-[680px] text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  <th className="pb-3">Date</th>
-                  <th className="pb-3">Class Subject</th>
+                  <th className="pb-3" aria-sort={ariaSort(logSort, 'date')}><SortableHeader label="Date" sortKey="date" sort={logSort} onSort={setLogSort} first="desc" /></th>
+                  <th className="pb-3" aria-sort={ariaSort(logSort, 'subject')}><SortableHeader label="Class Subject" sortKey="subject" sort={logSort} onSort={setLogSort} /></th>
                   <th className="pb-3">Check-In Time</th>
                   <th className="pb-3">Verification Method</th>
                   <th className="pb-3">Session Location</th>
-                  <th className="pb-3 text-right">Attendance Status</th>
+                  <th className="pb-3 text-right" aria-sort={ariaSort(logSort, 'status')}><SortableHeader label="Attendance Status" sortKey="status" sort={logSort} onSort={setLogSort} align="right" /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
@@ -372,7 +380,7 @@ export const AttendanceLogs: React.FC = () => {
                     return (
                       <tr key={rec.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
                         <td className="py-3.5">
-                          <span className="font-bold text-slate-800 dark:text-slate-100 block whitespace-nowrap">{rec.date}</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100 block whitespace-nowrap">{formatShortDate(rec.date)}</span>
                         </td>
                         <td className="py-3.5">
                           <span className="font-mono font-bold text-blue-600 dark:text-blue-400 block">{rec.courseCode}</span>
@@ -404,7 +412,7 @@ export const AttendanceLogs: React.FC = () => {
                   : (displayRecords as typeof mockStudentRecords).map((rec) => (
                     <tr key={rec.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="py-3.5">
-                        <span className="font-bold text-slate-800 dark:text-slate-100 block whitespace-nowrap">{rec.date}</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-100 block whitespace-nowrap">{formatShortDate(rec.date)}</span>
                         <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
                           <Clock className="w-3 h-3" />
                           {formatVisibleTime(rec.verifiedAt) === '—' ? '8:15 AM' : formatVisibleTime(rec.verifiedAt)}

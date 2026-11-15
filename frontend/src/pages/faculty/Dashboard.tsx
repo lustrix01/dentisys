@@ -20,6 +20,7 @@ import {
 } from '../../services/apiClient';
 import type { AuditEntry } from '../../services/auditService';
 import { AuditCompactList } from '../../components/AuditTrailPage';
+import { formatShortDate } from '../../utils/sessionDate';
 import { isViewOnlyClass } from '../../utils/classArchiving';
 
 export const Dashboard: React.FC = () => {
@@ -70,7 +71,7 @@ export const Dashboard: React.FC = () => {
           setDashboardKpis(kpiResult.value);
         } else {
           setDashboardKpis(null);
-          setDashboardError(kpiResult.reason instanceof Error ? kpiResult.reason.message : 'Unable to connect to backend server.');
+          setDashboardError(kpiResult.reason instanceof Error ? kpiResult.reason.message : 'Could not connect to the server. Check the connection and reload the page.');
         }
         if (retentionResult.status === 'fulfilled') {
           setRetentionRecords(Array.isArray(retentionResult.value.retention) ? retentionResult.value.retention : []);
@@ -234,7 +235,7 @@ export const Dashboard: React.FC = () => {
     if (!selectedRemedialId) return;
     const scoreVal = Number(remedialScore);
     if (isNaN(scoreVal) || scoreVal < 0 || scoreVal > 100) {
-      showFeedback('Please enter a valid score (0-100).', 'error');
+      showFeedback('Enter a score from 0 to 100.', 'error');
       return;
     }
     const outcomeContradictsScore = remedialOutcome === 'passed' ? scoreVal < 75 : scoreVal >= 75;
@@ -286,7 +287,7 @@ export const Dashboard: React.FC = () => {
       else showFeedback(`Remedial exam result recorded successfully.${notifiedText}`, 'success');
       loadDashboard();
     } catch (err) {
-      showFeedback(err instanceof Error ? err.message : 'Unable to persist the remedial result.', 'error');
+      showFeedback(err instanceof Error ? err.message : 'Could not save the remedial result.', 'error');
     }
   };
 
@@ -509,7 +510,7 @@ export const Dashboard: React.FC = () => {
                       </span>
                     </div>
                     <span className="block text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      {remedial.subjectCode} · {remedial.scheduledDate ? `Scheduled: ${remedial.scheduledDate}` : 'Record result'}
+                      {remedial.subjectCode} · {remedial.scheduledDate ? `Scheduled: ${formatShortDate(remedial.scheduledDate)}` : 'Record result'}
                     </span>
                   </button>
                 ))}

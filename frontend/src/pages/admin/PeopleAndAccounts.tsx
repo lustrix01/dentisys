@@ -16,8 +16,10 @@ import type { AdminPerson, PeopleFilterOptions, PersonClass } from '../../servic
 import { formatManilaWhen } from '../../services/auditService';
 import { downloadXlsx } from '../../utils/xlsxDownload';
 import { buildReportSheet } from '../../utils/reportWorkbook';
-import { PEOPLE_EXPORT_HEADERS, classesOf, emailParts, lastActivityText, peopleExportRow, personActions, statusLabel } from './peopleHelpers';
-import type { PersonAction } from './peopleHelpers';
+import { ATTENTION_OPTIONS, DEFAULT_PEOPLE_SORT, PEOPLE_EXPORT_HEADERS, attentionFromUrl, attentionParams, classesOf, emailParts, lastActivityText, peopleExportRow, personActions, statusLabel, yearLevelLabel } from './peopleHelpers';
+import type { Attention, PeopleSortKey, PersonAction } from './peopleHelpers';
+import { SortableHeader, ariaSort } from '../../components/SortableHeader';
+import type { SortState } from '../../components/SortableHeader';
 
 // ADM-001 Part C (docs/contracts/superadmin.md): the Dean lists Faculty and Students and manages their accounts
 // in Superadmin mode. Page parts copied from the earlier preview (tabs, filter row, table, phone blocks);
@@ -44,7 +46,7 @@ const ACTIONS: Record<PersonAction, ActionInfo> = {
   'revoke-face': { label: 'Revoke face enrollment', Icon: ScanFace, destructive: true, title: 'Revoke Face Enrollment', confirm: 'Revoke enrollment', reason: 'required', done: 'face enrollment revoked',
     bullets: () => ['Their face check-in enrollment is deleted; they must re-enroll to use face check-in.', 'Manual attendance stays available.', 'They get a notification with your reason.'] },
   deactivate: { label: 'Deactivate', Icon: CircleAlert, destructive: true, title: 'Deactivate Account', confirm: 'Deactivate account', reason: 'optional', done: 'deactivated',
-    bullets: p => ['Signed out on every device now, and sign-in is refused until you reactivate.', 'Records, classes and enrolments are kept.', ...(p.kind === 'student' ? ['If this Student is a Class Secretary, the Secretary sign-in is blocked too.'] : [])] },
+    bullets: p => ['Signed out on every device now, and sign-in is refused until you reactivate.', 'Records, classes and enrollments are kept.', ...(p.kind === 'student' ? ['If this Student is a Class Secretary, the Secretary sign-in is blocked too.'] : [])] },
   reactivate: { label: 'Reactivate', Icon: RotateCcw, title: 'Reactivate Account', confirm: 'Reactivate account', reason: 'none', done: 'reactivated',
     bullets: p => [`The person can sign in again with their existing password and 2FA. ${p.kind === 'student' ? 'A linked Class Secretary sign-in is restored too.' : ''}`.trim()] },
   resend: { label: 'Resend invitation', Icon: Send, title: 'Resend Invitation', confirm: 'Resend invitation', reason: 'none', done: 'invitation resent',
@@ -59,12 +61,12 @@ export const PeopleAndAccounts: React.FC = () => {
   const [kind, setKind] = useState<Kind>(() => (params.get('kind') === 'student' ? 'student' : 'faculty'));
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState<StatusFilter>(() => (['active', 'deactivated', 'invited'] as const).find(v => v === params.get('status')) ?? 'all');
-  const [twoFactor, setTwoFactor] = useState<'all' | 'on' | 'off'>(() => (['on', 'off'] as const).find(v => v === params.get('twoFactor')) ?? 'all');
-  const [activity, setActivity] = useState<'all' | 'never' | 'inactive30'>('all');
-  const [classes, setClasses] = useState<'all' | 'current' | 'none'>('all');
+  const [attention, setAttention] = useState<Attention>(() => attentionFromUrl(key => params.get(key)));
+  const [status, setStatus] = useState<StatusFilter>(() => (['all', 'active', 'deactivated', 'invited'] as const).find(v => v === params.get('status')) ?? (attention === 'expired' ? 'invited' : 'active'));
+  const [classes, setClasses] = useState<'all' | 'current' | 'none'>(() => (['current', 'none'] as const).find(v => v === params.get('classes')) ?? 'all');
   const [secretary, setSecretary] = useState(false);
-  const [face, setFace] = useState<'all' | 'enrolled' | 'not_enrolled'>('all');
+  const [yearLevel, setYearLevel] = useState(0);
+  const [sort, setSort] = useState<SortState<PeopleSortKey>>(DEFAULT_PEOPLE_SORT);
   const [courseId, setCourseId] = useState(0);
   const [classId, setClassId] = useState(0);
   const [options, setOptions] = useState<PeopleFilterOptions>({ courses: [], classes: [] });
@@ -90,11 +92,11 @@ export const PeopleAndAccounts: React.FC = () => {
 
   const filterParams = (p: number) => ({
     kind, status, q, page: p,
-    twoFactor: twoFactor === 'all' ? undefined : twoFactor,
-    activity: activity === 'all' ? undefined : activity,
-    classes: classes === 'all' ? undefined : classes,
-    secretary: secretary || undefined,
-    face: face === 'all' ? undefined : face,
+    ...attentionParams(attention),
+    sort: sort.key, dir: sort.dir,
+    classes: kind === 'faculty' && classes !== 'all' ? classes : undefined,
+    secretary: kind === 'student' && secretary ? true : undefined,
+    yearLevel: kind === 'student' ? yearLevel || undefined : undefined,
     courseId: courseId || undefined,
     classId: kind === 'student' ? classId || undefined : undefined,
   });
@@ -105,12 +107,13 @@ export const PeopleAndAccounts: React.FC = () => {
     setError('');
     getAdminPeopleApi(filterParams(page))
       .then(r => { if (ticket === latest.current) { setPeople(r.people); setTotal(r.total); } })
-      .catch(err => { if (ticket === latest.current) setError(err instanceof Error ? err.message : 'Unable to load accounts.'); })
+      .catch(err => { if (ticket === latest.current) setError(err instanceof Error ? err.message : 'Could not load accounts. Select Retry.'); })
       .finally(() => { if (ticket === latest.current) setLoading(false); });
   };
-  useEffect(load, [kind, status, q, page, twoFactor, activity, classes, secretary, face, courseId, classId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [kind, status, q, page, attention, sort, classes, secretary, yearLevel, courseId, classId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const clearFilters = () => { setSearch(''); setQ(''); setStatus('all'); setTwoFactor('all'); setActivity('all'); setClasses('all'); setSecretary(false); setFace('all'); setCourseId(0); setClassId(0); setPage(1); };
+  const clearFilters = () => { setSearch(''); setQ(''); setStatus('active'); setAttention('all'); setClasses('all'); setSecretary(false); setYearLevel(0); setCourseId(0); setClassId(0); setPage(1); };
+  const changeSort = (next: SortState<PeopleSortKey>) => { setSort(next); setPage(1); };
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const classOptions = options.classes.filter(c => !courseId || c.courseId === courseId);
 
@@ -180,7 +183,7 @@ export const PeopleAndAccounts: React.FC = () => {
         setBlocked({ message: err.message, classes: classes.map(c => ({ ...c, schoolYear: '', current: true })) });
       } else {
         setTarget(null);
-        showFeedback(err instanceof Error ? err.message : 'Unable to update the account.', 'error');
+        showFeedback(err instanceof Error ? err.message : 'Could not update the account. Try again.', 'error');
       }
     } finally {
       setBusy(false);
@@ -197,7 +200,7 @@ export const PeopleAndAccounts: React.FC = () => {
       <ListToolbar
         left={(
           <Tabs variant="switch" color="accent" label="Account roles" value={kind}
-            onChange={value => { setKind(value); setClasses('all'); setSecretary(false); setFace('all'); setCourseId(0); setClassId(0); setPage(1); setSearch(''); setQ(''); setStatus('all'); setTwoFactor('all'); setActivity('all'); }}
+            onChange={value => { setKind(value); setClasses('all'); setSecretary(false); setYearLevel(0); setCourseId(0); setClassId(0); setPage(1); setSearch(''); setQ(''); setStatus('active'); setAttention('all'); setSort(DEFAULT_PEOPLE_SORT); }}
             tabs={[{ id: 'faculty', label: 'Faculty' }, { id: 'student', label: 'Students' }]} />
         )}
         right={(
@@ -217,40 +220,22 @@ export const PeopleAndAccounts: React.FC = () => {
           <>
             <SearchField value={search} onChange={setSearch} placeholder={`Search ${kindLabel[kind].toLowerCase()}…`} color="accent" />
             <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Status</span>
-              <select aria-label="Status" value={status} onChange={event => { setStatus(event.target.value as StatusFilter); setPage(1); }} className={filterClass}>
-                <option value="all">All Statuses</option><option value="active">Active</option><option value="deactivated">Deactivated</option><option value="invited">Invited</option>
+              <select aria-label="Status" value={status} onChange={event => {
+                const next = event.target.value as StatusFilter;
+                setStatus(next);
+                if (attention === 'expired' && next !== 'invited' && next !== 'all') setAttention('all'); // expired invitations exist only among invited accounts
+                setPage(1);
+              }} className={filterClass}>
+                <option value="all">All statuses</option><option value="active">Active</option><option value="deactivated">Deactivated</option><option value="invited">Invited</option>
               </select>
             </label>
-            <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">2FA</span>
-              <select aria-label="2FA" value={twoFactor} onChange={event => { setTwoFactor(event.target.value as typeof twoFactor); setPage(1); }} className={filterClass}>
-                <option value="all">All 2FA</option><option value="on">On</option><option value="off">Off</option>
-              </select>
-            </label>
-            <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Activity</span>
-              <select aria-label="Activity" value={activity} onChange={event => { setActivity(event.target.value as typeof activity); setPage(1); }} className={filterClass}>
-                <option value="all">Any activity</option><option value="never">Never signed in</option><option value="inactive30">Inactive 30+ days</option>
-              </select>
-            </label>
-            {kind === 'faculty' && (
-              <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Classes</span>
-                <select aria-label="Classes" value={classes} onChange={event => { setClasses(event.target.value as typeof classes); setPage(1); }} className={filterClass}>
-                  <option value="all">All classes</option><option value="current">Has classes this school year</option><option value="none">No classes this school year</option>
+            {kind === 'student' && (
+              <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Year level</span>
+                <select aria-label="Year level" value={yearLevel} onChange={event => { setYearLevel(Number(event.target.value)); setPage(1); }} className={filterClass}>
+                  <option value={0}>All year levels</option>
+                  {(options.yearLevels ?? []).map(n => <option key={n} value={n}>{yearLevelLabel(n)}</option>)}
                 </select>
               </label>
-            )}
-            {kind === 'student' && (
-              <>
-                <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Role</span>
-                  <select aria-label="Role" value={secretary ? 'secretary' : 'all'} onChange={event => { setSecretary(event.target.value === 'secretary'); setPage(1); }} className={filterClass}>
-                    <option value="all">All students</option><option value="secretary">Class Secretaries</option>
-                  </select>
-                </label>
-                <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Face enrollment</span>
-                  <select aria-label="Face enrollment" value={face} onChange={event => { setFace(event.target.value as typeof face); setPage(1); }} className={filterClass}>
-                    <option value="all">Any face status</option><option value="enrolled">Face enrolled</option><option value="not_enrolled">Face not enrolled</option>
-                  </select>
-                </label>
-              </>
             )}
             <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Course</span>
               <select aria-label="Course" value={courseId} onChange={event => {
@@ -264,13 +249,37 @@ export const PeopleAndAccounts: React.FC = () => {
               </select>
             </label>
             {kind === 'student' && (
-              <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Class section</span>
-                <select aria-label="Class section" value={classId} onChange={event => { setClassId(Number(event.target.value)); setPage(1); }} className={filterClass}>
-                  <option value={0}>All class sections</option>
-                  {classOptions.map(c => <option key={c.csId} value={c.csId}>{c.label}</option>)}
+              <>
+                <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Class section</span>
+                  <select aria-label="Class section" value={classId} onChange={event => { setClassId(Number(event.target.value)); setPage(1); }} className={filterClass}>
+                    <option value={0}>All class sections</option>
+                    {classOptions.map(c => <option key={c.csId} value={c.csId}>{c.label}</option>)}
+                  </select>
+                </label>
+                <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Show</span>
+                  <select aria-label="Show" value={secretary ? 'secretary' : 'all'} onChange={event => { setSecretary(event.target.value === 'secretary'); setPage(1); }} className={filterClass}>
+                    <option value="all">All students</option><option value="secretary">Class Secretaries</option>
+                  </select>
+                </label>
+              </>
+            )}
+            {kind === 'faculty' && (
+              <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Teaching this school year</span>
+                <select aria-label="Teaching this school year" value={classes} onChange={event => { setClasses(event.target.value as typeof classes); setPage(1); }} className={filterClass}>
+                  <option value="all">All Faculty</option><option value="current">Teaching</option><option value="none">Not teaching</option>
                 </select>
               </label>
             )}
+            <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Needs attention</span>
+              <select aria-label="Needs attention" value={attention} onChange={event => {
+                const next = event.target.value as Attention;
+                setAttention(next);
+                if (next === 'expired' && status !== 'all') setStatus('invited'); // expired invitations exist only among invited accounts
+                setPage(1);
+              }} className={filterClass}>
+                {ATTENTION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </label>
             <button type="button" onClick={clearFilters} className="min-h-10 rounded-lg px-3 text-xs font-bold text-accent-700 hover:bg-accent-50 dark:text-accent-300 dark:hover:bg-accent-950/40">Clear filters</button>
           </>
         )}
@@ -278,7 +287,7 @@ export const PeopleAndAccounts: React.FC = () => {
 
       <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent-600 dark:text-accent-400" />
-        <p>Deactivating an account signs the person out on every device and blocks sign-in until you reactivate it. Records, classes and enrolments are kept. Faculty are invited from Faculty Invitations; Students are invited from class rosters.</p>
+        <p>Deactivating an account signs the person out on every device and blocks sign-in until you reactivate it. Records, classes and enrollments are kept. Faculty are invited from Faculty Invitations; Students are invited from class rosters.</p>
       </div>
 
       {error && (
@@ -304,13 +313,13 @@ export const PeopleAndAccounts: React.FC = () => {
               <table className="w-full min-w-[880px] text-left text-xs">
                 <thead className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400">
                   <tr>
-                    <th scope="col" className="px-5 py-3.5">Name</th>
+                    <th scope="col" aria-sort={ariaSort(sort, 'name')} className="px-5 py-3.5"><SortableHeader label="Name" sortKey="name" sort={sort} onSort={changeSort} /></th>
                     <th scope="col" className="px-4 py-3.5">Email</th>
-                    {kind === 'student' && <th scope="col" className="px-4 py-3.5">Student Number</th>}
-                    <th scope="col" className="px-4 py-3.5">Classes</th>
+                    {kind === 'student' && <th scope="col" aria-sort={ariaSort(sort, 'studentNo')} className="px-4 py-3.5"><SortableHeader label="Student No." sortKey="studentNo" sort={sort} onSort={changeSort} /></th>}
+                    <th scope="col" aria-sort={ariaSort(sort, 'classes')} className="px-4 py-3.5"><SortableHeader label="Classes" sortKey="classes" first="desc" sort={sort} onSort={changeSort} /></th>
                     <th scope="col" className="px-4 py-3.5">Status</th>
                     <th scope="col" className="px-4 py-3.5">2FA</th>
-                    <th scope="col" className="px-4 py-3.5">Last Activity</th>
+                    <th scope="col" aria-sort={ariaSort(sort, 'lastActivity')} className="px-4 py-3.5"><SortableHeader label="Last Activity" sortKey="lastActivity" first="desc" sort={sort} onSort={changeSort} /></th>
                     <th scope="col" className="px-4 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>

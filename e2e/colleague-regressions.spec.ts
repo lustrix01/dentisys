@@ -185,9 +185,9 @@ test('future and unclassified enrollments remain visible outside current and pas
   } }));
   await page.goto('/student/classes');
   await expect(page.getByRole('heading', { name: 'Other School-Year Enrollments', exact: true })).toBeVisible();
-  await expect(page.getByRole('row').filter({ hasText: 'FUTURE' })).toContainText('2027-2028');
+  await expect(page.getByRole('row').filter({ hasText: 'FUTURE' })).toContainText('S.Y. 2027–2028');
   await expect(page.getByRole('row').filter({ hasText: 'UNKNOWN' })).toContainText('Unavailable');
-  await expect(page.getByRole('main')).toContainText('No active classes for S.Y. 2026-2027');
+  await expect(page.getByRole('main')).toContainText('No active classes for S.Y. 2026–2027');
   await page.getByRole('tab', { name: /Archived Classes/ }).click();
   await expect(page.getByText('No archived classes found', { exact: true })).toBeVisible();
 });
@@ -346,7 +346,7 @@ test('Secretary correction uses a fresh reason, preserves failures for retry, an
   await expect.poll(() => writing).toBe(true);
   await expect(page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true })).toBeDisabled();
   release?.();
-  await expect(page.getByRole('main').getByText('Service is temporarily unavailable. Please try again later.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('main').getByText('Service is temporarily unavailable. Try again later.', { exact: true })).toBeVisible();
   await expect(page.locator('textarea')).toHaveValue('New verified correction reason');
   await expect(page.getByRole('button', { name: 'Send for approval' })).toBeEnabled();
   const row = page.getByRole('row').filter({ hasText: 'Correction Student' });

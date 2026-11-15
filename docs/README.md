@@ -1,6 +1,6 @@
-# DentiSys Documentation
+# DentiSYS Documentation
 
-Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) is the authoritative source for approved product behavior; where any document disagrees with it, the specification wins.
+Start with the [README](../README.md) to set up DentiSYS. [spec.md](../spec.md) is the authoritative source for approved product behavior; where any document disagrees with it, the specification wins.
 
 Every file in this folder describes the system as it is now. Dated records (handoffs, merge notes, reviews, change notes, amendment records, built proposals) are in the [archive](archive/README.md) and do not describe the current system.
 
@@ -18,7 +18,7 @@ Every file in this folder describes the system as it is now. Dated records (hand
 - [Manual demo readiness checklist](manual-demo-readiness.md)
 - [Single-server mode](single-server.md): the unfinished private-network deployment prototype.
 - [Hosting requirements](hosting-requirements.md): what the demo and production servers need and the accepted risks.
-- [Deploying DentiSys from scratch](deploy-from-scratch.md): the step-by-step VPS deployment guide.
+- [Deploying DentiSYS from scratch](deploy-from-scratch.md): the step-by-step VPS deployment guide.
 - [VPS deployment](vps-deployment.md): the DEL-001 image registry, HTTPS, update and backup runbook.
 - [Release guide](release-guide.md): from an approved change to the demo and production servers.
 - [Benchmark](benchmark.md): the repeatable load and face-check benchmark.

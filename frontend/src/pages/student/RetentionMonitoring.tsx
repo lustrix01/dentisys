@@ -11,6 +11,8 @@ import { getStudentAcademicRetentionApi } from '../../services/apiClient';
 import type { Student, StudentAcademicClass } from '../../types';
 import GradeValue from '../../components/GradeValue';
 import { formatGrade } from '../../utils/gradeHelper';
+import { SortableHeader, ariaSort, compareValues, type SortState } from '../../components/SortableHeader';
+import { formatSchoolYear } from '../../utils/schoolYear';
 import { semesterLabel } from '../../utils/academicTermDefaults';
 
 const courseKind = (cls: StudentAcademicClass): string | null => {
@@ -175,6 +177,7 @@ export const RetentionMonitoring: React.FC = () => {
   const [midtermAtRiskCount, setMidtermAtRiskCount] = useState<number>(0);
   const [currentSchoolYear, setCurrentSchoolYear] = useState<string | null>(null);
   const [hasPendingGrades, setHasPendingGrades] = useState(true);
+  const [courseSort, setCourseSort] = useState<SortState<'none' | 'course'>>({ key: 'none', dir: 'asc' });
   const [activeTab, setActiveTab] = useState<'current' | 'remedials' | 'midterm' | 'past'>('current');
   const [loading, setLoading] = useState<boolean>(isAuthoritative);
   const [error, setError] = useState<string | null>(null);
@@ -192,7 +195,7 @@ export const RetentionMonitoring: React.FC = () => {
         setHasPendingGrades(res.retention.hasPendingGrades);
       })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Unable to load retention monitoring data.');
+        setError(err instanceof Error ? err.message : 'Could not load retention monitoring data. Reload the page.');
       })
       .finally(() => {
         setLoading(false);
@@ -261,6 +264,7 @@ export const RetentionMonitoring: React.FC = () => {
     r.midtermEvaluation && !r.midtermEvaluation.complete && r.midtermEvaluation.totalCount > 0
     && r.grade === null && readRemedialProgression(r).stage === 'none'
   ), [currentRecords]);
+  const byCourse = (rows: StudentAcademicClass[]) => courseSort.key === 'none' ? rows : [...rows].sort((a, b) => compareValues(a.courseCode, b.courseCode, courseSort.dir));
 
   // Group past records by school year & semester
   const pastSemesters = useMemo(() => {
@@ -407,7 +411,7 @@ export const RetentionMonitoring: React.FC = () => {
                 <BookOpen className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
                 <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No courses enrolled for the active term.</h3>
               </div>
-            ) : currentRecords.map(cls => {
+            ) : byCourse(currentRecords).map(cls => {
               const isPending = cls.grade === null;
               const isAtRisk = (cls.retentionState || '').toLowerCase() === 'remedial';
               const hasRemedial = readRemedialProgression(cls).stage !== 'none';
@@ -428,7 +432,7 @@ export const RetentionMonitoring: React.FC = () => {
             <table className="w-full min-w-[560px] text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-50/50 dark:bg-slate-800/40">
-                  <th className="py-3 px-4">Course</th>
+                  <th className="py-3 px-4" aria-sort={ariaSort(courseSort, 'course')}><SortableHeader label="Course" sortKey="course" sort={courseSort} onSort={setCourseSort} /></th>
                   <th className="py-3 px-4 text-center">Midterm</th>
                   <th className="py-3 px-4 text-center">Final Grade</th>
                   <th className="py-3 px-4">Standing</th>
@@ -445,7 +449,7 @@ export const RetentionMonitoring: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  currentRecords.map(cls => {
+                  byCourse(currentRecords).map(cls => {
                     const isPending = cls.grade === null;
                     const retentionState = (cls.retentionState || '').toLowerCase();
                     const isAtRisk = retentionState === 'remedial';
@@ -536,7 +540,7 @@ export const RetentionMonitoring: React.FC = () => {
               <h4 className="text-xs font-bold"><span className="font-mono text-blue-600 mr-2">{cls.courseCode}</span>{cls.courseName}</h4>
               <p className="text-xs">Original Course Grade: {cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue>}</p>
               <p className="text-xs">Retention: {retentionStateLabel(cls.retentionState)}</p>
-              <p className="text-[10px] text-slate-500">{semesterLabel(cls.semester)} · {cls.schoolYear}</p>
+              <p className="text-[10px] text-slate-500">{semesterLabel(cls.semester)} · {formatSchoolYear(cls.schoolYear)}</p>
               <p className="text-xs font-semibold">{readRemedialProgression(cls).stage === 'none' ? 'No remedial attempt assigned.' : 'Remedial progression needs Faculty review.'}</p>
             </Card>)}
             {[...activeRemedialRecords, ...remedialHistoryRecords].map((cls, index) => {
@@ -566,7 +570,7 @@ export const RetentionMonitoring: React.FC = () => {
                     </span>
                   </div>
 
-                  <p className="text-[10px] text-slate-500">{semesterLabel(cls.semester)} · {cls.schoolYear} · {progression.stage.replaceAll('_', ' ')}</p>
+                  <p className="text-[10px] text-slate-500">{semesterLabel(cls.semester)} · {formatSchoolYear(cls.schoolYear)} · {progression.stage.replaceAll('_', ' ')}</p>
                   {/* Scheduled Exam Date */}
                   <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
                     <Clock className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
@@ -650,7 +654,7 @@ export const RetentionMonitoring: React.FC = () => {
                   <CheckCircle2 className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
                   <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{currentRecords.length === 0 ? 'No current courses available for a midterm advisory.' : 'No courses are on the Midterm Advisory.'}</h3>
                 </div>
-              ) : midtermRiskRecords.map(cls => (
+              ) : byCourse(midtermRiskRecords).map(cls => (
                 <article key={cls.enrollmentId} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs dark:border-slate-800 dark:bg-slate-950/40">
                   <h3 className="font-bold text-slate-800 dark:text-slate-100"><span className="font-mono text-blue-600 dark:text-blue-400">{cls.courseCode}</span> · {cls.courseName}</h3>
                   <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">Faculty: {cls.instructorName || 'Faculty'}</p>
@@ -666,7 +670,7 @@ export const RetentionMonitoring: React.FC = () => {
               <table className="w-full min-w-[620px] text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-50/50 dark:bg-slate-800/40">
-                    <th className="py-3 px-4">Course</th>
+                    <th className="py-3 px-4" aria-sort={ariaSort(courseSort, 'course')}><SortableHeader label="Course" sortKey="course" sort={courseSort} onSort={setCourseSort} /></th>
                     <th className="py-3 px-4 text-center">Midterm Score</th>
                     <th className="py-3 px-4 text-center">Midterm Grade</th>
                     <th className="py-3 px-4">Recommendation</th>
@@ -683,7 +687,7 @@ export const RetentionMonitoring: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    midtermRiskRecords.map(cls => (
+                    byCourse(midtermRiskRecords).map(cls => (
                       <tr key={cls.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                         <td className="py-3.5 px-4">
                           <span className="font-mono font-bold text-blue-600 dark:text-blue-400 text-sm mr-2">
@@ -739,7 +743,7 @@ export const RetentionMonitoring: React.FC = () => {
                   >
                     <div>
                       <h4 className="font-bold text-xs text-slate-800 dark:text-slate-100">
-                        S.Y. {sem.schoolYear} · {semesterLabel(sem.semester)}
+                        {formatSchoolYear(sem.schoolYear)} · {semesterLabel(sem.semester)}
                       </h4>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400">
                         {sem.records.length} Courses

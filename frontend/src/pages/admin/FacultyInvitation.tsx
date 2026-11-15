@@ -19,6 +19,8 @@ import { Card, CardHeader, CardTitle } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { formatManilaWhen } from '../../services/auditService';
+import { SortableHeader, ariaSort, compareValues } from '../../components/SortableHeader';
+import type { SortState } from '../../components/SortableHeader';
 import { EmailHistoryTable } from '../../components/email/EmailHistoryTable';
 import { actionsForInvitation, type EmailAction } from '../../components/email/emailHistory';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
@@ -57,6 +59,7 @@ export const FacultyInvitation: React.FC = () => {
   const [emailActions, setEmailActions] = useState<EmailAction[]>([]);
   const [emailSearch, setEmailSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [sort, setSort] = useState<SortState<'name' | 'invited' | 'status'>>({ key: 'invited', dir: 'desc' }); // newest first, as the server lists them
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -101,7 +104,7 @@ export const FacultyInvitation: React.FC = () => {
       const response = await getFacultyInvitations();
       setInvitations(Array.isArray(response?.invitations) ? response.invitations : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load Faculty invitations.');
+      setError(err instanceof Error ? err.message : 'Could not load Faculty invitations. Reload the page.');
     } finally {
       setLoading(false);
     }
@@ -121,7 +124,8 @@ export const FacultyInvitation: React.FC = () => {
     (statusFilter === 'all' || invitation.status === statusFilter)
     && (invitation.name.toLowerCase().includes(searchQuery.toLowerCase())
       || invitation.email.toLowerCase().includes(searchQuery.toLowerCase()))
-  ), [invitations, searchQuery, statusFilter]);
+  ).sort((a, b) => compareValues(sort.key === 'name' ? a.name : sort.key === 'status' ? a.status : a.invitedAt, sort.key === 'name' ? b.name : sort.key === 'status' ? b.status : b.invitedAt, sort.dir)),
+  [invitations, searchQuery, statusFilter, sort]);
 
   const emailLocalPart = email.includes('@') ? email.split('@')[0] : email;
   const editEmailLocalPart = editEmail.includes('@') ? editEmail.split('@')[0] : editEmail;
@@ -135,7 +139,7 @@ export const FacultyInvitation: React.FC = () => {
     const cleanFirst = firstName.trim();
     const cleanLast = lastName.trim();
     if (!cleanFirst || !cleanLast) {
-      setError('Please provide at least a first name and a last name.');
+      setError('Enter at least a first name and a last name.');
       return;
     }
 
@@ -172,7 +176,7 @@ export const FacultyInvitation: React.FC = () => {
       setEmail('');
       await refresh();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to issue Faculty invitation.';
+      const message = err instanceof Error ? err.message : 'Could not issue the Faculty invitation. Try again.';
       showFeedback(message, 'error');
     } finally {
       setSending(false);
@@ -204,11 +208,11 @@ export const FacultyInvitation: React.FC = () => {
     const cleanFirst = editFirstName.trim();
     const cleanLast = editLastName.trim();
     if (editStructuredName && (!cleanFirst || !cleanLast)) {
-      setEditError('Please provide at least a first name and a last name.');
+      setEditError('Enter at least a first name and a last name.');
       return;
     }
     if (!editStructuredName && !cleanFullName) {
-      setEditError('Please provide the faculty member\'s full name.');
+      setEditError('Enter the Faculty member\'s full name.');
       return;
     }
 
@@ -239,7 +243,7 @@ export const FacultyInvitation: React.FC = () => {
       setEditingInvitation(null);
       await refresh();
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : 'Unable to update Faculty invitation.');
+      setEditError(err instanceof Error ? err.message : 'Could not update the Faculty invitation. Try again.');
     } finally {
       setEditSaving(false);
     }
@@ -256,7 +260,7 @@ export const FacultyInvitation: React.FC = () => {
       setRevokingInvitation(null);
       await refresh();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to revoke Faculty invitation.';
+      const message = err instanceof Error ? err.message : 'Could not revoke the Faculty invitation. Try again.';
       showFeedback(message, 'error');
     } finally {
       setRevoking(false);
@@ -274,7 +278,7 @@ export const FacultyInvitation: React.FC = () => {
         : `Invitation reissued for ${invitation.email}, but email delivery failed.`);
       await refresh();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to reissue Faculty invitation.';
+      const message = err instanceof Error ? err.message : 'Could not reissue the Faculty invitation. Try again.';
       showFeedback(message, 'error');
     } finally {
       setSending(false);
@@ -555,10 +559,10 @@ export const FacultyInvitation: React.FC = () => {
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                <th className="px-4 py-3">Faculty</th>
+                <th scope="col" aria-sort={ariaSort(sort, 'name')} className="px-4 py-3"><SortableHeader label="Faculty" sortKey="name" sort={sort} onSort={setSort} /></th>
                 <th className="px-4 py-3">Institutional Email</th>
-                <th className="px-4 py-3">Invited</th>
-                <th className="px-4 py-3">Status</th>
+                <th scope="col" aria-sort={ariaSort(sort, 'invited')} className="px-4 py-3"><SortableHeader label="Invited" sortKey="invited" first="desc" sort={sort} onSort={setSort} /></th>
+                <th scope="col" aria-sort={ariaSort(sort, 'status')} className="px-4 py-3"><SortableHeader label="Status" sortKey="status" sort={sort} onSort={setSort} /></th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>

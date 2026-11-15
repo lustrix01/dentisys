@@ -6,6 +6,7 @@ require_once dirname(__DIR__) . '/app/remedial_attempts.php';
 require_once dirname(__DIR__) . '/app/academic_year.php';
 require_once dirname(__DIR__) . '/app/class_meetings.php';
 require_once dirname(__DIR__) . '/app/notifications.php';
+require_once dirname(__DIR__) . '/app/account_identity.php';
 
 if (!function_exists('sanitize_for_log')) {
     function sanitize_for_log(\Throwable $e): string
@@ -364,13 +365,13 @@ function faculty_map_student_rows(array $rows, ?float $retentionThreshold = null
     foreach ($rows as $row) {
         $id = (string) $row['student_id'];
         if (!isset($byStudent[$id])) {
-            $fullName = normalize_person_name(trim(implode(' ', array_filter([
-                $row['name_prefix'] ?? null,
-                $row['first_name'] ?? null,
-                $row['middle_name'] ?? null,
-                $row['last_name'] ?? null,
-                $row['name_suffix'] ?? null,
-            ], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''))));
+            $fullName = account_identity_normalized_composed_name([
+                'prefix' => $row['name_prefix'] ?? null,
+                'firstName' => $row['first_name'] ?? null,
+                'middleName' => $row['middle_name'] ?? null,
+                'lastName' => $row['last_name'] ?? null,
+                'suffix' => $row['name_suffix'] ?? null,
+            ]);
             $byStudent[$id] = [
                 'id' => $id,
                 'studentId' => $row['student_number'],
@@ -985,10 +986,10 @@ function handle_faculty_student_update(array $params = []): void
                 'middleName' => $after['middle_name'],
                 'lastName' => $after['last_name'],
                 'suffix' => $after['name_suffix'],
-                'name' => normalize_person_name(trim(implode(' ', array_filter([
-                    $after['name_prefix'], $after['first_name'], $after['middle_name'],
-                    $after['last_name'], $after['name_suffix'],
-                ], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== '')))),
+                'name' => account_identity_normalized_composed_name([
+                    'prefix' => $after['name_prefix'], 'firstName' => $after['first_name'], 'middleName' => $after['middle_name'],
+                    'lastName' => $after['last_name'], 'suffix' => $after['name_suffix'],
+                ]),
                 'email' => $after['bu_email'],
                 'contact' => $after['contact'],
                 'sex' => $after['sex'],
@@ -6795,7 +6796,7 @@ function faculty_send_remedial_schedule_email(
     $dateLabel = (new DateTimeImmutable($scheduledDate, new DateTimeZone('Asia/Manila')))->format('F j, Y');
     $subject = faculty_remedial_email_subject($courseCode, $className, $attemptNumber, $scheduledDate);
     $facultyName = (string) ($authCtx['display_name'] ?? 'your Faculty instructor');
-    $message = "A remedial exam for {$classLabel} has been scheduled. Attempt {$attemptNumber} is scheduled for {$dateLabel}. Please contact {$facultyName} if you have questions about this schedule.";
+    $message = "A remedial exam for {$classLabel} has been scheduled. Attempt {$attemptNumber} is scheduled for {$dateLabel}. Contact {$facultyName} if you have questions about this schedule.";
     $messageBody = email_faculty_message_html($recipientName, $facultyName, $message);
     $officialEmail = filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)
         && strtolower((string) substr(strrchr($recipientEmail, '@') ?: '', 1)) === 'bicol-u.edu.ph';
@@ -7786,7 +7787,7 @@ function handle_faculty_email_send(): void
                     $noticeDetailsByEnrollment[$enrollmentId] = [
                         'subject' => 'Midterm Academic Advisory: ' . (string) $recipient['cs_name'],
                         'message' => 'Your completed Midterm results in ' . (string) $recipient['cs_name']
-                            . ' meet the criteria for a Midterm Advisory. This is an informational notice, not a final course grade or a remedial assignment. Please contact '
+                            . ' meet the criteria for a Midterm Advisory. This is an informational notice, not a final course grade or a remedial assignment. Contact '
                             . (string) ($authCtx['display_name'] ?? 'your Faculty instructor') . ' to discuss your progress and available support.',
                     ];
                 } else {
@@ -7813,12 +7814,12 @@ function handle_faculty_email_send(): void
                         'subject' => 'Remedial Exam Schedule: ' . (string) $recipient['course_code'] . ' · ' . (string) $recipient['cs_name'],
                         'message' => 'A remedial exam for ' . (string) $recipient['course_code'] . ' · ' . (string) $recipient['cs_name']
                             . ' has been scheduled or updated. Attempt ' . (int) $pending['attemptNumber'] . ' is scheduled for ' . $scheduledDate->format('F j, Y')
-                            . '. Please contact ' . (string) ($authCtx['display_name'] ?? 'your Faculty instructor') . ' if you have questions about this schedule.',
+                            . '. Contact ' . (string) ($authCtx['display_name'] ?? 'your Faculty instructor') . ' if you have questions about this schedule.',
                     ];
                     $noticeDetailsByEnrollment[$enrollmentId]['subject'] = $newNoticeSubject;
                     $noticeDetailsByEnrollment[$enrollmentId]['message'] = 'A remedial exam for ' . $newNoticeClassLabel
                         . ' has been scheduled or updated. Attempt ' . (int) $pending['attemptNumber'] . ' is scheduled for ' . $scheduledDate->format('F j, Y')
-                        . '. Please contact ' . (string) ($authCtx['display_name'] ?? 'your Faculty instructor') . ' if you have questions about this schedule.';
+                        . '. Contact ' . (string) ($authCtx['display_name'] ?? 'your Faculty instructor') . ' if you have questions about this schedule.';
                 }
             }
         } else {
@@ -8896,9 +8897,10 @@ function handle_faculty_class_available_students(): void
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $mapped = array_map(function ($s) {
-            $fullName = normalize_person_name(trim(implode(' ', array_filter([
-                $s['name_prefix'], $s['first_name'], $s['middle_name'], $s['last_name'], $s['name_suffix'],
-            ], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''))));
+            $fullName = account_identity_normalized_composed_name([
+                'prefix' => $s['name_prefix'], 'firstName' => $s['first_name'], 'middleName' => $s['middle_name'],
+                'lastName' => $s['last_name'], 'suffix' => $s['name_suffix'],
+            ]);
             return [
                 'id' => (string) $s['student_id'],
                 'studentId' => $s['student_number'],

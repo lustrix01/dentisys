@@ -1,4 +1,4 @@
-# DentiSys Biometric Calibration and Deployment Report
+# DentiSYS Biometric Calibration and Deployment Report
 
 ## Scope and approval status
 

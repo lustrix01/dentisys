@@ -187,13 +187,13 @@ function student_auth_activation_raw_token(): string
 
 function student_auth_student_display_name(array $student): string
 {
-    return normalize_person_name(trim(implode(' ', array_filter([
-        $student['canonical_name_prefix'] ?? $student['name_prefix'] ?? null,
-        $student['canonical_first_name'] ?? $student['first_name'] ?? null,
-        $student['canonical_middle_name'] ?? $student['middle_name'] ?? null,
-        $student['canonical_last_name'] ?? $student['last_name'] ?? null,
-        $student['canonical_name_suffix'] ?? $student['name_suffix'] ?? null,
-    ], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''))));
+    return account_identity_normalized_composed_name([
+        'prefix' => $student['canonical_name_prefix'] ?? $student['name_prefix'] ?? null,
+        'firstName' => $student['canonical_first_name'] ?? $student['first_name'] ?? null,
+        'middleName' => $student['canonical_middle_name'] ?? $student['middle_name'] ?? null,
+        'lastName' => $student['canonical_last_name'] ?? $student['last_name'] ?? null,
+        'suffix' => $student['canonical_name_suffix'] ?? $student['name_suffix'] ?? null,
+    ]);
 }
 
 function student_auth_activation_email(array $student, string $link, string $facultyName = ''): string

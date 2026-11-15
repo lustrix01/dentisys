@@ -43,7 +43,7 @@ export const Dashboard: React.FC = () => {
       }
     } catch (requestError) {
       setData(null);
-      setError(requestError instanceof Error ? requestError.message : 'Unable to load dashboard data.');
+      setError(requestError instanceof Error ? requestError.message : 'Could not load dashboard data. Reload the page.');
     } finally {
       setLoading(false);
     }
@@ -198,7 +198,7 @@ export const Dashboard: React.FC = () => {
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1 text-xs">
                 <h4 className="font-bold text-slate-800 dark:text-slate-100">{activeSession.sessionCode}</h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Started {new Date(activeSession.startedAt).toLocaleString()}{activeSession.room ? ` · ${activeSession.room}` : ''}
+                  Started {new Date(activeSession.startedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}{activeSession.room ? ` · ${activeSession.room}` : ''}
                 </p>
                 <button
                   type="button"

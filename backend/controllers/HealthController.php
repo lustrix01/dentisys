@@ -51,7 +51,7 @@ function health_payload(): array
 {
     $payload = [
         'status' => 'ok',
-        'app' => 'DentiSys API',
+        'app' => 'DentiSYS API',
         'php' => 'up',
         'database' => 'unknown',
         'timestamp' => gmdate('c'),
@@ -113,7 +113,7 @@ function health_payload(): array
             'body' => $payload,
         ];
     } catch (Throwable $e) {
-        error_log('DentiSys health database check failed: ' . $e->getMessage());
+        error_log('DentiSYS health database check failed: ' . $e->getMessage());
 
         $payload['status'] = 'error';
         $payload['database'] = 'down';

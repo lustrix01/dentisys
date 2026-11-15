@@ -78,14 +78,14 @@ function handle_login(): void
         $response = build_json_response([
             'status' => 'error',
             'code' => 'BAD_REQUEST',
-            'message' => 'Please correct the highlighted field and try again.',
+            'message' => 'Correct the highlighted field and try again.',
             'errors' => $e->getErrors(),
             'requestId' => request_id(),
         ], 400);
         $response['headers'] = array_merge($response['headers'], build_no_store_headers());
         auth_controller_emit($response);
     } catch (RateLimitException $e) {
-        $message = $e->getMessage() !== 'Too many requests.' ? $e->getMessage() : 'Too many sign-in attempts. Please wait before trying again.';
+        $message = $e->getMessage() !== 'Too many requests.' ? $e->getMessage() : 'Too many sign-in attempts. Wait before trying again.';
         $response = auth_build_no_store_message_response($message, 429);
         if ($e->retryAfterSeconds > 0) {
             $response['headers'][] = 'Retry-After: ' . $e->retryAfterSeconds;

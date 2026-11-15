@@ -89,10 +89,10 @@ export const checkScheduleConflicts = (
     const label = `${s.type} (Session ${i + 1})`;
 
     if (!s.room.trim()) {
-      return `Please choose what room to use for ${s.type}.`;
+      return `Choose what room to use for ${s.type}.`;
     }
     if (s.days.length === 0) {
-      return `Please select at least one day for ${label}.`;
+      return `Select at least one day for ${label}.`;
     }
 
     const start = parseTimeToMinutes(s.startTime);

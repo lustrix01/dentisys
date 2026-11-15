@@ -39,7 +39,7 @@ export const StudentUnavailable: React.FC<{ title: string }> = ({ title }) => (
       <ShieldCheck className="h-8 w-8 text-amber-600 dark:text-amber-400" />
       <h1 className="mt-4 font-heading font-extrabold text-2xl text-amber-950 dark:text-amber-100">{title}</h1>
       <p className="mt-2 text-sm text-amber-900/80 dark:text-amber-200/80 leading-relaxed">
-        Academic services are currently unavailable. Please try again later.
+        Academic services are currently unavailable. Try again later.
       </p>
     </Card>
   </div>
@@ -119,7 +119,7 @@ export const RealStudentDashboard: React.FC = () => {
         .then(profile => setFaceEnrolled(isAuthoritativeActiveEnrolled(profile.enrollmentStatus)))
         .catch(() => setFaceEnrolled(true));
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unable to load student dashboard.');
+      setError(err instanceof Error ? err.message : 'Could not load the student dashboard. Reload the page.');
     } finally {
       setLoading(false);
     }
@@ -142,7 +142,7 @@ export const RealStudentDashboard: React.FC = () => {
           <div className="flex items-start gap-3">
             <AlertCircle className="w-6 h-6 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
             <div className="space-y-2">
-              <h2 className="font-bold text-base text-rose-950 dark:text-rose-100">Unable to load Student Dashboard</h2>
+              <h2 className="font-bold text-base text-rose-950 dark:text-rose-100">Could not load the Student Dashboard</h2>
               <p className="text-xs text-rose-800 dark:text-rose-300">{error || 'Failed to read academic records.'}</p>
               <button
                 type="button"
@@ -448,7 +448,7 @@ export const RealStudentProfile: React.FC = () => {
       const res = await getStudentAcademicProfileApi();
       setProfile(res.profile);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unable to load authoritative profile.');
+      setError(err instanceof Error ? err.message : 'Could not load the profile. Reload the page.');
     } finally {
       setLoading(false);
     }

@@ -148,13 +148,13 @@ function audit_catalogue(): array
         // 5.7 Biometrics
         'biometric_consent_granted' => ['Face-check consent given', $B, true, false],
         'biometric_consent_revoked' => ['Face-check consent withdrawn', $B, true, false],
-        'biometric_enrollment_started' => ['Face enrolment started', $B, false, false],
-        'biometric_enrollment_succeeded' => ['Face enrolment succeeded', $B, false, false],
-        'biometric_enrollment_failed' => ['Face enrolment failed', $B, false, false],
-        'biometric_enrollment_revoked' => ['Face enrolment deleted', $B, true, false],
-        'biometric_enrollment_revoked_by_dean' => ['Face enrolment deleted', $B, true, false],
-        'biometric_enrollment_revoked_inactive' => ['Face enrolment deleted', $B, true, false],
-        'biometric_enrollment_expired' => ['Face enrolment deleted', $B, true, false],
+        'biometric_enrollment_started' => ['Face enrollment started', $B, false, false],
+        'biometric_enrollment_succeeded' => ['Face enrollment succeeded', $B, false, false],
+        'biometric_enrollment_failed' => ['Face enrollment failed', $B, false, false],
+        'biometric_enrollment_revoked' => ['Face enrollment deleted', $B, true, false],
+        'biometric_enrollment_revoked_by_dean' => ['Face enrollment deleted', $B, true, false],
+        'biometric_enrollment_revoked_inactive' => ['Face enrollment deleted', $B, true, false],
+        'biometric_enrollment_expired' => ['Face enrollment deleted', $B, true, false],
         'biometric_verification_failed' => ['Face check failed', $B, false, false],
     ];
     return $map;
@@ -787,7 +787,7 @@ function audit_batch_label(string $code, int $n): string
         'student_created' => "Imported {$n} students", 'student_enroll' => "Enrolled {$n} students",
         'student_invited' => "Invited {$n} students", 'secretary_invited' => "Invited {$n} Secretaries",
         'faculty_attendance_change' => "Marked {$n} students Present",
-        'biometric_enrollment_expired' => "Deleted {$n} face enrolments", 'biometric_enrollment_revoked_inactive' => "Deleted {$n} face enrolments",
+        'biometric_enrollment_expired' => "Deleted {$n} face enrollments", 'biometric_enrollment_revoked_inactive' => "Deleted {$n} face enrollments",
     ];
     return $many[$code] ?? audit_code_info($code)['label'] . " ({$n})";
 }

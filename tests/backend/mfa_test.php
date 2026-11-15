@@ -40,7 +40,7 @@ assert_same(true, str_starts_with($payload['provisioning_uri'], 'otpauth://totp/
 $query = [];
 parse_str((string) parse_url($payload['provisioning_uri'], PHP_URL_QUERY), $query);
 assert_same($secret, $query['secret'] ?? null, 'Provisioning URI contains secret');
-assert_same('DentiSys', $query['issuer'] ?? null, 'Provisioning URI contains issuer');
+assert_same('DentiSYS', $query['issuer'] ?? null, 'Provisioning URI contains issuer');
 assert_same('SHA1', $query['algorithm'] ?? null, 'Provisioning URI uses SHA-1');
 assert_same('6', $query['digits'] ?? null, 'Provisioning URI uses six digits');
 assert_same('30', $query['period'] ?? null, 'Provisioning URI uses 30-second period');

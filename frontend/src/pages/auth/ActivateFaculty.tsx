@@ -54,7 +54,7 @@ export function ActivateFaculty() {
       await activateFacultyInvitation(token, password);
       navigate('/login?activated=1', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to accept Faculty invitation.');
+      setError(err instanceof Error ? err.message : 'Could not accept the Faculty invitation. Try again.');
     } finally {
       setSubmitting(false);
     }

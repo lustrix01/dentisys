@@ -35,6 +35,8 @@ import { meetingVenueLines } from '../../utils/scheduleHelper';
 import { isNextDay, sessionEndOffsetMs } from '../../utils/sessionTimes';
 import { formatVisibleTime } from '../../utils/timeDisplay';
 import { apiFieldErrors } from '../../utils/apiFieldErrors';
+import { formatSchoolYear } from '../../utils/schoolYear';
+import { SortableHeader, ariaSort, compareValues, type SortState } from '../../components/SortableHeader';
 import {
   REVOKED_SESSION_VIEW_ONLY_NOTE, countRevokedSessions, matchesRollCallFilters, revokedHiddenText, visibleSessions,
   type OverriddenFilter, type RecordedByFilter,
@@ -186,6 +188,7 @@ export const AttendanceList: React.FC = () => {
   const loadRequest = useRef(0);
   const saving = useRef(false);
   const [status, setStatus] = useState('all');
+  const [rosterSort, setRosterSort] = useState<SortState<'none' | 'student' | 'status'>>({ key: 'none', dir: 'asc' });
   const [overriddenFilter, setOverriddenFilter] = useState<OverriddenFilter>('all');
   const [recordedByFilter, setRecordedByFilter] = useState<RecordedByFilter>('all');
   // Revoked sessions are hidden until asked for; not remembered between visits.
@@ -348,7 +351,7 @@ export const AttendanceList: React.FC = () => {
       if (loadRequest.current !== requestId || quiet) return;
       setRecords([]);
       setSessions([]);
-      setError(requestError instanceof Error ? requestError.message : 'Unable to load attendance.');
+      setError(requestError instanceof Error ? requestError.message : 'Could not load attendance. Select Retry or reload the page.');
     } finally {
       if (!quiet && loadRequest.current === requestId) setLoading(false);
     }
@@ -375,7 +378,7 @@ export const AttendanceList: React.FC = () => {
       setCancelTarget(null);
       await loadExcused();
     } catch (err) {
-      setFeedback({ type: 'error', text: err instanceof Error ? err.message : 'Unable to cancel the request.' });
+      setFeedback({ type: 'error', text: err instanceof Error ? err.message : 'Could not cancel the request. Try again.' });
       setCancelTarget(null);
     } finally {
       setSubmitting(false);
@@ -435,7 +438,7 @@ export const AttendanceList: React.FC = () => {
       if (fieldError) setReasonError(fieldError);
       else setFeedback({
         type: 'error',
-        text: err instanceof Error ? err.message : 'Unable to send the request.',
+        text: err instanceof Error ? err.message : 'Could not send the request. Try again.',
       });
     } finally {
       saving.current = false;
@@ -458,7 +461,7 @@ export const AttendanceList: React.FC = () => {
       setRefreshVersion(version => version + 1);
       void load();
     } catch (err) {
-      setEndError(err instanceof Error ? err.message : 'Unable to end session.');
+      setEndError(err instanceof Error ? err.message : 'Could not end the session. Try again.');
     } finally {
       setSubmittingEnd(false);
     }
@@ -484,7 +487,7 @@ export const AttendanceList: React.FC = () => {
       setRefreshVersion(version => version + 1);
       void load();
     } catch (err) {
-      setRevokeError(err instanceof Error ? err.message : 'Unable to revoke session.');
+      setRevokeError(err instanceof Error ? err.message : 'Could not revoke the session. Try again.');
     } finally {
       setSubmittingRevoke(false);
     }
@@ -522,7 +525,7 @@ export const AttendanceList: React.FC = () => {
     setError('');
     getSecretaryAttendanceApi({ sessionId })
       .then(response => { if (sessionRequest.current === requestId) setSessionRecords(response.records); })
-      .catch(err => { if (sessionRequest.current === requestId) setError(err instanceof Error ? err.message : 'Unable to load session roster.'); })
+      .catch(err => { if (sessionRequest.current === requestId) setError(err instanceof Error ? err.message : 'Could not load the session roster. Try again.'); })
       .finally(() => { if (sessionRequest.current === requestId) setSessionLoading(false); });
     return () => { ++sessionRequest.current; };
   }, [sessionId, refreshVersion]);
@@ -612,6 +615,8 @@ export const AttendanceList: React.FC = () => {
       return record.studentName.toLocaleLowerCase().includes(needle) || record.studentNumber.toLocaleLowerCase().includes(needle) || record.subjectCode.toLocaleLowerCase().includes(needle);
     });
   }, [date, query, sessionRecords, sessionId, status, scopedCard, overriddenFilter, recordedByFilter]);
+  const sortedRecords = useMemo(() => rosterSort.key === 'none' ? filtered : [...filtered].sort((a, b) =>
+    compareValues(rosterSort.key === 'student' ? a.studentName : a.status, rosterSort.key === 'student' ? b.studentName : b.status, rosterSort.dir)), [filtered, rosterSort]);
 
   const dateSessions = useMemo(() => sessions.filter(s => inSection(scopedCard, s) && (!date || (s.sessionDate || s.date) === date)), [sessions, date, scopedCard]);
   const revokedSessionCount = countRevokedSessions(dateSessions);
@@ -785,9 +790,8 @@ export const AttendanceList: React.FC = () => {
               {/* Term Selector */}
               {currentSchoolYear && (
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">S.Y.:</span>
                   <div className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 shadow-xs">
-                    {currentSchoolYear} (Current)
+                    {formatSchoolYear(currentSchoolYear)} (Current)
                   </div>
                 </div>
               )}
@@ -1257,7 +1261,7 @@ export const AttendanceList: React.FC = () => {
                   : dateSessions.length === 0
                     ? (date
                       // Spelled out so it cannot be misread against the date box's own mm/dd format.
-                      ? `No attendance session on ${new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.${liveCurrentSession ? '' : ' Use Start session above to begin one.'}`
+                      ? `No attendance session on ${new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.${liveCurrentSession ? '' : ' Use Start session above to begin one.'}`
                       : 'This class has no attendance sessions yet.')
                     : 'Choose a session to manage its attendance.'}
               </p>
@@ -1314,10 +1318,10 @@ export const AttendanceList: React.FC = () => {
                 <table className="w-full min-w-[640px] text-left text-xs border-collapse">
                   <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
                     <tr>
-                      <th className="py-3 px-4 sm:py-4 sm:px-6">Student Details</th>
+                      <th className="py-3 px-4 sm:py-4 sm:px-6" aria-sort={ariaSort(rosterSort, 'student')}><SortableHeader label="Student Details" sortKey="student" sort={rosterSort} onSort={setRosterSort} /></th>
                       <th className="py-3 px-4 sm:py-4 sm:px-6">Check-In Time</th>
                       <th className="py-3 px-4 sm:py-4 sm:px-6">Verification Method</th>
-                      <th className="py-3 px-4 sm:py-4 sm:px-6">Attendance Status</th>
+                      <th className="py-3 px-4 sm:py-4 sm:px-6" aria-sort={ariaSort(rosterSort, 'status')}><SortableHeader label="Attendance Status" sortKey="status" sort={rosterSort} onSort={setRosterSort} /></th>
                       <th className="py-3 px-4 sm:py-4 sm:px-6 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -1341,7 +1345,7 @@ export const AttendanceList: React.FC = () => {
                         </td>
                       </tr>
                     ) : (
-                      filtered.map((record) => (
+                      sortedRecords.map((record) => (
                         <tr
                           key={record.id || `${record.studentId}-${record.attendanceSessionId}`}
                           className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"

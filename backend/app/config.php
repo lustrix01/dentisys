@@ -294,7 +294,7 @@ function app_config(?array $overrides = null): array
         ],
         'mfa' => [
             'encryption_key_b64' => (string) config_value('MFA_ENCRYPTION_KEY_B64', $values, $developmentKeys['MFA_ENCRYPTION_KEY_B64']),
-            'issuer' => 'DentiSys',
+            'issuer' => 'DentiSYS',
         ],
         'audit' => [
             'mac_key_b64' => (string) config_value('AUDIT_MAC_KEY_B64', $values, $developmentKeys['AUDIT_MAC_KEY_B64']),

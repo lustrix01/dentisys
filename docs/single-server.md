@@ -2,7 +2,7 @@
 
 ## Status: unfinished private-LAN prototype
 
-This Compose configuration is within DentiSys deployment bounds, but it is not a supported production deployment process. It is an implementation foundation for controlled private-LAN testing on one host. For the approved DEL-001 cloud VPS demonstration, use the [VPS deployment runbook](vps-deployment.md).
+This Compose configuration is within DentiSYS deployment bounds, but it is not a supported production deployment process. It is an implementation foundation for controlled private-LAN testing on one host. For the approved DEL-001 cloud VPS demonstration, use the [VPS deployment runbook](vps-deployment.md).
 
 It starts separate containers for the Nginx frontend, the PHP API, PostgreSQL and the private face-recognition sidecar:
 
@@ -28,7 +28,7 @@ Real Student authentication can be enabled in this private-LAN prototype with `S
 
 ## Why this is not deployment-ready
 
-Before DentiSys can call this a supported single-server deployment, it needs:
+Before DentiSYS can call this a supported single-server deployment, it needs:
 
 - a defined deployment and operations runbook;
 - TLS and reverse-proxy policy;

@@ -82,7 +82,7 @@ export const PasswordChangeCard: React.FC<PasswordChangeCardProps> = ({ onSucces
         confirmPassword,
       });
 
-      setSuccess(res.message || 'Password changed successfully. Please log in again with your new credentials.');
+      setSuccess(res.message || 'Password changed successfully. Sign in again with your new password.');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');

@@ -1,3 +1,6 @@
+import { SortableHeader, ariaSort, compareValues, type SortState } from '../../components/SortableHeader';
+import { formatShortDate } from '../../utils/sessionDate';
+import { formatSchoolYear } from '../../utils/schoolYear';
 import { filterPersonNameInput, personNameFieldError, preventInvalidPersonNameKey, type PersonNamePartKey } from '../../utils/personNameValidation';
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal, flushSync } from 'react-dom';
@@ -608,9 +611,10 @@ export const ClassesAndRosters: React.FC = () => {
   };
 
   // Filtered student roster by Search, Class Filter, and School Year Filter
+  const [rosterSort, setRosterSort] = useState<SortState<'default' | 'studentId' | 'name'>>({ key: 'default', dir: 'asc' });
   const filteredStudents = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return studentsList.filter((student) => {
+    const matching = studentsList.filter((student) => {
       const matchesSearch = !query || (
         (student.name && student.name.toLowerCase().includes(query)) ||
         (student.studentId && student.studentId.toLowerCase().includes(query)) ||
@@ -627,7 +631,10 @@ export const ClassesAndRosters: React.FC = () => {
 
       return matchesSearch && matchesClass && matchesSchoolYear;
     });
-  }, [studentsList, searchQuery, selectedClassFilterId, selectedSchoolYear, classSchoolYearMap]);
+    if (rosterSort.key === 'default') return matching;
+    const key = rosterSort.key;
+    return [...matching].sort((a, b) => compareValues(a[key], b[key], rosterSort.dir));
+  }, [studentsList, searchQuery, selectedClassFilterId, selectedSchoolYear, classSchoolYearMap, rosterSort]);
 
   const handleOpenClassRoster = (cls: FacultyClassItem) => {
     setSelectedClass(cls);
@@ -810,7 +817,7 @@ export const ClassesAndRosters: React.FC = () => {
       await fetchData();
     } catch (error) {
       setEditStudentFieldErrors(apiFieldErrors(error));
-      setEditStudentError(error instanceof Error ? error.message : 'Unable to save Student roster changes.');
+      setEditStudentError(error instanceof Error ? error.message : 'Could not save the student roster changes.');
     } finally {
       setIsUpdatingStudent(false);
     }
@@ -855,7 +862,7 @@ export const ClassesAndRosters: React.FC = () => {
     }
 
     if (!editBlock.trim()) {
-      setEditError('Please enter a section / block.');
+      setEditError('Enter a section / block.');
       return;
     }
 
@@ -1077,7 +1084,7 @@ export const ClassesAndRosters: React.FC = () => {
       return;
     }
     if (!newSchoolYear) {
-      showFeedback('Classes can only be created for the current active school year. Please reload.', 'error');
+      showFeedback('Classes can only be created for the current active school year. Reload the page to load the current school year.', 'error');
       return;
     }
 
@@ -1116,7 +1123,7 @@ export const ClassesAndRosters: React.FC = () => {
       });
       setClassOverlap(null);
 
-      showFeedback(res.message || `Class section ${csName} created successfully for current S.Y. ${newSchoolYear}!`, 'success');
+      showFeedback(res.message || `Class section ${csName} created successfully for the current school year (${formatSchoolYear(newSchoolYear)}).`, 'success');
       setIsCreateClassOpen(false);
       setCreateAttempted(false);
       setSelectedClassFilterId('all');
@@ -1139,11 +1146,11 @@ export const ClassesAndRosters: React.FC = () => {
   const handleEnrollStudents = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!targetEnrollCsId || targetEnrollCsId <= 0) {
-      showFeedback('Please select a valid class section.', 'error');
+      showFeedback('Select a class section.', 'error');
       return;
     }
     if (selectedStudentIds.length === 0) {
-      showFeedback('Please select at least one student to enroll.', 'error');
+      showFeedback('Select at least one student to enroll.', 'error');
       return;
     }
 
@@ -1199,7 +1206,7 @@ export const ClassesAndRosters: React.FC = () => {
       return;
     }
     if (!studentIdInput.trim() || !studentFirstName.trim() || !studentLastName.trim() || !studentEmailInput.trim()) {
-      showFeedback('Please fill in Student Number, first name, last name, and email.', 'error');
+      showFeedback('Fill in Student Number, first name, last name, and email.', 'error');
       return;
     }
     const normalizedEmail = (studentEmailInput.includes('@') ? studentEmailInput.trim() : `${studentEmailInput.trim()}@${DEFAULT_EMAIL_DOMAIN}`).toLowerCase();
@@ -1339,7 +1346,7 @@ export const ClassesAndRosters: React.FC = () => {
       const res = await removeSecretaryAppointmentApi(student.id, classId);
       showFeedback(res.message, 'success');
     } catch (err) {
-      showFeedback(err instanceof Error ? err.message : 'Unable to remove the appointment.', 'error');
+      showFeedback(err instanceof Error ? err.message : 'Could not remove the appointment.', 'error');
     }
     await fetchData();
   };
@@ -1360,7 +1367,7 @@ export const ClassesAndRosters: React.FC = () => {
       setNotification({ type: response.delivery_status === 'Failed' ? 'info' : 'success', message: response.message });
       await fetchData();
     } catch (error) {
-      setNotification({ type: 'info', message: error instanceof Error ? error.message : `Unable to invite ${student.name}.` });
+      setNotification({ type: 'info', message: error instanceof Error ? error.message : `Could not invite ${student.name}.` });
     } finally {
       setIsSendingInvitations(false);
     }
@@ -1489,7 +1496,7 @@ const handleSendAllStudentInvites = async () => {
                 const reason = cls.archiveReason ?? (historicalClass ? 'finished' : null);
                 const canRestore = Boolean(cls.archiveReason) && !cls.isHistorical && cls.isCurrentSchoolYear !== false;
                 const archivedDate = cls.archivedAt ? new Date(cls.archivedAt.replace(' ', 'T')) : null;
-                const archivedDateLabel = archivedDate && !Number.isNaN(archivedDate.getTime()) ? archivedDate.toLocaleDateString() : (cls.archivedAt ?? '');
+                const archivedDateLabel = archivedDate && !Number.isNaN(archivedDate.getTime()) ? formatShortDate(cls.archivedAt?.slice(0, 10)) : (cls.archivedAt ?? '');
                 const reasonLabel = reason === 'cancelled' ? 'Cancelled' : reason === 'mistake' ? 'Created by mistake' : 'Finished';
                 // Archived and past-year cards keep Edit on the top row so every card lines up when the row wraps.
                 const editButton = (
@@ -1546,7 +1553,7 @@ const handleSendAllStudentInvites = async () => {
                       <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
                         <div className="flex items-center gap-2">
                           <Calendar className="w-3.5 h-3.5 text-accent-500 flex-shrink-0" />
-                          <span>{semesterLabel(cls.semester)} &bull; {cls.schoolYear || '2025-2026'}</span>
+                          <span>{semesterLabel(cls.semester)} &bull; {formatSchoolYear(cls.schoolYear || '2025-2026')}</span>
                         </div>
                         <div className="flex items-start gap-2">
                           <MapPin className="w-3.5 h-3.5 text-accent-500 flex-shrink-0 mt-0.5" />
@@ -1570,7 +1577,7 @@ const handleSendAllStudentInvites = async () => {
                         <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                           {cls.archiveReason
                             ? `Archived ${archivedDateLabel} · ${reasonLabel}`
-                            : `Archived automatically when S.Y. ${cls.schoolYear} ended`}
+                            : `Archived automatically when ${formatSchoolYear(cls.schoolYear)} ended`}
                         </div>
                       )}
                   </div>
@@ -1732,7 +1739,7 @@ const handleSendAllStudentInvites = async () => {
                   >
                     <option value="all">All school years</option>
                     {availableSchoolYears.map(sy => (
-                      <option key={sy} value={sy}>S.Y. {sy}</option>
+                      <option key={sy} value={sy}>{formatSchoolYear(sy)}</option>
                     ))}
                   </select>
                 </div>
@@ -1782,7 +1789,7 @@ const handleSendAllStudentInvites = async () => {
                 {searchQuery
                   ? 'No class sections match your search query.'
                   : (selectedSchoolYear !== 'all' && selectedSchoolYear !== newSchoolYear)
-                    ? `Viewing past school year (S.Y. ${selectedSchoolYear}). Past school-year records are view-only. Class creation is only permitted for the current school year (S.Y. ${newSchoolYear}).`
+                    ? `Viewing past school year (${formatSchoolYear(selectedSchoolYear)}). Past school-year records are view-only. Class creation is only permitted for the current school year (${formatSchoolYear(newSchoolYear)}).`
                     : 'You do not have any class sections assigned for the selected criteria. Create a class section to get started.'}
               </p>
               {searchQuery && <button type="button" onClick={() => setSearchQuery('')} className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40"><X className="h-3.5 w-3.5" />Clear filters</button>}
@@ -2006,8 +2013,8 @@ const handleSendAllStudentInvites = async () => {
             <table className="w-full text-left text-xs border-collapse max-md:block">
               <thead className="max-md:hidden">
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4">Student No.</th>
-                  <th className="py-3 px-4">Full Name</th>
+                  <th className="py-3 px-4" aria-sort={ariaSort(rosterSort, 'studentId')}><SortableHeader label="Student No." sortKey="studentId" sort={rosterSort} onSort={setRosterSort} /></th>
+                  <th className="py-3 px-4" aria-sort={ariaSort(rosterSort, 'name')}><SortableHeader label="Full Name" sortKey="name" sort={rosterSort} onSort={setRosterSort} /></th>
                   <th className="py-3 px-4">BU Email Address</th>
                   <th className="py-3 px-4">Enrolled Class Section</th>
                   <th className="py-3 px-4">Year Level</th>
@@ -2424,7 +2431,7 @@ const handleSendAllStudentInvites = async () => {
               <div className="flex items-center gap-2">
                 <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <span className="font-bold text-xs">
-                  Academic Year: <span className="font-extrabold underline decoration-emerald-500">S.Y. {newSchoolYear || 'Loading...'}</span> (current active year)
+                  Academic Year: <span className="font-extrabold underline decoration-emerald-500">{newSchoolYear ? formatSchoolYear(newSchoolYear) : 'Loading...'}</span> (current active year)
                 </span>
               </div>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200/70 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 whitespace-nowrap">
@@ -2613,7 +2620,7 @@ const handleSendAllStudentInvites = async () => {
                   className={`w-full px-3.5 py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 font-medium cursor-pointer ${fieldCls('term', 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800')}`}
                 >
                   <option value="">{academicTerms.length === 0 ? 'No open term available' : 'Choose a term'}</option>
-                  {academicTerms.map(term => <option key={term.id} value={String(term.id)}>{semesterLabel(term.semester)} {term.schoolYear} ({termDate(term.startDate)} – {termDate(term.endDate, true)})</option>)}
+                  {academicTerms.map(term => <option key={term.id} value={String(term.id)}>{semesterLabel(term.semester)} {formatSchoolYear(term.schoolYear)} ({termDate(term.startDate)} – {termDate(term.endDate, true)})</option>)}
                 </select>
                 {fieldErr('term')}
               </div>
@@ -2727,7 +2734,7 @@ const handleSendAllStudentInvites = async () => {
             )}
 
             {/* Conflict Error Banner (its missing room/day text is already shown inline after Save) */}
-            {scheduleConflict && (createAttempted || !scheduleConflict.startsWith('Please ')) && !shownProblems.some(p => p.key.startsWith('room-') || p.key.startsWith('days-')) && (
+            {scheduleConflict && (createAttempted || !/^(Choose|Select) /.test(scheduleConflict)) && !shownProblems.some(p => p.key.startsWith('room-') || p.key.startsWith('days-')) && (
               <div className="flex items-start gap-3 rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 animate-fade-in">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{scheduleConflict}</span>
@@ -2999,7 +3006,7 @@ const handleSendAllStudentInvites = async () => {
                 <input
                   type="text"
                   readOnly
-                  value={editSchoolYear}
+                  value={formatSchoolYear(editSchoolYear)}
                   title="Classes can only be edited in the current school year."
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium"
                 />

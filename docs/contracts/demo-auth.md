@@ -17,7 +17,7 @@ The request uses `Content-Type: application/json` and an access token in the
 ```
 
 Admin, Faculty, Secretary, and Student accounts are supported. Google-linked
-accounts still use their stored DentiSys password for this operation.
+accounts still use their stored DentiSYS password for this operation.
 
 The current password must verify against the account row locked for the
 transaction. The new password uses the existing server policy from

@@ -27,9 +27,30 @@ function account_identity_name_parts(array $data): ?array
     ];
 }
 
+/** UI-001 wording rule 7: a comma before academic degrees ("Ana Cruz, DMD"); none before Jr., Sr., II, III, IV, V. */
 function account_identity_composed_name(array $parts): string
 {
-    return implode(' ', array_filter([$parts['prefix'], $parts['firstName'], $parts['middleName'], $parts['lastName'], $parts['suffix']], static fn($part) => $part !== null && $part !== ''));
+    $suffix = trim((string) ($parts['suffix'] ?? ''));
+    $generational = $suffix !== '' && preg_match('/^(?:Jr|Sr)\.?$|^(?:II|III|IV|V)$/i', $suffix) === 1;
+    $name = implode(' ', array_filter([$parts['prefix'], $parts['firstName'], $parts['middleName'], $parts['lastName']], static fn($part) => $part !== null && $part !== ''));
+    if ($suffix === '') return $name;
+    return $name . ($generational ? ' ' : ', ') . $suffix;
+}
+
+/**
+ * Same as account_identity_composed_name, but re-cases the name words with normalize_person_name the way the
+ * Student and Faculty roster paths always did; degrees in the suffix keep their stored casing ("DMD, PhD").
+ */
+function account_identity_normalized_composed_name(array $parts): string
+{
+    $suffix = trim((string) ($parts['suffix'] ?? ''));
+    $generational = $suffix !== '' && preg_match('/^(?:Jr|Sr).?$|^(?:II|III|IV|V)$/i', $suffix) === 1;
+    $words = implode(' ', array_filter([$parts['prefix'] ?? null, $parts['firstName'] ?? null, $parts['middleName'] ?? null, $parts['lastName'] ?? null],
+        static fn($part) => $part !== null && trim((string) $part) !== ''));
+    return account_identity_composed_name([
+        'prefix' => null, 'firstName' => normalize_person_name($words), 'middleName' => null, 'lastName' => null,
+        'suffix' => $generational ? normalize_person_name($suffix) : $suffix,
+    ]);
 }
 
 /** Parse and validate the dedicated self-service name-change request. */

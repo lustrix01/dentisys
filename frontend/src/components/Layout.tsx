@@ -298,7 +298,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
         { name: 'Attendance Monitoring', path: '/secretary/attendance', icon: CalendarDays, short: 'Attendance' },
-        { name: 'My Activity Log', path: '/secretary/audit-trail', icon: ListChecks, short: 'Activity' },
+        { name: 'My Activity', path: '/secretary/audit-trail', icon: ListChecks, short: 'Activity' },
       ];
     }
 
@@ -334,7 +334,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       { name: 'Attendance Monitoring', path: '/attendance', icon: CalendarDays, short: 'Attendance' },
       { name: 'Reports & Export', path: '/reports', icon: FileSpreadsheet, short: 'Reports' },
       { name: 'Email Management', path: '/email-management', icon: Mail, short: 'Email' },
-      { name: 'My Activity Log', path: '/faculty/audit-trail', icon: ListChecks, short: 'Activity' },
+      { name: 'My Activity', path: '/faculty/audit-trail', icon: ListChecks, short: 'Activity' },
     ];
   };
 
@@ -560,9 +560,9 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     } else if (path === '/secretary/attendance') {
       crumbs.push({ name: 'Attendance Monitoring', path: '/secretary/attendance' });
     } else if (path === '/secretary/audit-trail') {
-      crumbs.push({ name: 'My Activity Log', path: '/secretary/audit-trail' });
+      crumbs.push({ name: 'My Activity', path: '/secretary/audit-trail' });
     } else if (path === '/faculty/audit-trail') {
-      crumbs.push({ name: 'My Activity Log', path: '/faculty/audit-trail' });
+      crumbs.push({ name: 'My Activity', path: '/faculty/audit-trail' });
     } else if (path === '/faculty/attendance-activity') {
       crumbs.push({ name: 'Class Attendance Activity', path: '/faculty/attendance-activity' });
     } else if (path === '/student/dashboard') {

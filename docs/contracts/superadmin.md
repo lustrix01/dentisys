@@ -146,7 +146,7 @@ Refusal example (409):
 | SA21 | A Faculty account with **any class in the current school year** (`class_sections.instructor_user_id = userId`, `school_year = academic_current_school_year()`, not archived: `archived_at IS NULL`) is refused with 409 `faculty_has_current_classes` listing those classes (SA-example above). Past-year and archived classes do not block. |
 | SA22 | A Student account has no such block (decision 15 names Faculty only). A Student who is a Class Secretary signs in with the Student's own account (REG-006; the database refuses a separate Secretary account for a Student with a canonical account), so one deactivation blocks both the Student and the Secretary sign-in and one reactivation restores both (answer 3). The People list shows such an account under Students. |
 | SA23 | Targets other than an `active` Faculty or Student account are refused: Dean, Secretary-only, unknown id -> 404 `person_not_found`; already deactivated -> 200 no-op, no audit row (R3). A Dean can never deactivate a Dean (including themselves). |
-| SA24 | **Reactivate** sets `Active`, clears `disabled_at`, bumps nothing, restores no session; the person signs in again with their existing password and 2FA. Records, enrolments and 2FA settings were never touched. |
+| SA24 | **Reactivate** sets `Active`, clears `disabled_at`, bumps nothing, restores no session; the person signs in again with their existing password and 2FA. Records, enrollments and 2FA settings were never touched. |
 | SA25 | `reason` optional, ≤ 500 chars, stored in the audit `reason` field. The UI asks for it in the confirm dialog but does not require it. |
 
 ### Errors
@@ -220,7 +220,7 @@ One-line edits to existing sections (each needs approval):
 
 ## 10. Owner answers (2026-11-14)
 
-1. **Student in class-work rows: yes.** Class-work rows keep the student where the code carries one: score and grade rows hold `studentId` in the stored state, retention rows target the enrolment, attendance rows target the attendance record or request, which the Student filter resolves through the enrolment. No audited code needed a new payload field, so the filter also finds old rows; any new class-work code that involves a student must store the student the same way.
+1. **Student in class-work rows: yes.** Class-work rows keep the student where the code carries one: score and grade rows hold `studentId` in the stored state, retention rows target the enrollment, attendance rows target the attendance record or request, which the Student filter resolves through the enrollment. No audited code needed a new payload field, so the filter also finds old rows; any new class-work code that involves a student must store the student the same way.
 2. **A retired code typed by Faculty is refused** (SA16): "This course was retired by the Dean. Ask the Dean to restore it."
 3. **A Student who is a Class Secretary:** deactivating the Student also blocks the Secretary sign-in; reactivating restores both (SA22). They share one account, so this needs no extra code.
 4. **Defaults accepted:** opening class-work rows is not audited (SA11); a deactivated sign-in shows the existing message plus "Contact the Dean." (SA20); the Class Sections preview stays in the normal Dean view only (SA3); the superadmin can restore a retired course (SA17).
@@ -263,10 +263,10 @@ POST /api/admin/people/invitation/resend  {"userId": 58}
 | SA26 | **Invited** = a `user_accounts` row with `status = 'Pending Activation'` (the status the invitation flows write; not `Pending`) whose newest invitation token is not used and not revoked (it may be expired: `invitation.expired`). Faculty: newest `faculty_invitation` token of the account. Student: newest `student_activation` token issued to the Student's own account (`students.student_account_user_id`, the same account the token's `user_id` names). The list shows Faculty and Students separately by `kind`, as before. |
 | SA27 | **Sign out everywhere** and **Reset 2FA** apply to an Active Faculty or Student only (`people_fetch` rules): unknown, Dean, Secretary-only or invited -> 404 `person_not_found`; deactivated -> 409 `account_deactivated`. Both end the account in one shared helper (`people_end_sessions`): `token_version + 1` and every live session and refresh token revoked (reasons "Signed out by the Dean" / "2FA reset by the Dean"). The account stays Active. Sign out always writes its audit row. |
 | SA28 | **Reset 2FA**, one transaction: revokes the `mfa_credential` and `mfa_recovery` tokens (reason "Reset by the Dean"), ends the sessions, writes `mfa_reset_by_dean`. When there is nothing to revoke: 409 `two_factor_off`, no row. After commit the person is emailed (the Dean reset your 2FA, sign in with your password, set 2FA up again in your profile, contact the Dean if unexpected); a send failure is logged and does not fail the request. The audit row never holds secrets. |
-| SA29 | **Resend** reissues the pending invitation and sends the email. Faculty: the same code as `POST /api/admin/faculty-invitations/reissue` (`faculty_invitation_reissue_core`; audit `faculty_invited`, "Dean reissued Faculty invitation"). Student: the latest `student_activation` token's Student and class (`related_cs_id`) are kept (the original Faculty authorization), the old token is revoked ("Replaced by a Dean resend"), a new 7-day token is issued (same function as the Faculty invitation, `student_invitation_issue_token`), the email is the existing Student invitation template naming that class and its Faculty member, recorded in the email outbox with the Dean as sender; audit `student_invitation_resent_by_dean` (target the new token). 409 `invitation_class_unavailable` when the class is not Active, is archived or not of the current school year, or the Student's enrolment or record is not Active. |
+| SA29 | **Resend** reissues the pending invitation and sends the email. Faculty: the same code as `POST /api/admin/faculty-invitations/reissue` (`faculty_invitation_reissue_core`; audit `faculty_invited`, "Dean reissued Faculty invitation"). Student: the latest `student_activation` token's Student and class (`related_cs_id`) are kept (the original Faculty authorization), the old token is revoked ("Replaced by a Dean resend"), a new 7-day token is issued (same function as the Faculty invitation, `student_invitation_issue_token`), the email is the existing Student invitation template naming that class and its Faculty member, recorded in the email outbox with the Dean as sender; audit `student_invitation_resent_by_dean` (target the new token). 409 `invitation_class_unavailable` when the class is not Active, is archived or not of the current school year, or the Student's enrollment or record is not Active. |
 | SA30 | **Revoke** revokes the live invitation. Faculty: `faculty_invitation_revoke_core`, same audit `faculty_invitation_revoked`, reason "Revoked by the Dean". Student: the token is revoked ("Revoked by the Dean"), audit `student_invitation_revoked_by_dean` (target the account). The account row stays Pending Activation; Faculty can invite the Student again. |
 | SA31 | No live invitation (account not pending, or its newest token used or revoked), for resend or revoke: 409 `no_pending_invitation` "This person has no pending invitation." The existing `/api/admin/faculty-invitations*` routes behave as before. |
-| SA32 | **Filters** (9.17) count only this school year's classes that are not archived (`archived_at IS NULL`): Faculty teach one (`instructor_user_id`) of the course; a Student has an Active enrolment in one. `courseId` and `classId` combine with the other filters by AND. The options route lists those classes and the courses that have at least one. |
+| SA32 | **Filters** (9.17) count only this school year's classes that are not archived (`archived_at IS NULL`): Faculty teach one (`instructor_user_id`) of the course; a Student has an Active enrollment in one. `courseId` and `classId` combine with the other filters by AND. The options route lists those classes and the courses that have at least one. |
 
 ### Errors
 
@@ -282,3 +282,41 @@ POST /api/admin/people/invitation/resend  {"userId": 58}
 ### Audit events
 
 `sessions_ended_by_dean` ("Signed out everywhere", People & accounts), `mfa_reset_by_dean` ("2FA reset by the Dean", Sign-in & security; counts in the Dean's "2FA turned off" attention card with `mfa_revoked`), `student_invitation_resent_by_dean`, `student_invitation_revoked_by_dean` (People & accounts). All Dean-visible; see `docs/contracts/audit-logging.md` section 5.
+
+## 12. Round 2 - People sort and filters, Overview, name wording (UI-001)
+
+### People list additions (`GET /api/admin/people`)
+
+| Param | Rule |
+|---|---|
+| `yearLevel` | Students only (`students.year_level`, whole number 1-99). `kind=faculty` or a bad value is 422 on `yearLevel`. |
+| `invitation=expired` | Only with `status=invited` or `all`; narrows to invited people whose latest invitation has expired (both kinds). Any other value or status is 422 on `invitation`. |
+| `sort` | `name` (default), `studentNo` (Students only), `lastActivity`, `classes`. Anything else is 422 on `sort`. Server-side `ORDER BY` over all rows, so paging stays correct. |
+| `dir` | `asc` (default) or `desc`; anything else is 422 on `dir`. |
+
+Ties always break by `display_name`, then `user_id`. `lastActivity` is `NULLS LAST` in both directions (people who never signed in stay at the bottom). `classes` is the count of this school year's non-archived classes: taught (Faculty) or Active-enrolled (Students). Example: `GET /api/admin/people?kind=student&status=all&yearLevel=3&sort=lastActivity&dir=desc`.
+
+`GET /api/admin/people/filters` adds `yearLevels: [1, 2, 3]` (distinct `students.year_level` of Student accounts, ascending).
+
+### `GET /api/admin/overview` (Dean only, not audited, flat response)
+
+```json
+{"status":"ok",
+ "attention":{"expiredInvitations":{"faculty":1,"students":2},"facultyWithoutClasses":3,"inactive30":{"faculty":1,"students":4},"nextTermMissing":false},
+ "accounts":{"faculty":{"active":10,"invited":1,"deactivated":0},"students":{"active":120,"invited":5,"deactivated":2}},
+ "signIns":[{"weekStart":"2026-08-24","faculty":7,"students":80}],
+ "security":{"twoFactor":{"faculty":{"on":6,"total":10},"students":{"on":3,"total":120}},"failedSignIns":[{"day":"2026-11-02","count":0}]},
+ "yearLevels":[{"yearLevel":1,"students":40}],
+ "sectionsByCourse":[{"courseCode":"DENT 101","sections":4}],
+ "setup":{"currentTerm":{"semester":"1ST","schoolYear":"2026-2027","endDate":"2026-12-18"},"courses":{"active":30,"retired":2},"rooms":{"active":8,"retired":1}}}
+```
+
+- `accounts` use the same status rules as the People list. `twoFactor.total` and `inactive30` count Active accounts only; 2FA "on" uses the `twoFactor=on` rule, `inactive30` the `activity=inactive30` rule (people who never signed in are not counted).
+- `signIns`: 12 Monday-start Asia/Manila weeks ending with the current one, zero-filled; distinct users per role with a `login_success` or `google_login_success` audit event that week (Faculty vs Student and Class Secretary accounts). `failedSignIns`: 14 Manila days ending today, zero-filled, `login_failed` plus `google_login_denied`.
+- `expiredInvitations` is per kind so each count links to its People tab. `facultyWithoutClasses` = Active Faculty with no current-year non-archived class.
+- `currentTerm` is the Academic Term whose dates contain today (Manila), else `null`. `nextTermMissing` is true when a current term exists and no term starts after its end date (false when there is no current term).
+- `yearLevels` counts Active Student accounts per year level; `sectionsByCourse` is this school year's non-archived classes per course, top 10.
+
+### Wording (UI-001)
+
+Face enrollment spelling in audit labels; "Please" removed from backend errors and notices; names carry a comma before academic degrees ("Roberto Lim Santos, DMD") and none before Jr., Sr., II-V. Migration `061_name_degree_comma.sql` adds `identity_composed_name()`, uses it in the `user_accounts` identity trigger, and recomposes `display_name` only for rows still equal to the old composition (no comma); hand-edited names and rows with conflicting role identity copies are untouched.

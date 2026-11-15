@@ -146,7 +146,7 @@ export const Profile: React.FC = () => {
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
                 <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Academic Term</span>
-                <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">1st Semester, AY 2025-2026</p>
+                <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">1st Semester, S.Y. 2025–2026</p>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">

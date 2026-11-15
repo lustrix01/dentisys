@@ -4,6 +4,9 @@ import type { Download } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { strFromU8, unzipSync } from '../frontend/node_modules/fflate';
 
+// On-screen dates use the short month (spec UI-001 wording): '2026-11-17' -> 'Nov 17, 2026'.
+const shortDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+
 // Grade exports download .xlsx: unzip it and return all the XML text the workbook holds (cell values and shared strings).
 const readDownloadedXlsxText = async (download: Download) => {
   const files = unzipSync(new Uint8Array(await readFile((await download.path())!)));
@@ -57,8 +60,8 @@ test.describe('Faculty Module E2E Tests', () => {
     const terms = page.getByLabel('Academic Term *');
     await expect(terms).toHaveValue('12');
     await expect(terms.locator('option')).toHaveCount(2);
-    await expect(terms).toContainText('Summer 2026-2027');
-    await expect(terms).not.toContainText('2025-2026');
+    await expect(terms).toContainText('Summer S.Y. 2026–2027');
+    await expect(terms).not.toContainText('2025–2026');
     await terms.selectOption('12');
   });
 
@@ -441,7 +444,7 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.getByRole('button', { name: 'Actions for Active Student' }).click();
     await page.getByRole('button', { name: 'Send invite', exact: true }).click();
     await expect(page.getByRole('main').getByText('This Student identity is already linked to an active account.')).toBeVisible();
-    await expect(page.getByText('An unexpected error occurred. Please try again.')).toHaveCount(0);
+    await expect(page.getByText('An unexpected error occurred. Try again.')).toHaveCount(0);
   });
 
   test('Classes and Rosters roster header stays inside its card at 320 and 390 px', async ({ page }) => {
@@ -1514,7 +1517,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.getByRole('button', { name: 'Sessions', exact: true }).click();
     await page.getByRole('button', { name: /Upcoming Sessions/ }).click();
     const upcoming = page.locator('div.fixed.inset-0').filter({ hasText: 'Scheduled & Upcoming Sessions' });
-    await expect(upcoming).toContainText(futureDate);
+    await expect(upcoming).toContainText(shortDate(futureDate));
     await expect(upcoming).toContainText('FUTURE-101');
     await expect(upcoming).toContainText('8:00 AM – 11:00 AM');
     await expect(upcoming.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
@@ -1870,7 +1873,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.locator('form').getByRole('button', { name: 'absent', exact: true }).click();
     await page.locator('textarea').fill('  Verified absence with the Student  ');
     await page.getByRole('button', { name: 'Save override', exact: true }).click();
-    await expect(page.getByText('A server error occurred. Please try again later.', { exact: true })).toBeVisible();
+    await expect(page.getByText('A server error occurred. Try again later.', { exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Manual Attendance Override', exact: true })).toBeVisible();
     await expect(page.locator('textarea')).toHaveValue('  Verified absence with the Student  ');
     await expect(row.getByTestId('attendance-status')).toHaveText(/Present$/);
@@ -2039,7 +2042,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByText('EDIT-700', { exact: true })).toBeVisible();
     await expect(page.getByText('8:00 AM – 11:30 AM', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
-    await expect(page.getByText(`Date: ${session.sessionDate} (Asia/Manila)`, { exact: true })).toBeVisible();
+    await expect(page.getByText(`Date: ${shortDate(session.sessionDate)} (Asia/Manila)`, { exact: true })).toBeVisible();
     await expect(page.getByLabel('Present Cutoff', { exact: true })).toHaveValue('08:30');
     await expect(page.getByLabel('Allowed Radius (meters)')).toHaveValue('250');
     await expect(page.getByRole('checkbox', { name: /Face biometric/ })).not.toBeChecked();
@@ -2074,7 +2077,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
     test('opens with the exact saved values when geofence is off', async ({ page }) => {
       await openEdit(page, baseSession);
-      await expect(page.getByText('Date: 2099-10-03 (Asia/Manila)', { exact: true })).toBeVisible();
+      await expect(page.getByText('Date: Oct 3, 2099 (Asia/Manila)', { exact: true })).toBeVisible();
       await expect(page.getByLabel('Custom room name')).toHaveValue('Lab 5');
       await expect(page.getByLabel('Opening Time', { exact: true })).toHaveValue('07:45');
       await expect(page.getByLabel('Present Cutoff', { exact: true })).toHaveValue('08:20');
