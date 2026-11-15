@@ -47,7 +47,7 @@ export function LandingShell({ children }: { children?: React.ReactNode }) {
         setTimeout(() => el.scrollIntoView({ behavior: 'smooth' }), 60);
       }
     }
-  }, [location.pathname]);
+  }, [location.pathname, location.hash]);
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
     if (location.pathname === '/') {

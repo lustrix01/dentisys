@@ -27,6 +27,18 @@ No open items.
 
 ---
 
+# 12. Next features (Owner, 2026-11-15)
+
+Requested by the Owner; none has an agreed contract yet. Each starts with the contract (fields, errors, examples) and the Owner's `/grill-me`, and any spec change needs the Owner's approval first.
+
+- **12.1** Separate Superadmin and Dean roles. The Superadmin manages users, their roles and permissions.
+- **12.2** Face registration changes without the buddy loophole. The problem: a Student can revoke and re-enrol another person's face, so a blockmate can take attendance for them. Owner's first idea: a Student sends a revocation request with a reason, Faculty approve or reject it, and re-enrolment requests go to the Dean or Superadmin on a new page. Alternative to decide in the contract: on re-enrolment the new face must match the old enrolment and must not match any other enrolled Student; when either check fails, re-enrolment is done in person under Faculty or Dean supervision.
+- **12.3** Simplify attendance session creation.
+- **12.4** Join a class by code. Faculty generate a class code and share it; Students enter it to enrol. This is added next to the current invitation: the invitation still sends onboarding, and a Student who already has an account can join through the link or the code.
+- **12.5** Check-out time with geofencing, so Students cannot leave mid-class unnoticed.
+
+---
+
 # Done
 
 Full text and Owner decisions of these items: [backlog items closed before 2026-11-14](archive/backlog-done-2026-11.md).

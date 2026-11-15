@@ -215,7 +215,8 @@ export function AboutPage() {
                     </Link>
 
                     <span className="mt-3 text-[11px] text-slate-500">
-                      Need help signing in? Contact the Office of the College Secretary.
+                      Need help signing in?{' '}
+                      <Link to="/#contact" className="font-medium text-purple-600 hover:underline">Contact the college</Link>.
                     </span>
                   </div>
 
