@@ -221,8 +221,12 @@ sudo systemctl enable --now cron
 printf 'SHELL=/bin/bash\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n17 2 * * * root /bin/bash /opt/dentisys/scripts/backup-vps.sh\n' |
   sudo tee /etc/cron.d/dentisys-backup >/dev/null
 sudo chmod 644 /etc/cron.d/dentisys-backup
+# BIO-005: delete faces whose term has ended even when the Student never opens the app again.
+printf 'SHELL=/bin/bash\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n47 2 * * * root docker exec -u www-data dentisys-web-1 php /var/www/html/backend/bin/expire-biometrics.php >> /var/log/dentisys-expire-biometrics.log 2>&1\n' |
+  sudo tee /etc/cron.d/dentisys-biometric-expiry >/dev/null
+sudo chmod 644 /etc/cron.d/dentisys-biometric-expiry
 cat <<EOF
-Deployment complete. Nightly database backup: 02:17 in the server timezone.
+Deployment complete. Nightly database backup: 02:17; biometric expiry sweep: 02:47 (server timezone).
 Firewall guidance (also set the cloud firewall):
   Keep your existing SSH rule (e.g. sudo ufw limit 2202/tcp).
   sudo ufw allow 80/tcp

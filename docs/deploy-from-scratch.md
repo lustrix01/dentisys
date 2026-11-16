@@ -102,6 +102,7 @@ PASS: public /api/health reports ok
 PASS: unauthenticated POST /api/auth/refresh returns 401
 PASS: runtime-config matches the biometrics switch
 PASS: nightly backup cron installed and cron active
+PASS: nightly biometric expiry cron installed
 Reboot required; rebooting now.
 === Reboot (guide step 1) ===
 SSH is back after the reboot. ...
@@ -154,6 +155,7 @@ Follow the [release guide](release-guide.md). It covers who publishes the demo i
 | Other change | What to do |
 |---|---|
 | Compose files or server scripts | Rerun `provision-vps.ps1` with the same `-User` (add `-Production` for production). It asks only for the sudo password and the GHCR token, and keeps `.env` and data. |
+| Face expiry | Nightly at 02:47, faces whose term has ended are deleted; log in `/var/log/dentisys-expire-biometrics.log`. |
 | Backups | Nightly at 02:17 into `/opt/dentisys/backups`. Copy them off with the commands in [vps-deployment.md](vps-deployment.md#copy-backups-off-the-server). |
 
 ## Production VPS

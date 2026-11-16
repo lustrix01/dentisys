@@ -557,11 +557,14 @@ The biometric volume is excluded (BIO-003/BIO-005); loss requires re-enrollment.
 Store the server `.env` securely and separately so the matching keys remain
 available for a database restore; do not put it in the bundle or database dump.
 
-The existing semester-expiry maintenance should also run daily on a long-lived
-demo; use the command below in the operator's root crontab (`sudo crontab -e`):
+`deploy-vps.sh` also installs `/etc/cron.d/dentisys-biometric-expiry`, which runs
+the biometric expiry sweep at **02:47 in the server timezone** (BIO-005: faces
+whose term has ended are deleted even if the Student never opens the app again).
+Output goes to `/var/log/dentisys-expire-biometrics.log`. The sweep compares
+dates in the application timezone, not the server's:
 
 ```cron
-0 2 * * * cd /opt/dentisys && docker compose --env-file .env -p dentisys -f docker-compose.web.yml -f docker-compose.database.yml -f docker-compose.vps.yml exec -T web php /var/www/html/backend/bin/expire-biometrics.php
+47 2 * * * root docker exec -u www-data dentisys-web-1 php /var/www/html/backend/bin/expire-biometrics.php >> /var/log/dentisys-expire-biometrics.log 2>&1
 ```
 
 ## Updates

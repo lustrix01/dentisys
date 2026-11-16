@@ -314,6 +314,9 @@ result "$runtime_ok" 'runtime-config matches the biometrics switch'
 cron_ok=false
 if [[ -f /etc/cron.d/dentisys-backup ]] && grep -Fxq '17 2 * * * root /bin/bash /opt/dentisys/scripts/backup-vps.sh' /etc/cron.d/dentisys-backup && systemctl is-active --quiet cron; then cron_ok=true; fi
 result "$cron_ok" 'nightly backup cron installed and cron active'
+expiry_ok=false
+if grep -q 'expire-biometrics.php' /etc/cron.d/dentisys-biometric-expiry 2>/dev/null; then expiry_ok=true; fi
+result "$expiry_ok" 'nightly biometric expiry cron installed'
 unset body
 [[ "$failed" -eq 0 ]] || fail "Verification failed ($failed checks). Existing environment and database retained; fix the reported issue and rerun."
 echo "Verification complete: all checks passed. Site: https://$domain"
