@@ -31,6 +31,7 @@ No open items.
 
 Requested by the Owner. Each starts with the contract (fields, errors, examples) and the Owner's `/grill-me`, and any spec change needs the Owner's approval first.
 
+- **12.6** UI formality pass (Owner, 2026-11-16): make every screen clean, polished and formal: remove messiness, inconsistencies and unnecessary elements, and bring each page part to one standard look. Starts like the other items: a contract listing the screens and rules, the Owner's rulings, then Before/After demos from the real app.
 - **12.5** Dropped (Owner, 2026-11-15): check-out with geofencing. In a classroom a Student who leaves is noticed, and a second check would double the time attendance takes; face enrolment flags (12.2) cover the real abuse.
 
 ---
