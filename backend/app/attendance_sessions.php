@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/notifications.php';
 require_once __DIR__ . '/room_rules.php';
 require_once __DIR__ . '/class_meetings.php';
+require_once __DIR__ . '/auto_sessions.php';
 
 const ATTENDANCE_GEOFENCE_RADIUS_MIN_METERS = 50;
 const ATTENDANCE_GEOFENCE_RADIUS_MAX_METERS = 2000;
@@ -168,8 +169,22 @@ class BookingOverlapException extends AttendanceSessionException
     }
 }
 
+/** 409 asking the Faculty to confirm that a weekly schedule change moves or revokes N upcoming auto-sessions (ATT-008). */
+class AutoSessionsChangeException extends AttendanceSessionException
+{
+    public function __construct(public readonly int $count)
+    {
+        parent::__construct("This changes {$count} upcoming sessions.", 409, 'AUTO_SESSIONS_CHANGE');
+    }
+}
+
 function attendance_session_exception_response(AttendanceSessionException $e): void
 {
+    if ($e instanceof AutoSessionsChangeException) {
+        emit_response(build_json_response(['status' => 'error', 'code' => $e->errorCode, 'message' => $e->getMessage(),
+            'count' => $e->count, 'requestId' => function_exists('request_id') ? request_id() : null], 409));
+        return;
+    }
     if (!($e instanceof BookingOverlapException)) {
         emit_response(build_error_response($e->getMessage(), $e->statusCode, $e->errorCode));
         return;
@@ -455,7 +470,7 @@ function attendance_session_fetch_for_manager(
                     s.geofence_longitude, s.geofence_radius_meters,
                     s.biometric_required, s.opening_time, s.present_cutoff_time,
                     s.late_cutoff_time, s.class_end_time, s.revoked_at, s.revoked_by_user_id,
-                    s.revocation_reason, s.created_at, s.updated_at, s.created_by_role,
+                    s.revocation_reason, s.created_at, s.updated_at, s.created_by_role, s.auto_slot,
                     cs.cs_name, cs.block, c.course_id, c.course_code,
                     c.name AS course_name, u.display_name AS instructor_name
                FROM attendance_sessions s
@@ -653,6 +668,14 @@ function attendance_session_update(PDO $pdo, array $config, array $authCtx, arra
                 'Updated attendance session for ' . audit_class_label($pdo, $csId) . " on {$updatedSession['session_date']}.", null, $changed[0], $changed[1]
             );
         }
+        if ($changed !== null) { // ATT-008: an edited auto-session keeps its edit when the schedule changes
+            $pdo->prepare('UPDATE attendance_sessions SET auto_edited = true WHERE session_id = ? AND auto_slot IS NOT NULL')->execute([$sessionId]);
+        }
+        // Only an edit that changes the opening or a cutoff updates the class's grace periods.
+        $timesChanged = $changed !== null && array_intersect(['opening_time', 'present_cutoff_time', 'late_cutoff_time'], array_keys($changed[1])) !== [];
+        if ($role === 'faculty' && $timesChanged) {
+            attendance_session_save_class_grace($pdo, $config, $authCtx, $context, $sessionId, $csId, $values['opening_time'], $values['present_cutoff_time'], $values['late_cutoff_time']);
+        }
         attendance_session_overlap_confirmed($pdo, $config, $authCtx, $context, $sessionId, $csId, $values['session_date'], $values['opening_time'], $values['class_end_time'], $values['room'], $overlaps);
         $pdo->commit();
         return $updatedSession;
@@ -743,6 +766,7 @@ function attendance_session_map(array $row, bool $includeLocation = false): arra
         'biometricRequired' => attendance_session_bool($row['biometric_required']),
         'revokedAt' => attendance_session_timestamp($row['revoked_at'] !== null ? (string) $row['revoked_at'] : null),
         'revocationReason' => $row['revocation_reason'] ?? null,
+        'autoSession' => ($row['auto_slot'] ?? null) !== null,
         'createdAt' => attendance_session_timestamp((string) $row['created_at']),
         'updatedAt' => attendance_session_timestamp((string) $row['updated_at']),
     ];
@@ -908,6 +932,11 @@ function attendance_sessions_end_overdue(PDO $pdo, array $config, array $context
         }
     }
     attendance_sessions_open_due($pdo, $config, $context, $nowLocal);
+    try { // ATT-008: the daily weekly-schedule top-up must never break the request that triggered it
+        auto_sessions_top_up($pdo, $config, null, $context);
+    } catch (Throwable $e) {
+        error_log('Weekly schedule top-up error: ' . sanitize_for_log($e));
+    }
     return $ended;
 }
 
@@ -1078,6 +1107,7 @@ function attendance_session_record_audit(
         'request_id' => $context['request_id'] ?? null,
         'ip_address' => $context['ip_address'] ?? null,
         'user_agent' => $context['user_agent'] ?? null,
+        'operation_uuid' => $context['operation_uuid'] ?? null, // one batch id per scheduled top-up run
     ], $macKey, $beforeState, $afterState);
 }
 
@@ -1195,4 +1225,38 @@ function attendance_requests_auto_close(
         $close->execute([(int) $authCtx['user_id'], $nowSql, $note, (int) $requestId]);
         attendance_request_event($pdo, $config, $authCtx, (int) $requestId, 'auto_closed', $note, null, $context);
     }
+}
+
+/** ATT-001: [present, late] minutes after opening when 1 <= present < late <= 720, else null (times are HH:MM[:SS]). */
+function attendance_session_grace_minutes(string $opening, string $present, string $late): ?array
+{
+    $minutes = static function (string $time): int {
+        [$h, $m] = array_map('intval', explode(':', $time));
+        return $h * 60 + $m;
+    };
+    $presentMinutes = ($minutes($present) - $minutes($opening) + 1440) % 1440;
+    $lateMinutes = ($minutes($late) - $minutes($opening) + 1440) % 1440;
+    return $presentMinutes >= 1 && $presentMinutes < $lateMinutes && $lateMinutes <= 720 ? [$presentMinutes, $lateMinutes] : null;
+}
+
+/** ATT-001: a Faculty session with other grace periods becomes the class's grace periods (one audit row). Call inside the transaction. */
+function attendance_session_save_class_grace(PDO $pdo, array $config, array $authCtx, array $context, int $sessionId, int $csId, string $opening, string $present, string $late): void
+{
+    $grace = attendance_session_grace_minutes($opening, $present, $late);
+    if ($grace === null) {
+        return;
+    }
+    $stmt = $pdo->prepare('SELECT present_grace_minutes, late_grace_minutes FROM class_sections WHERE cs_id = ?');
+    $stmt->execute([$csId]);
+    $saved = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($saved) || ([(int) $saved['present_grace_minutes'], (int) $saved['late_grace_minutes']] === $grace)) {
+        return;
+    }
+    $pdo->prepare('UPDATE class_sections SET present_grace_minutes = ?, late_grace_minutes = ? WHERE cs_id = ?')->execute([$grace[0], $grace[1], $csId]);
+    attendance_session_record_audit(
+        $pdo, $config, $authCtx, $context, 'class_grace_periods_updated', $sessionId, $csId,
+        'Changed grace periods of ' . audit_class_label($pdo, $csId) . '.', null,
+        ['present_grace_minutes' => (int) $saved['present_grace_minutes'], 'late_grace_minutes' => (int) $saved['late_grace_minutes']],
+        ['present_grace_minutes' => $grace[0], 'late_grace_minutes' => $grace[1]]
+    );
 }

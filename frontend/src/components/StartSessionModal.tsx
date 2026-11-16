@@ -2,15 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronDown, MapPin, Navigation, Play } from 'lucide-react';
 import { LocationPicker } from './LocationPicker';
 import { Modal } from './Modal';
-import { RoomSelector, RetiredRoomWarning, retiredRoomError, useRooms } from './RoomSelector';
+import { RoomSelector, RetiredRoomWarning, retiredRoomError, roomKey, useRooms } from './RoomSelector';
 import { OverlapConfirmModal, overlapsFrom, type BookingOverlap } from './OverlapConfirmModal';
 
 import { formatShortDate } from '../utils/sessionDate';
 import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../utils/geofenceRadius';
-import type { ClassMeeting } from '../services/apiClient';
+import type { ClassMeeting, ClassSessionDefaults } from '../services/apiClient';
 import { SessionTimeFields } from './SessionTimeFields';
-import { checkTimes, type TimeSet } from '../utils/sessionTimes';
-import { FIXED_TIMES, manilaNow, meetingTimes, pickMeeting, sortMeetings } from '../utils/sessionDefaults';
+import { addMinutes, checkTimes, formatTime12, timesFromGrace, type TimeSet } from '../utils/sessionTimes';
+import { FIXED_TIMES, manilaNow, meetingOpening, nextQuarterHour, pickSessionMeeting, sortMeetings } from '../utils/sessionDefaults';
 import { formatVisibleTime } from '../utils/timeDisplay';
 const RADIUS_HINT = 'Indoors, use 150 m or more; phone GPS is often off by 50–100 m inside buildings.';
 
@@ -94,11 +94,13 @@ interface StartSessionModalProps {
   note?: React.ReactNode;
   /** The selected class's meetings; they prefill the times and show as chips. */
   meetings?: ClassMeeting[];
+  /** The class's grace periods and saved face / geofence choices (ATT-001). */
+  classDefaults?: Partial<ClassSessionDefaults>;
 }
 
 export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   isOpen, onClose, accent, summary, precheck, onSubmit, sections, selectedSectionId, onSelectSection,
-  initialRoom, initialLocation, note, meetings,
+  initialRoom, initialLocation, note, meetings, classDefaults,
 }) => {
   const a = ACCENTS[accent];
   const rooms = useRooms();
@@ -115,6 +117,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [overlaps, setOverlaps] = useState<BookingOverlap[] | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const fixtureLat = initialLocation?.latitude;
   const fixtureLng = initialLocation?.longitude;
@@ -128,23 +131,41 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   const sortedMeetings = useMemo(() => sortMeetings(meetings ?? []), [meetings]);
   const meetingsKey = JSON.stringify(sortedMeetings);
   const [chosen, setChosen] = useState<number | null>(null);
-  const applyMeeting = (index: number | null) => {
+  const graceOf = () => [classDefaults?.presentGraceMinutes ?? 30, classDefaults?.lateGraceMinutes ?? 45] as const;
+  // A room with a saved location fills the location for the geofence (ROOM-001).
+  const fillRoomLocation = (name: string) => {
+    const found = rooms.find(r => roomKey(r.name) === roomKey(name));
+    if (found?.latitude != null && found.longitude != null) setLocation({ latitude: found.latitude, longitude: found.longitude });
+  };
+  const applyMeeting = (index: number, date?: string) => {
+    const meeting = sortedMeetings[index];
     setChosen(index);
-    if (index !== null) {
-      setSessionDate(current => nearestSessionDateForMeeting(current, sortedMeetings[index].day));
-    }
-    const picked = index === null ? { ...FIXED_TIMES, room: null } : meetingTimes(sortedMeetings[index]);
-    setTimes({ openingTime: picked.openingTime, presentCutoff: picked.presentCutoff, lateCutoff: picked.lateCutoff, classEndTime: picked.classEndTime });
-    if (picked.room !== null) setRoom(picked.room);
+    setSessionDate(date ?? (current => nearestSessionDateForMeeting(current, meeting.day)));
+    const [present, late] = graceOf();
+    setTimes(timesFromGrace(meetingOpening(meeting.startTime), meeting.endTime, present, late));
+    setRoom(meeting.room);
+    fillRoomLocation(meeting.room);
   };
   // Prefill when the pop-up opens or the class changes, never while typing (S1, S2, S4).
   useEffect(() => {
-    if (!isOpen || sortedMeetings.length === 0) { setChosen(null); return; }
-    const now = manilaNow();
-    const picked = pickMeeting(sortedMeetings, now.day, now.minutes);
-    applyMeeting(picked ? sortedMeetings.indexOf(picked) : null);
+    if (!isOpen) { setChosen(null); return; }
+    setMoreOpen(false);
+    setBiometricRequired(classDefaults?.sessionBiometricRequired ?? true);
+    setGeofenceEnabled(classDefaults?.sessionGeofenceEnabled ?? false);
+    setGeofenceRadius(String(classDefaults?.sessionGeofenceRadius ?? 100));
+    const picked = pickSessionMeeting(sortedMeetings);
+    if (picked) { applyMeeting(sortedMeetings.indexOf(picked.meeting), picked.date); return; }
+    setChosen(null);
+    const [present, late] = graceOf();
+    const opening = nextQuarterHour(manilaNow().minutes);
+    setSessionDate(manilaToday());
+    setTimes(timesFromGrace(opening, addMinutes(opening, 90), present, late));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, meetingsKey]);
+  }, [isOpen, meetingsKey, selectedSectionId, classDefaults?.presentGraceMinutes, classDefaults?.lateGraceMinutes, classDefaults?.sessionBiometricRequired, classDefaults?.sessionGeofenceEnabled, classDefaults?.sessionGeofenceRadius]);
+
+  const timeProblem = checkTimes(times);
+  // A problem with a cutoff opens More settings so it is not hidden.
+  useEffect(() => { if (timeProblem && /cutoff/i.test(timeProblem)) setMoreOpen(true); }, [timeProblem]);
 
   const selectedMeeting = chosen === null ? null : sortedMeetings[chosen] ?? null;
   const meetingDateError = selectedMeeting && weekdayForSessionDate(sessionDate) !== selectedMeeting.day
@@ -193,13 +214,14 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
     if (!room.trim()) { setError('Choose a room or type the place where the session happens.'); return; }
     const retired = retiredRoomError(rooms, room);
     if (retired) { setError(retired); return; }
-    const timeProblem = checkTimes(times);
     if (timeProblem) { setError(timeProblem); return; }
     if (geofenceEnabled && !location) {
+      setMoreOpen(true);
       setError('Acquire the session location before starting a geofenced session.');
       return;
     }
     if (geofenceEnabled && parseRadius(geofenceRadius) === null) {
+      setMoreOpen(true);
       setError(RADIUS_RANGE_ERROR);
       return;
     }
@@ -319,34 +341,55 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
           </div>
         )}
 
-        <SessionTimeFields times={times} onChange={setTimes} sessionDate={sessionDate} endHint="The session ends automatically at this time; students without a record are marked Absent." />
+        <SessionTimeFields times={times} onChange={setTimes} sessionDate={sessionDate} accent={accent} part="main" endHint="The session ends automatically at this time; students without a record are marked Absent." />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-            <input type="checkbox" checked={biometricRequired} aria-label="Face biometric" onChange={(event) => setBiometricRequired(event.target.checked)} className={a.check} />
-            <span><strong className="block text-slate-700 dark:text-slate-200">Face biometric</strong><small className="text-slate-500 dark:text-slate-400">On: students check in with their face. Off: you mark attendance in the roll call.</small></span>
-          </label>
-          <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-            <input type="checkbox" checked={geofenceEnabled} aria-label="Geofence" onChange={(event) => setGeofenceEnabled(event.target.checked)} className={a.check} />
-            <span><strong className="block text-slate-700 dark:text-slate-200">Geofence</strong><small className="text-slate-500 dark:text-slate-400">Use a configured room radius</small></span>
-          </label>
-        </div>
-
-        {geofenceEnabled && (
-          <div className={`rounded-xl border p-3 ${a.box}`}>
-            <div className="flex items-center justify-between gap-3">
-              <label className="block flex-1"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Allowed Radius (meters)</span><input type="number" min={50} max={2000} value={geofenceRadius} onChange={(event) => setGeofenceRadius(cleanRadiusText(event.target.value))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /><small className="mt-1 block text-[10px] text-slate-500 dark:text-slate-400">{RADIUS_HINT}</small></label>
-              <button type="button" onClick={handleAcquireLocation} disabled={locating} className={`mt-5 inline-flex items-center gap-1.5 rounded-xl ${a.solid} px-3 py-2.5 text-[11px] font-bold text-white disabled:opacity-50`}><Navigation className="w-3.5 h-3.5" />{locating ? 'Locating…' : 'Use device location'}</button>
-              <button type="button" onClick={() => setShowMap(shown => !shown)} className={`mt-5 inline-flex items-center gap-1.5 rounded-xl border ${a.outline} px-3 py-2.5 text-[11px] font-bold`}><MapPin className="w-3.5 h-3.5" />{showMap ? 'Hide map' : 'Pick on map'}</button>
-            </div>
-            {showMap && (
-              <div className="relative z-0 mt-3">
-                <LocationPicker value={location} radiusMeters={parseRadius(geofenceRadius) ?? 100} onChange={setLocation} />
+        <div>
+          <button
+            type="button"
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen(open => !open)}
+            className={`flex w-full items-center justify-between gap-2 text-left ${boxClass}`}
+          >
+            <span className="block">
+              <span className="block font-bold text-slate-800 dark:text-slate-100">More settings</span>
+              <span data-testid="more-settings-summary" className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
+                Present until {times.presentCutoff ? formatTime12(times.presentCutoff) : '—'} · Late until {times.lateCutoff ? formatTime12(times.lateCutoff) : '—'} · Face {biometricRequired ? 'on' : 'off'} · Geofence {geofenceEnabled ? 'on' : 'off'}
+              </span>
+            </span>
+            <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400 transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {moreOpen && (
+            <div className="mt-3 space-y-4">
+              <SessionTimeFields times={times} onChange={setTimes} sessionDate={sessionDate} accent={accent} part="cutoffs" endHint="" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+                  <input type="checkbox" checked={biometricRequired} aria-label="Face biometric" onChange={(event) => setBiometricRequired(event.target.checked)} className={a.check} />
+                  <span><strong className="block text-slate-700 dark:text-slate-200">Face biometric</strong><small className="text-slate-500 dark:text-slate-400">On: students check in with their face. Off: you mark attendance in the roll call.</small></span>
+                </label>
+                <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+                  <input type="checkbox" checked={geofenceEnabled} aria-label="Geofence" onChange={(event) => setGeofenceEnabled(event.target.checked)} className={a.check} />
+                  <span><strong className="block text-slate-700 dark:text-slate-200">Geofence</strong><small className="text-slate-500 dark:text-slate-400">Use a configured room radius</small></span>
+                </label>
               </div>
-            )}
-            <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-400">{location ? `Location acquired: ${location.latitude}, ${location.longitude}` : 'The server stores the configured session location and radius; Student coordinates remain temporary.'}</p>
-          </div>
-        )}
+
+              {geofenceEnabled && (
+                <div className={`rounded-xl border p-3 ${a.box}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="block flex-1"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Allowed Radius (meters)</span><input type="number" min={50} max={2000} value={geofenceRadius} onChange={(event) => setGeofenceRadius(cleanRadiusText(event.target.value))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /><small className="mt-1 block text-[10px] text-slate-500 dark:text-slate-400">{RADIUS_HINT}</small></label>
+                    <button type="button" onClick={handleAcquireLocation} disabled={locating} className={`mt-5 inline-flex items-center gap-1.5 rounded-xl ${a.solid} px-3 py-2.5 text-[11px] font-bold text-white disabled:opacity-50`}><Navigation className="w-3.5 h-3.5" />{locating ? 'Locating…' : 'Use device location'}</button>
+                    <button type="button" onClick={() => setShowMap(shown => !shown)} className={`mt-5 inline-flex items-center gap-1.5 rounded-xl border ${a.outline} px-3 py-2.5 text-[11px] font-bold`}><MapPin className="w-3.5 h-3.5" />{showMap ? 'Hide map' : 'Pick on map'}</button>
+                  </div>
+                  {showMap && (
+                    <div className="relative z-0 mt-3">
+                      <LocationPicker value={location} radiusMeters={parseRadius(geofenceRadius) ?? 100} onChange={setLocation} />
+                    </div>
+                  )}
+                  <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-400">{location ? `Location acquired: ${location.latitude}, ${location.longitude}` : 'The server stores the configured session location and radius; Student coordinates remain temporary.'}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Footer stays pinned to the bottom of the pop-up so Cancel / Start are reachable without scrolling. */}
         <div className="sticky -bottom-4 sm:-bottom-6 z-10 -mx-4 sm:-mx-6 flex justify-end gap-2 border-t border-slate-100 bg-white px-4 py-3 sm:px-6 dark:border-slate-800 dark:bg-slate-950">

@@ -74,3 +74,63 @@ const DAY_MS = DAY * 60000;
 /** End moment of a session: the server flag when sent, else the end-before-opening rule. */
 export const sessionEndOffsetMs = (openingTime: string | null | undefined, classEndTime: string | null | undefined, flag?: boolean): number =>
   (flag ?? isNextDay(openingTime ?? '', classEndTime)) ? DAY_MS : 0;
+
+/** 'HH:MM' moved by `delta` minutes, wrapping past midnight. */
+export const addMinutes = (time: string, delta: number): string => toTime(toMinutes(time) + delta);
+
+/** Minutes from Opening to `time` (0-1439); a time before Opening counts as the next day. */
+export const minutesAfter = (openingTime: string, time: string): number => mod(toMinutes(time) - toMinutes(openingTime));
+
+/** `value` moved by `delta` inside min..max, looping at the ends (12 -> 1, 59 -> 0). */
+export const stepLoop = (value: number, delta: number, min: number, max: number): number => {
+  const size = max - min + 1;
+  return min + ((((value - min + delta) % size) + size) % size);
+};
+
+/** 'HH:MM' to the 12-hour wheel values (hour 1-12). */
+export const to12h = (time: string): { hour: number; minute: number; pm: boolean } => {
+  const h = Number(time.slice(0, 2));
+  return { hour: h % 12 || 12, minute: Number(time.slice(3, 5)), pm: h >= 12 };
+};
+
+/** Wheel values back to 'HH:MM'. */
+export const from12h = (hour: number, minute: number, pm: boolean): string =>
+  `${String((hour % 12) + (pm ? 12 : 0)).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+
+/** Digits typed on a focused column: a second digit extends the first, anything above `max` starts again. */
+export const nextDigits = (buffer: string, digit: string, max: number): string => {
+  const next = buffer.length >= 2 ? digit : buffer + digit;
+  return Number(next) > max ? digit : next;
+};
+
+/**
+ * Typed time to 'HH:MM', or null. "8", "830", "8:05", "1:30p", "1:30 pm", "19:00", "0730".
+ * Without am/pm: 7-11 is AM, 12 is noon, 1-6 is PM, 0 and 13-23 are 24-hour.
+ */
+export const parseTypedTime = (text: string): string | null => {
+  const t = text.trim().toLowerCase().replace(/\./g, '');
+  const colon = /^(\d{1,2}):(\d{2})\s*(a|p|am|pm)?$/.exec(t);
+  const plain = /^(\d{1,4})\s*(a|p|am|pm)?$/.exec(t);
+  let h: number; let m: number; let suffix: string | undefined;
+  if (colon) { h = Number(colon[1]); m = Number(colon[2]); suffix = colon[3]; }
+  else if (plain) {
+    const d = plain[1];
+    h = Number(d.length <= 2 ? d : d.slice(0, d.length - 2)); m = d.length <= 2 ? 0 : Number(d.slice(-2)); suffix = plain[2];
+  } else return null;
+  if (m > 59 || h > 23) return null;
+  if (suffix) {
+    if (h < 1 || h > 12) return null;
+    h = (h % 12) + (suffix.startsWith('p') ? 12 : 0);
+  } else if (h >= 1 && h <= 6) h += 12;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
+/**
+ * Four times from a meeting (or an opening and end): Present/Late cutoffs are the class's grace periods after the opening.
+ * Late is capped at the class end when that still leaves it after Present; otherwise the cutoffs stay at opening + grace.
+ */
+export const timesFromGrace = (openingTime: string, classEndTime: string, presentGrace: number, lateGrace: number): TimeSet => {
+  const endOffset = minutesAfter(openingTime, classEndTime);
+  const lateOffset = lateGrace > endOffset && endOffset > presentGrace ? endOffset : lateGrace;
+  return { openingTime, presentCutoff: addMinutes(openingTime, presentGrace), lateCutoff: addMinutes(openingTime, lateOffset), classEndTime };
+};

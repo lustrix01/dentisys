@@ -38,6 +38,9 @@ import { isViewOnlyClass, isArchivedCurrentYear, archiveGroup, type ArchiveReaso
 import { Student } from '../../types';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { ClassCardJoinCode } from '../../components/ClassJoinPanel';
+import { ClassJoinButton } from '../../components/ClassJoinPanel';
+import { AutoSessionsPanel } from '../../components/AutoSessionsPanel';
 import Tabs from '../../components/Tabs';
 import { ListToolbar, SearchField } from '../../components/FilterBars';
 import { showFeedback, requestConfirmation } from '../../components/FeedbackCenter';
@@ -59,7 +62,8 @@ import {
   getFacultyEmailLogsApi,
   createStudentApi,
   FacultyClassItem,
-  CourseCatalogItem
+  CourseCatalogItem,
+  ApiError
 } from '../../services/apiClient';
 
 import {
@@ -302,6 +306,9 @@ export const ClassesAndRosters: React.FC = () => {
   const [editSchoolYear, setEditSchoolYear] = useState('2025-2026');
   const [editError, setEditError] = useState<string | null>(null);
   const [classOverlap, setClassOverlap] = useState<{ overlaps: BookingOverlap[]; mode: 'create' | 'edit' } | null>(null);
+  // ATT-008: a schedule save that moves or revokes N upcoming auto-sessions asks first; keeps the overlap choice already made.
+  const [autoChange, setAutoChange] = useState<{ count: number; confirmOverlap: boolean } | null>(null);
+  const autoGoBackRef = useRef<HTMLButtonElement>(null);
   const [serverClash, setServerClash] = useState<string | null>(null);
   const [isUpdatingClass, setIsUpdatingClass] = useState(false);
 
@@ -847,7 +854,7 @@ export const ClassesAndRosters: React.FC = () => {
   };
 
   // Handler: Update Class Section
-  const handleUpdateClass = async (e: React.FormEvent | null, confirmOverlap = false) => {
+  const handleUpdateClass = async (e: React.FormEvent | null, confirmOverlap = false, confirmAutoSessions = false) => {
     e?.preventDefault();
     if (!editingClass) return;
     setEditError(null);
@@ -917,8 +924,10 @@ export const ClassesAndRosters: React.FC = () => {
         } : {}),
         ...(newCatalogCode || unitsChanged ? { lectureUnits, labUnits } : {}),
         confirmOverlap: confirmOverlap || undefined,
+        confirmAutoSessions: confirmAutoSessions || undefined,
       });
       setClassOverlap(null);
+      setAutoChange(null);
 
       if (res && (res.status === 'ok' || res.status === 'success')) {
         showFeedback(`Class ${editCourseCode} (${editBlock.trim()}) updated successfully!`, 'success');
@@ -930,7 +939,13 @@ export const ClassesAndRosters: React.FC = () => {
     } catch (err: any) {
       const found = overlapsFrom(err, 'CLASS_SESSION_OVERLAP');
       if (found) { setClassOverlap({ overlaps: found, mode: 'edit' }); return; }
+      if (err instanceof ApiError && err.status === 409 && err.code === 'AUTO_SESSIONS_CHANGE') {
+        setClassOverlap(null);
+        setAutoChange({ count: Number(err.details?.count) || 0, confirmOverlap });
+        return;
+      }
       setClassOverlap(null);
+      setAutoChange(null);
       setEditError(err?.message || 'Failed to save class section updates to backend.');
     } finally {
       setIsUpdatingClass(false);
@@ -1571,6 +1586,7 @@ const handleSendAllStudentInvites = async () => {
                             {!cls.lecRoom && !cls.labRoom && <div>Venue / Schedule TBA</div>}
                           </div>
                         </div>
+                        {!historicalClass && cls.joinCode && <ClassCardJoinCode code={cls.joinCode} enabled={cls.joinCodeEnabled !== false} />}
                       </div>
                       {!historicalClass && <RetiredRoomWarning rooms={rooms} names={[cls.lecRoom, cls.labRoom].map(room => room?.replace(/\s+\([A-Z][a-z]{2}\b.*\)$/, '')).concat((cls.meetings ?? []).map(meeting => meeting.room))} />}
                       {archivedClass && (
@@ -1969,6 +1985,7 @@ const handleSendAllStudentInvites = async () => {
                   <Upload className="w-3.5 h-3.5" />
                   <span>Import Students</span>
                 </button>
+                {selectedClass && !isViewOnlyClass(selectedClass) && <ClassJoinButton csId={selectedClass.csId} onApproved={() => void fetchData()} />}
                 <button
                   onClick={handleSendAllStudentInvites}
                   disabled={isSendingInvitations || filteredStudents.length === 0}
@@ -3235,6 +3252,8 @@ const handleSendAllStudentInvites = async () => {
             </>
             )}
 
+            {editingClass && !isViewOnlyClass(editingClass) && <AutoSessionsPanel csId={editingClass.csId} />}
+
             {editError && (
               <div className="flex items-start gap-3 rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 animate-fade-in">
                 <Info className="mt-0.5 h-4 w-4 shrink-0" />
@@ -3272,6 +3291,19 @@ const handleSendAllStudentInvites = async () => {
         onCancel={() => setClassOverlap(null)}
         onConfirm={() => void (classOverlap?.mode === 'edit' ? handleUpdateClass(null, true) : handleCreateClass(null, true))}
       />
+
+      {/* ATT-008: copies OverlapConfirmModal (Go back focused, accent Save). */}
+      <Modal isOpen={autoChange !== null} onClose={() => setAutoChange(null)} title="Change upcoming sessions?" size="sm">
+        {autoChange && (
+          <div className="space-y-4" data-testid="auto-sessions-change">
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">This changes {autoChange.count} upcoming sessions.</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" ref={autoGoBackRef} autoFocus disabled={isUpdatingClass} onClick={() => setAutoChange(null)} className="rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-700 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200">Go back</button>
+              <button type="button" disabled={isUpdatingClass} onClick={() => void handleUpdateClass(null, autoChange.confirmOverlap, true)} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 disabled:opacity-50">Save</button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Modal: Import a class and its roster from a file */}
       {isClassRosterImportOpen && (

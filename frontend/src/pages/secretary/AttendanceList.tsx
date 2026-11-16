@@ -55,6 +55,7 @@ import {
   endSecretaryAttendanceSessionApi,
   revokeSecretaryAttendanceSessionApi,
   type ClassMeeting,
+  type ClassSessionDefaults,
 } from '../../services/apiClient';
 
 type AttendanceItem = Awaited<ReturnType<typeof getSecretaryAttendanceApi>>['records'][number];
@@ -237,7 +238,7 @@ export const AttendanceList: React.FC = () => {
 
   // Start Session pop-up: current-school-year sections only (REG-006); a past-year section can never start a session.
   const [isStartOpen, setIsStartOpen] = useState(false);
-  const [startSections, setStartSections] = useState<Array<{ classId: string; className: string; classroomName: string; courseCode?: string; meetings?: ClassMeeting[] }>>([]);
+  const [startSections, setStartSections] = useState<Array<{ classId: string; className: string; classroomName: string; courseCode?: string; meetings?: ClassMeeting[]; classDefaults?: ClassSessionDefaults }>>([]);
   const [startCsId, setStartCsId] = useState('');
   const [otherLiveName, setOtherLiveName] = useState<string | null>(null);
   const startCsIdRef = useRef('');
@@ -258,7 +259,7 @@ export const AttendanceList: React.FC = () => {
     try {
       const kpis = await getSecretaryDashboardKpisApi('current');
       const fromServer = kpis?.assignedClasses?.length ? kpis.assignedClasses : kpis?.assignedClass?.classId ? [kpis.assignedClass] : [];
-      const list = fromServer.map(sec => ({ classId: sec.classId, className: sec.className, classroomName: sec.classroomName ?? '', courseCode: 'courseCode' in sec ? (sec.courseCode as string) : undefined, meetings: 'meetings' in sec ? sec.meetings : undefined }));
+      const list = fromServer.map(sec => ({ classId: sec.classId, className: sec.className, classroomName: sec.classroomName ?? '', courseCode: 'courseCode' in sec ? (sec.courseCode as string) : undefined, meetings: 'meetings' in sec ? sec.meetings : undefined, classDefaults: 'presentGraceMinutes' in sec ? sec as ClassSessionDefaults : undefined }));
       const chosen = list.find(sec => sec.classId === (startCsIdRef.current || String(kpis?.assignedClass?.classId ?? ''))) ?? list[0] ?? null;
       setStartSections(list);
       setStartCsId(chosen?.classId ?? '');
@@ -1588,6 +1589,7 @@ export const AttendanceList: React.FC = () => {
                               {countdown}
                             </span>
                             <span className="font-mono text-xs text-slate-500 dark:text-slate-400">({s.sessionCode})</span>
+                            {s.autoSession && <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Auto</span>}
                           </div>
                           <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
                             <span>Date: {sDate}</span>
@@ -1922,6 +1924,7 @@ export const AttendanceList: React.FC = () => {
         initialRoom={startSections.find(sec => sec.classId === startCsId)?.classroomName ?? ''}
         initialLocation={startLocation}
         meetings={startSections.find(sec => sec.classId === startCsId)?.meetings}
+        classDefaults={startSections.find(sec => sec.classId === startCsId)?.classDefaults}
         note={otherLiveName ? <p className="text-xs text-slate-500 dark:text-slate-500">{otherLiveName} has a live session.</p> : null}
       />
     </div>

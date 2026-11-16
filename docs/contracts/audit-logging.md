@@ -144,6 +144,9 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | Secretary invited / invitation revoked | secretary_invited, secretary_invitation_revoked | Faculty | student, class | yes | yes | KEEP |
 | Secretary appointed / appointment ended | secretary_appointed, secretary_appointment_ended | Faculty | student, class, role before → after | yes | yes | KEEP |
 | Class created / changed | class_create, class_update | Faculty | changed fields before → after | yes | yes | KEEP |
+| Join code replaced / turned off / turned on, auto-approve changed | class_code_regenerated, class_code_disabled, class_code_enabled, class_auto_approve_changed | Faculty | class, before → after (never the code itself) | no | yes | **NEW** (CLS-004) |
+| Join requested | class_join_requested | Student | student, class | no | — (Faculty see it for the class) | **NEW** (CLS-004) |
+| Join request approved / rejected | class_join_approved, class_join_rejected | Faculty, or system when auto-approve is on | student, class | no | yes | **NEW** (CLS-004) |
 | Class schedule saved over an overlap | class_schedule_overlap_confirmed | Faculty | who confirmed, other classes | yes | yes | KEEP |
 | Account deactivated / reactivated | account_deactivated, account_reactivated | Dean (Superadmin mode) | status Active ↔ Disabled, kind (Faculty or Student), reason on deactivation; a Student who is a Class Secretary is the same account, so one row | yes | — | **NEW** |
 | Moved to a new email | account_email_moved | Dean (Superadmin mode), or System (server script) | email old → new, reason, university ID checked in person | yes | — | **NEW** |
@@ -183,6 +186,9 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | What | Code | Actor | Stores | Dean | Own | Change |
 |---|---|---|---|---|---|---|
 | Attendance session created / changed / ended / revoked | attendance_session_started, _updated, _ended, _revoked | Faculty, Secretary | edits before → after; revoke reason | no | yes | KEEP |
+| Auto-sessions turned on / off / settings changed | auto_sessions_enabled, auto_sessions_disabled, auto_sessions_updated | Faculty | face, geofence, radius before → after; on turn-on over an overlap, the other classes | no | yes | **NEW** (ATT-008) |
+| Class grace periods changed | class_grace_periods_updated | Faculty | Present and Late minutes before → after | no | yes | **NEW** (ATT-001) |
+| Sessions created or revoked from the weekly schedule | attendance_session_started, attendance_session_revoked (one batch per run) | system ("DentiSYS (weekly schedule)") | class, date, times, room | no | — | **NEW** (ATT-008) |
 | Session booked over an overlap | attendance_session_overlap_confirmed | Faculty, Secretary | who confirmed, other classes | no | yes | KEEP |
 | Session opened / ended automatically | attendance_session_auto_opened, attendance_session_auto_ended | system | students resolved Absent (count) | no | — | KEEP |
 | Attendance recorded by face check | biometric_attendance_recorded | Student | session, method, device/IP (the only evidence of who checked a student in); about 14,000 rows per term, shown on no screen | no | — | KEEP |

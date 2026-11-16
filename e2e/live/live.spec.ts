@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openMoreSettings, setSessionTime } from '../sessionTimes';
 import { createHmac } from 'node:crypto';
 
 // Person names cannot contain digits, so unique suffixes are spelled with letters.
@@ -395,13 +396,14 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
     response => response.url().includes('/api/secretary/attendance/session') && response.request().method() === 'POST'
   );
   // ATT-002: geofence is off by default, so no toggle is needed for a session without a location.
+  await openMoreSettings(form);
   await expect(form.getByRole('checkbox', { name: /Geolocation|Geofence/ })).not.toBeChecked();
   const sessionWindow = manilaSessionWindow();
-  await form.getByLabel('Opening').fill(sessionWindow.openingTime);
-  await form.getByLabel('Present Cutoff').fill(sessionWindow.presentCutoff);
-  await form.getByLabel('Late Cutoff').fill(sessionWindow.lateCutoff);
+  await setSessionTime(form, 'Opening', sessionWindow.openingTime);
+  await setSessionTime(form, 'Present Cutoff', sessionWindow.presentCutoff);
+  await setSessionTime(form, 'Late Cutoff', sessionWindow.lateCutoff);
   // Open the session in the past while keeping its same-day end time ahead.
-  await form.getByLabel('Class end time').fill(sessionWindow.classEndTime);
+  await setSessionTime(form, 'Class End Time', sessionWindow.classEndTime);
   await form.getByLabel('Room or Session Location').selectOption('CUSTOM');
   await form.getByLabel('Custom room name').fill('Live Test Room');
   await form.getByRole('button', { name: 'Start session', exact: true }).click();

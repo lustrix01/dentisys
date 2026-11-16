@@ -931,6 +931,8 @@ function handle_secretary_dashboard_kpis(): void
 
         $csStmt = $pdo->prepare(
             "SELECT cs.cs_id, cs.cs_name, cs.lab_room, cs.lec_room, cs.meetings_recorded,
+                    cs.present_grace_minutes, cs.late_grace_minutes, cs.session_biometric_required,
+                    cs.session_geofence_enabled, cs.session_geofence_radius,
                     cs.semester, cs.school_year, c.course_code, c.name AS course_name
                FROM class_sections cs
                JOIN courses c ON c.course_id = cs.course_id
@@ -1079,6 +1081,11 @@ function handle_secretary_dashboard_kpis(): void
             'schoolYear' => $row['school_year'],
             'classroomName' => $row['lab_room'] ?: ($row['lec_room'] ?: null),
             'meetings' => class_meetings_read($pdo, $row),
+            'presentGraceMinutes' => (int) $row['present_grace_minutes'],
+            'lateGraceMinutes' => (int) $row['late_grace_minutes'],
+            'sessionBiometricRequired' => filter_var($row['session_biometric_required'], FILTER_VALIDATE_BOOLEAN),
+            'sessionGeofenceEnabled' => filter_var($row['session_geofence_enabled'], FILTER_VALIDATE_BOOLEAN),
+            'sessionGeofenceRadius' => (int) $row['session_geofence_radius'],
             'enrolledCount' => $enrolledBySection[(string) $row['cs_id']] ?? 0,
         ], $assignedClassRows);
 
@@ -1867,7 +1874,7 @@ function handle_secretary_attendance_get(): void
                     a.status, a.started_at, a.ended_at, a.revoked_at, a.opening_time, a.class_end_time,
                      a.present_cutoff_time, a.late_cutoff_time, a.biometric_required, a.geofence_enabled,
                      a.geofence_latitude, a.geofence_longitude, a.geofence_radius_meters,
-                     a.created_by_role, a.owner_user_id, a.secretary_user_id,
+                     a.created_by_role, a.owner_user_id, a.secretary_user_id, a.auto_slot,
                     cs.cs_name, c.course_code
                FROM attendance_sessions a
                JOIN class_sections cs ON cs.cs_id = a.cs_id
@@ -1904,6 +1911,7 @@ function handle_secretary_attendance_get(): void
             'geofenceLongitude' => $row['geofence_longitude'] !== null ? (float) $row['geofence_longitude'] : null,
             'geofenceRadiusMeters' => $row['geofence_radius_meters'] !== null ? (float) $row['geofence_radius_meters'] : null,
             'createdByRole' => $row['created_by_role'] ?? null,
+            'autoSession' => ($row['auto_slot'] ?? null) !== null,
             'createdByCurrentSecretary' => ($row['created_by_role'] ?? null) === 'secretary'
                 && (int) $row['owner_user_id'] === (int) $authCtx['user_id']
                 && (int) $row['secretary_user_id'] === (int) $authCtx['user_id'],

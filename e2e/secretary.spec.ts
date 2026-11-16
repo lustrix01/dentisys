@@ -1,4 +1,5 @@
 import type { Page, Route } from '@playwright/test';
+import { expectSessionTime, expectSessionTimes, openMoreSettings, setSessionTime } from './sessionTimes';
 import { roomsJson, test, expect, openSecretaryWorksheet, openAccountMenu } from './fixtures';
 
 test.describe('Class Secretary Module E2E Tests', () => {
@@ -402,6 +403,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await openStartPopup(page);
     const form = startForm(page);
     await form.getByLabel('Room or Session Location').selectOption('Room 101');
+    await openMoreSettings(form);
     await expect(form.getByLabel('Geofence')).not.toBeChecked();
     await form.getByLabel('Geofence').check();
     await expect(form.getByLabel('Allowed Radius (meters)')).toHaveValue('150');
@@ -418,21 +420,18 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     });
     await openStartPopup(page);
     const form = startForm(page);
-    const time = (label: string) => form.getByLabel(label, { exact: true });
-    await time('Opening').fill('02:00');
-    await expect(time('Present Cutoff')).toHaveValue('03:00');
-    await expect(time('Late Cutoff')).toHaveValue('06:00');
-    await expect(time('Class end time')).toHaveValue('07:00');
-    await time('Opening').fill('23:00');
-    await time('Present Cutoff').fill('23:30');
-    await time('Late Cutoff').fill('01:00');
-    await time('Class end time').fill('02:00');
+    await setSessionTime(form, 'Opening', '02:00');
+    await expectSessionTimes(form, ['02:00', '02:30', '02:45', '03:30']);
+    await setSessionTime(form, 'Opening', '23:00');
+    await setSessionTime(form, 'Present Cutoff', '23:30');
+    await setSessionTime(form, 'Late Cutoff', '01:00');
+    await setSessionTime(form, 'Class End Time', '02:00');
     await expect(form.getByTestId('caption-classEndTime')).toContainText('2:00 AM (next day)');
     await expect(form.getByTestId('time-summary')).toContainText('Session lasts 3 h');
     await form.getByRole('button', { name: /^(Start|Schedule) session$/i }).click();
     await expect.poll(() => payloads.length).toBe(1);
     expect(payloads[0]).toMatchObject({ openingTime: '23:00', presentCutoff: '23:30', lateCutoff: '01:00', classEndTime: '02:00' });
-    await time('Class end time').fill('13:00');
+    await setSessionTime(form, 'Class End Time', '13:00');
     await expect(form.getByTestId('time-summary')).toHaveText('A session can last at most 12 hours.');
     await form.getByRole('button', { name: 'Cancel', exact: true }).click();
     await openSessionsModal(page);
@@ -459,6 +458,8 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     const date = form.getByLabel('Session Date (Asia/Manila)');
     expect(await date.getAttribute('min')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await date.fill('2099-10-02');
+    await setSessionTime(form, 'Opening', '08:00'); // the default opening is the next quarter hour
+    await openMoreSettings(form);
     await expect(form.getByRole('checkbox', { name: /Geolocation|Geofence/ })).not.toBeChecked(); // ATT-002: off by default
     await form.getByRole('checkbox', { name: /Geolocation|Geofence/ }).uncheck();
     await form.getByRole('button', { name: 'Schedule session', exact: true }).click();
@@ -470,6 +471,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(page.getByText('Live session')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Start session', exact: true }).click();
+    await startForm(page).getByLabel('Session Date (Asia/Manila)').fill('2099-10-02'); // a reopened form starts from today again
     await startForm(page).getByRole('button', { name: 'Schedule session', exact: true }).click();
     await expect(startForm(page).getByRole('alert')).toContainText('created by Faculty Jane Doe');
   });
@@ -585,6 +587,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
 
     await openStartPopup(page);
     const form = startForm(page);
+    await openMoreSettings(form);
     await form.getByRole('checkbox', { name: /Geofence/ }).check();
     await page.getByRole('button', { name: 'Pick on map' }).click();
     const map = page.getByRole('application', { name: 'Session location map' });
@@ -841,8 +844,8 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     const form = startForm(page);
     const chip = form.getByRole('button', { name: 'Mon · Lecture · 9:00 AM–11:00 AM · CDM 1' });
     await expect(chip).toHaveAttribute('aria-pressed', 'true');
-    await expect(form.getByLabel('Opening', { exact: true })).toHaveValue('08:45');
-    await expect(form.getByLabel('Class end time', { exact: true })).toHaveValue('11:00');
+    await expectSessionTime(form, 'Opening', '08:45');
+    await expectSessionTime(form, 'Class End Time', '11:00');
     await expect(form.getByLabel('Custom room name')).toHaveValue('CDM 1');
   });
 

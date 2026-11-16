@@ -7,6 +7,7 @@ require_once dirname(__DIR__) . '/app/academic_year.php';
 require_once dirname(__DIR__) . '/app/class_meetings.php';
 require_once dirname(__DIR__) . '/app/notifications.php';
 require_once dirname(__DIR__) . '/app/account_identity.php';
+require_once dirname(__DIR__) . '/app/class_join.php';
 
 if (!function_exists('sanitize_for_log')) {
     function sanitize_for_log(\Throwable $e): string
@@ -5357,6 +5358,7 @@ function faculty_attendance_session_payload(?array $session): ?array
         'startedAt' => attendance_session_timestamp($session['started_at']),
         'endedAt' => attendance_session_timestamp($session['ended_at']),
         'createdByRole' => $session['created_by_role'] ?? null,
+        'autoSession' => ($session['auto_slot'] ?? null) !== null,
         'geofenceLatitude' => $session['geofence_latitude'] !== null ? (float) $session['geofence_latitude'] : null,
         'geofenceLongitude' => $session['geofence_longitude'] !== null ? (float) $session['geofence_longitude'] : null,
         'geofenceEnabled' => (bool) $session['geofence_enabled'],
@@ -5476,7 +5478,7 @@ function handle_faculty_attendance_get(): void
 
         $sessionStmt = $pdo->prepare(
             "SELECT session_id, cs_id, session_date, session_code, room, status, started_at, ended_at,
-                    geofence_enabled, geofence_latitude, geofence_longitude, geofence_radius_meters, biometric_required, created_by_role,
+                    geofence_enabled, geofence_latitude, geofence_longitude, geofence_radius_meters, biometric_required, created_by_role, auto_slot,
                     opening_time, present_cutoff_time, late_cutoff_time, class_end_time, revoked_at,
                     revocation_reason
              FROM attendance_sessions
@@ -5720,6 +5722,7 @@ function handle_faculty_attendance_session_create(): void
                 'Created attendance session for ' . audit_class_label($pdo, $csId) . " on {$sessionDate}.", null, null,
                 ['session_id' => $sessionId, 'cs_id' => $csId, 'session_date' => $sessionDate, 'status' => $creationStatus, 'opening_time' => $openingTime, 'present_cutoff_time' => $presentCutoff, 'late_cutoff_time' => $lateCutoff, 'class_end_time' => $classEndTime]
             );
+            attendance_session_save_class_grace($pdo, $config, $authCtx, $context, $sessionId, $csId, $openingTime, $presentCutoff, $lateCutoff);
             attendance_session_overlap_confirmed($pdo, $config, $authCtx, $context, $sessionId, $csId, $sessionDate, $openingTime, $classEndTime, $room, $overlaps);
             $pdo->commit();
         } catch (PDOException $e) {
@@ -8123,6 +8126,16 @@ function handle_faculty_classes_get(): void
                 cs.archive_reason,
                 cs.archived_at,
                 cs.meetings_recorded,
+                cs.present_grace_minutes,
+                cs.late_grace_minutes,
+                cs.session_biometric_required,
+                cs.session_geofence_enabled,
+                cs.session_geofence_radius,
+                cs.term_start_date,
+                cs.term_end_date,
+                cs.join_code,
+                cs.join_code_enabled,
+                cs.join_auto_approve,
                 c.course_code,
                 COALESCE(cs.course_title, c.name) AS course_name,
                 c.name AS catalog_course_name,
@@ -8155,8 +8168,10 @@ function handle_faculty_classes_get(): void
         $stmt->execute([':faculty_id' => $authCtx['user_id']]);
         $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $mapped = array_map(function ($cls) use ($currentSchoolYear, $authCtx, $pdo) {
+        $pdo->beginTransaction(); // the join code is created on first load (CLS-004), which needs a savepoint
+        $mapped = array_map(function ($cls) use ($currentSchoolYear, $authCtx, $pdo, $config) {
             $meetings = class_meetings_read($pdo, $cls);
+            $join = class_join_settings($pdo, $config, $cls, false); // Faculty only: never in Secretary or Student payloads
             return [
                 'id' => (string) $cls['cs_id'],
                 'csId' => (int) $cls['cs_id'],
@@ -8190,13 +8205,21 @@ function handle_faculty_classes_get(): void
                 // Keep this compatibility key without conflating either room with a schedule.
                 'schedule' => null,
                 'meetings' => $meetings,
+                'presentGraceMinutes' => (int) $cls['present_grace_minutes'],
+                'lateGraceMinutes' => (int) $cls['late_grace_minutes'],
+                'sessionBiometricRequired' => filter_var($cls['session_biometric_required'], FILTER_VALIDATE_BOOLEAN),
+                'sessionGeofenceEnabled' => filter_var($cls['session_geofence_enabled'], FILTER_VALIDATE_BOOLEAN),
+                'sessionGeofenceRadius' => (int) $cls['session_geofence_radius'],
                 'labRoom' => filter_var($cls['meetings_recorded'], FILTER_VALIDATE_BOOLEAN) ? class_meetings_display($meetings, 'Laboratory', $cls['lab_room'] ?? '') : ($cls['lab_room'] ?? ''),
                 'lecRoom' => filter_var($cls['meetings_recorded'], FILTER_VALIDATE_BOOLEAN) ? class_meetings_display($meetings, 'Lecture', $cls['lec_room'] ?? '') : ($cls['lec_room'] ?? ''),
                 'enrolledCount' => (int) ($cls['enrolled_count'] ?? 0),
                 'instructorName' => $cls['instructor_name'] ?? 'Faculty',
                 'status' => $cls['status'] ?? 'Active',
+                'joinCode' => $join['open'] ? $join['code'] : null,
+                'joinCodeEnabled' => $join['open'] && $join['enabled'],
             ];
         }, $classes);
+        $pdo->commit();
 
         json_response([
             'status' => 'ok',
@@ -8569,7 +8592,7 @@ function handle_faculty_class_update(): void
             }
         }
 
-        $allowedFields = ['csId', 'csName', 'block', 'yearLevel', 'lecRoom', 'labRoom', 'courseCode', 'courseName', 'semester', 'schoolYear', 'lectureUnits', 'labUnits', 'meetings', 'confirmOverlap'];
+        $allowedFields = ['csId', 'csName', 'block', 'yearLevel', 'lecRoom', 'labRoom', 'courseCode', 'courseName', 'semester', 'schoolYear', 'lectureUnits', 'labUnits', 'meetings', 'confirmOverlap', 'confirmAutoSessions'];
         foreach (array_keys($data) as $field) {
             if (!in_array($field, $allowedFields, true) && !array_key_exists($field, $protectedFields)) {
                 $errors[$field] = 'This field is not editable through the class-section contract.';
@@ -8790,9 +8813,11 @@ function handle_faculty_class_update(): void
                 return;
             }
             $overlaps = [];
+            $autoDiff = null;
             if ($meetings !== null) { // only a schedule save asks; a rename or unit edit does not
                 $termDates = academic_resolve_class_term_dates($before, academic_terms_read($pdo));
                 $overlaps = class_meetings_overlap_gate($pdo, $data, $termDates['startDate'], $termDates['endDate'], (int) $authCtx['user_id'], $meetings, $csId);
+                $autoDiff = auto_sessions_schedule_gate($pdo, $config, $data, auto_sessions_class_row($pdo, $csId), $meetings); // ATT-008
             }
 
             if ($updates !== []) {
@@ -8803,6 +8828,11 @@ function handle_faculty_class_update(): void
             }
 
             if ($meetings !== null) class_meetings_save($pdo, $csId, $meetings);
+            if ($autoDiff !== null) { // ATT-008: upcoming auto-sessions follow the new schedule, added meetings get theirs at once
+                $autoContext = $context + ['operation_uuid' => uuid_v4_string()];
+                auto_sessions_apply_diff($pdo, $config, $authCtx, $autoContext, $autoDiff);
+                auto_sessions_top_up($pdo, $config, $csId, $autoContext);
+            }
             $select->execute([$csId, $authCtx['user_id']]);
             $after = $select->fetch(PDO::FETCH_ASSOC);
             if (!$after) {

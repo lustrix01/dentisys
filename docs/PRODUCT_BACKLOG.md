@@ -29,10 +29,8 @@ No open items.
 
 # 12. Next features (Owner, 2026-11-15)
 
-Requested by the Owner; none has an agreed contract yet. Each starts with the contract (fields, errors, examples) and the Owner's `/grill-me`, and any spec change needs the Owner's approval first.
+Requested by the Owner. Each starts with the contract (fields, errors, examples) and the Owner's `/grill-me`, and any spec change needs the Owner's approval first.
 
-- **12.3** Simplify attendance session creation.
-- **12.4** Join a class by code. Faculty generate a class code and share it; Students enter it to enrol. This is added next to the current invitation: the invitation still sends onboarding, and a Student who already has an account can join through the link or the code.
 - **12.5** Dropped (Owner, 2026-11-15): check-out with geofencing. In a classroom a Student who leaves is noticed, and a second check would double the time attendance takes; face enrolment flags (12.2) cover the real abuse.
 
 ---
@@ -48,6 +46,8 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **9.18** Pinned header row and first column on every screen table.
 - **12.1** Account management in Superadmin mode: move a Faculty or Student account to a new email (compromised mailboxes) and correct names; retired emails; a server script for the one-Dean handover. The Dean and the Superadmin stay one account and permissions stay tied to the roles (Owner rulings 2026-11-15). Contract: `docs/contracts/roles.md`.
 - **12.2** Face enrolment flags: Update my face (matching updates raise nothing), faces expire at term end again (Owner, 2026-11-16), and a Dean-only Face Enrolment Flags page for re-enrolment within 30 days of the Student's own withdrawal (F1) and updates whose new face does not match (F2); nothing is blocked. Contract: `docs/contracts/face-reenrolment.md`.
+- **12.3** Simpler session setup: Windows-style clock picker for the four session times, Start session filled from the class's current or next meeting (opens 15 minutes early; class grace periods Present +30, Late +45 from the opening), cutoffs and face/geofence under More settings, and Sessions from the Weekly Schedule (auto-sessions for the next 7 days, labelled Auto; turned on in the class Edit dialog). Spec ATT-001 and ATT-008; contract: `docs/contracts/session-creation.md`.
+- **12.4** Join a class by code: each class has a code and link that only its Faculty see and share (hidden on the class card with an eye button; Join code button on the roster with New code, Code On, Auto-Approve and the join requests); Students join from My Classes after seeing which class the code belongs to; Faculty approve or reject. Spec CLS-004; contract: `docs/contracts/class-join-code.md`.
 - **3.1** Read-only profiles with a Change Name action for every role.
 - **3.2** Authenticator confirmation for name changes.
 - **4.1** Dean My Activity: dropped; the Audit Trail role filter covers it.

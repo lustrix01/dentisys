@@ -6,6 +6,7 @@ import { RuntimeConfigProvider, useRuntimeConfig } from './context/RuntimeConfig
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { FeedbackCenter } from './components/FeedbackCenter';
+import { peekJoinReturn } from './utils/classJoinCode';
 
 // Faculty Page Imports
 import { Dashboard as FacultyDashboard } from './pages/faculty/Dashboard';
@@ -75,7 +76,10 @@ function RoleDashboard() {
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'admin') return <DeanDashboard />;
   if (user.role === 'secretary') return <SecretaryDashboard />;
-  if (user.role === 'student') return <StudentDashboardRoute />;
+  if (user.role === 'student') {
+    const joinReturn = peekJoinReturn(); // CLS-004: back to the join link opened before sign-in
+    return joinReturn ? <Navigate to={joinReturn} replace /> : <StudentDashboardRoute />;
+  }
   return <FacultyDashboard />;
 }
 

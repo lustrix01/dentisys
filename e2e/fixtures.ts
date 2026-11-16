@@ -56,7 +56,8 @@ const KNOWN_API_PATHS = new Set([
   '/api/notifications', '/api/notifications/read-all', '/api/secretary/activity', '/api/faculty/activity', '/api/faculty/attendance-activity', '/api/faculty/excused-requests', '/api/secretary/excused-requests',
   '/api/student/dashboard', '/api/student/classes', '/api/student/retention',
   '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/attendance/sessions/upcoming', '/api/student/biometric/profile',
-  '/api/student/profile',
+  '/api/student/profile', '/api/student/join-requests',
+  '/api/faculty/classes/join', '/api/faculty/classes/join/requests', '/api/faculty/classes/auto-sessions',
 ]);
 
 const GET_ONLY_API_PATHS = new Set([
@@ -70,7 +71,8 @@ const GET_ONLY_API_PATHS = new Set([
   '/api/faculty/classes/available-students',
   '/api/student/dashboard', '/api/student/classes', '/api/student/retention',
   '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/attendance/sessions/upcoming', '/api/student/biometric/profile',
-  '/api/student/profile',
+  '/api/student/profile', '/api/student/join-requests',
+  '/api/faculty/classes/join', '/api/faculty/classes/join/requests', '/api/faculty/classes/auto-sessions',
 ]);
 
 const MULTI_METHOD_API_PATHS = new Set([
@@ -224,6 +226,9 @@ function responseFor(pathname: string, method: string): unknown {
     };
   }
   if (pathname === '/api/student/classes') return { status: 'ok', classes: [] };
+  if (pathname === '/api/student/join-requests' || pathname === '/api/faculty/classes/join/requests') return { status: 'ok', requests: [] };
+  if (pathname === '/api/faculty/classes/join') return { status: 'ok', csId: 1, code: 'K7M-4QX', link: 'http://localhost/student/classes?join=K7M4QX', enabled: true, open: true, autoApprove: false };
+  if (pathname === '/api/faculty/classes/auto-sessions') return { status: 'ok', enabled: false, biometricRequired: true, geofenceEnabled: false, geofenceRadius: 100, missingRoomLocations: [] };
   if (pathname === '/api/student/retention') return { status: 'ok', retention: { records: [], atRiskCount: 0, hasPendingGrades: false } };
   if (pathname === '/api/student/attendance/logs') return { status: 'ok', records: [], total: 0 };
   if (pathname === '/api/student/attendance/sessions/active') return { status: 'ok', activeSession: null };

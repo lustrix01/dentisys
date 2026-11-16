@@ -19,6 +19,8 @@ require_once dirname(__DIR__) . '/controllers/AdminController.php';
 require_once dirname(__DIR__) . '/controllers/RoomController.php';
 require_once dirname(__DIR__) . '/controllers/SuperadminController.php';
 require_once dirname(__DIR__) . '/controllers/FacultyController.php';
+require_once dirname(__DIR__) . '/controllers/ClassJoinController.php';
+require_once dirname(__DIR__) . '/controllers/AutoSessionsController.php';
 
 return [
     ['method' => 'GET', 'path' => '/api/admin/academic-terms', 'handler' => 'handle_admin_academic_terms'],
@@ -43,6 +45,17 @@ return [
     ['method' => 'POST', 'path' => '/api/admin/people/name', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/invitation/resend', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/invitation/revoke', 'handler' => 'handle_admin_people'],
+    ['method' => 'GET', 'path' => '/api/faculty/classes/join', 'handler' => 'handle_class_join_faculty_get'],
+    ['method' => 'POST', 'path' => '/api/faculty/classes/join/code', 'handler' => 'handle_class_join_faculty_new_code'],
+    ['method' => 'POST', 'path' => '/api/faculty/classes/join/settings', 'handler' => 'handle_class_join_faculty_settings'],
+    ['method' => 'GET', 'path' => '/api/faculty/classes/join/requests', 'handler' => 'handle_class_join_faculty_requests'],
+    ['method' => 'POST', 'path' => '/api/faculty/classes/join/requests/approve', 'handler' => 'handle_class_join_faculty_approve'],
+    ['method' => 'POST', 'path' => '/api/faculty/classes/join/requests/reject', 'handler' => 'handle_class_join_faculty_reject'],
+    ['method' => 'GET', 'path' => '/api/faculty/classes/auto-sessions', 'handler' => 'handle_auto_sessions_get'],
+    ['method' => 'POST', 'path' => '/api/faculty/classes/auto-sessions', 'handler' => 'handle_auto_sessions_save'],
+    ['method' => 'GET', 'path' => '/api/student/classes/join/preview', 'handler' => 'handle_class_join_student_preview'],
+    ['method' => 'POST', 'path' => '/api/student/classes/join', 'handler' => 'handle_class_join_student_join'],
+    ['method' => 'GET', 'path' => '/api/student/join-requests', 'handler' => 'handle_class_join_student_requests'],
     ['method' => 'GET', 'path' => '/api/rooms', 'handler' => 'handle_rooms_list'],
     ['method' => 'GET', 'path' => '/api/admin/rooms', 'handler' => 'handle_admin_rooms'],
     ['method' => 'POST', 'path' => '/api/admin/rooms', 'handler' => 'handle_admin_rooms'],

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   BookOpen,
   Clock,
@@ -8,16 +8,20 @@ import {
   ShieldCheck,
   GraduationCap,
   Building,
-  Archive
+  Archive,
+  Plus
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Card } from '../../components/Card';
+import { Modal } from '../../components/Modal';
 import Tabs from '../../components/Tabs';
 import { canAccessAuthoritativeStudentBiometrics, isStudentPrototypeAllowed } from './studentGates';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { useApp } from '../../context/AppContext';
 import { StudentUnavailable } from './RealStudentSurfaces';
-import { getStudentAcademicClassesApi } from '../../services/apiClient';
+import { getStudentAcademicClassesApi, getStudentJoinRequestsApi, joinClassByCodeApi, previewJoinClassApi, type JoinClassPreview, type StudentJoinRequestItem } from '../../services/apiClient';
+import { showFeedback } from '../../components/FeedbackCenter';
+import { clearJoinReturn, joinCodeFromSearch, normalizeJoinCode, typedJoinCode, formatJoinCode } from '../../utils/classJoinCode';
 import type { StudentAcademicClass } from '../../types';
 import GradeValue, { lectureHoverSteps } from '../../components/GradeValue';
 import { formatGrade } from '../../utils/gradeHelper';
@@ -150,6 +154,67 @@ export const Classes: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(isAuthoritative);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'current' | 'archived'>('current');
+  // CLS-004 Join a class by code. A join link (?join=CODE) opens the form with the code filled in; it never submits itself.
+  const { search } = useLocation();
+  const prefill = joinCodeFromSearch(search);
+  const [joinOpen, setJoinOpen] = useState(prefill !== '');
+  const [joinCode, setJoinCode] = useState(typedJoinCode(prefill));
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<StudentJoinRequestItem[]>([]);
+  // The class behind a full code, shown before joining (CLS-004). A lookup of a wrong code counts as a wrong try on the server.
+  const [preview, setPreview] = useState<JoinClassPreview | null>(null);
+  const [checking, setChecking] = useState(false);
+  const fullCode = normalizeJoinCode(joinCode);
+
+  useEffect(() => {
+    setPreview(null);
+    setJoinError(null);
+    if (!joinOpen || fullCode === '') { setChecking(false); return; }
+    let stale = false;
+    setChecking(true);
+    const timer = setTimeout(() => {
+      previewJoinClassApi(fullCode)
+        .then(res => { if (!stale) setPreview(res); })
+        .catch((err: unknown) => { if (!stale) setJoinError(err instanceof Error ? err.message : 'Could not check the code. Try again.'); })
+        .finally(() => { if (!stale) setChecking(false); });
+    }, 300);
+    return () => { stale = true; clearTimeout(timer); };
+  }, [joinOpen, fullCode]);
+
+  useEffect(() => {
+    clearJoinReturn();
+    if (prefill !== '') { setJoinOpen(true); setJoinCode(typedJoinCode(prefill)); }
+  }, [prefill]);
+
+  useEffect(() => {
+    if (!isAuthoritative) return;
+    getStudentJoinRequestsApi().then(res => setPendingRequests(res.requests)).catch(() => setPendingRequests([]));
+  }, [isAuthoritative]);
+
+  const submitJoin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setJoinError(null);
+    setJoining(true);
+    try {
+      const res = await joinClassByCodeApi(normalizeJoinCode(joinCode) || joinCode);
+      if (res.result === 'joined') {
+        showFeedback(`You joined ${res.className}.`, 'success');
+        const refreshed = await getStudentAcademicClassesApi();
+        setDbClasses(refreshed.classes);
+        setCurrentSchoolYear(refreshed.currentSchoolYear ?? null);
+      } else {
+        showFeedback('Request sent. The Faculty will approve it.', 'success');
+        setPendingRequests((await getStudentJoinRequestsApi()).requests);
+      }
+      setJoinOpen(false);
+      setJoinCode('');
+    } catch (err: unknown) {
+      setJoinError(err instanceof Error ? err.message : 'Could not join the class. Try again.');
+    } finally {
+      setJoining(false);
+    }
+  };
 
   useEffect(() => {
     if (!isAuthoritative) return;
@@ -292,7 +357,16 @@ export const Classes: React.FC = () => {
           )}
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => { setJoinOpen(true); setJoinError(null); }}
+            aria-haspopup="dialog"
+            className="inline-flex items-center gap-1.5 whitespace-nowrap px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Join a class</span>
+          </button>
           {/* Subtle link to Retention Standing */}
           <Link
             to="/student/retention"
@@ -303,6 +377,57 @@ export const Classes: React.FC = () => {
           </Link>
         </div>
       </div>
+
+      {pendingRequests.length > 0 && (
+        <p className="text-xs text-slate-500 dark:text-slate-400">Waiting for approval: {pendingRequests.map(r => `${r.classCode} · ${r.section}`).join(', ')}</p>
+      )}
+
+      {/* Join a class dialog: copies the "Join a Class" form fields from before; Cancel copies "Go back" of OverlapConfirmModal. */}
+      <Modal isOpen={joinOpen} onClose={() => setJoinOpen(false)} title="Join a Class" size="sm">
+        <form onSubmit={submitJoin} className="space-y-3">
+          <label className="block min-w-0">
+            <span className="font-bold text-slate-700 dark:text-slate-300">Class Code</span>
+            <input
+              type="text"
+              value={formatJoinCode(joinCode)}
+              onChange={(e) => setJoinCode(typedJoinCode(e.target.value))}
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              placeholder="K7M-4QX"
+              className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 font-mono text-sm uppercase tracking-widest text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+          </label>
+          {checking && <p role="status" className="text-[11px] text-slate-500 dark:text-slate-400">Checking code…</p>}
+          {preview && (
+            <div className="space-y-1.5 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="whitespace-nowrap px-2 py-0.5 rounded-md font-mono font-bold text-xs bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/60 dark:border-blue-900/60">{preview.class.courseCode}</span>
+                <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100 leading-snug min-w-0 break-words">{preview.class.title}</h3>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Sec. {preview.class.section} • {semesterLabel(preview.class.semester)} • {formatSchoolYear(preview.class.schoolYear)}</p>
+              <div className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+                <User className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">Faculty:</span>
+                <span className="font-semibold min-w-0 break-words">{preview.class.facultyName || 'Faculty Member'}</span>
+              </div>
+              {preview.alreadyEnrolled && <p className="text-[11px] text-slate-500 dark:text-slate-400">You are already in this class.</p>}
+              {!preview.alreadyEnrolled && preview.pending && <p className="text-[11px] text-slate-500 dark:text-slate-400">Your request to join is waiting for the Faculty.</p>}
+            </div>
+          )}
+          {joinError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">{joinError}</div>}
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={() => setJoinOpen(false)} className="rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">Cancel</button>
+            <button
+              type="submit"
+              disabled={joining || !preview || preview.alreadyEnrolled || preview.pending}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Join
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* 3. Tab Filter: Current vs Archived Classes */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">

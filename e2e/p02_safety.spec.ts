@@ -1,5 +1,6 @@
 import { test, expect, openSecretaryWorksheet } from './fixtures';
 import type { Page } from '@playwright/test';
+import { openMoreSettings } from './sessionTimes';
 
 const ENABLED_RUNTIME_CONFIG = {
   status: 'ok',
@@ -123,6 +124,7 @@ test.describe('P02 development safety seams', () => {
     await openSecretaryWorksheet(page);
     await page.getByRole('button', { name: 'Start session', exact: true }).click();
     const form = page.locator('form').filter({ hasText: 'Selected class' });
+    await openMoreSettings(form);
     await form.getByRole('checkbox', { name: /Geofence/ }).check();
     await form.getByRole('button', { name: /Use device location/i }).click();
     await expect(page.getByText(/Location acquired: 13\.1436, 123\.7438/)).toBeVisible();

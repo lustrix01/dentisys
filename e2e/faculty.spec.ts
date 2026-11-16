@@ -1,4 +1,5 @@
 import { roomsJson, test, expect, openAccountMenu } from './fixtures';
+import { expectSessionTime, expectSessionTimes, openMoreSettings, setSessionTime, type SessionTimeName } from './sessionTimes';
 import type { Page } from '@playwright/test';
 import type { Download } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
@@ -343,6 +344,20 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.getByTestId('retired-room-warning')).toHaveCount(1); // only the card still warns
     await page.getByRole('button', { name: 'Save changes' }).click();
     await expect.poll(() => updates.length).toBe(1);
+  });
+
+  test('A class card hides its join code until the eye button is pressed, and copy works while hidden', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const cls = { id: '91', csId: 91, csName: 'NEW601-A', courseId: 9, courseCode: 'NEW601', courseName: 'Advanced Clinic', units: 3, lectureUnits: 2, labUnits: 1, courseUnitsEditable: true, hasGrades: false, schoolYear: '2026-2027', isCurrentSchoolYear: true, isHistorical: false, semester: '1ST', yearLevel: 6, block: 'A', schedule: null, lecRoom: 'Lecture Hall A (Mon 08:00 AM - 09:00 AM)', labRoom: 'Simulation Lab (Wed 10:00 AM - 01:00 PM)', meetings: [{ component: 'Lecture', day: 'Mon', room: 'Lecture Hall A', startTime: '08:00', endTime: '09:00' }, { component: 'Laboratory', day: 'Wed', room: 'Simulation Lab', startTime: '10:00', endTime: '13:00' }], enrolledCount: 0, instructorName: 'Prof. Jane Doe', status: 'Active' , joinCode: 'K7M-4QX', joinCodeEnabled: true };
+    await page.route('**/api/faculty/classes', route => route.fulfill({ json: { status: 'ok', currentSchoolYear: '2026-2027', classes: [cls] } }));
+    await page.click('a[href="/classes"]');
+    const code = page.getByTestId('class-join-code');
+    await expect(code).toHaveText('•••-•••');
+    await page.getByRole('button', { name: 'Copy join code' }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('K7M-4QX');
+    await page.getByRole('button', { name: 'Show join code' }).click();
+    await expect(code).toHaveText('K7M-4QX');
+    await expect(page.getByRole('button', { name: 'Hide join code' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('Edit Class offers the same lecture/lab component choices and sends changed units', async ({ page }) => {
@@ -1029,6 +1044,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     const date = page.getByLabel('Session Date (Asia/Manila)');
     expect(await date.getAttribute('min')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await date.fill('2099-10-02');
+    await openMoreSettings(page);
     await page.getByLabel('Room or Session Location').selectOption('Dental Clinic Lab 1');
     await expect(page.getByRole('checkbox', { name: /Geofence/ })).not.toBeChecked(); // ATT-002: off by default
     await page.getByRole('checkbox', { name: /Geofence/ }).uncheck();
@@ -1048,24 +1064,22 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.getByLabel('Assigned course').selectOption('101');
     await page.getByLabel('Class section').selectOption('1');
     await page.getByRole('button', { name: 'Start session', exact: true }).click();
-    const time = (label: string) => page.getByLabel(label, { exact: true });
-    const expectTimes = async (v: string[]) => {
-      for (const [i, label] of ['Opening', 'Present Cutoff', 'Late Cutoff', 'Class end time'].entries()) await expect(time(label)).toHaveValue(v[i]);
-    };
-    await time('Opening').fill('02:00');
-    await expectTimes(['02:00', '03:00', '06:00', '07:00']);
-    await time('Late Cutoff').fill('14:00');
-    await expect(time('Class end time')).toHaveValue('14:00');
-    await time('Present Cutoff').fill('15:00');
+    const time = (name: SessionTimeName, value: string) => setSessionTime(page, name, value);
+    const expectTimes = (v: [string, string, string, string]) => expectSessionTimes(page, v);
+    await time('Opening', '02:00');
+    await expectTimes(['02:00', '02:30', '02:45', '03:30']);
+    await time('Late Cutoff', '14:00');
+    await expectSessionTime(page, 'Class End Time', '14:00');
+    await time('Present Cutoff', '15:00');
     await expectTimes(['02:00', '15:00', '15:01', '15:01']);
-    await time('Opening').fill('07:00');
+    await time('Opening', '07:00');
     await expectTimes(['07:00', '20:00', '20:01', '20:01']);
 
     await page.getByLabel('Room or Session Location').selectOption('Dental Clinic Lab 1');
-    await time('Opening').fill('23:00');
-    await time('Present Cutoff').fill('23:30');
-    await time('Late Cutoff').fill('01:00');
-    await time('Class end time').fill('02:00');
+    await time('Opening', '23:00');
+    await time('Present Cutoff', '23:30');
+    await time('Late Cutoff', '01:00');
+    await time('Class End Time', '02:00');
     await expect(page.getByTestId('caption-presentCutoff')).toHaveText('11:30 PM · same day');
     await expect(page.getByTestId('caption-lateCutoff')).toContainText('1:00 AM (next day)');
     await expect(page.getByTestId('caption-classEndTime')).toContainText('2:00 AM (next day)');
@@ -1074,7 +1088,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect.poll(() => payloads.length).toBe(1);
     expect(payloads[0]).toMatchObject({ openingTime: '23:00', presentCutoff: '23:30', lateCutoff: '01:00', classEndTime: '02:00' });
 
-    await time('Class end time').fill('13:00');
+    await time('Class End Time', '13:00');
     await expect(page.getByTestId('time-summary')).toHaveText('A session can last at most 12 hours.');
     await page.locator('form').getByRole('button', { name: /^(Start|Schedule) session$/i }).click();
     await expect(page.getByRole('alert')).toContainText('A session can last at most 12 hours.');
@@ -1126,7 +1140,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.getByLabel('Class section').selectOption('1');
     await page.getByRole('button', { name: 'Start session', exact: true }).click();
     const expectTimes = async (times: string[], room: string) => {
-      for (const [label, value] of [['Opening', times[0]], ['Present Cutoff', times[1]], ['Late Cutoff', times[2]], ['Class end time', times[3]]]) await expect(page.getByLabel(label, { exact: true })).toHaveValue(value);
+      await expectSessionTimes(page, times as [string, string, string, string]);
       await expect(page.getByLabel('Custom room name')).toHaveValue(room);
     };
     const chips = page.getByRole('button', { name: /^(Mon|Thu) · / });
@@ -1135,7 +1149,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByText('Times from Mon · Lecture · 9:00 AM–11:00 AM. Pick another meeting or edit the times.')).toBeVisible();
     await expectTimes(['08:45', '09:15', '09:30', '11:00'], 'CDM 1');
     await expect(page.getByText('On: students check in with their face. Off: you mark attendance in the roll call.')).toBeVisible();
-    await page.getByLabel('Present Cutoff', { exact: true }).fill('10:00');
+    await setSessionTime(page, 'Present Cutoff', '10:00');
     await page.getByLabel('Custom room name').fill('Hand room');
     await chips.nth(2).click();
     await expect(chips.nth(2)).toHaveAttribute('aria-pressed', 'true');
@@ -1161,6 +1175,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: 'Start session', exact: true }).click();
       await page.getByLabel('Session Date (Asia/Manila)').fill('2099-10-02');
       await pickRoom(page);
+      await openMoreSettings(page);
       await page.getByRole('checkbox', { name: /Geofence/ }).uncheck();
       await page.locator('form').getByRole('button', { name: 'Schedule session', exact: true }).click();
       await expect.poll(() => payload?.room).toBe(expected);
@@ -2043,7 +2058,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByText('8:00 AM – 11:30 AM', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(page.getByText(`Date: ${shortDate(session.sessionDate)} (Asia/Manila)`, { exact: true })).toBeVisible();
-    await expect(page.getByLabel('Present Cutoff', { exact: true })).toHaveValue('08:30');
+    await expectSessionTime(page, 'Present Cutoff', '08:30');
     await expect(page.getByLabel('Allowed Radius (meters)')).toHaveValue('250');
     await expect(page.getByRole('checkbox', { name: /Face biometric/ })).not.toBeChecked();
     await expect(page.getByText('Location set: 13.15, 123.75')).toBeVisible();
@@ -2079,10 +2094,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await openEdit(page, baseSession);
       await expect(page.getByText('Date: Oct 3, 2099 (Asia/Manila)', { exact: true })).toBeVisible();
       await expect(page.getByLabel('Custom room name')).toHaveValue('Lab 5');
-      await expect(page.getByLabel('Opening Time', { exact: true })).toHaveValue('07:45');
-      await expect(page.getByLabel('Present Cutoff', { exact: true })).toHaveValue('08:20');
-      await expect(page.getByLabel('Late Cutoff', { exact: true })).toHaveValue('09:40');
-      await expect(page.getByLabel('Class end time', { exact: true })).toHaveValue('10:15');
+      await expectSessionTimes(page, ['07:45', '08:20', '09:40', '10:15']);
       await expect(page.getByRole('checkbox', { name: /Face biometric/ })).toBeChecked();
       await expect(page.getByRole('checkbox', { name: /Geofence/ })).not.toBeChecked();
       await expect(page.getByLabel('Allowed Radius (meters)')).toHaveCount(0);
@@ -2099,7 +2111,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const payloads = await openEdit(page, baseSession);
       await expect(page.getByLabel('Room or Session Location')).toHaveValue('CUSTOM');
       await expect(page.getByLabel('Custom room name')).toHaveValue('Lab 5');
-      await page.getByLabel('Class end time', { exact: true }).fill('10:30');
+      await setSessionTime(page, 'Class End Time', '10:30');
       await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', classEndTime: '10:30' }]);
@@ -2107,10 +2119,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
     test('changing Opening shifts the other times and sends only the four changed time fields', async ({ page }) => {
       const payloads = await openEdit(page, baseSession);
-      await page.getByLabel('Opening Time', { exact: true }).fill('22:00');
-      await expect(page.getByLabel('Present Cutoff', { exact: true })).toHaveValue('22:35');
-      await expect(page.getByLabel('Late Cutoff', { exact: true })).toHaveValue('23:55');
-      await expect(page.getByLabel('Class end time', { exact: true })).toHaveValue('00:30');
+      await setSessionTime(page, 'Opening', '22:00');
+      await expectSessionTimes(page, ['22:00', '22:35', '23:55', '00:30']);
       await expect(page.getByTestId('caption-classEndTime')).toContainText('12:30 AM (next day)');
       await expect(page.getByTestId('time-summary')).toContainText('Session lasts 2 h 30 min');
       await page.getByRole('button', { name: 'Save changes', exact: true }).click();
@@ -2120,7 +2130,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
     test('moving a cutoff earlier than the later fields sends only that field', async ({ page }) => {
       const payloads = await openEdit(page, baseSession);
-      await page.getByLabel('Present Cutoff', { exact: true }).fill('08:00');
+      await setSessionTime(page, 'Present Cutoff', '08:00');
       await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', presentCutoff: '08:00' }]);
@@ -2134,7 +2144,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       expect(payloads).toEqual([{ sessionId: '710', room: 'Lab 6' }]);
     });
 
-    test('clearing all three times shows the server error and keeps the dialog open', async ({ page }) => {
+    test('a server validation error on the times is shown and keeps the dialog open', async ({ page }) => {
       const payloads: Record<string, unknown>[] = [];
       await page.route('**/api/faculty/attendance?*', route => route.fulfill({ json: { status: 'ok', worksheet: { ...mockWorksheetSectionA, managedSessions: [baseSession] } } }));
       await page.route('**/api/faculty/attendance/session/update', route => {
@@ -2146,10 +2156,11 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: 'Sessions', exact: true }).click();
       await page.getByRole('button', { name: /Upcoming Sessions/ }).click();
       await page.getByRole('button', { name: 'Edit', exact: true }).click();
-      for (const label of ['Opening Time', 'Present Cutoff', 'Late Cutoff']) await page.getByLabel(label, { exact: true }).fill('');
+      // The tap picker cannot be emptied (an empty typed field changes nothing), so the stubbed 422 is reached with a real time change.
+      await setSessionTime(page, 'Opening', '22:00');
       await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect(page.getByRole('alert')).toContainText('Opening time, Present cutoff, and Late cutoff are required.');
-      expect(payloads).toEqual([{ sessionId: '710', openingTime: '', presentCutoff: '', lateCutoff: '' }]);
+      expect(payloads).toEqual([{ sessionId: '710', openingTime: '22:00', presentCutoff: '22:35', lateCutoff: '23:55', classEndTime: '00:30' }]);
       await expect(page.getByLabel('Room or Session Location')).toBeVisible();
     });
 

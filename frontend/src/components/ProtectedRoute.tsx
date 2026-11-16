@@ -1,5 +1,6 @@
 import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { rememberJoinReturn } from '../utils/classJoinCode';
 import { useAuth } from '../context/AuthContext';
 import type { UserRole } from '../types/auth';
 
@@ -9,6 +10,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   const { phase, user } = useAuth();
+  const location = useLocation();
 
   if (phase === 'bootstrapping') {
     return (
@@ -19,6 +21,7 @@ export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   }
 
   if (phase !== 'authenticated' || !user) {
+    rememberJoinReturn(location.pathname + location.search); // CLS-004: a join link survives sign-in
     return <Navigate to="/login" replace />;
   }
 

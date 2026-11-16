@@ -1791,6 +1791,7 @@ export const AttendanceMonitoring: React.FC = () => {
         precheck={startSessionPrecheck}
         onSubmit={handleStartSession}
         meetings={availableSections.find(section => String(section.csId) === selectedCsId)?.meetings}
+        classDefaults={availableSections.find(section => String(section.csId) === selectedCsId)}
       />
 
       <OverlapConfirmModal overlaps={editOverlaps} busy={submittingEdit} onCancel={() => setEditOverlaps(null)} onConfirm={() => void saveSessionEdit(true)} />
@@ -2124,7 +2125,7 @@ export const AttendanceMonitoring: React.FC = () => {
               <div className="mt-2"><RetiredRoomWarning rooms={rooms} names={[editRoom]} /></div>
             </div>
 
-            <SessionTimeFields times={editTimes} onChange={setEditTimes} sessionDate={editingSession?.sessionDate ?? ''} openingLabel="Opening Time" endHint="The session ends automatically at this time; unrecorded students are marked Absent." />
+            <SessionTimeFields times={editTimes} onChange={setEditTimes} sessionDate={editingSession?.sessionDate ?? ''} openingLabel="Opening Time" accent="emerald" endHint="The session ends automatically at this time; unrecorded students are marked Absent." />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
@@ -2430,6 +2431,7 @@ export const AttendanceMonitoring: React.FC = () => {
                               <span className="font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
                                 {session.sessionCode}
                               </span>
+                              {session.autoSession && <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Auto</span>}
                               {startsInLabel && (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                                   <Clock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />

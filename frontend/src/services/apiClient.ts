@@ -1156,6 +1156,8 @@ export interface FacultyManagedAttendanceSession extends Record<string, unknown>
   geofenceLongitude?: number | null;
   geofenceRadiusMeters?: number | null;
   createdByRole?: string | null;
+  /** ATT-008: created from the weekly schedule (shown as an Auto pill). */
+  autoSession?: boolean;
   revocationReason?: string | null;
 }
 
@@ -1453,7 +1455,7 @@ export function getSecretaryDashboardKpisApi(schoolYear?: string): Promise<Schoo
     pendingRequests?: number;
   };
   recentActivity: AuditEntry[];
-  assignedClasses?: Array<{ classId: string; className: string; classroomName: string | null; schoolYear?: string; semester?: string; courseCode?: string; courseName?: string; meetings?: ClassMeeting[]; enrolledCount?: number }>;
+  assignedClasses?: Array<{ classId: string; className: string; classroomName: string | null; schoolYear?: string; semester?: string; courseCode?: string; courseName?: string; meetings?: ClassMeeting[]; enrolledCount?: number } & Partial<ClassSessionDefaults>>;
   assignedClass: {
     classId: string;
     className: string;
@@ -1487,6 +1489,7 @@ export function getSecretaryAttendanceApi(params?: {
     geofenceLongitude?: number | null;
     geofenceRadiusMeters?: number | null;
     createdByRole?: string | null;
+    autoSession?: boolean;
     createdByCurrentSecretary?: boolean | null;
     openingTime?: string | null;
     classEndTime?: string | null;
@@ -1764,7 +1767,16 @@ export interface ClassMeeting {
   endTime: string;
 }
 
-export interface FacultyClassItem {
+/** ATT-001: what Start session fills from the class (migration 065). */
+export interface ClassSessionDefaults {
+  presentGraceMinutes: number;
+  lateGraceMinutes: number;
+  sessionBiometricRequired: boolean;
+  sessionGeofenceEnabled: boolean;
+  sessionGeofenceRadius: number;
+}
+
+export interface FacultyClassItem extends Partial<ClassSessionDefaults> {
   meetings?: ClassMeeting[];
   isHistorical?: boolean;
   isCurrentSchoolYear?: boolean;
@@ -1774,6 +1786,9 @@ export interface FacultyClassItem {
   scheduledSessionCount?: number;
   liveSession?: boolean;
   secretaryName?: string | null;
+  /** CLS-004, Faculty only: "XXX-XXX", null when the class takes no joins. */
+  joinCode?: string | null;
+  joinCodeEnabled?: boolean;
   id: string;
   csId: number;
   csName: string;
@@ -1855,6 +1870,7 @@ export function updateFacultyClassApi(data: {
   lectureUnits?: number | null;
   labUnits?: number | null;
   confirmOverlap?: boolean;
+  confirmAutoSessions?: boolean;
 }): Promise<{ status: string; message: string }> {
   return request('POST', '/faculty/classes/update', data);
 }
@@ -1896,6 +1912,46 @@ export function archiveClassApi(data: {
 
 export function restoreClassApi(data: { csId: number }): Promise<{ status: string; message: string }> {
   return request('POST', '/faculty/classes/restore', data);
+}
+
+// ATT-008 sessions from the weekly schedule.
+export interface AutoSessionsSettings { enabled: boolean; biometricRequired: boolean; geofenceEnabled: boolean; geofenceRadius: number; missingRoomLocations: string[] }
+export function getAutoSessionsApi(csId: number): Promise<AutoSessionsSettings> {
+  return request('GET', `/faculty/classes/auto-sessions?csId=${csId}`);
+}
+export function saveAutoSessionsApi(data: { csId: number; enabled?: boolean; biometricRequired?: boolean; geofenceEnabled?: boolean; geofenceRadius?: number; confirmOverlap?: boolean }): Promise<AutoSessionsSettings> {
+  return request('POST', '/faculty/classes/auto-sessions', data);
+}
+
+// CLS-004 join a class by code.
+export interface ClassJoinSettings { csId: number; code: string | null; link: string | null; enabled: boolean; open: boolean; autoApprove?: boolean }
+export interface ClassJoinRequestItem { requestId: number; studentId: number; studentNumber: string; name: string; email: string | null; requestedAt: string }
+export interface StudentJoinRequestItem { requestId: number; classCode: string; title: string; section: string; requestedAt: string }
+
+export function getClassJoinSettingsApi(csId: number): Promise<ClassJoinSettings> {
+  return request('GET', `/faculty/classes/join?csId=${csId}`);
+}
+export function newClassJoinCodeApi(csId: number): Promise<ClassJoinSettings> {
+  return request('POST', '/faculty/classes/join/code', { csId });
+}
+export function updateClassJoinSettingsApi(data: { csId: number; enabled?: boolean; autoApprove?: boolean }): Promise<ClassJoinSettings> {
+  return request('POST', '/faculty/classes/join/settings', data);
+}
+export function getClassJoinRequestsApi(csId: number): Promise<{ requests: ClassJoinRequestItem[] }> {
+  return request('GET', `/faculty/classes/join/requests?csId=${csId}`);
+}
+export function decideClassJoinRequestApi(action: 'approve' | 'reject', data: { csId: number; requestId: number }): Promise<{ status: string }> {
+  return request('POST', `/faculty/classes/join/requests/${action}`, data);
+}
+export function joinClassByCodeApi(code: string): Promise<{ status: string; result: 'joined' | 'pending'; className: string }> {
+  return request('POST', '/student/classes/join', { code });
+}
+export interface JoinClassPreview { status: string; class: { courseCode: string; title: string; section: string; facultyName: string; semester: string; schoolYear: string }; alreadyEnrolled: boolean; pending: boolean }
+export function previewJoinClassApi(code: string): Promise<JoinClassPreview> {
+  return request('GET', `/student/classes/join/preview?code=${encodeURIComponent(code)}`);
+}
+export function getStudentJoinRequestsApi(): Promise<{ requests: StudentJoinRequestItem[] }> {
+  return request('GET', '/student/join-requests');
 }
 
 // ---------------------------------------------------------------------------

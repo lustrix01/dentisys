@@ -292,6 +292,8 @@ Owner decision (2026-10-28): Faculty and Student invitations expire 7 days after
 
 Owner decision (2026-11-15): the Dean may resend or revoke a pending Student invitation; a resent invitation keeps the original Faculty authorization and class and starts a new 7 days.
 
+A join code or link (CLS-004) lets an active Student ask to join a class; it never creates or activates an account.
+
 ## REG-002 — Password-backed invitation acceptance
 
 **Status: CURRENT**
@@ -866,7 +868,11 @@ Before a session is created or edited, DentiSYS looks for overlaps with: (a) an 
 
 The overlap pop-up, the 12-hour limit and the room requirement apply to Faculty and Secretary when starting, scheduling or editing a session. Every save checks again and notifies again. Editing a session made before these rules applies them; sessions not edited are not rechecked.
 
-History: 2026-10-01 queued sessions; 2026-10-10 to 2026-10-12 edit rules and required times; 2026-11-05 sessions may end after midnight; 2026-11-06 12-hour limit, room required, overlap pop-up. Records: docs/archive/.
+Session time entry (Owner decision 2026-11-16). Start session, Schedule session and Edit session show each of the four times (opening, Present cutoff, Late cutoff, class end) as one field. Selecting a field opens a picker like the Windows Clock alarm: scrolling hour (1–12), minute (00–59) and AM/PM columns that respond to the mouse wheel, swiping, the arrow buttons and the keyboard, and the time may also be typed while the field is selected ("8", "830", "8:05", "1:30p", "19:00"). Phones use the same picker. A class end earlier than the opening is the next day. Every timing rule and message above stays. Controls are at least 44 px and the picker fits a 320 px wide screen without sideways scrolling.
+
+Start session opens filled for the class's weekly meeting happening now, else its next meeting (date, room, opening 15 minutes before the meeting starts, class end at the meeting end; a later date makes it Schedule session), with the class's saved face and geofence choices; every field stays editable. Each class has grace periods, by default Present until opening + 30 min and Late until opening + 45 min (Owner decision 2026-11-16: for an 8:00 AM meeting, opens 7:45 AM, Present until 8:15 AM, Late until 8:30 AM, as before); when the class's Faculty start, schedule or edit a session with other grace periods, those become the class's grace periods. The cutoffs, face, geofence, map and radius are under More settings, closed by default, with a one-line summary ("Present until 8:15 AM · Late until 8:30 AM · Face on · Geofence off").
+
+History: 2026-10-01 queued sessions; 2026-10-10 to 2026-10-12 edit rules and required times; 2026-11-05 sessions may end after midnight; 2026-11-06 12-hour limit, room required, overlap pop-up; 2026-11-16 tap time picker, one-tap start, class grace periods. Records: docs/archive/.
 
 ## ATT-002 — Geofencing and location privacy
 
@@ -943,6 +949,20 @@ Students contact Secretary or Faculty outside DentiSYS. Current scope has no Stu
 **Status: APPROVED**
 
 Students see scheduled and open attendance sessions for their own active class enrollments on the Daily Attendance page. By default this covers today and the next 7 days, with an option to view all upcoming sessions. Revoked and ended sessions are not listed. Times are shown in Asia/Manila; countdowns use server time, are informational only, and never decide attendance. Listing a session does not change attendance eligibility or timing. On Daily Attendance, "Take attendance" on an open session starts the check-in for that session and scrolls to its location or camera step; if face registration is not active, it asks the student to register their face, with an option to cancel.
+
+## ATT-008 — Sessions from the weekly schedule
+
+**Status: APPROVED**
+
+Owner decision (2026-11-16); contract: docs/contracts/session-creation.md.
+
+A class's Faculty may turn on Create sessions from the weekly schedule. The class keeps its choices: face on or off, and geofence on or off with a radius (50–2,000 m, ATT-002). A geofenced auto-session uses its meeting room's saved location; geofence cannot be turned on while one of the class's meeting rooms has no saved location. Only the class's Faculty turn the setting on or off or change its choices; Secretaries keep running sessions as today.
+
+While it is on, DentiSYS keeps one scheduled session for each weekly meeting of the class in the next 7 days (Asia/Manila), created at turn-on and topped up daily, up to the end of the class's term and never for an archived class. Each is an ordinary scheduled session with that meeting's date, times and room and the class's grace periods, created by the class's Faculty and labelled "Auto" in Sessions. Faculty edit or revoke it like any scheduled session (holidays included; there is no holiday calendar). A revoked auto-session is not created again, and an edited one keeps its edit. A meeting that overlaps a session the class already has is skipped.
+
+Turning it on checks the class's meetings in the next 7 days against other classes under ATT-001 (a)–(c). Any overlap shows the overlap pop-up with Go back and Turn on anyway; Turn on anyway notifies each overlapped class's Faculty in-app and is audited. An auto-session created later that overlaps another class is still created, and the Faculty of both classes get an in-app notice listing the overlap.
+
+Turning it off revokes the class's auto-sessions that have not opened; open and past sessions stay. Changing the weekly schedule while it is on first warns "This changes N upcoming sessions." with Go back and Save; on Save, unedited upcoming auto-sessions follow the new schedule, those of removed meetings are revoked, and added meetings get their sessions at once.
 
 ## DEL-001 — Image publishing and deployment
 
@@ -1154,6 +1174,18 @@ Faculty Classes & Rosters separates Active and Archived class sections. The Arch
 Owner decisions (2026-10-22, CLS-003 contract): Remedial and cost recovery results remain recordable for a class section archived as Finished. Archiving revokes the class section's scheduled attendance sessions and ends its Class Secretary appointment; restoring brings back neither. Enrolled Students are notified when a class section is archived as Cancelled and when such a class section is restored. Finished may be chosen at any time in the current school year. Cancelled and Created-by-mistake class sections appear to Faculty only in the Archived view and the audit log.
 
 Owner-approved amendment (2026-11-10): The Dean/Admin class-section screen is a non-authoritative UI preview built with sample data; the course-catalog and people/accounts screens are real in Superadmin mode (ADM-001). All other CLS-003 rules stay as they are.
+
+## CLS-004 - Join a class by code
+
+**Status: APPROVED**
+
+Owner decision (2026-11-16); contract: docs/contracts/class-join-code.md.
+
+Each current class has one join code: 6 characters from letters and digits without look-alikes (no 0, O, 1, I or L), shown as "K7M-4QX", and a join link that opens Join a class with the code filled in, signing in first when needed. Only the class's Faculty see, copy and share the code and link (Owner decision 2026-11-16: Class Secretaries do not). Each class card on My Classes & Rosters shows the code hidden, with a button to reveal it and a Copy button; the roster's Join code button holds the link, the settings and the join requests. Only the class's Faculty make a New code (the old code and link stop working at once) or turn the code off and on. A code stops working when the class's term ends or the class is archived. Faculty share the code and link with Students themselves; DentiSYS sends no email with them.
+
+A signed-in active Student enters the code under Join a class on My Classes, on phone and desktop. The code never creates an account: a person without one still needs the invitation (REG-001). A Student already actively enrolled sees "You are already in this class."; one with a pending request sees "Your request to join is waiting for the Faculty." Before joining, once a full code is entered, the dialog shows the class it belongs to (course code and title, section, Faculty, semester and S.Y.) so the Student can check it; looking up a wrong code counts as a wrong try (Owner decision 2026-11-16). On Join, DentiSYS creates a join request with the Student's number and name; My Classes shows it as "Waiting for approval", and the class's Faculty see it on the roster as "Wants to join" with Approve and Reject. Only the class's Faculty decide. Approve enrolls the Student like adding them to the roster, with the NTF-001 notice; Reject removes the request and gives the Student an in-app notice. A per-class Auto-approve switch, off by default and changed only by the Faculty, approves requests at once.
+
+A wrong, turned-off or replaced code, and the code of a class whose term ended or that is archived, give "That code does not match an open class." Ten wrong codes within 15 minutes for one account give "Too many tries. Wait 15 minutes."
 
 ## ADM-001 - Superadmin mode
 
