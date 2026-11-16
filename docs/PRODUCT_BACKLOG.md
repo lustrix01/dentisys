@@ -23,7 +23,8 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 # 9. Known issues
 
-No open items.
+- **9.19** Production `devops` sudo password (Owner, 2026-11-17): it is still the original one from the emergency kit (an earlier `sudo passwd` changed root's password, not `devops`'s). Change it on the production server with `passwd` as `devops` (no `sudo`), then update the emergency kit.
+- **9.20** Face Registration on production (Owner, 2026-11-17): the Owner tries enrolment with a real camera on bu-dentisys.com. Known defect to confirm there: when enrolment fails with a server error, `FaceRegistration.tsx` still shows "Adjust lighting, face the camera directly…", which blames the Student for a server fault.
 
 ---
 
