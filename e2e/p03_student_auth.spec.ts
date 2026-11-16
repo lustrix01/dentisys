@@ -295,7 +295,7 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(main.getByText('Your face is registered for attendance')).toBeVisible();
     await expect(main.getByText('Privacy Agreement')).toHaveCount(0);
     await expect(main.getByRole('button', { name: 'Update my face' })).toBeVisible();
-    await expect(main.getByText('While you are an active Student')).toBeVisible();
+    await expect(main.getByText('Semester Expiration')).toBeVisible();
     await expect(main.getByRole('button', { name: /Re-Enroll|Re-Register|Continue to camera scan/i })).toHaveCount(0);
 
     await main.getByRole('button', { name: 'Revoke registration' }).click();

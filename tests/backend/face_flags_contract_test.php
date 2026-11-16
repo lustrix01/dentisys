@@ -38,5 +38,5 @@ assert_face_flags(str_contains($flags, 'SAVEPOINT face_flags') && str_contains($
 assert_face_flags(!str_contains($student, 'face_flags_list') && !str_contains(strtolower((string) file_get_contents($root . 'backend/app/student_biometrics.php')), 'flag'), 'The Student side never reads or returns flags');
 assert_face_flags(str_contains($student, "'previousReference'") && str_contains($student, "\$sidecar['matchesPrevious']"), 'The enrolment passes the current reference and reads matchesPrevious');
 assert_face_flags($sidecar === '' || str_contains($sidecar, '"matchesPrevious": matches_previous') && !preg_match('/logger\.\w+\([^)]*previous/', $sidecar), 'The sidecar returns matchesPrevious only, no score and no log of it');
-assert_face_flags(!str_contains($sweep, 'student_biometric_expiry_due') && !str_contains($sweep, "'expired'"), 'The sweep no longer deletes by term');
+assert_face_flags(str_contains($sweep, 'student_biometric_expiry_due') && str_contains($sweep, "'expired'"), 'The sweep expires enrollments at term end again');
 echo "PASS: Face flag contract checks completed.\n";

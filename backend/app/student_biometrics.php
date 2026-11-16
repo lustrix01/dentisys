@@ -242,6 +242,54 @@ function student_attendance_logs_response(array $records, string $timezone): arr
     ];
 }
 
+function student_biometric_expire_if_needed(
+    PDO $pdo,
+    array $config,
+    array $authCtx,
+    array $context,
+    int $studentId,
+    ?array $row = null
+): ?array {
+    $row ??= student_biometric_profile($pdo, $studentId, true);
+    // A NULL stored date (enrolled while 12.2 kept faces) still expires via the resolved term end.
+    if ($row === null || $row['enrollment_status'] !== 'active') {
+        return $row;
+    }
+
+    $today = app_local_date($config, attendance_session_now_utc());
+    if (!student_biometric_expiry_due($pdo, $studentId, $row['reference_expires_on'], $today)) {
+        return $row;
+    }
+
+    // Expiration is a privacy lifecycle event, not just a display state. The
+    // protected biometric object must be removed before metadata is invalidated so
+    // a later enrollment cannot leave an expired usable reference behind.
+    if ($row['protected_object_reference'] !== null) {
+        student_biometric_sidecar_revoke($config, (string) $row['protected_object_reference']);
+    }
+    $update = $pdo->prepare(
+        "UPDATE biometric_profiles
+            SET enrollment_status = 'expired', face_enrolled = 0,
+                protected_object_reference = NULL,
+                usable_sample_count = NULL,
+                updated_at = CURRENT_TIMESTAMP(6)
+          WHERE profile_id = ?"
+    );
+    $update->execute([(int) $row['profile_id']]);
+    $after = $row;
+    $after['enrollment_status'] = 'expired';
+    $after['face_enrolled'] = 0;
+    $after['protected_object_reference'] = null;
+    $after['usable_sample_count'] = null;
+    student_biometric_record_audit(
+        $pdo, $config, $authCtx, $context, 'biometric_enrollment_expired', (int) $row['student_id'],
+        'Biometric enrollment expired at the end of its academic validity period.', null,
+        student_biometric_snapshot($row), student_biometric_snapshot($after)
+    );
+    $row = student_biometric_profile($pdo, $studentId, true);
+    return $row;
+}
+
 /**
  * Delete a Student's usable biometric reference and mark the enrollment
  * revoked or expired (BIO-005). Consent is left unchanged, so the Student can

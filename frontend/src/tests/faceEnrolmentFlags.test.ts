@@ -44,5 +44,6 @@ test('page wiring: route, sidebar, overview tile, Update my face', () => {
   assert.match(read('../pages/admin/SuperadminOverview.tsx'), /Face enrolment flags/);
   const reg = read('../pages/student/FaceRegistration.tsx');
   assert.match(reg, /Update my face/);
-  assert.doesNotMatch(reg, /Semester Expiration|Expires seasonally|revoke this registration first/);
+  assert.doesNotMatch(reg, /revoke this registration first/);
+  assert.match(reg, /Semester Expiration/); // faces expire at term end again (Owner, 2026-11-16)
 });

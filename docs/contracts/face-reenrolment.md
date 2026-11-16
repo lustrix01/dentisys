@@ -9,7 +9,7 @@ A Student withdraws their face and lets a blockmate enrol the blockmate's face o
 - **Flag, never block.** DentiSys records facts and shows possible abuse to the Dean. Enrolment, withdrawal and attendance work as today. The Dean decides whether to act. Nothing extra is stored about anyone's face beyond their own.
 - Withdrawing consent stays instant. No approval queue.
 - No comparison with other Students' faces. No device tracking (a Student may borrow a phone).
-- Faces carry over between terms.
+- Enrolments expire at the end of the term (Owner decision 2026-11-16, reversing the first 12.2 ruling that faces carry over).
 
 ## 2. What exists now
 
@@ -38,7 +38,7 @@ Today the registered page says "To register again, revoke this registration firs
 - Registered page: subtitle "No further action is needed." Buttons: **Update my face** (secondary, before Revoke registration), **Revoke registration**, **Go to Daily Attendance**.
 - Update my face runs the existing enrolment capture (two liveness actions, 20–30 samples) without asking for consent again (consent stands). On success the new face replaces the old one at once, as re-enrolment does today, and the Student sees "Your face was updated."
 - A matching update raises no flag. A non-matching update is still accepted and raises F2.
-- The third tile "Semester Expiration / Expires seasonally" becomes **Validity**: "While you are an active Student" / "Kept until you revoke".
+- The third tile "Semester Expiration / Expires seasonally" stays.
 - Revoke stays for withdrawing consent; enrolling again within 30 days raises F1.
 
 | Student does | Allowed | Flag |
@@ -60,9 +60,11 @@ Sidebar item **Face Enrolment Flags** after People & Accounts, route `/superadmi
 
 Routes (Dean role, flat responses like People): `GET /api/admin/face-flags?status=open|dismissed|all&kind=F1|F2&q=&courseId=&classId=&page=` → `{flags[], total, page, pageSize}`; `POST /api/admin/face-flags/dismiss {flagId, note}` → `{flag}`. Revoke uses the existing `POST /api/admin/biometrics/revoke`, which also closes the Student's open flags.
 
-## 5. Faces carry over between terms
+## 5. Enrolments expire at term end
 
-Enrolments no longer expire at term end. `expire-biometrics.php` keeps deleting references of inactive Students and stops deleting by term. Face Registration's text "Biometric enrollment expires at the end of each semester…" and the consent disclosure change to "Your reference is kept while you are an active Student, until you withdraw consent or the Dean revokes it."
+Owner decision 2026-11-16: an enrolment expires at the end of the term (the latest term end among the Student's active classes, ACA-002), reversing the carry-over first agreed for 12.2. `expire-biometrics.php` deletes expired and inactive Students' references, and dates any active or enrolling profile that has no expiry date yet (faces enrolled while enrolments did not expire). Face Registration and the consent disclosure keep the semester-expiry wording.
+
+The first enrolment of a term has no previous face, so F2 cannot fire then; F1 still can. This is an accepted risk.
 
 ## 6. Data and audit
 
@@ -79,7 +81,6 @@ Audit (area Biometrics, Dean-visible): `face_flag_raised` (actor System), `face_
 
 ## 8. Spec changes (exact text for approval)
 
-- **BIO-005**: replace "An enrollment expires every semester. … A Student MUST re-enroll to continue biometric attendance after expiration." with "An enrollment stays valid while the Student is active, until the Student withdraws consent or the Dean revokes it." and remove "the enrollment expires at semester end" from the deletion list.
-- **BIO-002** disclosure: "a protected reference is retained and expires every semester" becomes "a protected reference is retained while the Student is active".
+- **BIO-005** and the **BIO-002** disclosure: unchanged from before 12.2 (Owner decision 2026-11-16: enrolments still expire every semester).
 - **BIO-009** add: "DentiSys flags possible face-enrolment abuse for the Dean without blocking: a re-enrollment within 30 days after the Student's own consent withdrawal, and a re-enrollment whose new face does not match the face it replaces (compared once, kept only as matched yes/no). The Dean may dismiss a flag with a note or revoke the enrollment."
 - **ADM-001**: add the Face Enrolment Flags page and Overview tile.

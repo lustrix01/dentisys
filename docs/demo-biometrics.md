@@ -14,10 +14,9 @@ profile. The authoritative `enrollmentStatus` values are:
 
 - `not_enrolled`: no usable protected reference is active;
 - `enrolling`: an enrollment operation is in progress;
-- `active`: consent, protected reference, and usable sample count
+- `active`: consent, term expiry, protected reference, and usable sample count
   all passed server checks;
-- `expired`: legacy state of an enrollment that expired at term end before backlog 12.2;
-  no new enrollment expires;
+- `expired`: the academic term ended and the protected reference was revoked;
 - `revoked`: consent or enrollment was revoked and the protected reference was
   deleted.
 

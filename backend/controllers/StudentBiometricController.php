@@ -80,7 +80,16 @@ function handle_student_biometric_profile_get(): void
     $context = student_biometric_http_context();
     try {
         [$config, $pdo, $authCtx, $identity] = student_biometric_controller_context();
-        json_response(student_biometric_profile_response(student_biometric_profile($pdo, $identity['student_id']), $config), 200);
+        $pdo->beginTransaction();
+        try {
+            $row = student_biometric_profile($pdo, $identity['student_id'], true);
+            $row = student_biometric_expire_if_needed($pdo, $config, $authCtx, $context, $identity['student_id'], $row);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+        json_response(student_biometric_profile_response($row, $config), 200);
     } catch (Throwable $e) {
         student_biometric_emit_exception($e);
     }
@@ -401,18 +410,19 @@ function handle_student_biometric_enrollment(): void
         $pdo->beginTransaction();
         try {
             academic_terms_lock($pdo);
+            $term = student_biometric_enrollment_term($pdo, $studentId, $config);
             $row = student_biometric_profile($pdo, $studentId, true);
             $before = student_biometric_snapshot($row);
             $update = $pdo->prepare(
                 "UPDATE biometric_profiles
                     SET enrollment_status = 'active', face_enrolled = 1,
-                        protected_object_reference = ?, reference_expires_on = NULL, reference_term_id = NULL, reference_cs_id = NULL,
+                        protected_object_reference = ?, reference_expires_on = ?, reference_term_id = ?, reference_cs_id = ?,
                         usable_sample_count = ?, enrolled_at = ?, revoked_at = NULL,
                         revoked_by_user_id = NULL, template_reference = NULL,
                         image_references = NULL, updated_at = ?
                   WHERE profile_id = ?"
             );
-            $update->execute([$reference, $usable, $nowSql, $nowSql, (int) $row['profile_id']]);
+            $update->execute([$reference, $term['endDate'], $term['termId'], $term['cs_id'], $usable, $nowSql, $nowSql, (int) $row['profile_id']]);
             $row = student_biometric_profile($pdo, $studentId, true);
             student_biometric_complete_challenge($pdo, $challengeTokenId, (string) $idempotencyKey);
             student_biometric_record_audit(
@@ -732,7 +742,7 @@ function handle_student_attendance_biometric(): void
                 $pdo->rollBack();
                 throw new StudentBiometricException('Attendance capture is not available for this session.', 409, (string) $decision['code']);
             }
-            $profile = student_biometric_profile($pdo, $studentId, true);
+            $profile = student_biometric_expire_if_needed($pdo, $config, $authCtx, $context, $studentId);
             if ($profile === null || $profile['consent_status'] !== 'approved') {
                 $pdo->rollBack();
                 throw new StudentBiometricException('Biometric consent is required before attendance capture.', 409, 'consent_required');

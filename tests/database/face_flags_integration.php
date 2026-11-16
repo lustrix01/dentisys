@@ -142,10 +142,10 @@ $ffClosed = $pdo->prepare('SELECT closed_at IS NOT NULL AND closed_by_user_id IS
 $ffClosed->execute([(int) $ffRows[0]['flag_id']]);
 expect_true((bool) $ffClosed->fetchColumn(), 'A revoked flag records when and by whom');
 
-// The sweep keeps an active Student's enrollment past the old term expiry and deletes only inactive Students' references.
+// The sweep expires an enrollment whose stored term end has passed.
 $ffSweep = $ffNew('Sweep');
 $pdo->prepare("UPDATE biometric_profiles SET enrollment_status = 'enrolling', reference_expires_on = '2020-12-31' WHERE student_id = ?")->execute([$ffSweep]);
 exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/../../backend/bin/expire-biometrics.php') . ' 2>&1', $ffSweepOutput);
 $ffStatusStmt = $pdo->prepare('SELECT enrollment_status FROM biometric_profiles WHERE student_id = ?');
 $ffStatusStmt->execute([$ffSweep]);
-expect_same('enrolling', $ffStatusStmt->fetchColumn(), 'The sweep leaves an active Student with an old expiry date alone: ' . implode(' | ', array_slice($ffSweepOutput, -2)));
+expect_same('expired', $ffStatusStmt->fetchColumn(), 'The sweep expires an enrollment with an old expiry date: ' . implode(' | ', array_slice($ffSweepOutput, -2)));

@@ -557,7 +557,7 @@ The biometric volume is excluded (BIO-003/BIO-005); loss requires re-enrollment.
 Store the server `.env` securely and separately so the matching keys remain
 available for a database restore; do not put it in the bundle or database dump.
 
-The inactive-Student biometric sweep should also run daily on a long-lived
+The existing semester-expiry maintenance should also run daily on a long-lived
 demo; use the command below in the operator's root crontab (`sudo crontab -e`):
 
 ```cron

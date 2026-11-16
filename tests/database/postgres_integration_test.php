@@ -7330,7 +7330,7 @@ expect_true(($auditPageOne['entries'][0]['id'] ?? null) !== ($auditPageTwo['entr
 expect_same(422, $auditBadDateStatus, 'Audit trail rejects a malformed date');
 
 // BIO-002 / BIO-005: the Dean can revoke an enrollment, an inactive Student's
-// enrollment is deleted, and the sweep no longer expires references by date. Fixtures use
+// enrollment is deleted, and the sweep expires ended references and dates undated ones. Fixtures use
 // "enrolling" profiles (no stored reference); the biometric sidecar is off in
 // the test environment, so a stored reference cannot be deleted here.
 $bioStudentStmt = $pdo->prepare(
@@ -7344,7 +7344,7 @@ $bioProfileStmt = $pdo->prepare(
 );
 $bioStatusStmt = $pdo->prepare('SELECT enrollment_status, consent_status FROM biometric_profiles WHERE student_id = ?');
 $bioStudents = [];
-foreach (['Dean', 'Inactive', 'Expired', 'Stored'] as $bioLabel) {
+foreach (['Dean', 'Inactive', 'Expired', 'Stored', 'Dated'] as $bioLabel) {
     $bioSuffix = strtolower(bin2hex(random_bytes(3)));
     $bioStudentStmt->execute(['BIO-' . strtoupper($bioSuffix), $bioLabel, "bio-{$bioSuffix}@bicol-u.edu.ph"]);
     $bioStudents[$bioLabel] = (int) $bioStudentStmt->fetchColumn();
@@ -7353,6 +7353,8 @@ foreach (['Dean', 'Inactive', 'Expired', 'Stored'] as $bioLabel) {
 $bioProfileStmt->execute([$bioStudents['Dean'], '2099-12-31']);
 $bioProfileStmt->execute([$bioStudents['Inactive'], '2099-12-31']);
 $bioProfileStmt->execute([$bioStudents['Expired'], '2020-12-31']);
+$bioProfileStmt->execute([$bioStudents['Dated'], null]); // enrolled while faces did not expire: no stored date
+$bioExpectedEnd = academic_latest_term_end(academic_student_term_dates($pdo, $bioStudents['Dated']))['endDate'] ?? null;
 $pdo->prepare(
     "INSERT INTO biometric_profiles
         (student_id, consent_status, face_enrolled, enrollment_status, protected_object_reference, reference_expires_on, enrolled_at)
@@ -7391,9 +7393,14 @@ expect_same('revoked', $bioStatusStmt->fetch(PDO::FETCH_ASSOC)['enrollment_statu
 
 exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/../../backend/bin/expire-biometrics.php') . ' 2>&1', $bioSweepOutput);
 $bioStatusStmt->execute([$bioStudents['Expired']]);
-expect_same('enrolling', $bioStatusStmt->fetch(PDO::FETCH_ASSOC)['enrollment_status'] ?? null, 'The sweep no longer expires an enrollment by date (12.2): ' . implode(' | ', array_slice($bioSweepOutput, -3)));
+expect_same('expired', $bioStatusStmt->fetch(PDO::FETCH_ASSOC)['enrollment_status'] ?? null, 'The sweep expires an enrollment whose validity ended: ' . implode(' | ', array_slice($bioSweepOutput, -3)));
+// The sweep stores the resolved term end on a profile without a date and leaves its status alone.
+expect_true($bioExpectedEnd !== null && $bioExpectedEnd >= date('Y-m-d'), 'The Dated fixture class has a term that has not ended');
+$bioDatedStmt = $pdo->prepare('SELECT enrollment_status, reference_expires_on FROM biometric_profiles WHERE student_id = ?');
+$bioDatedStmt->execute([$bioStudents['Dated']]);
+expect_same(['enrollment_status' => 'enrolling', 'reference_expires_on' => $bioExpectedEnd], $bioDatedStmt->fetch(PDO::FETCH_ASSOC), 'The sweep dates a profile that has no expiry yet');
 $bioAuditStmt = $pdo->prepare('SELECT COUNT(*) FROM audit_events WHERE action_code = ?');
-foreach (['biometric_enrollment_revoked_by_dean', 'biometric_enrollment_revoked_inactive'] as $bioAction) {
+foreach (['biometric_enrollment_revoked_by_dean', 'biometric_enrollment_revoked_inactive', 'biometric_enrollment_expired'] as $bioAction) {
     $bioAuditStmt->execute([$bioAction]);
     expect_true((int) $bioAuditStmt->fetchColumn() > 0, "Biometric deletion is audited ({$bioAction})");
 }

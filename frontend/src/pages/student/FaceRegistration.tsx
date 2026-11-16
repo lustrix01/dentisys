@@ -729,9 +729,9 @@ export const FaceRegistration: React.FC = () => {
         <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <strong className="block font-bold">Enrollment ended</strong>
+            <strong className="block font-bold">Enrollment expired for current semester</strong>
             <p className="mt-0.5 leading-relaxed">
-              Complete consent and re-enroll your facial reference below.
+              Biometric enrollment expires at the end of each semester per institutional policy. Complete consent and re-enroll your facial reference below.
             </p>
           </div>
         </div>
@@ -809,10 +809,10 @@ export const FaceRegistration: React.FC = () => {
                 <strong>No raw images kept:</strong> Camera captures are processed temporarily and then discarded. Raw photos and video frames are never stored.
               </li>
               <li>
-                <strong>Protected reference:</strong> An encrypted reference derived from your enrollment is kept so attendance can be checked, while you are an active Student.
+                <strong>Protected reference:</strong> An encrypted reference derived from your enrollment is kept so attendance can be checked. It expires every semester, and you must re-enroll to keep using face check-in.
               </li>
               <li>
-                <strong>Revocation and deletion:</strong> You may revoke at any time on this page. Your reference is deleted when you revoke, when the Dean revokes your enrollment, when you re-enroll (the old reference is replaced), when your Student account becomes inactive, or when your account is deleted.
+                <strong>Revocation and deletion:</strong> You may revoke at any time on this page. Your reference is deleted when you revoke, when the Dean revokes your enrollment, when you re-enroll (the old reference is replaced), when it expires at the end of the semester, when your Student account becomes inactive, or when your account is deleted.
               </li>
               <li>
                 <strong>Who can see your enrollment status:</strong> You, the Faculty of your classes, and the Dean can see whether you are enrolled. No one can see your reference or camera captures.
@@ -1138,9 +1138,13 @@ export const FaceRegistration: React.FC = () => {
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
-              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Validity</span>
-              <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block">While you are an active Student</span>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400">Kept until you revoke</span>
+              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Semester Expiration</span>
+              <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block">
+                {isAuthoritative
+                  ? (profile?.expiresAt ? new Date(profile.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'End of semester')
+                  : 'End of semester'}
+              </span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400">Expires seasonally</span>
             </div>
           </div>
 
