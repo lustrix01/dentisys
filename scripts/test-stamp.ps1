@@ -39,7 +39,9 @@ function Write-TestStamp([string]$Kind, [string]$TreeAtStart) {
     }
     $head = (& git rev-parse HEAD).Trim()
     Set-Content -LiteralPath (Join-Path (Get-StampDir) "$tree.$Kind") -Value "$(Get-Date -Format o) head=$head" -Encoding utf8NoBOM
-    Write-Host "Recorded $Kind pass for content $($tree.Substring(0, 12)). Commit exactly these files to publish them."
+    $extra = @(& git status --porcelain --untracked-files=all)
+    $note = if ($extra.Count -eq 0) { "HEAD $($head.Substring(0, 12)) may be published." } else { "$($extra.Count) uncommitted file(s) were part of this run, so it only counts for a commit with exactly these files. Usual path: commit first, then run the gate with nothing else uncommitted." }
+    Write-Host "Recorded $Kind pass for content $($tree.Substring(0, 12)). $note"
 }
 
 # Server-side paths: a change here needs a check-postgres.ps1 pass, not only check.ps1.
@@ -54,16 +56,21 @@ function Get-PublishBlockers {
         $reasons += 'scripts/check.ps1 has not passed on exactly this commit''s files.'
     }
     if (-not (Test-Path -LiteralPath (Join-Path $dir "$tree.pg"))) {
-        $last = Get-ChildItem -LiteralPath $dir -Filter '*.pg' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        $changed = $null
-        if ($last) {
-            $changed = @(& git diff --name-only $last.BaseName $tree -- @ServerPaths 2>$null)
-            if ($LASTEXITCODE -ne 0) { $changed = $null }
+        # Any earlier pass counts when the server-side files are identical to it. Passes whose tree git has
+        # since pruned (untested content is collected after about two weeks) are skipped.
+        $closest = $null
+        foreach ($stamp in Get-ChildItem -LiteralPath $dir -Filter '*.pg' | Sort-Object LastWriteTime -Descending) {
+            & git cat-file -e "$($stamp.BaseName)^{tree}" 2>$null
+            if ($LASTEXITCODE -ne 0) { continue }
+            $changed = @(& git diff --name-only $stamp.BaseName $tree -- @ServerPaths 2>$null)
+            if ($LASTEXITCODE -ne 0) { continue }
+            if ($changed.Count -eq 0) { $closest = @(); break }
+            if ($null -eq $closest) { $closest = $changed }
         }
-        if ($null -eq $changed) {
+        if ($null -eq $closest) {
             $reasons += 'scripts/check-postgres.ps1 has no recorded pass to compare against.'
-        } elseif ($changed.Count -gt 0) {
-            $reasons += "Server-side files changed since the last scripts/check-postgres.ps1 pass ($($changed[0])$(if ($changed.Count -gt 1) { " and $($changed.Count - 1) more" }))."
+        } elseif ($closest.Count -gt 0) {
+            $reasons += "Server-side files changed since the last scripts/check-postgres.ps1 pass ($($closest[0])$(if ($closest.Count -gt 1) { " and $($closest.Count - 1) more" }))."
         }
     }
     return $reasons
