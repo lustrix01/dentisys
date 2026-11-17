@@ -1,0 +1,12 @@
+#!/bin/sh
+# demo-line guard: a commit that changes UI files must name its demo.
+# Installed via: git config core.hooksPath .githooks
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "commit-msg: node not found on PATH; cannot check the Demo line." >&2
+  echo "commit-msg: install Node.js, or bypass with: git commit --no-verify" >&2
+  exit 1
+fi
+
+exec node "$here/check-commit-msg.mjs" "$1"

@@ -2,6 +2,7 @@
 
 usage: python build-demo.py <demo.json> <shotsDir> <out.html>
 Run verify.py first; this script refuses to build when a fix key has no shots.
+It also needs a passing review.md (last line "Verdict: pass") from the design-review agent, written after the last capture.
 
 demo.json:
 {
@@ -52,9 +53,14 @@ def kind(m):
 
 
 stamp = os.path.join(root, 'verified.ok')
-newest = max(os.path.getmtime(os.path.join(dp, f)) for dp, _, fs in os.walk(root) for f in fs if f.endswith(('.png', '.json')) and 'contact' not in dp)
+newest = max(os.path.getmtime(os.path.join(dp, f)) for dp, _, fs in os.walk(root) for f in fs if f.endswith(('.png', '.json')) and 'contact' not in dp and os.path.relpath(dp, root).split(os.sep)[0] != 'review')
 if not os.path.exists(stamp) or os.path.getmtime(stamp) < newest:
     sys.exit('shots not verified since the last capture - run verify.py, fix every FAIL and look at every contact sheet first')
+review = os.path.join(root, 'review.md')
+lines = [l.strip() for l in open(review, encoding='utf-8')] if os.path.exists(review) else []
+lines = [l for l in lines if l]
+if not os.path.exists(review) or os.path.getmtime(review) < newest or not lines or lines[-1] != 'Verdict: pass':
+    sys.exit('design review missing, stale or failed - run the design-review agent on these shots (.claude/agents/design-review.md), fix every Blocker and High, recapture, verify, and review again')
 meta_dir = os.path.join(root, 'before', 'meta')
 metas = {f[:-5]: json.load(open(os.path.join(meta_dir, f), encoding='utf-8')) for f in os.listdir(meta_dir) if f.endswith('.json')}
 for fx in demo['fixes']:

@@ -28,9 +28,12 @@ Both routes end in Stage 2 (below). Never capture the full device list before th
    2. Capture it: `... <shotsDir> A` (then `B`).
    3. Save it: `git diff -- <files> > <shotsDir>/A.patch`, then undo it exactly: `git apply -R <shotsDir>/A.patch`.
 5. `python <skill>/scripts/verify.py <shotsDir>`. Fix every FAIL. Open the contact sheet for the main spot, and the sheet for any WARN. Do not open the rest.
+5b. **Design review.** Run the `design-review` agent (`.claude/agents/design-review.md`) with the shotsDir, the Owner's request in their words, the stage, and the patch files. Fix every Blocker and High in the options (re-edit, recapture, re-verify), then review again. An option that cannot pass is dropped, not shown. `build-demo.py` refuses to build without a passing `review.md` newer than the shots.
 6. Build the options page from `demo.json` with `versions` (see `build-demo.py` header): Before, Option A with `"rec": true`, Option B, one line of `desc` each, and an `ask` line. No steps, code panel, table or "checked" list at this stage.
 7. `python <skill>/scripts/build-demo.py demo.json <shotsDir> <scratch>/<name>.html`, then `node <skill>/scripts/smoke-demo.mjs <name>.html <name>.png`: no errors, `flipped: true`, `peekWorks: true`, `phoneSidewaysScroll: false`.
 8. Publish as a private Artifact and send one line: "Reply A, B, or what to change. A is the default." Stop and wait.
+
+Every correction the Owner makes ("change X", "neither", a rejection) is a missed review: add it as one line to "Standing Owner rulings" in `references/dentisys.md` in the same turn, so the `design-review` agent catches it next time.
 
 On "change X": edit the chosen option, recapture that one version only, rebuild at the same link. On "neither": ask one question, offer two new options.
 
@@ -45,10 +48,11 @@ On "change X": edit the chosen option, recapture that one version only, rebuild 
 ## Stage 2: after approval
 
 1. Apply the chosen option: `git apply <shotsDir>/A.patch`. For Route B, make the fix (a subagent may implement; you review).
-2. Subagents over-reach on UI. **Read the diff, not the summary**, and revert any line the rule did not need: a removed `flex-wrap` that was still needed, a `nowrap` on a heading that should wrap, a layout changed at a width that was fine.
+2. Subagents over-reach on UI. A UI brief names the "Page patterns" part (or the existing page) each element copies, the exact class strings, and "must fit at 393 px, light and dark"; it forbids any colour, component or wording not listed. **Read the diff, not the summary**, and revert any line the rule did not need: a removed `flex-wrap` that was still needed, a `nowrap` on a heading that should wrap, a layout changed at a width that was fine.
 3. Prefer width-scoped classes (`max-[359px]:`, `lg:max-2xl:`) over global changes. Fit rules that held up: tighten padding or gaps first; `whitespace-nowrap` on labels, codes and chips; text + button rows get `flex-1 basis-64` on the text and `flex-wrap` on the row; `<wbr />` or U+2011 controls where a label breaks; icons get `shrink-0`.
 4. Sweep: `AUDIT_TIER=full` on the touched routes and roles (numbers only), then capture `"device": "core"` (11 devices) for the changed spots, `before` and `after`. Before shots come from the code before the change: reuse Stage 1's `before/` when it is the same commit, otherwise `git stash push -- <src>` → capture → `git stash pop`, then check `git stash list` is empty.
 5. `verify.py`: fix every FAIL. Open the main spot's sheet and every sheet with a WARN, nothing else.
+5b. **Design review** of the built change, as in Stage 1 step 5b, on the `after/` shots; this time the agent also runs the quick device audit on the changed routes. Fix every Blocker and High before the final demo.
 6. **If another width breaks the approved look**: fix it with width-scoped classes so the approved Desktop 1920 and iPhone 393 stay pixel-identical (prove it with an `"expect": "same"` target). That needs no new approval. Only a visible change to what the Owner approved goes back to them, as one line.
 7. Build the final demo (no `versions`): steps, before/after text, code panel, "checked" list and change table. Write for the Owner: plain words for where to look and what they will see; class names only in the code panel. Pills: agreed / needs your OK (anything beyond what was agreed) / recommendation.
 8. The page embeds the core tier plus flagged spots, never the full tier; `build-demo.py` stops over 16 MB. Publish to the **same Artifact link** as the Stage 1 page.

@@ -28,6 +28,12 @@ Repo `C:\Users\decha\Desktop\Github\dentisys`. Rules in `AGENTS.md` and `CLAUDE.
 - Stat-tile labels wrap only between words, and values never wrap.
 - Casing: follow spec.md UI-001 "Owner decision (2026-11-06): Interface casing". Short form: names of places/fields (page, card, section and dialog titles, tabs, sidebar items, column headers, form labels) are Title Case; everything else (buttons, links, chips, status values, hints, tooltips, toasts, errors, message headings like "No scores yet") is sentence case. Roles, Midterm/Finals/Lecture/Laboratory, DentiSys/BU/Google, ID/PDF/CSV and 1st/2nd Semester are always capitalised; a page, tab or button name quoted in other text keeps its own casing ("Open in Retention Monitoring"). Never type ALL CAPS (CSS does it); only the printed class list header is in capitals.
 - Desktop 1920 stays pixel-identical unless it is broken there.
+- New features fit into the page as if they were always there (2026-11-16): a toolbar button that opens a dialog (with a count badge when something waits), settings inside the existing Edit dialog, a side card that copies the neighbouring side card exactly. Never a new full-width card or bar stacked above a page's main table or list.
+- Improve inside today's layout (2026-11-07). Restructuring pages for consistency's sake was rejected ("before was easier on the eyes").
+- One control per job on a toolbar (2026-11-17): Reports keep one Excel and one PDF control; a tab with several reports turns each into a ▾ menu instead of adding buttons.
+- Open menus and popovers never print: their panel carries `no-print` (2026-11-18).
+- Time entry is the clock-style wheel (`components/TimePicker.tsx`), never a grid of tap buttons.
+- Demo shots keep the page's existing toolbar in frame, or the Owner reads the toolbar as removed.
 - Colours:
   - Dead Tailwind classes become whatever renders today's look.
   - Small grey text is `text-slate-500 dark:text-slate-400`, except placeholders, disabled text and icons.

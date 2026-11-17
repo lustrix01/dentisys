@@ -24,3 +24,6 @@ UTF-16 / mojibake / invalid UTF-8 text, and a `PreToolUse` hook in
 `.claude/settings.json` refuses the 5.1 write commands above before they run.
 After editing config files, `node .githooks/check-staged-encoding.mjs` verifies the
 staged content (run `git add` first).
+A `commit-msg` hook in `.githooks/` requires a `Demo: <artifact link>` or
+`Demo: none - <reason>` line when a commit changes `frontend/src` .tsx/.css files
+outside tests.

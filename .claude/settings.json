@@ -18,6 +18,15 @@
             "command": "node \"C:/Users/decha/Desktop/Github/dentisys/.claude/hooks/guard-encoding.mjs\""
           }
         ]
+      },
+      {
+        "matcher": "Artifact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/Users/decha/Desktop/Github/dentisys/.claude/hooks/guard-demo-page.mjs\""
+          }
+        ]
       }
     ]
   }
