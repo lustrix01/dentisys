@@ -364,6 +364,8 @@ headers and cookies pass through intact. `APP_IS_HTTPS=true` keeps secure cookie
 `TRUSTED_PROXY_CIDRS` trusts Traefik's private Docker network so the backend uses
 the client IP from its forwarded header. Keep public clients outside those
 trusted ranges and never enable insecure forwarded-header trust in Traefik.
+The HTTPS entry point reads a request for up to 180 seconds (Traefik's default is 60): a face enrolment
+uploads 30 frames from a phone, and the browser waits up to 120 seconds for it.
 
 Both services have Docker healthchecks and Traefik HTTP healthchecks (every
 five seconds). With `allowemptyservices=false`, the
