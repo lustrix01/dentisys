@@ -61,7 +61,19 @@ One template for both stages: `assets/template.html`, filled only by `build-demo
 - Close-ups sit side by side at the top (Before | A | B, or Before | After); the full screen in a device frame sits below.
 - Hold **B** to peek at the other version, **1–3** to pick, **← →** to change screen. The options page opens on the recommendation; the final demo opens on Before.
 
+## Options built outside the working tree
+
+When a subagent writes each option as file copies (the working tree holds work under review), back up the real files, copy option A in, capture `A`, copy B in, capture `B`, restore the backups and prove it with `cmp`. Never stash work you did not start.
+
+## Files, print views and flows
+
+- Print/PDF views: a target with `"print": true` (window.print is stubbed, print media, full page). When the PDF is a menu item, open it with `steps` (trigger, then `{"role": "menuitem", "name": "..."}`), not `click`, which only opens the menu. Export files: open the downloaded `.xlsx` and show its rows on the demo or attach the file; say which seed data it came from.
+- Flows and dialogs (how it behaves, not how it looks) copy the 2026-10-12 Artifact demos named in `CLAUDE.local.md`. A hand-written demo page is never allowed: if a page needs something the template lacks, change the template once.
+
 ## Shot details that bite
+
+- Tabs may be `role="tab"`; `tab` tries that first, then a button.
+- Open menus and popovers close when the page scrolls: give the target `"noScroll": true` and no `text`, so the shot is the viewport as it is after the `click`.
 
 - Targets: make `text` a regex that only the intended element matches, and add `closest` (e.g. `".grid"`) to frame the right container.
 - Devices come from `audit/devices.json`: a name, or a tier (`quick`, `core`, `full`) for every device in it.

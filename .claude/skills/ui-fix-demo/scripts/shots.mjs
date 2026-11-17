@@ -5,7 +5,8 @@
 // writes <outDir>/<mode>/{vp,crop,meta}/<id>-<Device>-<theme>.{png,json}
 // target fields: id, device (a name from audit/devices.json, a tier "quick"|"core"|"full" = every device in it,
 //   a Playwright profile or "Desktop 1440 900"), role, route, mock?, tab?, fill?, upload?, click?, steps?, sel?, text? (regex),
-//   closest? (CSS selector to frame), up? (parent hops), theme? ("light"|"dark"), full?, expect? ("same")
+//   closest? (CSS selector to frame), up? (parent hops), theme? ("light"|"dark"), full?, expect? ("same"),
+//   noScroll? (no scrolling, viewport shot: open menus/popovers that close on scroll), print? (print view: window.print stubbed, print media, full page)
 import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -39,6 +40,7 @@ for (const [k, list] of groups) {
   const [device, role] = k.split('|');
   const opts = dev(device);
   const ctx = await browser.newContext({ ...opts, baseURL: APP.baseURL, colorScheme: 'light' });
+  await ctx.addInitScript(() => { window.print = () => {}; }); // print views stay rendered for print: true targets
   const page = await ctx.newPage();
   let pageErrors = [];
   page.on('pageerror', e => pageErrors.push(e.message)); // a crashed page screenshots as blank: fail the target instead
@@ -62,7 +64,7 @@ for (const [k, list] of groups) {
       await page.goto(t.route); await page.waitForLoadState('networkidle').catch(() => {});
       await page.evaluate(([cls, on]) => document.documentElement.classList.toggle(cls, on), [APP.darkClass ?? 'dark', theme === 'dark']);
       await page.waitForTimeout(APP.settleMs ?? 900); // let colour transitions finish
-      if (t.tab) { await page.getByRole('button', { name: new RegExp('^\\s*' + t.tab) }).first().click(); await page.waitForTimeout(800); }
+      if (t.tab) { const tabRe = new RegExp('^\\s*' + t.tab), asTab = page.getByRole('tab', { name: tabRe }); await ((await asTab.count()) ? asTab : page.getByRole('button', { name: tabRe })).first().click(); await page.waitForTimeout(800); }
       if (t.fill) { await page.fill(t.fill[0], t.fill[1]); await page.waitForTimeout(500); } // [selector, value], typed before click      // steps: [{role?, name?} | {css, text?}, nth?, wait?] clicked in order before select/click, for states several clicks deep
       for (const s of t.steps ?? []) {
         const l = s.role ? page.getByRole(s.role, { name: new RegExp(s.name, 'i') }) : page.locator(s.css, s.text ? { hasText: new RegExp(s.text) } : undefined);
@@ -77,7 +79,8 @@ for (const [k, list] of groups) {
       if (t.click) { await page.locator('button', { hasText: new RegExp(t.click, 'i') }).filter({ visible: true }).first().click(); await page.waitForTimeout(800); }
       meta.url = new URL(page.url()).pathname + new URL(page.url()).search;
       if (pageErrors.length) throw new Error(`page error: ${pageErrors[0]} (a mock object missing fields? copy it whole)`);
-      if (t.text || t.sel) {
+      if (t.print) { await page.emulateMedia({ media: 'print' }); await page.waitForTimeout(500); }
+      if ((t.text || t.sel) && !t.noScroll && !t.print) {
         const loc = page.locator(t.sel ?? 'button, a, input, select, span, p, h1, h2, h3, h4, label, td', { hasText: t.text ? new RegExp(t.text) : undefined }).filter({ visible: true });
         meta.matchCount = await loc.count();
         if (!meta.matchCount) throw new Error(`nothing visible matches ${t.sel ?? ''} /${t.text ?? ''}/`);
@@ -106,9 +109,10 @@ for (const [k, list] of groups) {
         await page.screenshot({ path: join(dirs.crop, name + '.png'), clip: meta.clip });
       } else {
         meta.matchCount = null;
-        await page.screenshot({ path: join(dirs.crop, name + '.png'), fullPage: !!t.full });
+        await page.screenshot({ path: join(dirs.crop, name + '.png'), fullPage: !!(t.full || t.print) });
       }
-      await page.screenshot({ path: join(dirs.vp, name + '.png') });
+      await page.screenshot({ path: join(dirs.vp, name + '.png'), fullPage: !!t.print });
+      if (t.print) await page.emulateMedia({ media: 'screen' });
       writeFileSync(join(dirs.meta, name + '.json'), JSON.stringify(meta, null, 1));
       console.log('ok  ', name, meta.matchCount > 1 ? `(${meta.matchCount} matches: check framing)` : '');
     } catch (e) { failed++; console.log('FAIL', name, String(e.message).split('\n')[0]); }
