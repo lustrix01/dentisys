@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, CheckCircle2, ChevronRight, Plus, Search, Calculator, Filter } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import Tabs from '../../components/Tabs';
@@ -68,6 +69,7 @@ type RemedialDisplayStatus = RemedialAttemptStatus | 'available' | 'not_started'
 type Notification = {
   type: 'success' | 'info';
   message: string;
+  noticeEnrollmentId?: string;
 };
 
 const isPersistedText = (value: string | null | undefined): value is string => (
@@ -293,6 +295,7 @@ const statusBadgeClasses = (state: FacultyRetentionState): string => {
 };
 
 export const RetentionMonitoring: React.FC = () => {
+  const navigate = useNavigate();
   const [retentionRecords, setRetentionRecords] = useState<FacultyRetentionRecord[]>([]);
   const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -688,12 +691,14 @@ export const RetentionMonitoring: React.FC = () => {
       });
       const refreshed = await refreshRetention();
       resetScheduleForm();
-      const emailMessage = saved.emailDelivery ? ` ${saved.emailDelivery.message}` : '';
+      const hasDate = scheduleDate.trim().length > 0;
+      const savedMessage = hasDate ? 'Remedial exam saved. The notice has not been sent.' : 'Remedial exam saved.';
       setNotification({
-        type: refreshed && (!saved.emailDelivery || saved.emailDelivery.status === 'Sent') ? 'success' : 'info',
+        type: refreshed ? 'success' : 'info',
         message: refreshed
-          ? `Remedial exam persisted successfully.${emailMessage}`
-          : `Remedial exam persisted, but the authoritative list could not be refreshed.${emailMessage}`,
+          ? savedMessage
+          : `${savedMessage} The authoritative list could not be refreshed.`,
+        noticeEnrollmentId: hasDate ? saved.enrollmentId ?? undefined : undefined,
       });
     } catch (requestError) {
       showFeedback(requestError instanceof Error ? requestError.message : 'Could not save the remedial exam.', 'error');
@@ -827,6 +832,15 @@ export const RetentionMonitoring: React.FC = () => {
       {notification && (
         <div className="flex items-start gap-3 rounded-xl border p-3 text-xs border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200 animate-fade-in">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /><span className="flex-1">{notification.message}</span>
+          {notification.noticeEnrollmentId && (
+            <button
+              type="button"
+              onClick={() => navigate(`/email-management?tab=remedial&enrollment=${encodeURIComponent(notification.noticeEnrollmentId ?? '')}`)}
+              className="text-xs font-semibold underline cursor-pointer"
+            >
+              Preview and send notice
+            </button>
+          )}
           <button type="button" onClick={() => setNotification(null)} className="text-xs font-semibold cursor-pointer">Dismiss</button>
         </div>
       )}

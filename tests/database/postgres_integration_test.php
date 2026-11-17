@@ -3684,12 +3684,21 @@ $remedialOriginalStmt = $pdo->prepare(
 );
 $remedialOriginalStmt->execute([$invitedEnrollmentId]);
 $remedialOriginalGrade = $remedialOriginalStmt->fetch(PDO::FETCH_ASSOC);
+$remedialNoticeCount = static fn(): int => (int) $pdo->query("SELECT COUNT(*) FROM email_outbox WHERE email_type = 'Remedial Notice'")->fetchColumn();
+$remedialNoticesBefore = $remedialNoticeCount();
 [$remedialScheduleStatus, $remedialScheduleBody] = $remedialPost($invitedEnrollmentId, [
     'attemptNumber' => 1,
     'scheduledDate' => '2027-01-10',
 ], $seedFacultyAccessToken);
 expect_same(200, $remedialScheduleStatus, 'Faculty schedules remedial attempt 1 through the canonical route');
 expect_same('attempt_1_pending', $remedialScheduleBody['progression']['stage'] ?? null, 'Scheduled attempt 1 is pending');
+expect_true(!array_key_exists('emailDelivery', $remedialScheduleBody), 'Saving a remedial attempt no longer reports an email delivery');
+[$remedialRescheduleStatus] = $remedialPost($invitedEnrollmentId, [
+    'attemptNumber' => 1,
+    'scheduledDate' => '2027-01-11',
+], $seedFacultyAccessToken);
+expect_same(200, $remedialRescheduleStatus, 'Faculty changes the remedial attempt 1 date');
+expect_same($remedialNoticesBefore, $remedialNoticeCount(), 'Scheduling or rescheduling a remedial attempt writes no Remedial Notice email');
 [$remedialFirstFailStatus, $remedialFirstFailBody] = $remedialPost($invitedEnrollmentId, [
     'attemptNumber' => 1,
     'percentage' => 49.99,

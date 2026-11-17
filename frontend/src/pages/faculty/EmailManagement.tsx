@@ -16,6 +16,7 @@ import {
   Filter,
   Inbox
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import Tabs from '../../components/Tabs';
 import { showFeedback, requestConfirmation } from '../../components/FeedbackCenter';
@@ -128,7 +129,10 @@ export const EmailManagement: React.FC = () => {
 
   const classIdOf = (classItem: any) => String(classItem.csId || classItem.id || '');
 
-  const [tab, setTab] = useState<Tab>('student_invites');
+  // Deep link from Retention Monitoring: ?tab=remedial&enrollment=<id>. Read once on load.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => (searchParams.get('tab') === 'remedial' ? 'remedial' : 'student_invites'));
+  const preselectEnrollmentId = useRef<string | null>(searchParams.get('tab') === 'remedial' ? searchParams.get('enrollment') : null);
   const [selected, setSelected] = useState<string[]>([]);
 
   // Filter Dropdown States
@@ -291,6 +295,14 @@ export const EmailManagement: React.FC = () => {
     isOfficialBicolEmail(row.email) && (tab !== 'remedial' || Boolean(row.pendingAttempt?.scheduledDate))
   );
   const selectedNoticeRows = selectableNoticeRows.filter(row => selected.includes(row.enrollmentId));
+
+  // Tick the linked student once, after the list has loaded. Unknown or ineligible ids are ignored.
+  useEffect(() => {
+    const id = preselectEnrollmentId.current;
+    if (id === null || loadingRetention || retentionRecords.length === 0) return;
+    preselectEnrollmentId.current = null;
+    if (tab === 'remedial' && selectableNoticeRows.some(row => String(row.enrollmentId) === id)) setSelected([id]);
+  }, [loadingRetention, retentionRecords, selectableNoticeRows, tab]);
 
   const [secretarySort, setSecretarySort] = useState<StudentSort>({ key: 'default', dir: 'asc' });
   const [studentSort, setStudentSort] = useState<StudentSort>({ key: 'default', dir: 'asc' });
@@ -480,7 +492,7 @@ export const EmailManagement: React.FC = () => {
 
     setSavingRemedialId(row.enrollmentId);
     try {
-      const result = await saveFacultyRemedialApi({
+      await saveFacultyRemedialApi({
         enrollmentId: row.enrollmentId,
         attemptNumber: row.pendingAttempt.attemptNumber,
         scheduledDate,
@@ -488,10 +500,9 @@ export const EmailManagement: React.FC = () => {
       setEditingRemedialId(null);
       setRemedialDateDraft('');
       await Promise.all([loadRetentionRecords(), fetchEmailLogs()]);
-      const delivery = result.emailDelivery;
       notify({
-        type: delivery && delivery.status !== 'Sent' ? 'warning' : 'success',
-        message: delivery?.message ?? 'Remedial exam date saved successfully.',
+        type: 'success',
+        message: 'Remedial exam date saved. The notice has not been sent; select the student and choose Preview to send it.',
       });
     } catch (error) {
       notify({ type: 'error', message: error instanceof Error ? error.message : 'Could not save the remedial exam date.' });
@@ -964,8 +975,8 @@ export const EmailManagement: React.FC = () => {
               <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                 {tab === 'midterm_advisory'
                   ? 'Students currently on the Midterm Watchlist are listed with their weighted midterm grade. The email remains informational and does not include grades.'
-                  : 'Pending attempts are listed. Add or change a date to email the student automatically; use Preview & resend for a manual retry.'}
-                {tab === 'midterm_advisory' && ' Emails are sent only after you preview and confirm.'}
+                  : 'Pending attempts are listed with their scheduled date. Saving a date does not send email.'}
+                {' Emails are sent only after you preview and confirm.'}
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:shrink-0">

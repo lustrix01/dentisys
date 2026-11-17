@@ -6784,66 +6784,6 @@ function faculty_remedial_email_subject(string $courseCode, string $className, i
         . ' | Attempt ' . $attemptNumber . ' | ' . $dateLabel;
 }
 
-/** Send and record the schedule email after the remedial schedule transaction commits. */
-function faculty_send_remedial_schedule_email(
-    PDO $pdo,
-    array $config,
-    array $authCtx,
-    array $target,
-    int $attemptNumber,
-    string $scheduledDate
-): array {
-    $recipientEmail = mb_strtolower(trim((string) ($target['bu_email'] ?? '')));
-    $recipientName = trim((string) ($target['student_name'] ?? ''));
-    $courseCode = (string) ($target['course_code'] ?? '');
-    $className = (string) ($target['cs_name'] ?? '');
-    $classLabel = faculty_remedial_email_class_label($courseCode, $className);
-    $dateLabel = (new DateTimeImmutable($scheduledDate, new DateTimeZone('Asia/Manila')))->format('F j, Y');
-    $subject = faculty_remedial_email_subject($courseCode, $className, $attemptNumber, $scheduledDate);
-    $facultyName = (string) ($authCtx['display_name'] ?? 'your Faculty instructor');
-    $message = "A remedial exam for {$classLabel} has been scheduled. Attempt {$attemptNumber} is scheduled for {$dateLabel}. Contact {$facultyName} if you have questions about this schedule.";
-    $messageBody = email_faculty_message_html($recipientName, $facultyName, $message);
-    $officialEmail = filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)
-        && strtolower((string) substr(strrchr($recipientEmail, '@') ?: '', 1)) === 'bicol-u.edu.ph';
-    $initialStatus = $officialEmail ? 'Pending' : 'Failed';
-    $failureReason = $officialEmail ? null : 'Only official @bicol-u.edu.ph addresses can receive DentiSYS email.';
-    $operationUuid = uuid_v4_string();
-    $actionUuid = email_action_uuid([]);
-
-    try {
-        $insert = $pdo->prepare(
-            "INSERT INTO email_outbox
-                (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, failure_reason, operation_uuid, action_uuid)
-             VALUES (?, ?, ?, ?, 'Remedial Notice', ?, ?, ?, ?, ?) RETURNING email_id"
-        );
-        $insert->execute([
-            (int) $authCtx['user_id'], $recipientEmail, $recipientName, $subject, $messageBody,
-            $initialStatus, $failureReason, $operationUuid, $actionUuid,
-        ]);
-        $emailId = (int) $insert->fetchColumn();
-        if ($emailId <= 0) {
-            throw new RuntimeException('Remedial notice outbox insert did not return a valid identifier.');
-        }
-        if (!$officialEmail) {
-            return ['status' => 'Failed', 'message' => (string) $failureReason];
-        }
-
-        $sent = send_email($recipientEmail, $subject, $messageBody, $config);
-        $suppressed = $sent && !email_reaches_recipient($recipientEmail, $config);
-        $status = $suppressed ? 'Suppressed' : ($sent ? 'Sent' : 'Failed');
-        $sentAt = $sent ? (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u') : null;
-        $failureReason = $suppressed
-            ? 'Custom e-mail mode: the recipient is not on the allowlist; delivered to Mailpit only.'
-            : ($sent ? null : 'SMTP delivery failed or is not configured.');
-        $finish = $pdo->prepare('UPDATE email_outbox SET status = ?, sent_at = ?, failure_reason = ? WHERE email_id = ?');
-        $finish->execute([$status, $sentAt, $failureReason, $emailId]);
-        return ['status' => $status, 'message' => $failureReason ?? 'Remedial notice sent.'];
-    } catch (Throwable $e) {
-        error_log('Automatic remedial email failed: ' . sanitize_for_log($e));
-        return ['status' => 'Failed', 'message' => 'The schedule was saved, but the remedial email could not be delivered. Retry it from Email Management.'];
-    }
-}
-
 function handle_faculty_retention_get(): void
 {
     try {
@@ -7467,12 +7407,6 @@ function handle_faculty_retention_remedial_save(): void
         $outcome = $request['hasPercentage']
             ? faculty_remedial_attempt_outcome((float) $request['percentage'])
             : 'pending';
-        $effectiveScheduledDate = $existing === null
-            ? $request['scheduledDate']
-            : ($hasScheduledDate ? $request['scheduledDate'] : ($existing['scheduled_date'] !== null ? (string) $existing['scheduled_date'] : null));
-        $shouldAutoSendRemedialNotice = $outcome === 'pending'
-            && $effectiveScheduledDate !== null
-            && ($existing === null || (string) ($existing['scheduled_date'] ?? '') !== $effectiveScheduledDate);
         if ($existing === null) {
             $insert = $pdo->prepare(
                 'INSERT INTO enrollment_remedial_attempts
@@ -7544,9 +7478,6 @@ function handle_faculty_retention_remedial_save(): void
             ['scope_cs_id' => (int) $target['cs_id'], 'after' => ['attemptNumber' => $attemptNumber, 'outcome' => $outcome, 'notes' => $request['notes']]]
         );
         $pdo->commit();
-        $emailDelivery = $shouldAutoSendRemedialNotice
-            ? faculty_send_remedial_schedule_email($pdo, $config, $authCtx, $target, $attemptNumber, (string) $effectiveScheduledDate)
-            : null;
         json_response([
             'status' => 'ok',
             'message' => $outcome === 'pending'
@@ -7555,7 +7486,6 @@ function handle_faculty_retention_remedial_save(): void
             'enrollmentId' => (string) $enrollmentId,
             'progression' => $updatedProgression,
             'notification' => $notification !== null ? ['created' => $notification['created']] : null,
-            'emailDelivery' => $emailDelivery,
         ], 200);
     } catch (RemedialAttemptException $e) {
         if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }

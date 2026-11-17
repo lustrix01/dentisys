@@ -1342,7 +1342,6 @@ export function saveFacultyRemedialApi(data: {
   enrollmentId: string | null;
   progression?: FacultyRemedialProgression;
   notification?: { created: boolean } | null;
-  emailDelivery?: { status: 'Sent' | 'Failed' | 'Pending' | 'Suppressed'; message: string } | null;
 }> {
   return request('POST', '/faculty/retention/remedial', data);
 }

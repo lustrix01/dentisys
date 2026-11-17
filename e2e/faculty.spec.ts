@@ -636,6 +636,54 @@ test.describe('Faculty Module E2E Tests', () => {
     expect(remedialPosts[0]).toMatchObject({ enrollmentId: '901', attemptNumber: 1, notes: 'Bring the lab manual.' });
   });
 
+  test('saving a dated remedial attempt sends no email and offers Preview and send notice, which opens the Remedial tab with the student ticked', async ({ page }) => {
+    const remedialPosts: Record<string, unknown>[] = [];
+    const sendPosts: unknown[] = [];
+    let saved = false;
+    await page.route('**/api/faculty/retention', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok', currentSchoolYear: '2026-2027', retentionThreshold: 2.5,
+          retention: [{
+            enrollmentId: '901', studentId: '42', studentNumber: '2023-0042', studentName: 'Remedial Candidate',
+            email: 'remedial.candidate@bicol-u.edu.ph',
+            classId: '77', className: 'CLIN401-A', subjectCode: 'CLIN401', percentage: 70, gwa: 2.8,
+            state: 'remedial', remedial: null, schoolYear: '2026-2027', remedialEligible: true,
+            remedialProgression: saved
+              ? { stage: 'attempt_1_pending', attempts: [{ attemptNumber: 1, outcome: 'pending', scheduledDate: '2099-01-15', percentage: null, notes: null }], passedAttempt: null, legacyUnclassified: false }
+              : { stage: 'none', attempts: [], passedAttempt: null, legacyUnclassified: false },
+          }],
+        }),
+      });
+    });
+    await page.route('**/api/faculty/retention/remedial', async (route) => {
+      remedialPosts.push(route.request().postDataJSON() as Record<string, unknown>);
+      saved = true;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'ok', enrollmentId: '901' }) });
+    });
+    await page.route('**/api/faculty/send-email', async (route) => {
+      sendPosts.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'ok', results: [] }) });
+    });
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/retention');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await page.getByRole('row').filter({ hasText: 'Remedial Candidate' }).getByTitle('Schedule remedial exam').click();
+    const dialog = page.locator('form').filter({ hasText: 'Confirm & schedule exam' });
+    await dialog.locator('input[type="date"]').fill('2099-01-15');
+    await dialog.getByRole('button', { name: 'Confirm & schedule exam' }).click();
+    await expect.poll(() => remedialPosts.length).toBe(1);
+    await expect(page.getByText('Remedial exam saved. The notice has not been sent.').first()).toBeVisible();
+    expect(sendPosts).toHaveLength(0);
+    await page.getByRole('button', { name: 'Preview and send notice' }).click();
+    await expect(page).toHaveURL(/\/email-management\?tab=remedial&enrollment=901$/);
+    await expect(page.getByLabel('Select Remedial Candidate for Remedial Notice')).toBeChecked();
+    expect(sendPosts).toHaveLength(0);
+  });
+
   test('person names block digits while typing, sanitize paste and preserve accents, punctuation and IME', async ({ page }) => {
     await page.goto('/faculty/profile');
     await page.getByRole('button', { name: 'Change name' }).click();
