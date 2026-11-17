@@ -1,0 +1,28 @@
+{
+  "_note": "Single device list for audit:devices and the ui-fix-demo screenshots. 'profile' = Playwright built-in (UA, touch, DPR); otherwise w/h are the browser viewport in CSS px (screen minus browser bars and taskbar). Tiers: quick = stage-1 options page; core = one device per app width band (<360, 360-374, 375-389, 390-419, 420-639, 640-767 phone layout, 768-1023, 1024-1279, 1280-1439, 1440-1535, 1536+); full = core plus height extremes and landscape. Bands come from frontend max-[359/374/389/419/1439/1535px] rules and the isPhone <768 check: update this list when those change. Sizes checked 2026-11.",
+  "devices": [
+    { "name": "Small Android 320", "group": "Small Android phones", "tier": "core", "profile": "Galaxy S9+", "why": "Below 360: compact phones, large font or display zoom (16 max-[359px] rules)" },
+    { "name": "Budget Android 360", "group": "Small Android phones", "tier": "core", "profile": "Moto G4", "why": "Most common Android width at budget height (Galaxy A05/A15, Redmi, Realme, Oppo, Tecno)" },
+    { "name": "Android 412", "group": "Android phones", "tier": "full", "profile": "Pixel 7", "why": "Pixel 7/8, many mid-range Androids; tallest phone height" },
+    { "name": "Android 480", "group": "Android phones", "tier": "core", "profile": "Galaxy A55", "why": "Only device in the 420-639 band; Playwright's A55 width, unconfirmed on a real phone" },
+    { "name": "Android 863 landscape", "group": "Android phones", "tier": "full", "profile": "Pixel 7 landscape", "why": "Tablet layout at only 360px tall" },
+
+    { "name": "iPhone mini 375", "group": "iPhone minis", "tier": "core", "profile": "iPhone 13 Mini", "why": "iPhone 12/13 mini and SE width; shortest phone height (629)" },
+    { "name": "iPhone 393", "group": "iPhones", "tier": "quick", "profile": "iPhone 15", "why": "iPhone 14 Pro/15/16/17 band (390-419)" },
+
+    { "name": "Android tablet 1280 landscape", "group": "Android tablets", "tier": "full", "w": 1280, "h": 712, "dpr": 1.5, "mobile": true, "why": "10-11 inch tablets (Galaxy Tab A9+/S9 FE) held sideways; portrait 800 shares the iPad 820 band" },
+
+    { "name": "iPad mini 744", "group": "iPads", "tier": "core", "w": 744, "h": 1058, "dpr": 2, "mobile": true, "why": "Gets the phone layout (<768); also covers 7-9 inch Android tablets" },
+    { "name": "iPad 820", "group": "iPads", "tier": "core", "w": 820, "h": 1106, "dpr": 2, "mobile": true, "why": "iPad 10th/11th gen, iPad Air 11; covers 10-11 inch Android tablets in portrait" },
+    { "name": "iPad Pro 13 1032", "group": "iPads", "tier": "core", "w": 1032, "h": 1302, "dpr": 2, "mobile": true, "why": "iPad Pro 13 (Air 13 is 1024): first desktop-width band on a touch screen" },
+
+    { "name": "Laptop 1280", "group": "Laptops", "tier": "full", "w": 1280, "h": 585, "why": "1920x1080 laptop at 150% Windows scaling; shortest desktop height" },
+    { "name": "Laptop 1366", "group": "Laptops", "tier": "core", "w": 1366, "h": 633, "why": "1366x768 budget laptops" },
+    { "name": "Laptop 1536", "group": "Laptops", "tier": "full", "w": 1536, "h": 730, "why": "1920x1080 laptop at 125% Windows scaling; first width past the max-[1535px] rules" },
+
+    { "name": "MacBook Air 13 1470", "group": "MacBooks", "tier": "core", "w": 1470, "h": 832, "dpr": 2, "why": "Only core device in 1440-1535 (14 max-[1535px] rules); MacBook Pro 14 is 1512, same band" },
+
+    { "name": "Desktop 1920", "group": "Desktops", "tier": "quick", "w": 1920, "h": 947, "why": "1920x1080 monitors, the Owner's screen" },
+    { "name": "Desktop 2560", "group": "Desktops", "tier": "full", "w": 2560, "h": 1307, "why": "1440p monitors; 4K at 150% scaling; also stands in for MacBook Pro 16 (1728) and ultrawides" }
+  ]
+}

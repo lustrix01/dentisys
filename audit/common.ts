@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { devices } from '@playwright/test';
 
 export const OUT = 'audit-output';
@@ -20,24 +22,23 @@ export const wantedRoles = (): Role[] => {
   return ALL_ROLES.filter(r => !f.length || f.includes(r));
 };
 
-// iPhone SE / Galaxy S9+ profiles are 320px wide; Galaxy S24 (360) and iPhone SE 3rd gen (375) cover today's small phones.
-const phone = ['iPhone SE', 'Galaxy S24', 'iPhone SE (3rd gen)', 'iPhone 13', 'iPhone 14 Pro Max', 'Pixel 7', 'Galaxy S9+', 'iPhone 13 landscape',
-  'Pixel 7 landscape', 'iPad Mini', 'iPad Pro 11', 'iPad Mini landscape'];
-const desktop = [[1280, 800], [1440, 900], [1920, 1080]];
+export type AuditDevice = { name: string; options: Record<string, unknown>; viewport: { width: number; height: number }; tier: string };
 
-export type AuditDevice = { name: string; options: Record<string, unknown>; viewport: { width: number; height: number } };
+// Device list shared with the ui-fix-demo screenshots: audit/devices.json (tiers quick < core < full).
+type Spec = { name: string; tier: 'quick' | 'core' | 'full'; profile?: string; w?: number; h?: number; dpr?: number; mobile?: boolean };
+const SPECS: Spec[] = JSON.parse(readFileSync(join(__dirname, 'devices.json'), 'utf8')).devices;
+const TIERS = ['quick', 'core', 'full'];
 
 export function wantedDevices(): AuditDevice[] {
-  const all: AuditDevice[] = [
-    ...phone.map(name => {
-      // Run every profile in Chromium (only browser installed); keep viewport/UA/touch/scale.
-      const { defaultBrowserType: _ignored, ...options } = devices[name] as Record<string, unknown>;
-      return { name, options, viewport: (options.viewport as AuditDevice['viewport']) };
-    }),
-    ...desktop.map(([width, height]) => ({
-      name: `Desktop ${width}`, options: { viewport: { width, height } }, viewport: { width, height },
-    })),
-  ];
+  const all: AuditDevice[] = SPECS.map(s => {
+    // Run every profile in Chromium (only browser installed); keep viewport/UA/touch/scale.
+    const { defaultBrowserType: _ignored, ...options } = s.profile
+      ? (devices[s.profile] as Record<string, unknown>) ?? (() => { throw new Error(`Unknown Playwright profile: ${s.profile}`); })()
+      : { viewport: { width: s.w!, height: s.h! }, deviceScaleFactor: s.dpr ?? 1, isMobile: !!s.mobile, hasTouch: !!s.mobile };
+    return { name: s.name, options, viewport: options.viewport as AuditDevice['viewport'], tier: s.tier };
+  });
   const f = pick('AUDIT_DEVICES');
-  return all.filter(d => !f.length || f.includes(d.name));
+  const tier = TIERS.indexOf(process.env.AUDIT_TIER ?? 'full');
+  if (tier < 0) throw new Error('AUDIT_TIER must be quick, core or full');
+  return all.filter(d => (!f.length || f.includes(d.name)) && TIERS.indexOf(d.tier) <= tier);
 }

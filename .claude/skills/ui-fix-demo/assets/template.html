@@ -1,0 +1,252 @@
+<meta charset="utf-8">
+<title>__TITLE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* One template for both stages. Options page: DEMO.versions = Before + options (with desc/rec). Final demo: Before/After (default). Layout: header, fix cards, close-ups side by side, full screen in a device frame, then panels. */
+:root{
+  --bg:#f5f7f6; --surface:#ffffff; --surface-2:#f1f4f3; --line:#dde3e1; --fg:#1d2a27; --muted:#62716d;
+  --brand:#2f7d3a; --brand-soft:#e6f2e7; --brand-ink:#1f5a28;
+  --amber:#b45309; --amber-soft:#fdf3e2; --rose:#be123c; --rose-soft:#fdecef; --blue:#1d5fa8; --blue-soft:#e7f0fb;
+  --bezel:#1b2220; --bezel-2:#2c3532;
+  --display:"Outfit",system-ui,sans-serif; --body:"Plus Jakarta Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111816; --surface:#18211e; --surface-2:#1f2a27; --line:#2d3a36; --fg:#e4ece9; --muted:#9aaba6;
+  --brand:#5fb36b; --brand-soft:#1d3322; --brand-ink:#9fd9a8;
+  --amber:#f2b260; --amber-soft:#3a2a12; --rose:#f47a93; --rose-soft:#3d1a22; --blue:#7fb2ec; --blue-soft:#18283c;
+  --bezel:#05080a; --bezel-2:#3a4542; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111816; --surface:#18211e; --surface-2:#1f2a27; --line:#2d3a36; --fg:#e4ece9; --muted:#9aaba6;
+  --brand:#5fb36b; --brand-soft:#1d3322; --brand-ink:#9fd9a8;
+  --amber:#f2b260; --amber-soft:#3a2a12; --rose:#f47a93; --rose-soft:#3d1a22; --blue:#7fb2ec; --blue-soft:#18283c;
+  --bezel:#05080a; --bezel-2:#3a4542; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:14px;line-height:1.5;margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:20px 48px;display:grid;gap:16px}
+h1{font-family:var(--display);font-size:26px;margin:0;text-wrap:balance}
+h2{font-family:var(--display);font-size:17px;margin:0}
+.sub{color:var(--muted);margin:2px 0 0;max-width:70ch}
+.bar{display:flex;flex-wrap:wrap;gap:12px;align-items:end;justify-content:space-between}
+.hint{color:var(--muted);font-size:12px;display:grid;justify-items:end;gap:2px}
+.hint .focus{color:var(--amber)}
+@media (hover:none){.hint{display:none}}
+kbd{font:600 11px var(--body);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--surface)}
+.lbl{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.scen{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:860px){.scen{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.sc{text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:10px 12px;cursor:pointer;color:var(--fg);font:inherit;display:grid;gap:2px}
+.sc b{font-family:var(--display);font-size:15px}
+.sc span{color:var(--muted);font-size:12.5px}
+.sc[aria-pressed="true"]{border-color:var(--brand);box-shadow:inset 0 0 0 1px var(--brand)}
+/* close-ups side by side: the main decision surface */
+.cmp{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:12px}
+@media (max-width:760px){.cmp{grid-template-columns:1fr}}
+.col{text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:10px;cursor:pointer;color:var(--fg);font:inherit;display:grid;gap:8px;align-content:start;min-width:0}
+.col[aria-pressed="true"]{border-color:var(--brand);box-shadow:inset 0 0 0 1px var(--brand)}
+.col .head{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.col .head b{font-family:var(--display);font-size:15px}
+.col .desc{color:var(--muted);font-size:12.5px}
+.col .crop{background:var(--surface-2);border-radius:8px;padding:6px;overflow:hidden}
+.col .crop img{display:block;max-width:100%;height:auto;margin-inline:auto;border-radius:4px}
+.guide{border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:12px 16px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media (max-width:760px){.guide{grid-template-columns:1fr}}
+.guide ol{margin:6px 0 0;padding-left:20px}
+.guide li{margin:2px 0}
+.where{color:var(--muted);font-size:12.5px;margin-top:4px}
+.expect{border-radius:10px;padding:8px 12px;background:var(--surface-2)}
+.expect.before{background:var(--rose-soft)} .expect.after{background:var(--brand-soft)}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.main.solo{grid-template-columns:minmax(0,1fr)}
+@media (max-width:980px){.main{grid-template-columns:1fr}}
+.app{border:1px solid var(--line);border-radius:18px;background:var(--surface-2);padding:14px;display:grid;grid-template-columns:minmax(0,1fr);gap:12px;justify-items:center;min-width:0}
+.devs{display:flex;flex-wrap:wrap;gap:6px;justify-self:stretch}
+.dv{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:4px 12px;font:600 12px var(--body);cursor:pointer}
+.dv[aria-pressed="true"]{border-color:var(--brand);color:var(--brand-ink);background:var(--brand-soft)}
+.state{justify-self:stretch;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.tag{border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700}
+.tag.before{background:var(--rose-soft);color:var(--rose)} .tag.after{background:var(--brand-soft);color:var(--brand-ink)}
+.device{max-width:100%;min-width:0}
+/* every version sits in the same grid cell; only the current one is visible, so flipping never shifts the layout */
+.stack{display:grid}
+.stack img{grid-area:1/1;display:block;width:100%;height:auto;visibility:hidden}
+.stack img.on{visibility:visible}
+.device.phone{background:var(--bezel);border-radius:38px;padding:14px 10px 18px;box-shadow:0 0 0 2px var(--bezel-2),0 10px 30px rgba(0,0,0,.18)}
+.device.phone .screen{border-radius:24px;overflow:hidden}
+.device.phone::before{content:"";display:block;width:70px;height:6px;border-radius:6px;background:var(--bezel-2);margin:0 auto 10px}
+.device.landscape{background:var(--bezel);border-radius:30px;padding:10px 16px;box-shadow:0 0 0 2px var(--bezel-2),0 10px 30px rgba(0,0,0,.18)}
+.device.landscape .screen{border-radius:18px;overflow:hidden}
+.device.tablet{background:var(--bezel);border-radius:28px;padding:20px 16px;box-shadow:0 0 0 2px var(--bezel-2),0 10px 30px rgba(0,0,0,.18)}
+.device.tablet .screen{border-radius:8px;overflow:hidden}
+.device.laptop{width:100%}
+.device.laptop .lid{background:var(--bezel);border-radius:14px 14px 4px 4px;padding:12px 12px 14px;box-shadow:0 0 0 2px var(--bezel-2)}
+.device.laptop .base{height:12px;background:linear-gradient(var(--bezel-2),var(--bezel));border-radius:0 0 14px 14px}
+.rail{display:grid;gap:12px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:8px;min-width:0}
+.panel p{margin:0;font-size:12.5px}
+code{font-size:11.5px;background:var(--surface-2);border-radius:5px;padding:0 4px}
+ul.facts{margin:0;padding-left:18px;display:grid;gap:4px;font-size:12.5px}
+table{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:5px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:11.5px}
+.changes td:first-child{font-weight:700;white-space:nowrap}
+.changes tr{cursor:pointer}
+.pill{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;white-space:nowrap}
+.pill.agreed{background:var(--brand-soft);color:var(--brand-ink)}
+.pill.prop{background:var(--amber-soft);color:var(--amber)}
+.pill.rec{background:var(--blue-soft);color:var(--blue)}
+.pill.bad{background:var(--rose-soft);color:var(--rose)}
+.tablewrap{overflow-x:auto}
+.ask{border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:10px 16px;font-size:13.5px;margin:0}
+button:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+[hidden]{display:none!important}
+</style>
+
+<div class="wrap">
+  <header class="bar">
+    <div>
+      <h1 id="title"></h1>
+      <p class="sub" id="subtitle"></p>
+    </div>
+    <div class="hint" id="hint"></div>
+  </header>
+
+  <div class="scen" id="scen" role="group" aria-label="Fixes"></div>
+
+  <section class="cmp" id="cmp" role="group" aria-label="Versions"></section>
+
+  <p class="ask" id="ask" hidden></p>
+
+  <section class="guide" id="guide" aria-live="polite">
+    <div><div class="lbl">Try it</div><ol id="steps"></ol><div class="where" id="where"></div></div>
+    <div id="expect" class="expect"></div>
+  </section>
+
+  <div class="main" id="main">
+    <div class="app">
+      <div class="devs" id="devs" role="group" aria-label="Screen size"></div>
+      <div class="state"><span class="lbl" id="devname"></span><span class="tag" id="tag" aria-live="polite"></span></div>
+      <div id="device"></div>
+    </div>
+    <aside class="rail" id="rail">
+      <div class="panel" id="codep">
+        <div class="lbl">What changed in the code</div>
+        <p id="code"></p>
+      </div>
+      <div class="panel" id="checkedp">
+        <div class="lbl">Checked elsewhere</div>
+        <ul class="facts" id="checked"></ul>
+      </div>
+    </aside>
+  </div>
+
+  <section class="panel" id="table">
+    <h2>What is changing</h2>
+    <div class="tablewrap"><table class="changes">
+      <thead><tr><th>Item</th><th>Status</th><th>Before</th><th>After</th></tr></thead>
+      <tbody id="changes"></tbody>
+    </table></div>
+    <p class="sub" id="footnote"></p>
+  </section>
+</div>
+
+<script>
+const DEMO = /*__DATA__*/null;
+const FIXES = DEMO.fixes, ROWS = DEMO.rows ?? [];
+// Final demo = Before/After; options page passes DEMO.versions = [{key:'before'}, {key:'A', label, desc, rec}, ...]
+const VERS = DEMO.versions ?? [{ key: 'before', label: DEMO.beforeLabel ?? 'Before' }, { key: 'after', label: DEMO.afterLabel ?? 'After (proposed)' }];
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+$('title').textContent = DEMO.title; $('subtitle').innerHTML = DEMO.subtitle ?? '';
+$('checked').innerHTML = (DEMO.checked ?? []).map(x => `<li>${x}</li>`).join('');
+$('footnote').innerHTML = DEMO.footnote ?? '';
+$('checkedp').hidden = !DEMO.checked?.length;
+$('table').hidden = !ROWS.length;
+$('scen').hidden = FIXES.length < 2;
+if (DEMO.ask) { $('ask').hidden = false; $('ask').innerHTML = DEMO.ask; }
+const rec = VERS.findIndex(v => v.rec);
+// Options page opens on the recommendation; final demo opens on Before.
+let S = { v: rec > 0 ? rec : 0, last: rec > 0 ? rec : 1, peek: false, fix: 0, dev: 0 };
+$('scen').innerHTML = FIXES.map((f, i) => `<button class="sc" data-i="${i}"><b>${f.id.length > 3 ? '' : esc(f.id) + ' · '}${f.card}</b><span>${f.short ?? ''}</span></button>`).join('');
+$('changes').innerHTML = ROWS.map(r => `<tr data-id="${esc(r[0])}"><td>${r[0]}</td><td><span class="pill ${r[1]}">${r[2]}</span></td><td>${r[3]}</td><td>${r[4]}</td></tr>`).join('');
+const multi = VERS.length > 1;
+function hint() {
+  if (!multi) { $('hint').innerHTML = ''; return; }
+  $('hint').innerHTML = (document.hasFocus() ? '' : '<span class="focus">Click the page to use the keys</span>') +
+    `<span>Hold <kbd>B</kbd> to see ${VERS.length > 2 ? 'the other' : 'Before'} · <kbd>1</kbd>–<kbd>${VERS.length}</kbd> pick · <kbd>←</kbd><kbd>→</kbd> screen</span>`;
+}
+// shot images: s.v/s.c keyed by version key (options page); s.vb/s.va/s.cb/s.ca (final, from build-demo.py)
+const src = (s, kind, k) => s[kind] ? s[kind][k] : s[kind + (k === 'before' ? 'b' : 'a')];
+const shown = () => S.peek ? (S.v ? 0 : S.last) : S.v;
+
+function buildFix() {
+  const f = FIXES[S.fix];
+  $('devs').innerHTML = f.shots.map((d, i) => `<button class="dv" data-i="${i}">${esc(d.dev)}</button>`).join('');
+  $('devs').hidden = f.shots.length < 2;
+  const hasCrop = f.shots.some(s => src(s, 'c', 'before'));
+  $('cmp').hidden = !hasCrop;
+  $('cmp').style.setProperty('--n', VERS.length);
+  $('guide').hidden = !f.steps;
+  if (f.steps) { $('steps').innerHTML = f.steps.map(x => `<li>${x}</li>`).join(''); $('where').textContent = f.where ?? ''; }
+  $('codep').hidden = !f.code; $('code').innerHTML = f.code ?? '';
+  const rail = !$('codep').hidden || !$('checkedp').hidden;
+  $('rail').hidden = !rail; $('main').classList.toggle('solo', !rail);
+  buildDev();
+}
+function buildDev() {
+  const f = FIXES[S.fix], s = f.shots[S.dev];
+  $('cmp').innerHTML = VERS.map((v, i) => `<button class="col" data-i="${i}"><span class="head"><b>${esc(v.label ?? (i ? 'After' : 'Before'))}</b>${v.rec ? '<span class="pill rec">Recommended</span>' : ''}</span>` +
+    (v.desc ? `<span class="desc">${v.desc}</span>` : '') +
+    `<span class="crop"><img src="${src(s, 'c', v.key) ?? ''}" alt="Close-up, ${esc(v.label ?? v.key)}, ${esc(s.dev)}" style="width:${Math.min(s.cw ?? 560, 1000)}px"></span></button>`).join('');
+  const imgs = VERS.map((v, i) => `<img data-i="${i}" src="${src(s, 'v', v.key)}" alt="${esc(v.label ?? v.key)}: ${esc(f.card)} on ${esc(s.dev)}">`).join('');
+  const width = { phone: s.w + 20, landscape: Math.min(s.w, 760) + 32, tablet: 420, laptop: null }[s.kind];
+  $('device').style.width = width ? width + 'px' : '100%';
+  $('device').style.maxWidth = '100%';
+  $('device').innerHTML = s.kind === 'laptop'
+    ? `<div class="device laptop"><div class="lid stack">${imgs}</div><div class="base"></div></div>`
+    : `<div class="device ${s.kind}"><div class="screen stack">${imgs}</div></div>`;
+  $('devname').textContent = s.dev;
+  render();
+}
+function render() {
+  const f = FIXES[S.fix], v = shown(), before = v === 0;
+  document.querySelectorAll('.sc').forEach(b => b.setAttribute('aria-pressed', +b.dataset.i === S.fix));
+  document.querySelectorAll('.dv').forEach(b => b.setAttribute('aria-pressed', +b.dataset.i === S.dev));
+  document.querySelectorAll('.col').forEach(b => b.setAttribute('aria-pressed', +b.dataset.i === v));
+  document.querySelectorAll('#device img').forEach(im => im.classList.toggle('on', +im.dataset.i === v));
+  $('tag').className = 'tag ' + (before ? 'before' : 'after'); $('tag').textContent = VERS[v].label ?? (before ? 'Before' : 'After');
+  if (f.steps) {
+    $('expect').className = 'expect ' + (before ? 'before' : 'after');
+    $('expect').innerHTML = `<div class="lbl">${before ? 'Before' : 'After'}: what you will see</div><div>${before ? f.before : f.after}</div>`;
+  }
+}
+const pick = i => { if (i < 0 || i >= VERS.length) return; if (i) S.last = i; S.v = i; S.peek = false; render(); };
+const setDev = i => { S.dev = i; buildDev(); };
+$('cmp').onclick = e => { const b = e.target.closest('.col'); if (b) pick(+b.dataset.i); };
+$('devs').onclick = e => { const b = e.target.closest('.dv'); if (b) setDev(+b.dataset.i); };
+function setFix(i) {
+  const name = FIXES[S.fix].shots[S.dev].dev;
+  S.fix = i; const j = FIXES[i].shots.findIndex(s => s.dev === name); S.dev = j < 0 ? 0 : j; buildFix();
+}
+$('scen').onclick = e => { const b = e.target.closest('.sc'); if (b) setFix(+b.dataset.i); };
+$('changes').onclick = e => {
+  const id = e.target.closest('tr')?.dataset.id?.split(' ')[0].replace(/–.*/, '');
+  const i = FIXES.findIndex(f => f.id === id);
+  if (i >= 0) { setFix(i); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+};
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input,textarea,[contenteditable]')) return;
+  const n = FIXES[S.fix].shots.length;
+  if (e.key === 'b' || e.key === 'B') { if (!e.repeat && multi) { S.peek = true; render(); } }
+  else if (e.repeat) return;
+  else if (/^[1-9]$/.test(e.key)) pick(+e.key - 1);
+  else if (e.key === 'ArrowRight' && n > 1) setDev((S.dev + 1) % n);
+  else if (e.key === 'ArrowLeft' && n > 1) setDev((S.dev + n - 1) % n);
+  else return;
+  e.preventDefault();
+});
+document.addEventListener('keyup', e => { if ((e.key === 'b' || e.key === 'B') && S.peek) { S.peek = false; render(); } });
+window.addEventListener('blur', () => { if (S.peek) { S.peek = false; render(); } hint(); });
+window.addEventListener('focus', hint);
+hint(); buildFix();
+</script>

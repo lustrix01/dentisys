@@ -1,0 +1,147 @@
+<title>__TITLE__</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: a review ledger. Summary chips filter a change list; each change shows the three versions side by side
+   (your branch | Colleague | merged), so the eye reads left to right from "today" to "proposal". */
+:root{
+  --bg:#f4f6f5; --surface:#ffffff; --sunk:#eaeeec; --line:#d6dddb; --fg:#18231f; --muted:#5b6964;
+  --ours:#55636a; --owhie:#7b3fc4; --merged:#1f7a4a;
+  --asis:#2e6b57; --asis-bg:#e2f1ea; --changed:#9a5b06; --changed-bg:#fcf0dc; --replaced:#b3263f; --replaced-bg:#fbe6ea;
+  --added:#1f5ea8; --added-bg:#e5eefa; --skipped:#5b6964; --skipped-bg:#eceff0;
+  --display:"Bricolage Grotesque",system-ui,sans-serif; --body:"Instrument Sans",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1513; --surface:#161e1b; --sunk:#1d2724; --line:#2b3733; --fg:#e3ebe8; --muted:#97a7a1;
+  --ours:#a6b3b8; --owhie:#c7a2f2; --merged:#6fd19b;
+  --asis:#7fd1ae; --asis-bg:#173229; --changed:#f0b45c; --changed-bg:#35270f; --replaced:#f48aa0; --replaced-bg:#3a1820;
+  --added:#8cbcf2; --added-bg:#162638; --skipped:#97a7a1; --skipped-bg:#222c29; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1513; --surface:#161e1b; --sunk:#1d2724; --line:#2b3733; --fg:#e3ebe8; --muted:#97a7a1;
+  --ours:#a6b3b8; --owhie:#c7a2f2; --merged:#6fd19b;
+  --asis:#7fd1ae; --asis-bg:#173229; --changed:#f0b45c; --changed-bg:#35270f; --replaced:#f48aa0; --replaced-bg:#3a1820;
+  --added:#8cbcf2; --added-bg:#162638; --skipped:#97a7a1; --skipped-bg:#222c29; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.55}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 64px;display:grid;gap:22px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0}
+h1{font-size:clamp(26px,4vw,36px);letter-spacing:-.01em}
+h2{font-size:19px}
+h3{font-size:17px}
+.lede{color:var(--muted);max-width:72ch;margin:6px 0 0}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+.sw.ours{background:var(--ours)} .sw.owhie{background:var(--owhie)} .sw.merged{background:var(--merged)}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:10px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.chip{font:600 13px var(--body);border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+.chip b{font-variant-numeric:tabular-nums}
+.chip[aria-pressed="true"]{outline:2px solid currentColor;outline-offset:-1px}
+.chip.asis{color:var(--asis)} .chip.changed{color:var(--changed)} .chip.replaced{color:var(--replaced)} .chip.added{color:var(--added)} .chip.skipped{color:var(--skipped)}
+.spacer{flex:1 1 auto}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{font:600 13px var(--body);border:0;background:var(--surface);color:var(--muted);padding:6px 12px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+button:focus-visible,a:focus-visible{outline:2px solid var(--merged);outline-offset:2px}
+.index{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+td{padding:6px 8px;border-top:1px solid var(--line);vertical-align:top}
+td.rid{font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+td.rid a{color:var(--fg)}
+.cols{columns:2 340px;column-gap:24px}
+.cols table{break-inside:avoid}
+.pill{display:inline-block;white-space:nowrap;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:700}
+.pill.asis{background:var(--asis-bg);color:var(--asis)} .pill.changed{background:var(--changed-bg);color:var(--changed)}
+.pill.replaced{background:var(--replaced-bg);color:var(--replaced)} .pill.added{background:var(--added-bg);color:var(--added)} .pill.skipped{background:var(--skipped-bg);color:var(--skipped)}
+.items{display:grid;gap:18px}
+.item{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;display:grid;gap:12px;min-width:0;scroll-margin-top:70px}
+.item-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 12px}
+.item-head .rid{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.what{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px 20px;margin:0}
+.what div{min-width:0}
+dt{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.what div:first-child dt{color:var(--owhie)} .what div:last-child dt{color:var(--merged)}
+dd{margin:2px 0 0;max-width:62ch}
+.trio{display:grid;gap:6px}
+.dev{margin:0;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:760px){.grid3{grid-template-columns:1fr}}
+.pane{margin:0;min-width:0;display:grid;gap:4px;align-content:start}
+.pane figcaption{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:6px}
+.pane figcaption::before{content:"";width:10px;height:10px;border-radius:3px}
+.pane.ours figcaption{color:var(--ours)} .pane.ours figcaption::before{background:var(--ours)}
+.pane.owhie figcaption{color:var(--owhie)} .pane.owhie figcaption::before{background:var(--owhie)}
+.pane.merged figcaption{color:var(--merged)} .pane.merged figcaption::before{background:var(--merged)}
+.shot{display:block;width:100%;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--sunk);cursor:zoom-in}
+.shot img{display:block;width:100%;height:auto;max-width:100%}
+.noshot{margin:0;font-size:13px;color:var(--muted)}
+dialog{border:0;padding:0;background:transparent;max-width:min(96vw,1500px);max-height:94vh}
+dialog::backdrop{background:rgba(8,12,11,.78)}
+dialog img{display:block;max-width:100%;max-height:88vh;height:auto;border-radius:8px;background:var(--surface)}
+dialog .close{position:absolute;top:8px;right:8px;font:600 13px var(--body);border:0;border-radius:8px;padding:6px 10px;background:var(--surface);color:var(--fg);cursor:pointer}
+@media (prefers-reduced-motion:no-preference){.item{transition:opacity .15s}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>__TITLE__</h1>
+    <p class="lede">__LEDE__</p>
+  </header>
+  <div class="legend" aria-label="Column colours">
+    <span><i class="sw ours"></i>__L_OURS__</span>
+    <span><i class="sw owhie"></i>__L_THEIRS__</span>
+    <span><i class="sw merged"></i>__L_MERGED__</span>
+  </div>
+
+  <div class="bar" role="toolbar" aria-label="Filter and view">
+    <!--SUMMARY-->
+    <span class="spacer"></span>
+    <div class="seg" role="group" aria-label="Image size">
+      <button type="button" id="v-crop" aria-pressed="true">Close-ups</button>
+      <button type="button" id="v-vp" aria-pressed="false">Full screens</button>
+    </div>
+  </div>
+
+  <section class="index" aria-labelledby="idx-h">
+    <h2 id="idx-h">All changes</h2>
+    <div class="cols tablewrap"><table><tbody><!--ROWS--></tbody></table></div>
+  </section>
+
+  <section class="items" aria-label="Changes"><!--ITEMS--></section>
+</div>
+
+<dialog id="zoom" aria-label="Enlarged screenshot"><button class="close" type="button" id="zoom-close">Close</button><img id="zoom-img" alt=""></dialog>
+
+<script>
+(() => {
+  const chips = [...document.querySelectorAll('.chip')];
+  const filtered = () => chips.filter(c => c.getAttribute('aria-pressed') === 'true').map(c => c.dataset.filter);
+  const apply = () => {
+    const on = filtered();
+    document.querySelectorAll('[data-status]').forEach(el => { el.hidden = on.length > 0 && !on.includes(el.dataset.status); });
+  };
+  chips.forEach(c => c.addEventListener('click', () => { c.setAttribute('aria-pressed', c.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); apply(); }));
+  const setView = v => {
+    document.getElementById('v-crop').setAttribute('aria-pressed', v === 'crop');
+    document.getElementById('v-vp').setAttribute('aria-pressed', v === 'vp');
+    document.querySelectorAll('.shot img').forEach(img => {
+      img.src = img.dataset[v]; img.width = +img.dataset[v === 'crop' ? 'cw' : 'vw']; img.height = +img.dataset[v === 'crop' ? 'ch' : 'vh'];
+    });
+    try { localStorage.setItem('cmp-view', v); } catch (e) {}
+  };
+  document.getElementById('v-crop').addEventListener('click', () => setView('crop'));
+  document.getElementById('v-vp').addEventListener('click', () => setView('vp'));
+  let start = 'crop';
+  try { if (localStorage.getItem('cmp-view') === 'vp') start = 'vp'; } catch (e) {}
+  setView(start); // images get their src here, so an embedded image is stored once
+  const dlg = document.getElementById('zoom'), zi = document.getElementById('zoom-img');
+  document.querySelectorAll('.shot').forEach(b => b.addEventListener('click', () => {
+    const img = b.querySelector('img'); zi.src = img.src; zi.alt = img.alt; dlg.showModal();
+  }));
+  document.getElementById('zoom-close').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+})();
+</script>

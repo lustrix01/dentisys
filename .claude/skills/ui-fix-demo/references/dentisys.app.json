@@ -1,0 +1,13 @@
+{
+  "_note": "Seeded local dev accounts only (docs/demo-accounts.md, audit/common.ts). Never put demo-site or production passwords here.",
+  "baseURL": "http://localhost:5173",
+  "login": { "path": "/login", "email": "input[inputmode=\"email\"]", "password": "input[type=\"password\"]", "submit": "button[type=\"submit\"]", "notAfter": "^/(login|2fa|mfa)" },
+  "accounts": {
+    "admin": ["admin@bicol-u.edu.ph", "Admin123!"],
+    "faculty": ["faculty@bicol-u.edu.ph", "Faculty123!"],
+    "secretary": ["secretary@bicol-u.edu.ph", "Secretary123!"],
+    "student": ["student@bicol-u.edu.ph", "Student123!"]
+  },
+  "darkClass": "dark",
+  "settleMs": 900
+}
