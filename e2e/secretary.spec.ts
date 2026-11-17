@@ -111,6 +111,7 @@ test.describe('Class Secretary Module E2E Tests', () => {
     await page.click('a[href="/secretary/audit-trail"]');
     await expect(page).toHaveURL('/secretary/audit-trail');
     await expect(page.locator('body')).toContainText(/Audit Trail|Activity|Log/i);
+    await expect(page.getByText('No activity recorded yet.').first()).toBeVisible(); // the list loaded and rendered
   });
 
   test('secretary can view Profile and Settings', async ({ page }) => {

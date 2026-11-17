@@ -328,6 +328,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.locator('[aria-label="Account view"] button').nth(1).click(); await page.click('a[href="/superadmin/audit-trail"]');
     await expect(page).toHaveURL('/superadmin/audit-trail');
     await expect(page.locator('body')).toContainText(/Audit Trail|Activity Log/i);
+    await expect(page.getByText('No activity recorded yet.').first()).toBeVisible(); // the list loaded and rendered
   });
 
   test('Dean view has the 8 setup/watch pages; Superadmin has 4; old paths redirect', async ({ page }) => {
