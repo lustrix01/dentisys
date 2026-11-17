@@ -638,6 +638,30 @@ function handle_admin_biometric_revoke(): void
     }
 }
 
+/** X31: whole-term attendance of any class for the Dean's attendance sheet. */
+function handle_admin_attendance_sheet(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        admin_verify_auth($pdo, $config);
+        $csId = (int) ($_GET['csId'] ?? 0);
+        if ($csId <= 0) {
+            safe_error_response('csId is required.', 422);
+            return;
+        }
+        $sheet = attendance_sheet_payload($pdo, $csId, null);
+        if ($sheet === null) {
+            safe_error_response('Class section was not found.', 404);
+            return;
+        }
+        json_response(['status' => 'ok', 'sheet' => $sheet], 200);
+    } catch (\Throwable $e) {
+        error_log('Admin attendance sheet error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
 function handle_admin_reports_summary(): void
 {
     try {
@@ -734,6 +758,7 @@ function handle_admin_reports_summary(): void
                 $grouped[$id] = [
                     'id' => $id, 'studentId' => $s['student_number'],
                     'name' => trim($s['first_name'] . ' ' . ($s['middle_name'] ? $s['middle_name'] . ' ' : '') . $s['last_name']),
+                    'firstName' => $s['first_name'], 'middleName' => $s['middle_name'], 'lastName' => $s['last_name'],
                     'email' => $s['bu_email'] ?? '', 'yearLevel' => $s['year_level'] !== null ? (int) $s['year_level'] : null,
                     'status' => $s['retention_state'] ?? strtolower($s['status'] ?? 'active'),
                     'overallGWA' => null, 'faceEnrolled' => (bool) ($s['face_enrolled'] ?? false),
@@ -768,6 +793,8 @@ function handle_admin_reports_summary(): void
                 $grouped[$id]['enrolledSubjects'][] = [
                     'enrollmentId' => (string) $enrollmentId,
                     'remedialProgression' => $progression,
+                    'retentionState' => $s['retention_state'],
+                    'className' => $s['cs_name'],
                     'code' => $s['course_code'], 'name' => $s['course_name'],
                     'units' => (float) $s['units'], 'grade' => $s['final_gwa'] !== null ? (float) $s['final_gwa'] : null,
                     'percentage' => $s['final_percentage'] !== null ? (float) $s['final_percentage'] : null,

@@ -33,7 +33,7 @@ import {
   Legend
 } from 'recharts';
 import { flushSync } from 'react-dom';
-import { PrintStyle, PrintHeader, PrintCaption, PrintLegend, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
+import { PrintStyle, PrintHeader, PrintCaption, PrintLegend, PrintSignatures, PrintExportTable, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Student, AttendanceRecord, Assessment, AssessmentScore } from '../../types';
@@ -50,6 +50,7 @@ import {
   getFacultyGradingConfigApi,
   getFacultyRetentionApi,
   getFacultyAttendanceWorksheetApi,
+  getFacultyAttendanceSheetApi,
   previewFacultyGradesApi,
   isPeriodComputeResult,
   ApiError,
@@ -64,6 +65,9 @@ import { downloadXlsx, type Cell as XlsxCell, type XlsxSheet } from '../../utils
 import { showFeedback } from '../../components/FeedbackCenter';
 import { assessmentMatrixCells, assessmentMatrixGroups, buildAssessmentScoresSheet, buildReportSheet, dayToDate, termLine, watchlistStatusText } from '../../utils/reportWorkbook';
 import { IBU_SUMMARY_COLUMNS, ibuGradeSummaryRow, savedGradeResult, sheetName } from '../../utils/officialGradeSheetExport';
+import { buildAttendanceSheetTable, type AttendanceSheetTable } from '../../utils/attendanceSheet';
+import { ExportPair } from '../../components/ExportMenu';
+import { buildRemedialSummaryTable, type RemedialSummaryTable } from '../../utils/remedialSummary';
 
 type ReportsBundleSnapshot = {
   retention: FacultyRetentionRecord[];
@@ -657,6 +661,52 @@ export const Reports: React.FC = () => {
     })]);
   };
 
+  // X31 / X32: the attendance sheet (one class, whole term) and the remedial summary; Excel and PDF share one table.
+  const [sheetPrint, setSheetPrint] = useState<{ table: AttendanceSheetTable | RemedialSummaryTable; leftColumns: number } | null>(null);
+  const exportSheet = async (kind: 'attendance' | 'remedial', mode: 'excel' | 'pdf') => {
+    try {
+      let table: AttendanceSheetTable | RemedialSummaryTable;
+      if (kind === 'attendance') {
+        table = buildAttendanceSheetTable((await getFacultyAttendanceSheetApi(Number(selectedClassId))).sheet);
+      } else {
+        table = buildRemedialSummaryTable({
+          schoolYear: selectedSchoolYear === 'all' ? 'All school years' : selectedSchoolYear,
+          filter: 'All assigned classes',
+          rows: retentionRecords
+            .filter(record => selectedSchoolYear === 'all' || !record.schoolYear || record.schoolYear === selectedSchoolYear)
+            .map(record => ({
+              studentNumber: record.studentNumber,
+              studentName: nameByNumber(record.studentNumber ?? undefined, record.studentName ?? ''),
+              courseCode: record.subjectCode,
+              section: record.className,
+              finalGrade: record.gwa,
+              state: record.state,
+              progression: record.remedialProgression,
+            })),
+        });
+      }
+      if (mode === 'excel') {
+        await downloadXlsx(table.fileName, [buildReportSheet({
+          sheet: kind === 'attendance' ? 'Attendance Sheet' : 'Remedial Summary', title: table.title, filter: table.filter, term: table.term,
+          by: user?.display_name ?? '', columns: table.columns, rows: table.rows,
+        })]);
+        return;
+      }
+      const restoreAfterPrint = () => {
+        setSheetPrint(null);
+        window.removeEventListener('afterprint', restoreAfterPrint);
+      };
+      window.addEventListener('afterprint', restoreAfterPrint);
+      flushSync(() => {
+        setPrintedAt(new Date());
+        setSheetPrint({ table, leftColumns: kind === 'attendance' ? 2 : 4 });
+      });
+      window.print();
+    } catch (err) {
+      showFeedback(err instanceof Error ? err.message : 'Could not export the report.', 'error');
+    }
+  };
+
   // Recharts Stats: course grade distribution for the selected course and
   // section. A grade of 2.50 or worse triggers remedial (UI-003).
   const gradeHistogramData = (() => {
@@ -1245,27 +1295,16 @@ export const Reports: React.FC = () => {
         <Card className="p-0 overflow-hidden no-print">
           <div className="px-5 py-4 border-b dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex flex-wrap gap-2 justify-between items-center">
             <h3 className="flex-1 basis-40 font-bold text-sm text-slate-800 dark:text-slate-200">Retention Status Reports</h3>
-            <div className="flex shrink-0 items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => handleExportExcel('retention')}
-                className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
-                title="Export retention report as Excel spreadsheet"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Export Excel</span>
-              </button>
-              <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
-              <button
-                type="button"
-                onClick={handlePrint}
-                className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer"
-                title="Export or print retention report as PDF document"
-              >
-                <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-                <span>Export PDF</span>
-              </button>
-            </div>
+            <ExportPair
+              excelItems={[
+                { label: 'Retention list', onSelect: () => handleExportExcel('retention') },
+                { label: 'Remedial summary', onSelect: () => exportSheet('remedial', 'excel'), disabledReason: retentionUnavailable ? 'Retention data is not available yet' : undefined },
+              ]}
+              pdfItems={[
+                { label: 'Retention list', onSelect: handlePrint },
+                { label: 'Remedial summary', onSelect: () => exportSheet('remedial', 'pdf'), disabledReason: retentionUnavailable ? 'Retention data is not available yet' : undefined },
+              ]}
+            />
           </div>
 
           <div className="table-pin table-pin-first">
@@ -1334,7 +1373,7 @@ export const Reports: React.FC = () => {
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Authoritative Attendance Register</h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{selectedClass?.courseCode || 'Class unavailable'} · {formatShortDate(attendanceDate)}</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 type="date"
                 value={attendanceDate}
@@ -1355,29 +1394,16 @@ export const Reports: React.FC = () => {
                   })}
                 </select>
               )}
-              <div className="flex shrink-0 items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => handleExportExcel('attendance')}
-                  disabled={attendanceRecords.length === 0}
-                  className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors disabled:opacity-40 cursor-pointer"
-                  title="Export attendance register as Excel spreadsheet"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span>Export Excel</span>
-                </button>
-                <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
-                <button
-                  type="button"
-                  onClick={handlePrint}
-                  disabled={attendanceRecords.length === 0}
-                  className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors disabled:opacity-40 cursor-pointer"
-                  title="Export or print attendance register as PDF document"
-                >
-                  <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-                  <span>Export PDF</span>
-                </button>
-              </div>
+              <ExportPair
+                excelItems={[
+                  { label: 'Attendance register', onSelect: () => handleExportExcel('attendance'), disabledReason: attendanceRecords.length === 0 ? 'No attendance records to export' : undefined },
+                  { label: 'Attendance sheet', onSelect: () => exportSheet('attendance', 'excel'), disabledReason: !selectedClassId ? 'Select one class first' : undefined },
+                ]}
+                pdfItems={[
+                  { label: 'Attendance register', onSelect: handlePrint, disabledReason: attendanceRecords.length === 0 ? 'No attendance records to export' : undefined },
+                  { label: 'Attendance sheet', onSelect: () => exportSheet('attendance', 'pdf'), disabledReason: !selectedClassId ? 'Select one class first' : undefined },
+                ]}
+              />
             </div>
           </div>
 
@@ -1536,6 +1562,9 @@ export const Reports: React.FC = () => {
           PRINT LAYOUT SHEETS PRINT AREA
       ---------------------------------------------------- */}
       {(() => {
+        if (sheetPrint) {
+          return <PrintExportTable table={sheetPrint.table} leftColumns={sheetPrint.leftColumns} generated={formatPrintedAt(printedAt ?? new Date())} faculty={user?.display_name} />;
+        }
         if (reportsBundlePrint && selectedClass) {
           const bundle = buildReportsBundleTables(reportsBundlePrint);
           const generated = formatPrintedAt(printedAt ?? new Date());

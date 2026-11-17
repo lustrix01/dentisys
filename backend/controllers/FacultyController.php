@@ -5598,6 +5598,30 @@ function handle_faculty_attendance_get(): void
     }
 }
 
+/** X31: whole-term attendance of one of the Faculty's own classes. */
+function handle_faculty_attendance_sheet_get(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+        $csId = faculty_attendance_positive_int(faculty_attendance_query_value(is_array($_GET ?? null) ? $_GET : [], 'csId'));
+        if ($csId === null) {
+            faculty_attendance_error_response('csId is required.', 422, 'VALIDATION_ERROR');
+            return;
+        }
+        $sheet = attendance_sheet_payload($pdo, $csId, (int) $authCtx['user_id']);
+        if ($sheet === null) {
+            faculty_attendance_error_response('Class section is not assigned to this Faculty member.', 403, 'FACULTY_SECTION_ACCESS_DENIED');
+            return;
+        }
+        json_response(['status' => 'ok', 'sheet' => $sheet], 200);
+    } catch (\Throwable $e) {
+        error_log('Faculty attendance sheet error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
 function handle_faculty_attendance_session_create(): void
 {
     $context = [

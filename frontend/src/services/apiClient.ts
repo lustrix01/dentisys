@@ -1218,6 +1218,36 @@ export interface FacultyAttendanceWorksheetResponse {
   worksheet: FacultyAttendanceWorksheet;
 }
 
+/** X31: a class's whole-term attendance for the sheet export. */
+export interface AttendanceSheetData {
+  class: {
+    csId: string;
+    courseCode: string;
+    courseName: string;
+    sectionName: string;
+    block?: string | null;
+    schoolYear: string | null;
+    semester: string | null;
+  };
+  sessions: { id: string; date: string; openingTime: string | null }[];
+  students: {
+    enrollmentId: string;
+    studentNumber: string;
+    lastName: string;
+    firstName: string;
+    middleName: string | null;
+  }[];
+  records: { enrollmentId: string; sessionId: string; status: string }[];
+}
+
+export function getFacultyAttendanceSheetApi(csId: number): Promise<{ status: string; sheet: AttendanceSheetData }> {
+  return request('GET', `/faculty/attendance/sheet?csId=${encodeURIComponent(String(csId))}`);
+}
+
+export function getAdminAttendanceSheetApi(csId: number): Promise<{ status: string; sheet: AttendanceSheetData }> {
+  return request('GET', `/admin/reports/attendance-sheet?csId=${encodeURIComponent(String(csId))}`);
+}
+
 export interface FacultyAttendanceInitialEntryPayload {
   sessionId?: number;
   csId: number;

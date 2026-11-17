@@ -107,7 +107,7 @@ export interface ClassListInput {
   students: ClassListStudent[];
 }
 
-const semesterOf = (value: string): { title: string; file: string } => {
+export const semesterOf = (value: string): { title: string; file: string } => {
   const upper = value.toUpperCase();
   if (upper.includes('2ND') || upper.includes('SECOND')) return { title: '2ND SEMESTER', file: '2nd' };
   if (upper.includes('SUMMER')) return { title: 'SUMMER', file: 'Summer' };

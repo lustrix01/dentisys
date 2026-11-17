@@ -109,3 +109,41 @@ export const PrintSignatures: React.FC<{ faculty?: string; seal?: boolean; role?
     </div>
   </div>
 );
+
+/** One export table (attendance sheet, remedial summary) as a print sheet; empty values print as a dash (X31, X32). */
+export const PrintExportTable: React.FC<{
+  table: { title: string; filter: string; term: string; columns: { header: string; width: number; format?: string }[]; rows: unknown[][] };
+  generated: string;
+  faculty?: string;
+  /** Leading columns that print left-aligned. */
+  leftColumns: number;
+  signatureRole?: string;
+  seal?: boolean;
+}> = ({ table, generated, faculty, leftColumns, signatureRole, seal }) => {
+  const total = table.columns.reduce((sum, c) => sum + c.width, 0);
+  const text = (value: unknown, format?: string) => {
+    if (value === null || value === undefined || value === '') return '—';
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    if (typeof value === 'number' && format === '0.00') return value.toFixed(2);
+    return String(value);
+  };
+  return (
+    <div className="print-only hidden bg-white text-slate-900 font-sans ps">
+      <PrintStyle title={table.title} running={`${table.title} · ${table.filter} · ${table.term}`} generated={generated} />
+      <PrintHeader title={table.title} sub={table.filter} rows={[['Term', table.term], ['Rows', String(table.rows.length)], ['Date', generated]]} />
+      <table>
+        <colgroup>{table.columns.map((c, i) => <col key={i} style={{ width: `${(c.width / total) * 100}%` }} />)}</colgroup>
+        <thead><tr>{table.columns.map((c, i) => <th key={i} className={i < leftColumns ? 'l' : ''}>{c.header}</th>)}</tr></thead>
+        <tbody>
+          {table.rows.map((row, r) => (
+            <tr key={r}>{table.columns.map((c, i) => {
+              const value = text(row[i], c.format);
+              return <td key={i} className={`${c.header === 'Student No.' ? 'id' : i < leftColumns ? 'l' : ''} ${printCellClass(value)}`.trim()}>{value}</td>;
+            })}</tr>
+          ))}
+        </tbody>
+      </table>
+      <PrintSignatures faculty={faculty} role={signatureRole} seal={seal} />
+    </div>
+  );
+};

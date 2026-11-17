@@ -73,6 +73,7 @@ const GET_ONLY_API_PATHS = new Set([
   '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/attendance/sessions/upcoming', '/api/student/biometric/profile',
   '/api/student/profile', '/api/student/join-requests',
   '/api/faculty/classes/join', '/api/faculty/classes/join/requests', '/api/faculty/classes/auto-sessions',
+  '/api/faculty/attendance/sheet', '/api/admin/reports/attendance-sheet',
 ]);
 
 const MULTI_METHOD_API_PATHS = new Set([
@@ -81,6 +82,7 @@ const MULTI_METHOD_API_PATHS = new Set([
   '/api/secretary/profile', '/api/secretary/settings', '/api/faculty/scores', '/api/faculty/profile',
   '/api/faculty/settings', '/api/faculty/classes',
   '/api/notifications', '/api/faculty/excused-requests', '/api/secretary/excused-requests',
+  '/api/faculty/attendance/sheet', '/api/admin/reports/attendance-sheet',
 ]);
 
 function isKnownApiPath(pathname: string): boolean {
@@ -165,6 +167,9 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname.endsWith('/faculty/classes')) return { status: 'ok', classes: [] };
   if (pathname.endsWith('/faculty/activity') || pathname.endsWith('/secretary/activity') || pathname.endsWith('/admin/audit-logs')) return { status: 'ok', entries: [], total: 0, page: 1, pageSize: 50, areas: [] };
   if (pathname.endsWith('/faculty/attendance-activity')) return { status: 'ok', activity: [] };
+  if (pathname === '/api/faculty/attendance/sheet' || pathname === '/api/admin/reports/attendance-sheet') {
+    return { status: 'ok', sheet: { class: { csId: '1', courseCode: 'CLIN401', courseName: 'Clinical Dentistry I', sectionName: 'CLIN401-A', schoolYear: '2026-2027', semester: '1st Semester' }, sessions: [], students: [], records: [] } };
+  }
   if (pathname.endsWith('/excused-requests')) return { status: 'ok', requests: [] };
   if (pathname === '/api/faculty/grading-config') {
     if (method === 'GET') {

@@ -16,6 +16,9 @@ export interface EnrolledSubject {
   hasRemedial: boolean;
   classId?: string;
   enrollmentId?: string;
+  /** Dean summary: the enrollment's retention state and class section name (X32). */
+  retentionState?: string | null;
+  className?: string | null;
 }
 
 export interface RemedialExam {

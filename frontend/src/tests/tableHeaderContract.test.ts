@@ -16,6 +16,7 @@ const printExempt: Record<string, number> = {
   'faculty/GradeComputation.tsx': 1,
   'faculty/Reports.tsx': 3,
   'components/AuditTrailPage.tsx': 1,
+  'components/PrintSheet.tsx': 1,
 };
 
 const walk = (dir: string): string[] =>

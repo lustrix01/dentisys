@@ -25,7 +25,8 @@ import { STANDING_LABELS, classStanding, pageStanding } from './deanStanding';
 
 type ReportTab = 'students' | 'retention' | 'attendance';
 
-import { getAdminReportsSummaryApi, getAdminSettingsApi, revokeStudentBiometricApi } from '../../services/apiClient';
+import { getAdminReportsSummaryApi, getAdminAttendanceSheetApi, getAdminSettingsApi, revokeStudentBiometricApi } from '../../services/apiClient';
+import { ExportPair } from '../../components/ExportMenu';
 import { Modal } from '../../components/Modal';
 import Tabs from '../../components/Tabs';
 import { showFeedback } from '../../components/FeedbackCenter';
@@ -34,7 +35,9 @@ import GradeValue from '../../components/GradeValue';
 import { flushSync } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { apiFieldErrors } from '../../utils/apiFieldErrors';
-import { PrintStyle, PrintHeader, PrintCaption, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
+import { PrintStyle, PrintHeader, PrintCaption, PrintSignatures, PrintExportTable, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
+import { buildAttendanceSheetTable, type AttendanceSheetTable } from '../../utils/attendanceSheet';
+import { buildRemedialSummaryTable, type RemedialSummaryTable } from '../../utils/remedialSummary';
 
 // Export names are LAST, First Middle, ordered by last name (attendance keeps the newest date first).
 const nameKey = (s?: { name: string; lastName?: string }) => (s?.lastName?.trim() || s?.name || '').toLowerCase();
@@ -339,6 +342,53 @@ export const DeanReports: React.FC = () => {
     window.print();
   };
 
+  // X31 / X32: the attendance sheet (one class, whole term) and the remedial summary; Excel and PDF share one table.
+  const [sheetPrint, setSheetPrint] = useState<{ table: AttendanceSheetTable | RemedialSummaryTable; leftColumns: number } | null>(null);
+  const exportSheet = async (kind: 'attendance' | 'remedial', mode: 'excel' | 'pdf') => {
+    try {
+      let table: AttendanceSheetTable | RemedialSummaryTable;
+      if (kind === 'attendance') {
+        if (!selectedClassId) return;
+        table = buildAttendanceSheetTable((await getAdminAttendanceSheetApi(Number(selectedClassId))).sheet);
+      } else {
+        table = buildRemedialSummaryTable({
+          schoolYear: schoolYear === 'all' ? 'All school years' : (schoolYear === 'current' ? (currentSchoolYear ?? '') : schoolYear),
+          filter: 'All classes',
+          rows: students.flatMap((s: any) => (s.enrolledSubjects ?? []).map((sub: any) => ({
+            studentNumber: s.studentId,
+            studentName: sheetName(s),
+            courseCode: sub.code,
+            section: sub.className ?? null,
+            finalGrade: sub.grade ?? null,
+            state: sub.retentionState ?? null,
+            progression: sub.remedialProgression ?? null,
+          }))),
+        });
+      }
+      if (mode === 'excel') {
+        recordAudit({ action: 'Exported report', module: 'Reports & Analytics', description: `Exported ${kind === 'attendance' ? 'attendance sheet' : 'remedial summary'} as Excel.`, status: 'Success' });
+        await downloadXlsx(table.fileName, [buildReportSheet({
+          sheet: kind === 'attendance' ? 'Attendance Sheet' : 'Remedial Summary', title: table.title, filter: table.filter, term: table.term,
+          by: user?.display_name ?? '', columns: table.columns, rows: table.rows,
+        })]);
+        return;
+      }
+      recordAudit({ action: 'Generated report PDF', module: 'Reports & Analytics', description: `Opened ${kind === 'attendance' ? 'attendance sheet' : 'remedial summary'} for PDF printing.`, status: 'Success' });
+      const restoreAfterPrint = () => {
+        setSheetPrint(null);
+        window.removeEventListener('afterprint', restoreAfterPrint);
+      };
+      window.addEventListener('afterprint', restoreAfterPrint);
+      flushSync(() => {
+        setPrintedAt(new Date());
+        setSheetPrint({ table, leftColumns: kind === 'attendance' ? 2 : 4 });
+      });
+      window.print();
+    } catch (err) {
+      showFeedback(err instanceof Error ? err.message : 'Could not export the report.', 'error');
+    }
+  };
+
   // ── Status badge ─────────────────────────────────────────
   const StatusBadge = ({ status }: { status: string }) => {
     const map: Record<string, string> = {
@@ -357,7 +407,7 @@ export const DeanReports: React.FC = () => {
     );
   };
 
-  const exportPrintControls = (
+  const plainExportControls = (
     <div className="no-print inline-flex flex-shrink-0 items-center rounded-xl border border-slate-200/90 bg-white p-0.5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
       <button
         type="button"
@@ -378,6 +428,37 @@ export const DeanReports: React.FC = () => {
       </button>
     </div>
   );
+
+  // One report per tab keeps the plain buttons; tabs with two reports open a menu from each button.
+  const exportPrintControls = activeTab === 'retention' ? (
+    <ExportPair
+      excelIcon={Download}
+      pdfIcon={Printer}
+      pdfLabel="Print PDF"
+      excelItems={[
+        { label: 'Retention report', onSelect: handleExportExcel },
+        { label: 'Remedial summary', onSelect: () => exportSheet('remedial', 'excel') },
+      ]}
+      pdfItems={[
+        { label: 'Retention report', onSelect: handlePrint },
+        { label: 'Remedial summary', onSelect: () => exportSheet('remedial', 'pdf') },
+      ]}
+    />
+  ) : activeTab === 'attendance' ? (
+    <ExportPair
+      excelIcon={Download}
+      pdfIcon={Printer}
+      pdfLabel="Print PDF"
+      excelItems={[
+        { label: 'Attendance report', onSelect: handleExportExcel },
+        { label: 'Attendance sheet', onSelect: () => exportSheet('attendance', 'excel'), disabledReason: !selectedClassId ? 'Select one class first' : undefined },
+      ]}
+      pdfItems={[
+        { label: 'Attendance report', onSelect: handlePrint },
+        { label: 'Attendance sheet', onSelect: () => exportSheet('attendance', 'pdf'), disabledReason: !selectedClassId ? 'Select one class first' : undefined },
+      ]}
+    />
+  ) : plainExportControls;
 
   // Phones show the short label so all three tabs fit without a hidden, sideways-scrolled third tab.
   const tabs: { id: ReportTab; label: string; short: string; icon: React.ReactNode }[] = [
@@ -1457,7 +1538,8 @@ export const DeanReports: React.FC = () => {
         )}
       </div>
 
-      {(() => {
+      {sheetPrint && <PrintExportTable table={sheetPrint.table} leftColumns={sheetPrint.leftColumns} generated={formatPrintedAt(printedAt ?? new Date())} faculty={user?.display_name} signatureRole="Dean" />}
+      {!sheetPrint && (() => {
         const tabLabel = tabs.find(t => t.id === activeTab)?.label ?? '';
         const captions: Record<ReportTab, string> = {
           students: 'Student Information & Academic Standing',

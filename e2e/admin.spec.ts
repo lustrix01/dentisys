@@ -315,6 +315,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.getByRole('tab', { name: 'Retention Reports' }).click();
     downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export Excel' }).click();
+    await page.getByRole('menuitem', { name: 'Retention report' }).click();
     download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/^Retention_Report_.*\.xlsx$/);
     const retention = await readDownloadedXlsxText(download);
@@ -322,6 +323,57 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     expect(retention).toContain('CLINIC, "4A"\nSpecial');
     for (const text of ['=1+1', '+SUM(1,1)']) expect(retention).toContain(text);
     expect(retention).not.toContain('<f>');
+  });
+
+  // X31 / X32: Dean Reports export the attendance sheet of one class and the remedial summary of every class.
+  const remedialSubject = (over: Record<string, unknown>) => ({ code: 'CLIN401', name: 'Oral Surgery', grade: 3, isClinical: true, className: 'CLINIC-4A', ...over });
+  const deanSheetStudents = [
+    { ...deanReportStudents[0], name: 'Alex Example', firstName: 'Alex', lastName: 'Example', enrolledSubjects: [remedialSubject({
+      enrollmentId: '901', retentionState: 'remedial',
+      remedialProgression: { stage: 'attempt_2_pending', passedAttempt: null, legacyUnclassified: false, costRecovery: null, attempts: [
+        { attemptNumber: 1, scheduledDate: '2026-11-10', percentage: 60, outcome: 'failed', actorUserId: null, createdAt: '', updatedAt: '' },
+        { attemptNumber: 2, scheduledDate: '2026-11-24', percentage: null, outcome: 'pending', actorUserId: null, createdAt: '', updatedAt: '' },
+      ] },
+    })] },
+    { ...deanReportStudents[1], name: 'Missing Class Name', firstName: 'Missing', lastName: 'Name', enrolledSubjects: [remedialSubject({ enrollmentId: '902', grade: 1.5, retentionState: 'active' })] },
+  ];
+
+  test('Dean attendance sheet needs one class and exports the whole term as Excel', async ({ page }) => {
+    await mockDeanReportSummary(page, deanSheetStudents);
+    await page.route('**/api/admin/reports/attendance-sheet?*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sheet: {
+      class: { csId: '21', courseCode: 'CLIN401', courseName: 'Oral Surgery', sectionName: 'CLINIC-4A', schoolYear: '2026-2027', semester: '1st Semester' },
+      sessions: [{ id: '31', date: '2026-09-22', openingTime: '08:00' }],
+      students: [{ enrollmentId: '901', studentNumber: '2023-0101', lastName: 'Example', firstName: 'Alex', middleName: null }],
+      records: [{ enrollmentId: '901', sessionId: '31', status: 'late' }],
+    } }) }));
+    await page.goto('/admin/reports');
+    await page.getByRole('tab', { name: 'Attendance Reports' }).click();
+    await page.getByRole('button', { name: 'Export Excel' }).click();
+    await expect(page.getByRole('menuitem', { name: /Attendance sheet/ })).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.getByRole('menuitem', { name: /Attendance sheet/ })).toContainText('Select one class first');
+    await page.keyboard.press('Escape');
+    await openClassCard(page, 'CLINIC');
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export Excel' }).click();
+    await page.getByRole('menuitem', { name: 'Attendance sheet' }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('CLIN401_CLINIC-4A_Attendance_Sheet_2026-2027_1st.xlsx');
+    const xlsx = await readDownloadedXlsxText(download);
+    for (const text of ['ATTENDANCE SHEET', 'EXAMPLE, Alex', 'Sep 22', '100%']) expect(xlsx).toContain(text);
+  });
+
+  test('Dean remedial summary lists every class that entered remedial as Excel', async ({ page }) => {
+    await mockDeanReportSummary(page, deanSheetStudents);
+    await page.goto('/admin/reports');
+    await page.getByRole('tab', { name: 'Retention Reports' }).click();
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export Excel' }).click();
+    await page.getByRole('menuitem', { name: 'Remedial summary' }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('Remedial_Summary_2026-2027.xlsx');
+    const xlsx = await readDownloadedXlsxText(download);
+    for (const text of ['REMEDIAL SUMMARY', '2023-0101', 'EXAMPLE, Alex', 'CLINIC-4A', 'Attempt 2 pending', 'Failed']) expect(xlsx).toContain(text);
+    expect(xlsx).not.toContain('2023-0102');
   });
 
   test('admin can navigate to Audit Trail page', async ({ page }) => {

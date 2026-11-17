@@ -1255,6 +1255,56 @@ expect_same(['rejected', 'Student checked in by face'], array_slice(array_values
 $reqLastRow = array_values(array_filter($reqLastListBody['requests'] ?? [], static fn(array $row): bool => $row['id'] === $reqFBody['requestId']));
 expect_same(['rejected', 'late', 'Student checked in by face'], [$reqLastRow[0]['status'] ?? null, $reqLastRow[0]['requestedStatus'] ?? null, $reqLastRow[0]['decisionNote'] ?? null], 'The Secretary list shows the requested status and the decision note');
 
+// X31 attendance sheet: whole-term data of one class for Faculty (own class only) and Dean (any class); revoked sessions never appear.
+$sheetEnrollment = $pdo->prepare('SELECT enrollment_id FROM enrollments WHERE student_id = ? AND cs_id = ?');
+$sheetEnrollment->execute([$reqStudentA, $secretarySessionClassId]);
+$sheetEnrollmentA = (string) $sheetEnrollment->fetchColumn();
+$sheetEnrollment->execute([$reqStudentB, $secretarySessionClassId]);
+$sheetEnrollmentB = (string) $sheetEnrollment->fetchColumn();
+$sheetEnrollment->execute([$reqStudentE, $secretarySessionClassId]);
+$pdo->prepare("INSERT INTO attendance_records (enrollment_id, attendance_session_id, session_date, session_code, status, verification_method)
+               SELECT ?, session_id, session_date, session_code, 'absent', 'integration_fixture' FROM attendance_sessions WHERE session_id = ?")
+    ->execute([(int) $sheetEnrollment->fetchColumn(), $reqLiveSession]);
+$sheetPath = '/api/faculty/attendance/sheet?csId=' . $secretarySessionClassId;
+[$sheetFacultyStatus, $sheetFacultyBody] = integration_http_get_json($sheetPath, $facultyActivityAccessToken);
+expect_same(200, $sheetFacultyStatus, 'Faculty read the attendance sheet of their own class');
+$sheet = $sheetFacultyBody['sheet'] ?? [];
+expect_same((string) $secretarySessionClassId, $sheet['class']['csId'] ?? null, 'The attendance sheet names its class');
+$sheetSessionIds = array_column($sheet['sessions'] ?? [], 'id');
+expect_true(in_array((string) $reqSession, $sheetSessionIds, true), 'The attendance sheet lists the class sessions');
+expect_true(!in_array((string) $reqLiveSession, $sheetSessionIds, true), 'The attendance sheet leaves out revoked sessions');
+$sheetDates = array_column($sheet['sessions'] ?? [], 'date');
+$sortedDates = $sheetDates;
+sort($sortedDates);
+expect_same($sortedDates, $sheetDates, 'The attendance sheet sessions are in date order');
+$sheetStatusOf = static function (array $sheet, string $enrollmentId, int $sessionId): ?string {
+    foreach ($sheet['records'] ?? [] as $record) {
+        if ($record['enrollmentId'] === $enrollmentId && $record['sessionId'] === (string) $sessionId) {
+            return $record['status'];
+        }
+    }
+    return null;
+};
+expect_same(['excused', 'late'], [$sheetStatusOf($sheet, $sheetEnrollmentA, $reqSession), $sheetStatusOf($sheet, $sheetEnrollmentB, $reqSession)], 'The attendance sheet records match the saved attendance');
+expect_true(!in_array((string) $reqLiveSession, array_column($sheet['records'] ?? [], 'sessionId'), true), 'The attendance sheet carries no record of a revoked session');
+expect_true(in_array($sheetEnrollmentA, array_column($sheet['students'] ?? [], 'enrollmentId'), true), 'The attendance sheet lists the enrolled students');
+
+$pdo->prepare('UPDATE class_sections SET instructor_user_id = ? WHERE cs_id = ?')->execute([(int) $reqOwner['secretary_user_id'], $secretarySessionClassId]);
+[$sheetOtherFacultyStatus] = integration_http_get_json($sheetPath, $facultyActivityAccessToken);
+$pdo->prepare('UPDATE class_sections SET instructor_user_id = ? WHERE cs_id = ?')->execute([(int) $reqOwner['instructor_user_id'], $secretarySessionClassId]);
+expect_same(403, $sheetOtherFacultyStatus, 'Faculty cannot read the attendance sheet of a class of another Faculty member');
+[$sheetNoClassStatus] = integration_http_get_json('/api/faculty/attendance/sheet', $facultyActivityAccessToken);
+expect_same(422, $sheetNoClassStatus, 'The attendance sheet needs a class id');
+
+$deanSheetPath = '/api/admin/reports/attendance-sheet?csId=' . $secretarySessionClassId;
+[$sheetDeanStatus, $sheetDeanBody] = integration_http_get_json($deanSheetPath, $adminAccessToken);
+expect_same(200, $sheetDeanStatus, 'The Dean read the attendance sheet of any class');
+expect_same($sheet, $sheetDeanBody['sheet'] ?? null, 'The Dean and Faculty attendance sheets are the same data');
+[$sheetDeanMissingStatus] = integration_http_get_json('/api/admin/reports/attendance-sheet?csId=999999', $adminAccessToken);
+expect_same(404, $sheetDeanMissingStatus, 'The Dean attendance sheet of an unknown class is not found');
+[$sheetSecretaryStatus] = integration_http_get_json($deanSheetPath, $secretaryAccessToken);
+expect_same(403, $sheetSecretaryStatus, 'The Secretary cannot read the Dean attendance sheet');
+
 $originalAdminGradingDefaultsJson = (string) $pdo->query(
     "SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults'"
 )->fetchColumn();
@@ -1810,6 +1860,9 @@ expect_same($facultyAccountBefore, $facultyEmailStmt->fetch(PDO::FETCH_ASSOC), '
 ]);
 expect_same(200, $studentNameLoginStatus, 'Student name-change integration login succeeds');
 $studentNameAccessToken = (string) ($studentNameLoginBody['access_token'] ?? '');
+[$sheetStudentFacultyStatus] = integration_http_get_json('/api/faculty/attendance/sheet?csId=' . $secretarySessionClassId, $studentNameAccessToken);
+[$sheetStudentDeanStatus] = integration_http_get_json('/api/admin/reports/attendance-sheet?csId=' . $secretarySessionClassId, $studentNameAccessToken);
+expect_same([403, 403], [$sheetStudentFacultyStatus, $sheetStudentDeanStatus], 'A Student cannot read either attendance sheet');
 $profileNameCases = [
     'Dean' => ['/api/admin/profile', $adminAccessToken, 'admin@bicol-u.edu.ph'],
     'Faculty' => ['/api/faculty/profile', $facultyAccessToken, 'faculty@bicol-u.edu.ph'],

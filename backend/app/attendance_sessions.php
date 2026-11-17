@@ -1260,3 +1260,107 @@ function attendance_session_save_class_grace(PDO $pdo, array $config, array $aut
         ['present_grace_minutes' => $grace[0], 'late_grace_minutes' => $grace[1]]
     );
 }
+
+/**
+ * X31: one class's whole-term attendance for the sheet export. Revoked sessions
+ * are left out (ATT-001). A record saved without a session id counts toward the
+ * only session of its date. Three batched queries, no per-row queries.
+ *
+ * @return array{sessions: list<array>, students: list<array>, records: list<array>}
+ */
+function attendance_sheet_data(PDO $pdo, int $csId): array
+{
+    $sessionStmt = $pdo->prepare(
+        "SELECT session_id, session_date, opening_time
+         FROM attendance_sessions
+         WHERE cs_id = ? AND status <> 'revoked'
+         ORDER BY session_date, opening_time NULLS LAST, session_id"
+    );
+    $sessionStmt->execute([$csId]);
+    $sessions = [];
+    $sessionsByDate = [];
+    foreach ($sessionStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $sessions[] = [
+            'id' => (string) $row['session_id'],
+            'date' => $row['session_date'],
+            'openingTime' => $row['opening_time'] !== null ? substr((string) $row['opening_time'], 0, 5) : null,
+        ];
+        $sessionsByDate[$row['session_date']][] = (string) $row['session_id'];
+    }
+
+    $studentStmt = $pdo->prepare(
+        "SELECT e.enrollment_id, s.student_number, s.last_name, s.first_name, s.middle_name
+         FROM enrollments e
+         JOIN students s ON s.student_id = e.student_id
+         WHERE e.cs_id = ? AND LOWER(e.status) = 'active'
+         ORDER BY s.last_name, s.first_name, e.enrollment_id"
+    );
+    $studentStmt->execute([$csId]);
+    $students = array_map(static fn(array $row): array => [
+        'enrollmentId' => (string) $row['enrollment_id'],
+        'studentNumber' => $row['student_number'],
+        'lastName' => $row['last_name'],
+        'firstName' => $row['first_name'],
+        'middleName' => $row['middle_name'],
+    ], $studentStmt->fetchAll(PDO::FETCH_ASSOC));
+
+    $recordStmt = $pdo->prepare(
+        "SELECT r.enrollment_id, r.attendance_session_id, r.session_date, r.status
+         FROM attendance_records r
+         JOIN enrollments e ON e.enrollment_id = r.enrollment_id
+         WHERE e.cs_id = ? AND LOWER(e.status) = 'active'
+         ORDER BY r.record_id"
+    );
+    $recordStmt->execute([$csId]);
+    $validIds = array_flip(array_column($sessions, 'id'));
+    $latest = [];
+    foreach ($recordStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $sessionId = $row['attendance_session_id'] !== null ? (string) $row['attendance_session_id'] : null;
+        if ($sessionId === null) {
+            $onDate = $sessionsByDate[$row['session_date']] ?? [];
+            $sessionId = count($onDate) === 1 ? $onDate[0] : null;
+        }
+        if ($sessionId === null || !isset($validIds[$sessionId])) {
+            continue;
+        }
+        $latest[$row['enrollment_id'] . ':' . $sessionId] = [
+            'enrollmentId' => (string) $row['enrollment_id'],
+            'sessionId' => $sessionId,
+            'status' => $row['status'],
+        ];
+    }
+
+    return ['sessions' => $sessions, 'students' => $students, 'records' => array_values($latest)];
+}
+
+/** Class header and sheet data shared by the Faculty and Dean attendance-sheet routes; null when the class does not exist. */
+function attendance_sheet_payload(PDO $pdo, int $csId, ?int $instructorUserId): ?array
+{
+    $sql = "SELECT cs.cs_id, cs.cs_name, cs.block, cs.semester, cs.school_year, c.course_code, c.name AS course_name
+            FROM class_sections cs
+            JOIN courses c ON c.course_id = cs.course_id
+            WHERE cs.cs_id = ? AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')";
+    $params = [$csId];
+    if ($instructorUserId !== null) {
+        $sql .= ' AND cs.instructor_user_id = ?';
+        $params[] = $instructorUserId;
+    }
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $class = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($class)) {
+        return null;
+    }
+
+    return [
+        'class' => [
+            'csId' => (string) $class['cs_id'],
+            'courseCode' => $class['course_code'],
+            'courseName' => $class['course_name'],
+            'sectionName' => $class['cs_name'],
+            'block' => $class['block'],
+            'schoolYear' => $class['school_year'],
+            'semester' => $class['semester'],
+        ],
+    ] + attendance_sheet_data($pdo, $csId);
+}

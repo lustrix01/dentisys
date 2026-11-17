@@ -505,6 +505,8 @@ Grade sheets, class lists and report exports are Excel (.xlsx) files in the Dean
 
 Faculty Reports → Grades & Assessments exports a five-sheet Excel report and matching five-section PDF (the Grade Computation Full Matrix View with "Show computation" on: per assessment its score, its raw percentage (score ÷ maximum score × 100) and its Transmuted value, the effective percentage used in the grade; per category its Average % and Weighted; then grade summary, Midterm Watchlist, attendance register, and interactive analytics graphs with source data). This report bundle is separate from the import-compatible Grade Computation workbook, which keeps its official `LEC`, `LAB`, `TFG`, and `DATA` sheets. See docs/contracts/official-exports.md X28.
 
+Faculty Reports and Dean Reports also export, for one class, an attendance sheet for the whole term, and, for a school year, a remedial summary of every enrollment that entered remedial; see docs/contracts/official-exports.md X31 and X32.
+
 History: 2026-09-28 saved weights required; 2026-10-12 default banner; 2026-10-27 to 2026-10-29 Excel, student view, reports and class-list PDF; 2026-11-10 lecture-only draft moved to GRD-003. Records: docs/archive/.
 
 ---

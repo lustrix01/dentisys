@@ -4887,5 +4887,99 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       for (const header of ['Full Name', 'Status', 'Midterm', 'Tentative', 'Final', 'Completion', 'Notes']) expect(xlsx).toContain(header);
       for (const value of ['2.2', '2', '2.1', '5', '2.5', '2.8']) expect(xlsx).toContain(`<v>${value}</v>`);
     });
+
+    // X31 / X32: the attendance sheet of the selected class and the remedial summary, both from the Reports tabs.
+    const mockSheetReports = async (page: Page) => {
+      await page.route('**/api/faculty/reports/summary', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', reports: {
+        currentSchoolYear: '2026-2027', students: [
+          { id: '701', studentId: 'DENT-007', name: 'Alice Reyes', firstName: 'Alice', lastName: 'Reyes', status: 'remedial', classId: '1', schoolYear: '2026-2027', enrolledSubjects: [] },
+        ],
+        summary: { totalStudents: 1, averageGWA: 3, atRiskCount: 1, retentionPassRate: 0 },
+      } }) }));
+      await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [
+        { id: '1', csId: 1, csName: 'CLIN401-A', courseId: 101, courseCode: 'CLIN401', courseName: 'Clinical Dentistry I', semester: '1st Semester', schoolYear: '2026-2027', block: 'A' },
+      ] }) }));
+      await page.route('**/api/faculty/retention', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', retentionThreshold: 2.5, retention: [
+        { enrollmentId: '801', studentId: '701', studentNumber: 'DENT-007', studentName: 'Alice Reyes', classId: '1', className: 'CLIN401-A', subjectCode: 'CLIN401', schoolYear: '2026-2027',
+          percentage: 70, gwa: 3, state: 'remedial', remedial: null, remedialProgression: {
+            stage: 'attempt_1_pending', passedAttempt: null, legacyUnclassified: false, costRecovery: null,
+            attempts: [{ attemptNumber: 1, scheduledDate: '2026-11-20', percentage: null, outcome: 'pending', actorUserId: null, createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z' }],
+          } },
+        { enrollmentId: '802', studentId: '702', studentNumber: 'DENT-008', studentName: 'Bea Santos', classId: '1', className: 'CLIN401-A', subjectCode: 'CLIN401', schoolYear: '2026-2027',
+          percentage: 90, gwa: 1.5, state: 'active', remedial: null },
+      ] }) }));
+    };
+
+    test('Faculty Reports exports the attendance sheet of the selected class as Excel', async ({ page }) => {
+      await mockSheetReports(page);
+      let requestedCsId: string | null = null;
+      await page.route('**/api/faculty/attendance/sheet?*', route => {
+        requestedCsId = new URL(route.request().url()).searchParams.get('csId');
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sheet: {
+          class: { csId: '1', courseCode: 'CLIN401', courseName: 'Clinical Dentistry I', sectionName: 'CLIN401-A', schoolYear: '2026-2027', semester: '1st Semester' },
+          sessions: [{ id: '11', date: '2026-11-08', openingTime: '08:00' }, { id: '12', date: '2026-11-15', openingTime: '08:00' }, { id: '13', date: '2026-11-15', openingTime: '13:30' }],
+          students: [
+            { enrollmentId: '802', studentNumber: 'DENT-008', lastName: 'Santos', firstName: 'Bea', middleName: null },
+            { enrollmentId: '801', studentNumber: 'DENT-007', lastName: 'Reyes', firstName: 'Alice', middleName: 'Lim' },
+          ],
+          records: [
+            { enrollmentId: '801', sessionId: '11', status: 'present' }, { enrollmentId: '801', sessionId: '12', status: 'late' },
+            { enrollmentId: '801', sessionId: '13', status: 'absent' }, { enrollmentId: '802', sessionId: '11', status: 'excused' },
+          ],
+        } }) });
+      });
+      await page.goto('/reports');
+      await page.getByRole('tab', { name: 'Attendance Registers' }).click();
+      const downloadPromise = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Export Excel' }).click();
+      await page.getByRole('menuitem', { name: 'Attendance sheet' }).click();
+      const download = await downloadPromise;
+      expect(requestedCsId).toBe('1');
+      expect(download.suggestedFilename()).toBe('CLIN401_CLIN401-A_Attendance_Sheet_2026-2027_1st.xlsx');
+      const xlsx = await readDownloadedXlsxText(download);
+      for (const text of ['ATTENDANCE SHEET', 'REYES, Alice Lim', 'SANTOS, Bea', 'Nov 8', 'Nov 15 8:00 AM', 'Nov 15 1:30 PM', 'Attendance rate', '67%', '100%']) expect(xlsx).toContain(text);
+    });
+
+    test('Faculty Reports exports the remedial summary of the school year as Excel', async ({ page }) => {
+      await mockSheetReports(page);
+      await page.goto('/reports');
+      await page.getByRole('tab', { name: 'Retention Watch Lists' }).click();
+      const downloadPromise = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Export Excel' }).click();
+      await page.getByRole('menuitem', { name: 'Remedial summary' }).click();
+      const download = await downloadPromise;
+      expect(download.suggestedFilename()).toBe('Remedial_Summary_2026-2027.xlsx');
+      const xlsx = await readDownloadedXlsxText(download);
+      for (const text of ['REMEDIAL SUMMARY', 'Attempt 1 Result', 'DENT-007', 'REYES, Alice', 'CLIN401-A', 'Pending', 'Attempt 1 pending']) expect(xlsx).toContain(text);
+      // Bea never entered remedial.
+      expect(xlsx).not.toContain('DENT-008');
+    });
+
+    test('Faculty Reports export menu works with the keyboard and shows why an item is disabled', async ({ page }) => {
+      await mockSheetReports(page);
+      await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [] }) }));
+      await page.goto('/reports');
+      await page.getByRole('tab', { name: 'Attendance Registers' }).click();
+      const trigger = page.getByRole('button', { name: 'Export Excel' });
+      await trigger.focus();
+      await page.keyboard.press('Enter');
+      const sheetItem = page.getByRole('menuitem', { name: /Attendance sheet/ });
+      await expect(sheetItem).toHaveAttribute('aria-disabled', 'true');
+      await expect(sheetItem).toContainText('Select one class first');
+      await expect(page.getByRole('menuitem', { name: /Attendance register/ })).toHaveAttribute('aria-disabled', 'true');
+      await expect(page.getByRole('menuitem', { name: /Attendance register/ })).toContainText('No attendance records to export');
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('menu')).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+      // With a class selected, ArrowDown moves focus between the enabled items.
+      await page.getByRole('tab', { name: 'Retention Watch Lists' }).click();
+      await trigger.focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('menuitem', { name: 'Retention list' })).toBeFocused();
+      await page.keyboard.press('ArrowDown');
+      await expect(page.getByRole('menuitem', { name: 'Remedial summary' })).toBeFocused();
+      await page.keyboard.press('Escape');
+      await expect(trigger).toBeFocused();
+    });
   });
 });

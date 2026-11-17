@@ -449,6 +449,12 @@ return [
         'handler' => 'handle_admin_reports_summary',
         'has_params' => false,
     ],
+    [
+        'method' => 'GET',
+        'path' => '/api/admin/reports/attendance-sheet',
+        'handler' => 'handle_admin_attendance_sheet',
+        'has_params' => false,
+    ],
     // Faculty Module APIs
     [
         'method' => 'GET',
@@ -556,6 +562,12 @@ return [
         'method' => 'GET',
         'path' => '/api/faculty/attendance',
         'handler' => 'handle_faculty_attendance_get',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/faculty/attendance/sheet',
+        'handler' => 'handle_faculty_attendance_sheet_get',
         'has_params' => false,
     ],
     [
