@@ -89,6 +89,8 @@ test.describe('Class Secretary Module E2E Tests', () => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', profile: { assignedClassName: 'CLINIC-4B' } }) });
     });
     await page.route('**/api/secretary/excused-requests', async (route) => {
+      // The page also GETs this URL to refresh its list; only the POST carries the request.
+      if (route.request().method() !== 'POST') return route.fallback();
       requestPayload = route.request().postDataJSON() as Record<string, unknown>;
       await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Excused request sent to Faculty for approval.', request: null }) });
     });
