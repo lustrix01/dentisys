@@ -139,7 +139,10 @@ export const TimePicker: React.FC<TimePickerProps> = ({ value, onChange, name, a
   const root = useRef<HTMLDivElement>(null);
   const flyout = useRef<HTMLDivElement>(null);
   const buffer = useRef({ key: '', text: '' });
-  useEffect(() => { setText(value ? formatTime12(value) : ''); }, [value]);
+  // Re-sync the typed text during render, not in an effect: an effect runs after paint, so text typed in that
+  // gap (e.g. right after another field auto-shifted this one) would be overwritten by the old shifted value.
+  const [synced, setSynced] = useState(value);
+  if (value !== synced) { setSynced(value); setText(value ? formatTime12(value) : ''); }
 
   const close = () => setOpen(false);
   const show = () => {
