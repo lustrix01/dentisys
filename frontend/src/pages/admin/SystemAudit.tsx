@@ -16,6 +16,7 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { recordAudit } from '../../services/auditService';
 import { formatGrade } from '../../utils/gradeHelper';
+import { exportGradeOf } from './exportGrade';
 import { downloadXlsx } from '../../utils/xlsxDownload';
 import { buildReportSheet, clinicHoursText, dayToDate } from '../../utils/reportWorkbook';
 import { sheetName } from '../../utils/officialGradeSheetExport';
@@ -294,11 +295,7 @@ export const DeanReports: React.FC = () => {
     const ts = new Date().toISOString().replace('T', ' ').substring(0, 19).replace(/[: ]/g, '-');
     const term = schoolYear === 'all' ? 'All school years' : `AY ${schoolYear === 'current' ? (currentSchoolYear ?? '') : schoolYear}`;
     const filter = currentSelectedClass?.name ? `Class: ${currentSelectedClass.name}` : 'All classes';
-    const gradeOf = (s: any) => {
-      const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
-      const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
-      return gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? formatGrade(Number(gradeVal)) : 'N/A';
-    };
+    const gradeOf = (s: any) => exportGradeOf(s, currentSelectedClass?.subjectCode);
     const base = { filter, term, by: user?.display_name ?? '' };
     let fileName: string;
     let sheet;
