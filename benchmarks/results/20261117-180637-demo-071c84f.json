@@ -1,0 +1,827 @@
+{
+ "profile": "v1",
+ "target": "demo",
+ "startedUtc": "2026-11-17T18:06:37.8750925Z",
+ "gitSha": "071c84f",
+ "dirty": false,
+ "valid": true,
+ "invalidReason": null,
+ "rttMs": 49.9,
+ "fingerprint": {
+  "cap": null,
+  "profile": "v1",
+  "diskGb": 47,
+  "swapMb": 4899,
+  "cpuModel": "AMD EPYC-Rome Processor",
+  "ramMb": 1636,
+  "replicas": {
+   "web": 1,
+   "pgadmin": 1,
+   "frontend": 1,
+   "traefik": 1,
+   "db": 1,
+   "tunnel-entrance": 1,
+   "biometric": 1,
+   "watchtower": 1
+  },
+  "rowCounts": {
+   "enrollments": 0,
+   "students": 0,
+   "assessment_scores": 0,
+   "class_sections": 0,
+   "user_accounts": 1,
+   "attendance_records": 0,
+   "audit_events": 1
+  },
+  "vcpu": 1
+ },
+ "faceSkipped": null,
+ "stages": {
+  "read-1": {
+   "users": 1,
+   "start": 1794938834726,
+   "end": 1794938894747,
+   "requests": 978,
+   "rps": 16.3,
+   "p50": 58.8,
+   "p95": 80,
+   "p99": 112.6,
+   "errorCount": 0,
+   "errors": {},
+   "server": {
+    "samples": 12,
+    "containersCpuAvg": 44.3,
+    "containersCpuPeak": 56.3,
+    "containersMemPeak": 555,
+    "cpuBusyAvg": 48.2,
+    "cpuBusyPeak": 60.7,
+    "cpuStealAvg": 0,
+    "cpuStealPeak": 0.1,
+    "memUsedAvg": 802,
+    "memUsedPeak": 811,
+    "memAvailMin": 825,
+    "swapPeak": 330,
+    "loadAvg": 1.7,
+    "loadPeak": 2,
+    "containers": {
+     "dentisys-biometric-1": {
+      "cpuAvg": 2.6,
+      "cpuPeak": 5.7,
+      "memAvg": 268.1,
+      "memPeak": 269
+     },
+     "dentisys-db-1": {
+      "cpuAvg": 27.6,
+      "cpuPeak": 38,
+      "memAvg": 76.2,
+      "memPeak": 80
+     },
+     "dentisys-frontend-1": {
+      "cpuAvg": 0.6,
+      "cpuPeak": 0.7,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-pgadmin-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 13,
+      "memPeak": 13
+     },
+     "dentisys-traefik-1": {
+      "cpuAvg": 1.4,
+      "cpuPeak": 1.7,
+      "memAvg": 101,
+      "memPeak": 101
+     },
+     "dentisys-tunnel-entrance-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-watchtower-1": {
+      "cpuAvg": 0.1,
+      "cpuPeak": 0.7,
+      "memAvg": 9.9,
+      "memPeak": 10
+     },
+     "dentisys-web-1": {
+      "cpuAvg": 12,
+      "cpuPeak": 15.3,
+      "memAvg": 79,
+      "memPeak": 79
+     }
+    }
+   }
+  },
+  "read-5": {
+   "users": 5,
+   "start": 1794938894748,
+   "end": 1794938954812,
+   "requests": 2242,
+   "rps": 37.3,
+   "p50": 125.2,
+   "p95": 236.1,
+   "p99": 318.9,
+   "errorCount": 0,
+   "errors": {},
+   "server": {
+    "samples": 11,
+    "containersCpuAvg": 92.4,
+    "containersCpuPeak": 95.5,
+    "containersMemPeak": 573,
+    "cpuBusyAvg": 98.5,
+    "cpuBusyPeak": 99.8,
+    "cpuStealAvg": 0,
+    "cpuStealPeak": 0.1,
+    "memUsedAvg": 800.7,
+    "memUsedPeak": 809,
+    "memAvailMin": 827,
+    "swapPeak": 330,
+    "loadAvg": 3.1,
+    "loadPeak": 3.8,
+    "containers": {
+     "dentisys-biometric-1": {
+      "cpuAvg": 2.5,
+      "cpuPeak": 5.8,
+      "memAvg": 269.3,
+      "memPeak": 281
+     },
+     "dentisys-db-1": {
+      "cpuAvg": 60.6,
+      "cpuPeak": 64.8,
+      "memAvg": 82.9,
+      "memPeak": 88
+     },
+     "dentisys-frontend-1": {
+      "cpuAvg": 0.7,
+      "cpuPeak": 0.8,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-pgadmin-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 13,
+      "memPeak": 13
+     },
+     "dentisys-traefik-1": {
+      "cpuAvg": 2.5,
+      "cpuPeak": 2.7,
+      "memAvg": 101.4,
+      "memPeak": 102
+     },
+     "dentisys-tunnel-entrance-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-watchtower-1": {
+      "cpuAvg": 0.2,
+      "cpuPeak": 0.7,
+      "memAvg": 9.5,
+      "memPeak": 10
+     },
+     "dentisys-web-1": {
+      "cpuAvg": 25.8,
+      "cpuPeak": 27.3,
+      "memAvg": 79.5,
+      "memPeak": 80
+     }
+    }
+   }
+  },
+  "read-10": {
+   "users": 10,
+   "start": 1794938954813,
+   "end": 1794939014964,
+   "requests": 2233,
+   "rps": 37.1,
+   "p50": 249.2,
+   "p95": 492,
+   "p99": 615.2,
+   "errorCount": 0,
+   "errors": {},
+   "server": {
+    "samples": 12,
+    "containersCpuAvg": 95.3,
+    "containersCpuPeak": 96,
+    "containersMemPeak": 591,
+    "cpuBusyAvg": 99.9,
+    "cpuBusyPeak": 100,
+    "cpuStealAvg": 0,
+    "cpuStealPeak": 0.1,
+    "memUsedAvg": 824.8,
+    "memUsedPeak": 835,
+    "memAvailMin": 801,
+    "swapPeak": 336,
+    "loadAvg": 6.7,
+    "loadPeak": 9,
+    "containers": {
+     "dentisys-biometric-1": {
+      "cpuAvg": 2.8,
+      "cpuPeak": 6.2,
+      "memAvg": 261.8,
+      "memPeak": 268
+     },
+     "dentisys-db-1": {
+      "cpuAvg": 62.7,
+      "cpuPeak": 65,
+      "memAvg": 95.3,
+      "memPeak": 106
+     },
+     "dentisys-frontend-1": {
+      "cpuAvg": 0.7,
+      "cpuPeak": 0.9,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-pgadmin-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 13,
+      "memPeak": 13
+     },
+     "dentisys-traefik-1": {
+      "cpuAvg": 2.5,
+      "cpuPeak": 2.8,
+      "memAvg": 102.9,
+      "memPeak": 105
+     },
+     "dentisys-tunnel-entrance-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-watchtower-1": {
+      "cpuAvg": 0.1,
+      "cpuPeak": 0.8,
+      "memAvg": 10,
+      "memPeak": 10
+     },
+     "dentisys-web-1": {
+      "cpuAvg": 26.4,
+      "cpuPeak": 28.3,
+      "memAvg": 94.9,
+      "memPeak": 101
+     }
+    }
+   }
+  },
+  "read-25": {
+   "users": 25,
+   "start": 1794939014966,
+   "end": 1794939075555,
+   "requests": 2174,
+   "rps": 35.9,
+   "p50": 642,
+   "p95": 1289.5,
+   "p99": 1562.6,
+   "errorCount": 0,
+   "errors": {},
+   "server": {
+    "samples": 12,
+    "containersCpuAvg": 95.4,
+    "containersCpuPeak": 96.1,
+    "containersMemPeak": 681,
+    "cpuBusyAvg": 100,
+    "cpuBusyPeak": 100,
+    "cpuStealAvg": 0,
+    "cpuStealPeak": 0.1,
+    "memUsedAvg": 896.3,
+    "memUsedPeak": 916,
+    "memAvailMin": 720,
+    "swapPeak": 353,
+    "loadAvg": 16.6,
+    "loadPeak": 21.5,
+    "containers": {
+     "dentisys-biometric-1": {
+      "cpuAvg": 2.4,
+      "cpuPeak": 5.7,
+      "memAvg": 250.6,
+      "memPeak": 265
+     },
+     "dentisys-db-1": {
+      "cpuAvg": 63.7,
+      "cpuPeak": 66.3,
+      "memAvg": 133.5,
+      "memPeak": 149
+     },
+     "dentisys-frontend-1": {
+      "cpuAvg": 0.7,
+      "cpuPeak": 0.7,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-pgadmin-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 13,
+      "memPeak": 13
+     },
+     "dentisys-traefik-1": {
+      "cpuAvg": 2.5,
+      "cpuPeak": 2.7,
+      "memAvg": 103.7,
+      "memPeak": 105
+     },
+     "dentisys-tunnel-entrance-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-watchtower-1": {
+      "cpuAvg": 0.1,
+      "cpuPeak": 0.7,
+      "memAvg": 15,
+      "memPeak": 15
+     },
+     "dentisys-web-1": {
+      "cpuAvg": 26.1,
+      "cpuPeak": 27.5,
+      "memAvg": 140.5,
+      "memPeak": 150
+     }
+    }
+   }
+  },
+  "read-50": {
+   "users": 50,
+   "start": 1794939075557,
+   "end": 1794939136743,
+   "requests": 2168,
+   "rps": 35.4,
+   "p50": 1387.8,
+   "p95": 2273,
+   "p99": 2507.1,
+   "errorCount": 0,
+   "errors": {},
+   "server": {
+    "samples": 12,
+    "containersCpuAvg": 95.4,
+    "containersCpuPeak": 96.2,
+    "containersMemPeak": 698,
+    "cpuBusyAvg": 100,
+    "cpuBusyPeak": 100,
+    "cpuStealAvg": 0,
+    "cpuStealPeak": 0.1,
+    "memUsedAvg": 923.5,
+    "memUsedPeak": 930,
+    "memAvailMin": 706,
+    "swapPeak": 452,
+    "loadAvg": 27.6,
+    "loadPeak": 31.6,
+    "containers": {
+     "dentisys-biometric-1": {
+      "cpuAvg": 2.8,
+      "cpuPeak": 5.9,
+      "memAvg": 165.4,
+      "memPeak": 229
+     },
+     "dentisys-db-1": {
+      "cpuAvg": 63.3,
+      "cpuPeak": 66.4,
+      "memAvg": 152.9,
+      "memPeak": 168
+     },
+     "dentisys-frontend-1": {
+      "cpuAvg": 0.7,
+      "cpuPeak": 0.7,
+      "memAvg": 2.1,
+      "memPeak": 3
+     },
+     "dentisys-pgadmin-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 12,
+      "memPeak": 12
+     },
+     "dentisys-traefik-1": {
+      "cpuAvg": 2.4,
+      "cpuPeak": 2.7,
+      "memAvg": 109.6,
+      "memPeak": 111
+     },
+     "dentisys-tunnel-entrance-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-watchtower-1": {
+      "cpuAvg": 0.1,
+      "cpuPeak": 0.7,
+      "memAvg": 14.9,
+      "memPeak": 15
+     },
+     "dentisys-web-1": {
+      "cpuAvg": 26.2,
+      "cpuPeak": 28.6,
+      "memAvg": 221.7,
+      "memPeak": 238
+     }
+    }
+   }
+  },
+  "signin": {
+   "start": 1794939136745,
+   "end": 1794939196758,
+   "requests": 60,
+   "rps": 1,
+   "p50": 280,
+   "p95": 388.3,
+   "p99": 621.5,
+   "errorCount": 0,
+   "errors": {},
+   "server": {
+    "samples": 12,
+    "containersCpuAvg": 32.4,
+    "containersCpuPeak": 55.1,
+    "containersMemPeak": 598,
+    "cpuBusyAvg": 35.8,
+    "cpuBusyPeak": 59.3,
+    "cpuStealAvg": 0,
+    "cpuStealPeak": 0.1,
+    "memUsedAvg": 782.6,
+    "memUsedPeak": 869,
+    "memAvailMin": 767,
+    "swapPeak": 452,
+    "loadAvg": 21,
+    "loadPeak": 31.7,
+    "containers": {
+     "dentisys-biometric-1": {
+      "cpuAvg": 2.7,
+      "cpuPeak": 5.7,
+      "memAvg": 148.1,
+      "memPeak": 149
+     },
+     "dentisys-db-1": {
+      "cpuAvg": 4.9,
+      "cpuPeak": 25.4,
+      "memAvg": 73.2,
+      "memPeak": 75
+     },
+     "dentisys-frontend-1": {
+      "cpuAvg": 0.6,
+      "cpuPeak": 0.6,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-pgadmin-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 12,
+      "memPeak": 12
+     },
+     "dentisys-traefik-1": {
+      "cpuAvg": 0.2,
+      "cpuPeak": 0.7,
+      "memAvg": 111,
+      "memPeak": 111
+     },
+     "dentisys-tunnel-entrance-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-watchtower-1": {
+      "cpuAvg": 0.1,
+      "cpuPeak": 0.7,
+      "memAvg": 14,
+      "memPeak": 14
+     },
+     "dentisys-web-1": {
+      "cpuAvg": 24,
+      "cpuPeak": 27.1,
+      "memAvg": 146.8,
+      "memPeak": 235
+     }
+    }
+   }
+  },
+  "face-1": {
+   "users": 1,
+   "start": 1794939200585,
+   "end": 1794939264973,
+   "checkins": 4,
+   "checkinP50": 16.1,
+   "checkinP95": 16.14,
+   "addedP50": 0.5,
+   "addedP95": 0.54,
+   "guidanceP50": 0.03,
+   "guidanceP95": 0.07,
+   "verifyP50": 0.49,
+   "verifyP95": 0.53,
+   "over20s": 0,
+   "errorCount": 0,
+   "errors": {},
+   "server": {
+    "samples": 12,
+    "containersCpuAvg": 13.3,
+    "containersCpuPeak": 20.2,
+    "containersMemPeak": 638,
+    "cpuBusyAvg": 18,
+    "cpuBusyPeak": 35.6,
+    "cpuStealAvg": 0,
+    "cpuStealPeak": 0.1,
+    "memUsedAvg": 872.3,
+    "memUsedPeak": 879,
+    "memAvailMin": 757,
+    "swapPeak": 452,
+    "loadAvg": 7.2,
+    "loadPeak": 10.8,
+    "containers": {
+     "dentisys-biometric-1": {
+      "cpuAvg": 10.4,
+      "cpuPeak": 18.2,
+      "memAvg": 347.4,
+      "memPeak": 348
+     },
+     "dentisys-db-1": {
+      "cpuAvg": 1.5,
+      "cpuPeak": 1.7,
+      "memAvg": 73.9,
+      "memPeak": 74
+     },
+     "dentisys-frontend-1": {
+      "cpuAvg": 0.5,
+      "cpuPeak": 0.7,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-pgadmin-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 13,
+      "memPeak": 13
+     },
+     "dentisys-traefik-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0.2,
+      "memAvg": 108.7,
+      "memPeak": 111
+     },
+     "dentisys-tunnel-entrance-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-watchtower-1": {
+      "cpuAvg": 0.1,
+      "cpuPeak": 0.6,
+      "memAvg": 14.8,
+      "memPeak": 15
+     },
+     "dentisys-web-1": {
+      "cpuAvg": 0.7,
+      "cpuPeak": 1.4,
+      "memAvg": 73,
+      "memPeak": 73
+     }
+    }
+   }
+  },
+  "face-2": {
+   "users": 2,
+   "start": 1794939264973,
+   "end": 1794939331185,
+   "checkins": 8,
+   "checkinP50": 16.57,
+   "checkinP95": 16.66,
+   "addedP50": 0.97,
+   "addedP95": 1.06,
+   "guidanceP50": 0.04,
+   "guidanceP95": 0.09,
+   "verifyP50": 0.96,
+   "verifyP95": 1.05,
+   "over20s": 0,
+   "errorCount": 0,
+   "errors": {},
+   "server": {
+    "samples": 13,
+    "containersCpuAvg": 21.7,
+    "containersCpuPeak": 35.6,
+    "containersMemPeak": 648,
+    "cpuBusyAvg": 24.7,
+    "cpuBusyPeak": 38.3,
+    "cpuStealAvg": 0,
+    "cpuStealPeak": 0.1,
+    "memUsedAvg": 862.7,
+    "memUsedPeak": 876,
+    "memAvailMin": 760,
+    "swapPeak": 452,
+    "loadAvg": 2.5,
+    "loadPeak": 3.9,
+    "containers": {
+     "dentisys-biometric-1": {
+      "cpuAvg": 18.8,
+      "cpuPeak": 33.5,
+      "memAvg": 359.6,
+      "memPeak": 372
+     },
+     "dentisys-db-1": {
+      "cpuAvg": 1.6,
+      "cpuPeak": 2.1,
+      "memAvg": 74,
+      "memPeak": 74
+     },
+     "dentisys-frontend-1": {
+      "cpuAvg": 0.6,
+      "cpuPeak": 0.7,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-pgadmin-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 13,
+      "memPeak": 13
+     },
+     "dentisys-traefik-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0.1,
+      "memAvg": 96.7,
+      "memPeak": 97
+     },
+     "dentisys-tunnel-entrance-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-watchtower-1": {
+      "cpuAvg": 0.1,
+      "cpuPeak": 0.6,
+      "memAvg": 15,
+      "memPeak": 15
+     },
+     "dentisys-web-1": {
+      "cpuAvg": 0.6,
+      "cpuPeak": 1.4,
+      "memAvg": 73,
+      "memPeak": 73
+     }
+    }
+   }
+  },
+  "face-4": {
+   "users": 4,
+   "start": 1794939331185,
+   "end": 1794939400446,
+   "checkins": 16,
+   "checkinP50": 17.11,
+   "checkinP95": 17.98,
+   "addedP50": 1.51,
+   "addedP95": 2.38,
+   "guidanceP50": 0.04,
+   "guidanceP95": 0.14,
+   "verifyP50": 1.5,
+   "verifyP95": 2.37,
+   "over20s": 0,
+   "errorCount": 0,
+   "errors": {},
+   "server": {
+    "samples": 14,
+    "containersCpuAvg": 35.4,
+    "containersCpuPeak": 54.7,
+    "containersMemPeak": 673,
+    "cpuBusyAvg": 38.4,
+    "cpuBusyPeak": 58,
+    "cpuStealAvg": 0,
+    "cpuStealPeak": 0.1,
+    "memUsedAvg": 881.4,
+    "memUsedPeak": 888,
+    "memAvailMin": 748,
+    "swapPeak": 440,
+    "loadAvg": 1.3,
+    "loadPeak": 1.7,
+    "containers": {
+     "dentisys-biometric-1": {
+      "cpuAvg": 32.6,
+      "cpuPeak": 52.6,
+      "memAvg": 370.4,
+      "memPeak": 396
+     },
+     "dentisys-db-1": {
+      "cpuAvg": 1.5,
+      "cpuPeak": 1.7,
+      "memAvg": 74,
+      "memPeak": 74
+     },
+     "dentisys-frontend-1": {
+      "cpuAvg": 0.6,
+      "cpuPeak": 0.6,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-pgadmin-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 13,
+      "memPeak": 13
+     },
+     "dentisys-traefik-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0.1,
+      "memAvg": 97.9,
+      "memPeak": 98
+     },
+     "dentisys-tunnel-entrance-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-watchtower-1": {
+      "cpuAvg": 0.1,
+      "cpuPeak": 0.7,
+      "memAvg": 15,
+      "memPeak": 15
+     },
+     "dentisys-web-1": {
+      "cpuAvg": 0.6,
+      "cpuPeak": 1.3,
+      "memAvg": 73,
+      "memPeak": 73
+     }
+    }
+   }
+  },
+  "idle": {
+   "start": 1794939401306,
+   "end": 1794939431320,
+   "server": {
+    "samples": 6,
+    "containersCpuAvg": 11.6,
+    "containersCpuPeak": 44.3,
+    "containersMemPeak": 624,
+    "cpuBusyAvg": 15.2,
+    "cpuBusyPeak": 50,
+    "cpuStealAvg": 0,
+    "cpuStealPeak": 0.1,
+    "memUsedAvg": 867.3,
+    "memUsedPeak": 869,
+    "memAvailMin": 767,
+    "swapPeak": 439,
+    "loadAvg": 0.8,
+    "loadPeak": 0.9,
+    "containers": {
+     "dentisys-biometric-1": {
+      "cpuAvg": 8.5,
+      "cpuPeak": 40.8,
+      "memAvg": 346,
+      "memPeak": 346
+     },
+     "dentisys-db-1": {
+      "cpuAvg": 1.6,
+      "cpuPeak": 1.8,
+      "memAvg": 74,
+      "memPeak": 74
+     },
+     "dentisys-frontend-1": {
+      "cpuAvg": 0.6,
+      "cpuPeak": 0.6,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-pgadmin-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 13,
+      "memPeak": 13
+     },
+     "dentisys-traefik-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 98,
+      "memPeak": 98
+     },
+     "dentisys-tunnel-entrance-1": {
+      "cpuAvg": 0,
+      "cpuPeak": 0,
+      "memAvg": 2,
+      "memPeak": 2
+     },
+     "dentisys-watchtower-1": {
+      "cpuAvg": 0.1,
+      "cpuPeak": 0.8,
+      "memAvg": 15.2,
+      "memPeak": 16
+     },
+     "dentisys-web-1": {
+      "cpuAvg": 0.7,
+      "cpuPeak": 1.3,
+      "memAvg": 73,
+      "memPeak": 73
+     }
+    }
+   }
+  }
+ }
+}
