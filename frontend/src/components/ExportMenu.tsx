@@ -105,7 +105,7 @@ export function ExportMenu({ kind, label, items, icon }: { kind: ExportKind; lab
           style={pos}
           onClick={(e) => e.stopPropagation()}
           onKeyDown={onPanelKeyDown}
-          className="fixed w-56 max-w-[calc(100vw-1rem)] rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-900/10 py-1.5 z-[60] text-xs text-left"
+          className="no-print fixed w-56 max-w-[calc(100vw-1rem)] rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-900/10 py-1.5 z-[60] text-xs text-left"
         >
           {items.map(item => {
             const disabled = Boolean(item.disabledReason);
