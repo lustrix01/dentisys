@@ -76,10 +76,12 @@ foreach ($file in $activeFiles) {
     }
 }
 
-& docker compose run --rm --no-deps frontend npm run build
+# Frontend build and unit tests run natively, like the browser tests below (about twice as fast as in Docker on
+# Windows; they use frontend/node_modules, which the browser tests need anyway).
+& npm --prefix frontend run build
 if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
 
-& docker compose run --rm --no-deps frontend npm test
+& npm --prefix frontend test
 if ($LASTEXITCODE -ne 0) { throw 'Frontend unit tests failed.' }
 
 & docker compose run --rm --no-deps `

@@ -17,6 +17,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+      # Check every second while starting, so the stack is usable as soon as it is ready.
+      start_period: 60s
+      start_interval: 1s
 
   mailpit:
     image: axllent/mailpit:v1.27
@@ -126,6 +129,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+      start_period: 60s
+      start_interval: 1s
 
   frontend:
     build:

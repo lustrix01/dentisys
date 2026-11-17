@@ -25,6 +25,7 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 - **9.19** Production `devops` sudo password (Owner, 2026-11-17): it is still the original one from the emergency kit (an earlier `sudo passwd` changed root's password, not `devops`'s). Change it on the production server with `passwd` as `devops` (no `sudo`), then update the emergency kit.
 - **9.20** Face Registration on production (Owner, 2026-11-17): the Owner tries enrolment with a real camera on bu-dentisys.com. Known defect to confirm there: when enrolment fails with a server error, `FaceRegistration.tsx` still shows "Adjust lighting, face the camera directly…", which blames the Student for a server fault.
+- **9.21** Flaky mocked browser tests (2026-11-17): with 8 workers and one local retry, a test that passes only on retry is reported as "flaky" and does not fail `check.ps1`. Each one hides a timing bug in the app or the test (the TimePicker re-sync race was a real app bug). Fix one, then remove it here; add any new flaky test the run reports. Known: `secretary.spec.ts` "Excused (ATT-006): the Secretary sends an Excused request instead of setting Excused" (2 of 10 runs: the request's payload is never seen by the test's handler although the success message shows); `admin.spec.ts` "admin can navigate to Audit Trail page" and `secretary.spec.ts` "secretary can navigate to Audit Trail page" (1 failure each in one full run, not reproduced in 10 repeats).
 
 ---
 

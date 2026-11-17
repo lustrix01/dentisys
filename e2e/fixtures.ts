@@ -61,7 +61,7 @@ const KNOWN_API_PATHS = new Set([
 ]);
 
 const GET_ONLY_API_PATHS = new Set([
-  '/api/rooms', '/api/admin/people', '/api/admin/courses', '/api/admin/rooms', '/api/admin/overview', '/api/admin/face-flags', '/api/admin/people/filters',
+  '/api/rooms', '/api/admin/email-logs', '/api/admin/people', '/api/admin/courses', '/api/admin/rooms', '/api/admin/overview', '/api/admin/face-flags', '/api/admin/people/filters',
   '/api/health', '/api/runtime-config', '/api/auth/me', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/student/invitation', '/api/auth/mfa/settings', '/api/admin/faculty-invitations',
   '/api/admin/dashboard/kpis', '/api/admin/audit-logs', '/api/admin/reports/summary', '/api/secretary/invitation', '/api/secretary/invitations',
   '/api/secretary/dashboard/kpis', '/api/secretary/attendance', '/api/secretary/attendance/session/active', '/api/secretary/profile', '/api/secretary/settings',
