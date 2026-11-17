@@ -286,3 +286,55 @@ test('guided capture honours a targetFrames value below 20', async () => {
   assert.equal(result.status, 'complete');
   assert.equal(result.frames.length, 8);
 });
+
+type UsableGuidance = { detectedAction: LivenessAction | null; faceDetected: boolean; usable?: boolean };
+
+async function captureWithUnusableActionFrames(actions: LivenessAction[], targetFrames: number, guidance: UsableGuidance[]) {
+  const log: string[] = [];
+  let captureCount = 0;
+  const result = await runGuidedCapture({
+    actions,
+    targetFrames,
+    captureFrame: async () => frame(captureCount++),
+    analyzeFrame: async blob => {
+      const next = guidance.shift() ?? neutral;
+      if (next.detectedAction) log.push(`${await blob.text()}:${next.usable === false ? 'unusable' : 'usable'}`);
+      return next;
+    },
+    isCancelled: () => false,
+    onPhase: () => undefined,
+    onFrameCount: () => undefined,
+    onActionSuccess: (_index, action) => { log.push(`success:${action}`); },
+    wait: async () => undefined,
+  });
+  return { result, log, texts: await Promise.all(result.frames.map(blob => blob.text())) };
+}
+
+test('guided capture with two actions keeps only usable action frames and succeeds after them', async () => {
+  const { result, log, texts } = await captureWithUnusableActionFrames(['turn_left', 'blink'], 20, [
+    ...Array(6).fill(neutral),
+    { detectedAction: 'turn_left', faceDetected: true, usable: false },
+    { detectedAction: 'turn_left', faceDetected: true, usable: true },
+    ...Array(6).fill(neutral),
+    { detectedAction: 'blink', faceDetected: true, usable: false },
+    { detectedAction: 'blink', faceDetected: true },
+    ...Array(6).fill(neutral),
+  ]);
+  assert.equal(result.status, 'complete');
+  assert.deepEqual(log, ['6:unusable', '7:usable', 'success:turn_left', '14:unusable', '15:usable', 'success:blink']);
+  assert.ok(!texts.includes('6') && !texts.includes('14'), 'unusable action frames are never uploaded');
+  assert.ok(texts.includes('7') && texts.includes('15'), 'the usable action frames are uploaded');
+});
+
+test('guided capture with one action keeps only the usable action frame and succeeds after it', async () => {
+  const { result, log, texts } = await captureWithUnusableActionFrames(['blink'], 9, [
+    ...Array(4).fill(neutral),
+    { detectedAction: 'blink', faceDetected: true, usable: false },
+    { detectedAction: 'blink', faceDetected: true, usable: true },
+    ...Array(4).fill(neutral),
+  ]);
+  assert.equal(result.status, 'complete');
+  assert.deepEqual(log, ['4:unusable', '5:usable', 'success:blink']);
+  assert.ok(!texts.includes('4'), 'the unusable action frame is never uploaded');
+  assert.ok(texts.includes('5'), 'the usable action frame is uploaded');
+});

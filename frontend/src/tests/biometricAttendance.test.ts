@@ -23,7 +23,8 @@ import type {
   StartSecretaryAttendanceSessionPayload,
   SecretaryAttendanceSession,
 } from '../services/apiClient.ts';
-import { isTransportOrBiometricUnavailable } from '../utils/biometricErrors.ts';
+import { enrollmentFailureMessage, isRequestTimeout, isTransportOrBiometricUnavailable } from '../utils/biometricErrors.ts';
+import { fitFrameSize } from '../utils/camera.ts';
 
 const defaultRuntimeConfig: RuntimeConfig = {
   loading: false,
@@ -671,4 +672,30 @@ test('Attendance: a rejected or paused check-in shows its notice after returning
   const source = fs.readFileSync(new URL('../pages/student/Attendance.tsx', import.meta.url), 'utf8');
   assert.match(source, /setFailureNotice\(`\$\{msg\} Your attendance was not recorded[\s\S]{0,120}setCheckInStage\('idle'\)/);
   assert.match(source, /\{checkInStage === 'idle' && failureNotice && \(\s*<div role="alert"[\s\S]{0,600}\{failureNotice\}/);
+});
+
+test('Enrollment failure message blames lighting only for quality failures', () => {
+  const live = enrollmentFailureMessage({ code: 'liveness_failed', message: 'x' });
+  assert.equal(live, 'The requested action was not captured clearly. Keep your face inside the guide while you do it, then start a fresh capture.');
+  const quality = enrollmentFailureMessage(Object.assign(new Error('Face too dark.'), { code: 'quality_failed' }));
+  assert.equal(quality, 'Face too dark. Adjust lighting, face the camera directly, and start a fresh capture, or contact your Faculty/Secretary for manual attendance.');
+  const other = enrollmentFailureMessage(new Error('Server error.'));
+  assert.equal(other, 'Server error. Start a fresh capture. If this continues, use manual attendance through your Secretary or Faculty.');
+  assert.match(enrollmentFailureMessage('boom'), /^Facial enrollment failed\. Start a fresh capture/);
+  assert.doesNotMatch(live + other, /lighting/i);
+});
+
+test('Request timeout is classified as transport so the preserved upload can be retried', () => {
+  const timeout = { status: 0, code: 'request_timeout', message: 'The server did not answer in time. Check your connection and try again.' };
+  assert.equal(isRequestTimeout(timeout), true);
+  assert.equal(isTransportOrBiometricUnavailable(timeout), true);
+  assert.equal(isRequestTimeout({ status: 0, message: 'x' }), false);
+});
+
+test('fitFrameSize fits within 640x480, keeps aspect ratio and never upscales', () => {
+  assert.deepEqual(fitFrameSize(1280, 720), { width: 640, height: 360 });
+  assert.deepEqual(fitFrameSize(480, 640), { width: 360, height: 480 });
+  assert.deepEqual(fitFrameSize(640, 480), { width: 640, height: 480 });
+  assert.deepEqual(fitFrameSize(320, 240), { width: 320, height: 240 });
+  assert.deepEqual(fitFrameSize(1920, 1080), { width: 640, height: 360 });
 });

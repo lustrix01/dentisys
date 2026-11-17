@@ -227,3 +227,12 @@ export async function startCameraStream(
 
   throw lastError instanceof Error ? lastError : new Error('The camera could not be opened.');
 }
+
+const MAX_FRAME_WIDTH = 640;
+const MAX_FRAME_HEIGHT = 480;
+
+/** Size to draw a captured frame at: fit within 640x480, keep aspect ratio, never upscale. */
+export function fitFrameSize(width: number, height: number): { width: number; height: number } {
+  const scale = Math.min(1, MAX_FRAME_WIDTH / width, MAX_FRAME_HEIGHT / height);
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}

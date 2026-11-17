@@ -36,7 +36,9 @@ import {
   listCameraDevices,
   startCameraStream,
   type CameraDevice,
+  fitFrameSize,
 } from '../../utils/camera';
+import { enrollmentFailureMessage, isRequestTimeout, UPLOAD_TIMEOUT_MESSAGE_PREFIX } from '../../utils/biometricErrors';
 import {
   runGuidedCapture,
   type GuidanceIssue,
@@ -338,8 +340,9 @@ export const FaceRegistration: React.FC = () => {
     if (!video || !video.videoWidth || !video.videoHeight) return null;
 
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const size = fitFrameSize(video.videoWidth, video.videoHeight);
+    canvas.width = size.width;
+    canvas.height = size.height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
@@ -409,13 +412,14 @@ export const FaceRegistration: React.FC = () => {
         setPendingPayload(payload);
         setCanRetryUpload(true);
         const msg = err instanceof Error ? err.message : 'Network or biometric service is temporarily unavailable.';
-        setAuthError(`${msg} Your captured frames and server challenge are preserved. Click "Retry Upload" to resubmit with the same idempotency key, or seek manual attendance from your Secretary or Faculty.`);
+        setAuthError(isRequestTimeout(err)
+          ? `${UPLOAD_TIMEOUT_MESSAGE_PREFIX}select Retry Upload.`
+          : `${msg} Your captured frames and server challenge are preserved. Click "Retry Upload" to resubmit with the same idempotency key, or seek manual attendance from your Secretary or Faculty.`);
       } else {
         // Semantic failure or quality rejection: discard and request fresh challenge
         setPendingPayload(null);
         setCanRetryUpload(false);
-        const msg = err instanceof Error ? err.message : 'Facial enrollment failed.';
-        setAuthError(`${msg} Adjust lighting, face the camera directly, and start a fresh capture, or contact your Faculty/Secretary for manual attendance.`);
+        setAuthError(enrollmentFailureMessage(err));
         void startCameraAndChallenge(undefined, true);
       }
     } finally {

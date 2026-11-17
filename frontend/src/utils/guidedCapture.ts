@@ -88,9 +88,10 @@ export function neutralSegments(neutralTarget: number, count = 3): number[] {
  * Capture runs in strict steps and never moves on by itself:
  *   neutral samples -> action 1 -> neutral samples -> action 2 -> neutral samples.
  * A neutral step only counts usable forward-facing frames that pass the
- * server's face and quality check. An action step captures nothing and waits
- * (until the challenge deadline) for the requested action to be observed;
- * other actions and neutral frames are ignored. Live problems (no face,
+ * server's face and quality check. An action step keeps a frame only when the
+ * requested action is observed on a usable frame (the server rejects unusable
+ * frames) and otherwise waits, until the challenge deadline; other actions,
+ * neutral frames and unusable frames are ignored. Live problems (no face,
  * several faces, blur/dark) are reported through onIssue. Returned frames
  * stay in capture order so the server sees the actions in the challenge order.
  */
@@ -187,7 +188,7 @@ export async function runGuidedCapture(options: GuidedCaptureOptions): Promise<G
 
     // Live issue reporting. During an action the head is turned or the eyes
     // are closed, so the frontal-quality check is expected to fail; only a
-    // missing face is reported then.
+    // missing face is reported then. An unusable action frame is not kept.
     if (!guidance.faceDetected) {
       trackIssue(guidance.issue ?? 'no_face');
     } else if (!isActionStep() && !usable) {
@@ -199,7 +200,7 @@ export async function runGuidedCapture(options: GuidedCaptureOptions): Promise<G
     if (isActionStep()) {
       const index = actionIndex();
       const action = options.actions[index];
-      if (guidance.faceDetected && guidance.detectedAction === action) {
+      if (guidance.faceDetected && guidance.detectedAction === action && usable) {
         frames.push({ order: frameOrder, frame });
         options.onFrameCount(frames.length);
         trackIssue(null);

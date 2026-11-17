@@ -336,7 +336,8 @@ async function request<T>(
 
   let response: Response;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timeoutId = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
   const onExternalAbort = () => controller.abort();
   if (signal) {
     if (signal.aborted) {
@@ -357,6 +358,9 @@ async function request<T>(
   } catch {
     if (signal?.aborted) {
       throw new ApiError(0, 'Request cancelled.');
+    }
+    if (timedOut) {
+      throw new ApiError(0, 'The server did not answer in time. Check your connection and try again.', undefined, 'request_timeout');
     }
     throw new ApiError(0, 'Could not connect to the server. Check your connection.');
   } finally {
@@ -2358,7 +2362,7 @@ export function requestBiometricLivenessGuidance(formData: FormData, signal?: Ab
 }
 
 export function submitBiometricEnrollment(formData: FormData, signal?: AbortSignal): Promise<BiometricEnrollmentResponse> {
-  return request<BiometricEnrollmentResponse>('POST', '/student/biometric/enrollment', formData, undefined, 30000, signal);
+  return request<BiometricEnrollmentResponse>('POST', '/student/biometric/enrollment', formData, undefined, 120000, signal);
 }
 
 export function revokeStudentBiometricProfile(): Promise<BiometricRevocationResponse> {
@@ -2424,7 +2428,7 @@ export async function getStudentUpcomingAttendanceSessions(
 }
 
 export function submitBiometricAttendance(formData: FormData, signal?: AbortSignal): Promise<BiometricAttendanceResponse> {
-  return request<BiometricAttendanceResponse>('POST', '/student/attendance/biometric', formData, undefined, 30000, signal);
+  return request<BiometricAttendanceResponse>('POST', '/student/attendance/biometric', formData, undefined, 120000, signal);
 }
 
 export interface StudentLocationCheckResponse {

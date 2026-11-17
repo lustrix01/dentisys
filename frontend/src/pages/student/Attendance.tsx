@@ -45,7 +45,9 @@ import {
   listCameraDevices,
   startCameraStream,
   type CameraDevice,
+  fitFrameSize,
 } from '../../utils/camera';
+import { isRequestTimeout, UPLOAD_TIMEOUT_MESSAGE_PREFIX } from '../../utils/biometricErrors';
 import {
   runGuidedCapture,
   type GuidanceIssue,
@@ -638,8 +640,9 @@ export const Attendance: React.FC = () => {
     if (!video || !video.videoWidth || !video.videoHeight) return null;
 
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const size = fitFrameSize(video.videoWidth, video.videoHeight);
+    canvas.width = size.width;
+    canvas.height = size.height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
@@ -710,7 +713,9 @@ export const Attendance: React.FC = () => {
         setPendingAttendancePayload(payload);
         setCanRetryUpload(true);
         const msg = err instanceof Error ? err.message : 'Biometric service or network connection is temporarily unavailable.';
-        setFailureNotice(`${msg} Your verification frames and server challenge have been preserved. You can click "Retry submission" to resubmit with the existing idempotency key, or report to your Class Secretary or Faculty for authorized manual check-in.`);
+        setFailureNotice(isRequestTimeout(err)
+          ? `${UPLOAD_TIMEOUT_MESSAGE_PREFIX}select Retry submission.`
+          : `${msg} Your verification frames and server challenge have been preserved. You can click "Retry submission" to resubmit with the existing idempotency key, or report to your Class Secretary or Faculty for authorized manual check-in.`);
         setCheckInStage('camera');
       } else {
         // Semantic rejection: consume challenge and return to idle
