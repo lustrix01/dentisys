@@ -1,12 +1,15 @@
 # Builds the web, frontend and biometric images from a clean, committed HEAD and pushes them to GHCR as
 # ghcr.io/<namespace>/dentisys-{web,frontend,biometric} with the tags sha-<12-character commit> and a moving
 # tag (-Tag, default demo; sha-* is refused). -Namespace defaults to light505. Needs docker login ghcr.io first.
+# Refuses a commit whose files have not passed scripts/check.ps1, plus scripts/check-postgres.ps1 when server-side
+# files changed since its last pass (see scripts/test-stamp.ps1). -Force publishes anyway, with a warning.
 [CmdletBinding()]
 param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9-]*$')]
     [string]$Namespace = 'light505',
     [ValidatePattern('^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')]
-    [string]$Tag = 'demo'
+    [string]$Tag = 'demo',
+    [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,6 +39,13 @@ try {
     if ($dirty.Count -gt 0) { throw 'Refusing to publish a dirty working tree. Test and commit the changes first.' }
     $sha = (& git rev-parse --short=12 HEAD | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or $sha -notmatch '^[0-9a-f]+$') { throw 'Unable to read the tested commit SHA.' }
+    . (Join-Path $PSScriptRoot 'test-stamp.ps1')
+    $blockers = @(Get-PublishBlockers)
+    if ($blockers.Count -gt 0) {
+        $list = ($blockers | ForEach-Object { "  - $_" }) -join [Environment]::NewLine
+        if (-not $Force) { throw "Refusing to publish $sha because its tests have not passed:$([Environment]::NewLine)$list$([Environment]::NewLine)Run the missing gate on these files, or pass -Force to publish untested." }
+        Write-Warning "Publishing $sha UNTESTED (-Force):$([Environment]::NewLine)$list"
+    }
     Write-Host "Publishing commit $sha for linux/amd64. Run docker login ghcr.io first."
 
     # Build the committed tree only. Extra ignore rules live in this disposable

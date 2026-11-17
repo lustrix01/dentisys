@@ -15,6 +15,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $root
+. (Join-Path $PSScriptRoot 'test-stamp.ps1')
+$treeAtStart = Get-WorkTreeId  # publish-images.ps1 accepts only content that passed
 
 $project = $ComposeProject
 $backendBaseUrl = "http://127.0.0.1:$BackendHttpPort"
@@ -306,6 +308,7 @@ FROM (
         throw 'PostgreSQL logs contain invalid UTF-8/22021 errors.'
     }
 
+    Write-TestStamp 'pg' $treeAtStart
     Write-Host 'PASS: Disposable PostgreSQL integration, migration, PHP, live E2E, and log checks passed.'
 }
 finally {

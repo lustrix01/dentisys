@@ -9,6 +9,8 @@ param()
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $root
+. (Join-Path $PSScriptRoot 'test-stamp.ps1')
+$treeAtStart = Get-WorkTreeId  # publish-images.ps1 accepts only content that passed
 
 # The runtime validator is the last line of defence against accidentally
 # shipping development identity/biometric/location providers. Exercise the
@@ -100,4 +102,5 @@ if ($LASTEXITCODE -ne 0) { throw 'Documentation contract test failed.' }
 & npm run test:e2e
 if ($LASTEXITCODE -ne 0) { throw 'Mocked UI E2E tests failed.' }
 
+Write-TestStamp 'check' $treeAtStart
 Write-Host 'PASS: Fast checks and mocked UI tests passed. Run .\scripts\check-postgres.ps1 for PostgreSQL integration/live validation.'
