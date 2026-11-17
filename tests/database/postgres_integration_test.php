@@ -3693,6 +3693,29 @@ $remedialNoticesBefore = $remedialNoticeCount();
 expect_same(200, $remedialScheduleStatus, 'Faculty schedules remedial attempt 1 through the canonical route');
 expect_same('attempt_1_pending', $remedialScheduleBody['progression']['stage'] ?? null, 'Scheduled attempt 1 is pending');
 expect_true(!array_key_exists('emailDelivery', $remedialScheduleBody), 'Saving a remedial attempt no longer reports an email delivery');
+$deanRemedialCourseStmt = $pdo->prepare(
+    'SELECT c.course_code FROM enrollments e JOIN class_sections cs ON cs.cs_id = e.cs_id JOIN courses c ON c.course_id = cs.course_id WHERE e.enrollment_id = ?'
+);
+$deanRemedialCourseStmt->execute([$invitedEnrollmentId]);
+$deanRemedialCourseCode = (string) $deanRemedialCourseStmt->fetchColumn();
+[$deanRemedialStatus, $deanRemedialBody] = integration_http_get_json('/api/admin/reports/summary', $adminAccessToken);
+expect_same(200, $deanRemedialStatus, 'Dean report summary loads while a remedial attempt is scheduled');
+$deanRemedialStudent = null;
+foreach ($deanRemedialBody['reports']['students'] ?? [] as $deanReportStudent) {
+    if ((string) ($deanReportStudent['id'] ?? '') === (string) $invitedStudentId) {
+        $deanRemedialStudent = $deanReportStudent;
+    }
+}
+$deanPendingRemedials = array_values(array_filter(
+    $deanRemedialStudent['remedialExams'] ?? [],
+    static fn(array $row): bool => ($row['status'] ?? null) === 'pending' && ($row['subjectCode'] ?? null) === $deanRemedialCourseCode,
+));
+expect_same(1, count($deanPendingRemedials), 'Dean report lists a remedial attempt scheduled through the canonical route as pending');
+$deanRemedialSubject = array_values(array_filter(
+    $deanRemedialStudent['enrolledSubjects'] ?? [],
+    static fn(array $row): bool => ($row['enrollmentId'] ?? null) === (string) $invitedEnrollmentId,
+));
+expect_same('attempt_1_pending', $deanRemedialSubject[0]['remedialProgression']['stage'] ?? null, 'Dean report enrolled subject carries the remedial progression');
 [$remedialRescheduleStatus] = $remedialPost($invitedEnrollmentId, [
     'attemptNumber' => 1,
     'scheduledDate' => '2027-01-11',

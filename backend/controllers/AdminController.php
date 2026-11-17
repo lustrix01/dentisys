@@ -666,7 +666,7 @@ function handle_admin_reports_summary(): void
                     COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
                     COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
                     " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)', 'COALESCE(egb.final_gwa, e.final_gwa)') . " AS retention_state,
-                    e.remedial_state_json, ers.status AS normalized_remedial_status,
+                    e.enrollment_id, e.remedial_state_json, ers.status AS normalized_remedial_status,
                     ers.original_grade AS normalized_original_grade,
                     ers.remedial_score AS normalized_remedial_score,
                     ers.remedial_grade AS normalized_remedial_grade,
@@ -720,6 +720,14 @@ function handle_admin_reports_summary(): void
         $grouped = [];
         $gwaTotals = [];
         $stateRank = ['remedial' => 3, 'irregular_reenrollment' => 2, 'cleared' => 1, 'active' => 0];
+        // Current remedial attempts live in enrollment_remedial_attempts; load them for all rows in one query.
+        $legacyByEnrollment = [];
+        foreach ($students as $s) {
+            if ($s['enrollment_id'] !== null) {
+                $legacyByEnrollment[(int) $s['enrollment_id']] = remedial_state_json_is_legacy($s['remedial_state_json']);
+            }
+        }
+        $progressions = remedial_attempts_load($pdo, array_keys($legacyByEnrollment), $legacyByEnrollment);
         foreach ($students as $s) {
             $id = (string) $s['student_id'];
             if (!isset($grouped[$id])) {
@@ -755,7 +763,11 @@ function handle_admin_reports_summary(): void
                     $gwaTotals[$id]['units'] += $units;
                     $grouped[$id]['overallGWA'] = round($gwaTotals[$id]['weighted'] / $gwaTotals[$id]['units'], 2);
                 }
+                $enrollmentId = (int) $s['enrollment_id'];
+                $progression = $progressions[$enrollmentId] ?? remedial_attempts_empty_progression();
                 $grouped[$id]['enrolledSubjects'][] = [
+                    'enrollmentId' => (string) $enrollmentId,
+                    'remedialProgression' => $progression,
                     'code' => $s['course_code'], 'name' => $s['course_name'],
                     'units' => (float) $s['units'], 'grade' => $s['final_gwa'] !== null ? (float) $s['final_gwa'] : null,
                     'percentage' => $s['final_percentage'] !== null ? (float) $s['final_percentage'] : null,
@@ -766,7 +778,25 @@ function handle_admin_reports_summary(): void
                 $legacyRemedial = remedial_state_json_legacy_payload($s['remedial_state_json']);
                 // enrollment_remedial_states is a projection of the same JSON,
                 // so an override-only value (not a remedial record) is skipped.
-                if ($legacyRemedial !== null) {
+                if ($progression['attempts'] !== []) {
+                    // Current attempts take precedence over the legacy record for the same enrollment.
+                    foreach ($progression['attempts'] as $attempt) {
+                        $grouped[$id]['remedialExams'][] = [
+                            'id' => $enrollmentId . '-' . $attempt['attemptNumber'],
+                            'studentId' => $id,
+                            'studentName' => $grouped[$id]['name'],
+                            'subjectCode' => $s['course_code'],
+                            'subjectName' => $s['course_name'],
+                            'originalGrade' => $s['final_gwa'] !== null ? (float) $s['final_gwa'] : null,
+                            'remedialScore' => $attempt['percentage'],
+                            'remedialGrade' => null,
+                            'examDate' => $attempt['scheduledDate'],
+                            'status' => $attempt['outcome'],
+                            'attemptNumber' => $attempt['attemptNumber'],
+                            'notes' => $attempt['notes'],
+                        ];
+                    }
+                } elseif ($legacyRemedial !== null) {
                     $remedial = $legacyRemedial;
                     if ($s['normalized_remedial_status'] !== null) {
                         $remedial['status'] = $s['normalized_remedial_status'];
