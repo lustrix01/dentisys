@@ -7,6 +7,10 @@
           {
             "type": "command",
             "command": "node \"C:/Users/decha/Desktop/Github/dentisys/.claude/hooks/guard-encoding.mjs\""
+          },
+          {
+            "type": "command",
+            "command": "node \"C:/Users/decha/Desktop/Github/dentisys/.claude/hooks/guard-no-verify.mjs\""
           }
         ]
       },
@@ -16,6 +20,10 @@
           {
             "type": "command",
             "command": "node \"C:/Users/decha/Desktop/Github/dentisys/.claude/hooks/guard-encoding.mjs\""
+          },
+          {
+            "type": "command",
+            "command": "node \"C:/Users/decha/Desktop/Github/dentisys/.claude/hooks/guard-no-verify.mjs\""
           }
         ]
       },
