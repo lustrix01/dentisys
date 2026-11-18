@@ -270,9 +270,11 @@ npm ci
 npx playwright install chromium
 ```
 
+`npm ci` also turns on the repository's git hooks (`git config core.hooksPath .githooks`): they refuse commits that add a BOM or broken encoding, AI trailers, a `fix:` without a test, a `feat:` without a backlog id, or a UI change without a `Demo:` line. The rules are in `CLAUDE.md`.
+
 | Command | What it runs | Needs |
 | --- | --- | --- |
-| `.\scripts\check.ps1` | Config, PHP and TypeScript checks, backend tests, frontend build, frontend unit tests, mocked browser tests | Docker running and the images built once by `start-dev.ps1` |
+| `.\scripts\check.ps1` | Config, PHP and TypeScript checks, backend tests, frontend build, frontend unit tests, git hook tests, mocked browser tests | Docker running and the images built once by `start-dev.ps1` |
 | `.\scripts\check-postgres.ps1` | Database integration tests and live browser tests in a separate, throw-away Docker project | Docker; it never touches your development database |
 | `npm run test:e2e -- e2e/<file>.spec.ts` | One mocked browser test file (all API calls are faked) | Only the Node packages above |
 | `bash scripts/test-e2e.sh e2e/<file>.spec.ts` | The same mocked browser tests on macOS or Linux, without PowerShell | Only the Node packages above |

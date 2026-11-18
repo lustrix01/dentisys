@@ -1,6 +1,6 @@
 # Pre-handoff gate for runtime changes (README A12). Runs, in order: Compose config checks (development,
 # single-server, single-server with the mailpit profile), a scan for removed MariaDB/phpMyAdmin references,
-# the production-validator negative test, the frontend build and unit tests, PHP lint, the backend PHP tests,
+# the production-validator negative test, the frontend build and unit tests, the git hook tests, PHP lint, the backend PHP tests,
 # the documentation contract and the mocked Playwright browser tests (npm run test:e2e).
 # Needs Docker running and the development images built once (start-dev.ps1). No parameters.
 [CmdletBinding()]
@@ -83,6 +83,10 @@ if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
 
 & npm --prefix frontend test
 if ($LASTEXITCODE -ne 0) { throw 'Frontend unit tests failed.' }
+
+# The commit-message rules and the guard that stops Claude skipping them (tests/workflow/).
+& node --test tests/workflow/
+if ($LASTEXITCODE -ne 0) { throw 'Git hook tests failed.' }
 
 & docker compose run --rm --no-deps `
     -v "${root}\tests:/var/www/html/tests:ro" `

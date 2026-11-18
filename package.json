@@ -2,6 +2,7 @@
   "name": "dentisys",
   "private": true,
   "scripts": {
+    "prepare": "node .githooks/install.mjs",
     "dev": "npm --prefix frontend run dev --",
     "build": "npm --prefix frontend run build",
     "lint": "npm --prefix frontend run lint",
