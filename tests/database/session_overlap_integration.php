@@ -66,9 +66,20 @@ $ovCount->execute([$ovA]);
 expect_same(0, (int) $ovCount->fetchColumn(), 'An unconfirmed overlap saves nothing');
 $ovOtherBefore = $ovNotices($ovOtherId);
 $ovSelfBefore = $ovNotices($ovFacultyId);
+// Start/Schedule cannot book over another Faculty's class, even when confirmed (2026-11-18); nothing is saved or sent.
 [$ovStatus, $ovBody] = integration_http_json('/api/faculty/attendance/session', $seedFacultyAccessToken, $ovAPayload + ['confirmOverlap' => true]);
-expect_same(201, $ovStatus, 'Book anyway saves the overlapping session: ' . json_encode($ovBody));
+expect_same([409, 'SESSION_OVERLAP'], [$ovStatus, $ovBody['code'] ?? null], 'A confirmed Start/Schedule over another Faculty is still refused');
+$ovCount->execute([$ovA]);
+expect_same(0, (int) $ovCount->fetchColumn(), 'A refused overlap saves nothing');
+expect_same($ovOtherBefore, $ovNotices($ovOtherId), 'A refused overlap sends no notice');
+// An edit may still overlap after confirmation: book clear of the other class, then move it onto it.
+[$ovStatus, $ovBody] = integration_http_json('/api/faculty/attendance/session', $seedFacultyAccessToken, $ovSession($ovA, $ovDate, '11:00', '12:00', $ovRoomVariant));
+expect_same(201, $ovStatus, 'A session after the other class ends is booked: ' . json_encode($ovBody));
 $ovASession = (int) ($ovBody['session']['sessionId'] ?? 0);
+[$ovStatus, $ovBody] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, ['sessionId' => $ovASession] + $ovTimes('10:00', '12:00'));
+expect_same([409, 'SESSION_OVERLAP'], [$ovStatus, $ovBody['code'] ?? null], 'Editing a session onto another class asks to confirm');
+[$ovStatus, $ovBody] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, ['sessionId' => $ovASession, 'confirmOverlap' => true] + $ovTimes('10:00', '12:00'));
+expect_same(200, $ovStatus, 'Confirming the overlapping edit saves it: ' . json_encode($ovBody));
 expect_same($ovOtherBefore + 1, $ovNotices($ovOtherId), 'The other Faculty gets one overlap notice');
 expect_same($ovSelfBefore, $ovNotices($ovFacultyId), 'The booking Faculty gets no notice about their own booking');
 $ovNote = $pdo->prepare("SELECT body FROM notifications WHERE recipient_user_id = ? AND notification_type = 'room_overlap' ORDER BY notification_id DESC LIMIT 1");
@@ -96,12 +107,16 @@ $ovSecPayload = $ovSession($ovA, $ovSecDate, '08:00', '09:30', $ovRoom);
 [$ovStatus, $ovBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, $ovSecPayload);
 expect_same([409, 'SESSION_OVERLAP'], [$ovStatus, $ovBody['code'] ?? null], 'Secretary booking over another class asks to confirm');
 [$ovStatus, $ovBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, $ovSecPayload + ['confirmOverlap' => true]);
-expect_same(201, $ovStatus, 'Secretary can book anyway: ' . json_encode($ovBody));
+expect_same([409, 'SESSION_OVERLAP'], [$ovStatus, $ovBody['code'] ?? null], 'A Secretary cannot book over another Faculty, even confirmed');
+// Over the same Faculty's other class (a joint session) the Secretary may book anyway.
+$ovSecJoint = $ovBooked($ovC, $ovFacultyId, $ovSecDate, 'Sec Joint Place ' . $ovSuffix, '13:00', '14:00');
+[$ovStatus, $ovBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, $ovSession($ovA, $ovSecDate, '13:30', '14:30', 'Sec Other Place ' . $ovSuffix, ['confirmOverlap' => true]));
+expect_same(201, $ovStatus, 'Secretary can book a joint session anyway: ' . json_encode($ovBody));
 $ovSecSession = (int) ($ovBody['session']['sessionId'] ?? 0);
 $ovActor = $pdo->prepare("SELECT actor_role FROM audit_events WHERE action_code = 'attendance_session_overlap_confirmed' AND target_id = ?");
 $ovActor->execute([(string) $ovSecSession]);
 expect_same('secretary', strtolower((string) $ovActor->fetchColumn()), 'The audit names the Secretary who confirmed');
-$ovRevoke($ovASession, $ovBSession, $ovBSecond, $ovSecSession);
+$ovRevoke($ovASession, $ovBSession, $ovBSecond, $ovSecJoint, $ovSecSession);
 
 // (b) Same Faculty teaching another class at that time (joint block sessions): asks, but nobody is notified.
 $ovJointDate = $ovDay(33);

@@ -13,7 +13,7 @@ const standard = ['text-[10px]', 'font-bold', 'uppercase', 'tracking-wider'];
 const printExempt: Record<string, number> = {
   'admin/SystemAudit.tsx': 2,
   'faculty/ClassesAndRosters.tsx': 1,
-  'faculty/GradeComputation.tsx': 1,
+  'faculty/GradeComputation.tsx': 2,
   'faculty/Reports.tsx': 3,
   'components/AuditTrailPage.tsx': 1,
   'components/PrintSheet.tsx': 1,

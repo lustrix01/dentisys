@@ -7,7 +7,7 @@ import { Card } from '../../components/Card';
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import { Modal } from '../../components/Modal';
 import { PendingRequestsBadge } from '../../components/FacultyExcusedRequestsPanel';
-import { showFeedback } from '../../components/FeedbackCenter';
+import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
 import {
   getFacultyActivityApi,
   getFacultyExcusedRequestsApi,
@@ -245,6 +245,17 @@ export const Dashboard: React.FC = () => {
     }
     const selected = pendingRemedials.find(row => row.id === selectedRemedialId);
     if (!selected) return;
+    const resultSummary = scoreVal >= 75
+      ? 'the student will pass and be cleared'
+      : selected.attemptNumber === 1
+        ? `attempt 2 will become available${reattemptDate.trim() ? ` and be scheduled for ${reattemptDate.trim()}` : ''}`
+        : 'the student will move to cost recovery';
+    const confirmed = await requestConfirmation(
+      `Record ${selected.studentName}'s Attempt ${selected.attemptNumber} score of ${scoreVal.toFixed(2)}% in ${selected.subjectCode}? ${resultSummary}. The Student may receive an in-app notification.`,
+      'Confirm Remedial Result',
+      'Save result',
+    );
+    if (!confirmed) return;
     try {
       const saved = await saveFacultyRemedialApi({
         enrollmentId: selected.record.enrollmentId,

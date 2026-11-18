@@ -262,11 +262,13 @@ function attendance_session_overlaps(PDO $pdo, int $csId, string $date, ?string 
     return $overlaps;
 }
 
-/** Throws the SESSION_OVERLAP 409 unless the request confirmed it; returns the overlaps to record after saving. */
-function attendance_session_overlap_gate(PDO $pdo, array $data, int $csId, string $date, ?string $opening, string $end, ?string $room): array
+/** Throws the SESSION_OVERLAP 409 unless the request confirmed it. With $allowConfirmation false (manual Start/Schedule),
+ *  an overlap with another Faculty's class cannot be confirmed; overlaps only with the same Faculty's classes (joint sessions) still can. */
+function attendance_session_overlap_gate(PDO $pdo, array $data, int $csId, string $date, ?string $opening, string $end, ?string $room, bool $allowConfirmation = true): array
 {
     $overlaps = attendance_session_overlaps($pdo, $csId, $date, $opening, $end, $room);
-    if ($overlaps !== [] && ($data['confirmOverlap'] ?? null) !== true) throw new BookingOverlapException($overlaps);
+    $confirmable = $allowConfirmation || !array_filter($overlaps, fn(array $o): bool => !$o['isOwn']);
+    if ($overlaps !== [] && (!$confirmable || ($data['confirmOverlap'] ?? null) !== true)) throw new BookingOverlapException($overlaps);
     return $overlaps;
 }
 

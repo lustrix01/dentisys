@@ -35,16 +35,18 @@ interface Props {
   overlaps: BookingOverlap[] | null;
   /** Class form wording: "This schedule overlaps with:" / "Save anyway". */
   forClass?: boolean;
+  /** Block an interactive session creation when a booking overlap is found. */
+  blocking?: boolean;
   /** Confirm button text when the default ("Save anyway" / "Book anyway") does not fit, e.g. "Turn on anyway". */
   confirmLabel?: string;
   /** Same accent as the Start Session pop-up that opens this one (Secretary flows pass 'blue'). */
   accent?: 'emerald' | 'blue';
   busy?: boolean;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm?: () => void;
 }
 
-export const OverlapConfirmModal: React.FC<Props> = ({ overlaps, forClass, confirmLabel, accent = 'emerald', busy, onCancel, onConfirm }) => {
+export const OverlapConfirmModal: React.FC<Props> = ({ overlaps, forClass, blocking = false, confirmLabel, accent = 'emerald', busy, onCancel, onConfirm }) => {
   const backRef = useRef<HTMLButtonElement>(null);
   // Modal focuses its own panel after mount, so ask for the safe button one tick later.
   useEffect(() => { if (!overlaps) return undefined; const t = window.setTimeout(() => backRef.current?.focus()); return () => window.clearTimeout(t); }, [overlaps]);
@@ -57,7 +59,7 @@ export const OverlapConfirmModal: React.FC<Props> = ({ overlaps, forClass, confi
   // Same classes as the Start Session pop-up's submit button, per accent.
   const primary = accent === 'blue' ? 'bg-blue-600 shadow-blue-600/20' : 'bg-emerald-600 shadow-emerald-600/20';
   return (
-    <Modal isOpen={!!overlaps} onClose={onCancel} title={forClass ? 'This schedule overlaps with:' : 'This booking overlaps with:'} size="sm">
+    <Modal isOpen={!!overlaps} onClose={onCancel} title={blocking ? 'Session cannot be created' : forClass ? 'This schedule overlaps with:' : 'This booking overlaps with:'} size="sm">
       {overlaps && (
         <div className="space-y-4" data-testid="overlap-confirm">
           <ul className={`space-y-2 ${overlaps.length > 1 ? 'max-h-[50vh] overflow-y-auto' : ''}`}>
@@ -78,11 +80,13 @@ export const OverlapConfirmModal: React.FC<Props> = ({ overlaps, forClass, confi
             ))}
           </ul>
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-            {others.length ? `${others.join(', ')} will be notified.` : 'This overlaps only your own booking, so nobody else is notified.'}
+            {blocking
+              ? `${others.length ? `Contact ${others.join(', ')} to coordinate a different room or time.` : 'Resolve the overlapping booking before creating this session.'} This session has not been created.`
+              : others.length ? `${others.join(', ')} will be notified.` : 'This overlaps only your own booking, so nobody else is notified.'}
           </p>
           <div className="flex justify-end gap-2">
-            <button type="button" ref={backRef} disabled={busy} onClick={onCancel} className="rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-700 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200">Go back</button>
-            <button type="button" disabled={busy} onClick={onConfirm} className={`inline-flex items-center gap-1.5 rounded-xl ${primary} px-4 py-2 text-xs font-bold text-white shadow-md disabled:opacity-50`}>{confirmLabel ?? (forClass ? 'Save anyway' : 'Book anyway')}</button>
+            <button type="button" ref={backRef} disabled={busy} onClick={onCancel} className="rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-700 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200">{blocking ? 'Go back and change details' : 'Go back'}</button>
+            {!blocking && onConfirm && <button type="button" disabled={busy} onClick={onConfirm} className={`inline-flex items-center gap-1.5 rounded-xl ${primary} px-4 py-2 text-xs font-bold text-white shadow-md disabled:opacity-50`}>{confirmLabel ?? (forClass ? 'Save anyway' : 'Book anyway')}</button>}
           </div>
         </div>
       )}

@@ -5,6 +5,8 @@ import {
   GraduationCap, 
   AlertTriangle, 
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   FileCheck,
   CheckCircle,
   BookOpen,
@@ -47,99 +49,38 @@ import { extractPeriodEvaluation, type PeriodComponentEvaluation } from '../../u
 import {
   getFacultyReportsSummaryApi,
   getFacultyClassesApi,
+  getFacultyAttendanceSheetApi,
   getFacultyGradingConfigApi,
   getFacultyRetentionApi,
   getFacultyAttendanceWorksheetApi,
-  getFacultyAttendanceSheetApi,
   previewFacultyGradesApi,
   isPeriodComputeResult,
   ApiError,
-  type FacultyGradeComputeResult,
   type FacultyGradingConfiguration,
   type FacultyRetentionRecord,
   type FacultyAttendanceWorksheetRosterItem,
 } from '../../services/apiClient';
 import GradeValue from '../../components/GradeValue';
 import Tabs from '../../components/Tabs';
-import { downloadXlsx, type Cell as XlsxCell, type XlsxSheet } from '../../utils/xlsxDownload';
+import { downloadXlsx } from '../../utils/xlsxDownload';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { assessmentMatrixCells, assessmentMatrixGroups, buildAssessmentScoresSheet, buildReportSheet, dayToDate, termLine, watchlistStatusText } from '../../utils/reportWorkbook';
 import { IBU_SUMMARY_COLUMNS, ibuGradeSummaryRow, savedGradeResult, sheetName } from '../../utils/officialGradeSheetExport';
 import { buildAttendanceSheetTable, type AttendanceSheetTable } from '../../utils/attendanceSheet';
 import { ExportPair } from '../../components/ExportMenu';
 import { buildRemedialSummaryTable, type RemedialSummaryTable } from '../../utils/remedialSummary';
+import { buildFacultyAcademicSummarySheet, buildFacultyAcademicSummaryTable, type FacultyAcademicSummaryValues } from '../../utils/facultyAcademicSummaryExport';
 
-type ReportsBundleSnapshot = {
-  retention: FacultyRetentionRecord[];
-  attendance: FacultyAttendanceWorksheetRosterItem[];
-  analyticsAttendance: FacultyAttendanceWorksheetRosterItem[];
-  revokedAttendanceSessions: string[];
-  /** The server's grade results by student id; null for a past class (its saved breakdowns are read instead). */
-  gradeResults: Record<string, FacultyGradeComputeResult> | null;
+
+type AcademicSummaryPrintSnapshot = {
+  courseLabel: string;
+  section: string;
+  term: string;
+  faculty: string;
+  lectureLaboratory: boolean;
+  columns: string[];
+  rows: string[][];
 };
-
-type ReportAnalyticsRow = { dataset: string; metric: string; value: number; unit: string };
-
-async function buildAnalyticsChartImage(rows: ReportAnalyticsRow[]): Promise<{ blob: Blob; height: number }> {
-  const canvas = document.createElement('canvas');
-  const width = 1200;
-  const rowHeight = 34;
-  const groups = [
-    { title: 'Retention standing', rows: rows.filter(row => row.dataset === 'Retention Watch Standings'), color: '#15803d' },
-    { title: 'Grade distribution', rows: rows.filter(row => row.dataset === 'Grade Distribution'), color: '#2563eb' },
-    { title: 'Assessment averages', rows: rows.filter(row => row.dataset === 'Assessment Average Success Rates'), color: '#0d9488' },
-  ];
-  const height = groups.reduce((total, group) => total + 72 + Math.max(group.rows.length, 1) * rowHeight + 28, 30);
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('Could not prepare the analytics charts.');
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, width, height);
-  let y = 28;
-  for (const group of groups) {
-    context.fillStyle = '#172033';
-    context.font = 'bold 26px Arial';
-    context.fillText(group.title, 24, y + 28);
-    y += 52;
-    const max = Math.max(...group.rows.map(row => row.value), group.rows[0]?.unit === '%' ? 100 : 1);
-    for (const row of group.rows) {
-      context.fillStyle = '#334155';
-      context.font = '19px Arial';
-      context.fillText(row.metric, 30, y + 22, 330);
-      const barX = 380;
-      const barWidth = 650;
-      context.fillStyle = '#e2e8f0';
-      context.fillRect(barX, y + 4, barWidth, 18);
-      context.fillStyle = group.color;
-      context.fillRect(barX, y + 4, Math.max(0, Math.min(1, row.value / max)) * barWidth, 18);
-      context.fillStyle = '#172033';
-      context.font = 'bold 18px Arial';
-      context.fillText(`${row.value}${row.unit === '%' ? '%' : ` ${row.unit}`}`, 1050, y + 21);
-      y += rowHeight;
-    }
-    y += 28;
-  }
-  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Could not render the analytics charts.')), 'image/png'));
-  return { blob, height };
-}
-
-async function loadReportAttendance(csId: number, date: string, selectedSessionId: string) {
-  const initial = await getFacultyAttendanceWorksheetApi({
-    csId,
-    date,
-    sessionId: selectedSessionId ? Number(selectedSessionId) : undefined,
-  });
-  const sessions = initial.worksheet?.attendanceSessions ?? [];
-  const fallbackSessionId = !selectedSessionId && sessions.length > 1
-    ? String(sessions[0]?.sessionId ?? '')
-    : '';
-  if (fallbackSessionId) {
-    const selected = await getFacultyAttendanceWorksheetApi({ csId, date, sessionId: Number(fallbackSessionId) });
-    return { sessions, records: selected.worksheet?.roster ?? [], selectedSessionId: fallbackSessionId };
-  }
-  return { sessions, records: initial.worksheet?.roster ?? [], selectedSessionId };
-}
 
 async function loadReportAnalyticsAttendance(csId: number, dates: string[]) {
   const records: FacultyAttendanceWorksheetRosterItem[] = [];
@@ -384,6 +325,52 @@ export const Reports: React.FC = () => {
   // Report Category State: 'academic' | 'retention' | 'attendance' | 'analytics'
   const [reportTab, setReportTab] = useState<'academic' | 'retention' | 'attendance' | 'analytics'>('academic');
   const [attendanceDate, setAttendanceDate] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date()));
+  const [attendanceSessionDates, setAttendanceSessionDates] = useState<string[]>([]);
+  const [attendanceCalendarOpen, setAttendanceCalendarOpen] = useState(false);
+  const [attendanceCalendarMonth, setAttendanceCalendarMonth] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
+
+  useEffect(() => {
+    if (!selectedClass?.csId) {
+      setAttendanceSessionDates([]);
+      setAttendanceDate('');
+      return;
+    }
+    let ignore = false;
+    getFacultyAttendanceSheetApi(Number(selectedClass.csId)).then(response => {
+      if (ignore) return;
+      const dates = Array.from(new Set((response.sheet?.sessions ?? []).map(session => session.date).filter(Boolean))).sort();
+      setAttendanceSessionDates(dates);
+      setAttendanceDate(current => dates.includes(current) ? current : (dates[dates.length - 1] ?? ''));
+    }).catch(() => {
+      if (!ignore) {
+        setAttendanceSessionDates([]);
+        setAttendanceDate('');
+      }
+    });
+    return () => { ignore = true; };
+  }, [selectedClass?.csId]);
+
+  useEffect(() => {
+    if (!attendanceDate) return;
+    const [year, month] = attendanceDate.split('-').map(Number);
+    if (year && month) setAttendanceCalendarMonth(new Date(year, month - 1, 1));
+  }, [attendanceDate]);
+
+  const attendanceSessionDateSet = useMemo(() => new Set(attendanceSessionDates), [attendanceSessionDates]);
+  const attendanceCalendarCells = useMemo(() => {
+    const year = attendanceCalendarMonth.getFullYear();
+    const month = attendanceCalendarMonth.getMonth();
+    const firstWeekday = new Date(year, month, 1).getDay();
+    const dayCount = new Date(year, month + 1, 0).getDate();
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return [
+      ...Array.from({ length: firstWeekday }, () => null),
+      ...Array.from({ length: dayCount }, (_, index) => `${year}-${pad(month + 1)}-${pad(index + 1)}`),
+    ];
+  }, [attendanceCalendarMonth]);
 
   useEffect(() => {
     setSelectedAttendanceSessionId('');
@@ -579,12 +566,40 @@ export const Reports: React.FC = () => {
       }),
   [selectedGradingConfiguration?.componentMode, studentsInSelectedSubject, selectedClassId, selectedSubjectCode]);
 
-  // Sorting applies to the on-screen table only; exports and print keep the roster order.
+  // The export contains every filtered row and preserves the current table sort.
   const sortedStudentsInSubject = useMemo(() => {
     if (gradeSort.key === 'default') return studentsInSelectedSubject;
     const value = (student: any) => gradeSort.key === 'name' ? student.name : courseEvaluation(subjectForSelection(student)).overallGwa;
     return [...studentsInSelectedSubject].sort((a, b) => compareValues(value(a), value(b), gradeSort.dir));
   }, [studentsInSelectedSubject, gradeSort, selectedClassId, selectedSubjectCode]);
+
+  const buildAcademicSummaryData = () => {
+    if (!selectedClass) throw new Error('Select a class before exporting the Grades & Assessment Summary.');
+    const values: FacultyAcademicSummaryValues[] = sortedStudentsInSubject.map(student => {
+      const subj = subjectForSelection(student);
+      const evaluation = courseEvaluation(subj);
+      return {
+        studentNumber: student.studentId,
+        studentName: student.name,
+        ...(isLectureLaboratoryMode ? {
+          midtermLecture: formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus),
+          midtermLaboratory: formatComponentResult(evaluation.midtermComponents?.laboratory, evaluation.midtermStatus),
+          finalsLecture: formatComponentResult(evaluation.finalComponents?.lecture, evaluation.finalStatus),
+          finalsLaboratory: formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus),
+        } : {}),
+        midterm: formatPercent(evaluation.midtermPercentage),
+        finals: formatPercent(evaluation.finalPercentage),
+        grade: formatCourseGrade(evaluation),
+        remarks: courseRemark(student, subj),
+      };
+    });
+    const table = buildFacultyAcademicSummaryTable(isLectureLaboratoryMode, values);
+    const courseLabel = `${selectedClass.courseCode}${selectedClass.courseName ? ` · ${selectedClass.courseName}` : ''}`;
+    const term = selectedClass.semester && selectedClass.schoolYear
+      ? termLine(String(selectedClass.semester), String(selectedClass.schoolYear))
+      : `S.Y. ${selectedClass.schoolYear || selectedSchoolYear}`;
+    return { ...table, courseLabel, section: selectedClass.csName, term };
+  };
 
   const sortedFacultyStudents = retentionSort.key === 'default'
     ? facultyStudents
@@ -598,14 +613,13 @@ export const Reports: React.FC = () => {
   const totalPagesInSubject = Math.ceil(studentsInSelectedSubject.length / pageSize) || 1;
 
   const [printedAt, setPrintedAt] = useState<Date | null>(null);
-  const [reportsBundlePrint, setReportsBundlePrint] = useState<ReportsBundleSnapshot | null>(null);
-  const [isPreparingBundlePrint, setIsPreparingBundlePrint] = useState(false);
+  const [academicSummaryPrint, setAcademicSummaryPrint] = useState<AcademicSummaryPrintSnapshot | null>(null);
   const handlePrint = () => {
     flushSync(() => setPrintedAt(new Date()));
     window.print();
   };
 
-  // Academic exports the five-sheet Reports bundle; Retention and Attendance keep their focused .xlsx exports.
+  // Academic export matches the selected table; Retention and Attendance keep their focused .xlsx exports.
   const [isExportingAcademic, setIsExportingAcademic] = useState(false);
   // Plain exports and prints name students `LAST, First Middle`, ordered by last name.
   const byLastName = <T extends Student>(list: T[]) => [...list].sort((a, b) => sheetName(a).localeCompare(sheetName(b)));
@@ -619,9 +633,20 @@ export const Reports: React.FC = () => {
     if (type === 'academic') {
       setIsExportingAcademic(true);
       try {
-        await handleExportReportsBundle();
+        const table = buildAcademicSummaryData();
+        const fileBase = `${selectedClass?.courseCode || 'Course'}_${selectedClass?.csName || 'Class'}_Grades_Assessment_Summary_${selectedClass?.schoolYear || selectedSchoolYear}_${selectedClass?.semester || ''}`
+          .replace(/[^a-zA-Z0-9_.-]+/g, '_');
+        await downloadXlsx(`${fileBase}.xlsx`, [buildFacultyAcademicSummarySheet({
+          table,
+          lectureLaboratory: isLectureLaboratoryMode,
+          courseLabel: table.courseLabel,
+          section: table.section,
+          term: table.term,
+          by: user?.display_name ?? '',
+          generated: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+        })]);
       } catch (err) {
-        showFeedback(err instanceof Error ? err.message : 'Could not export the reports workbook.', 'error');
+        showFeedback(err instanceof Error ? err.message : 'Could not export the Grades & Assessment Summary.', 'error');
       } finally {
         setIsExportingAcademic(false);
       }
@@ -750,7 +775,7 @@ export const Reports: React.FC = () => {
     ].filter(item => item.value > 0);
   }, [retentionRecords, selectedClassId, selectedSchoolYear]);
 
-  // Recharts Stats: Assessment Success Rates. Also used by the five-sheet export.
+  // Recharts Stats: Assessment Success Rates.
   const buildAssessmentStatsData = (attendanceRows: FacultyAttendanceWorksheetRosterItem[], revokedSessions: string[] = []) => {
     const revokedKeys = new Set(revokedSessions);
     const activeAss = assessments.filter(a =>
@@ -783,241 +808,29 @@ export const Reports: React.FC = () => {
   };
   const assessmentStatsData = analyticsAttendanceLoading ? [] : buildAssessmentStatsData(analyticsAttendanceRecords, revokedAnalyticsSessions);
 
-  async function collectReportsBundleSnapshot(): Promise<ReportsBundleSnapshot> {
-    if (!selectedClass?.csId) throw new Error('Select a class before exporting the Grades & Assessments report.');
-    const [retentionResponse, attendanceSnapshot, analyticsAttendance, gradeResults] = await Promise.all([
-      getFacultyRetentionApi(),
-      loadReportAttendance(Number(selectedClass.csId), attendanceDate, selectedAttendanceSessionId),
-      loadReportAnalyticsAttendance(Number(selectedClass.csId), analyticsAssessmentDates),
-      // Same fallback as the Grade Computation export: the preview refuses past (409) and non-live (403) classes.
-      previewFacultyGradesApi(String(selectedClass.csId || selectedClass.id))
-        .then(response => Object.fromEntries((response.results ?? []).map(result => [String(result.studentId), result])))
-        .catch((error: unknown) => {
-          if (error instanceof ApiError && [403, 409].includes(error.status)) return null;
-          throw error;
-        }),
-    ]);
-    if (attendanceSnapshot.selectedSessionId && !selectedAttendanceSessionId) {
-      setSelectedAttendanceSessionId(attendanceSnapshot.selectedSessionId);
-    }
-    return {
-      retention: retentionResponse.retention ?? [],
-      attendance: attendanceSnapshot.records,
-      analyticsAttendance: analyticsAttendance.records,
-      revokedAttendanceSessions: analyticsAttendance.revokedSessions,
-      gradeResults,
-    };
-  }
-
-  function buildReportsBundleTables(snapshot: ReportsBundleSnapshot) {
-    if (!selectedClass) throw new Error('Select a class before exporting the Grades & Assessments report.');
-    const classId = String(selectedClass.csId || selectedClass.id);
-    const categories = [
-      ...(selectedGradingConfiguration?.midtermCategories ?? []),
-      ...(selectedGradingConfiguration?.finalCategories ?? []),
-    ];
-    const classAssessments = assessments
-      .filter(assessment => String(assessment.classId) === classId
-        && assessment.subjectCode === selectedClass.courseCode
-        && assessment.status !== 'Archived')
-      .sort((a, b) => {
-        const categoryA = categories.find(item => String(item.id ?? '') === String(a.gradingCategoryId ?? '')
-          && (!item.gradingPeriod || item.gradingPeriod === a.gradingPeriod));
-        const categoryB = categories.find(item => String(item.id ?? '') === String(b.gradingCategoryId ?? '')
-          && (!item.gradingPeriod || item.gradingPeriod === b.gradingPeriod));
-        const componentRank = (component: string | null | undefined) => {
-          const normalized = String(component ?? '').toLowerCase();
-          return normalized === 'lecture' ? 0 : normalized === 'laboratory' || normalized === 'lab' ? 1 : 2;
-        };
-        return (a.gradingPeriod === 'Midterm' ? 0 : 1) - (b.gradingPeriod === 'Midterm' ? 0 : 1)
-          || componentRank(categoryA?.component) - componentRank(categoryB?.component)
-          || (categoryA?.sortOrder ?? 999) - (categoryB?.sortOrder ?? 999)
-          || a.dueDate.localeCompare(b.dueDate)
-          || a.title.localeCompare(b.title);
-      });
-    const scoreByStudentAndAssessment = new Map(assessmentScores.map(score => [`${score.studentId}|${score.assessmentId}`, score.score]));
-    const revokedSessions = new Set(snapshot.revokedAttendanceSessions);
-    const classStudents = ([...studentsInSelectedSubject] as Student[]).sort((a, b) => sheetName(a).localeCompare(sheetName(b)));
-    const assessmentColumns = classAssessments.map(assessment => {
-      const category = categories.find(item => String(item.id ?? '') === String(assessment.gradingCategoryId ?? '')
-        && (!item.gradingPeriod || item.gradingPeriod === assessment.gradingPeriod));
-      return {
-        id: assessment.id,
-        period: assessment.gradingPeriod === 'Final' ? 'Finals' as const : 'Midterm' as const,
-        component: category?.component ?? 'Course',
-        category: category?.name ?? assessment.type,
-        categoryId: category && category.sourceKind !== 'attendance' && category.id != null ? Number(category.id) : null,
-        weight: category ? Number(category.weight) : null,
-        title: assessment.title,
-        maxScore: assessment.maxScore,
-        transmutationEnabled: Boolean(assessment.transmutationEnabled),
-        attendanceSessionDate: assessment.attendanceSessionDate ?? null,
-        attendanceSessionCode: assessment.attendanceSessionCode ?? null,
-      };
-    });
-    // `LAST, First Middle` on every sheet and print section (X11/X28).
-    const nameOf = (match: (s: Student) => boolean, fallback: string) => {
-      const found = classStudents.find(match);
-      return found ? sheetName(found) : fallback;
-    };
-    const assessmentMatrixRows = classStudents.map(student => {
-      const subject = (student.enrolledSubjects || []).find(sub => sub.code === selectedClass.courseCode
-        && String(sub.classId ?? student.classId ?? classId) === classId);
-      const live = snapshot.gradeResults?.[student.id];
-      const periods = snapshot.gradeResults ? (live && isPeriodComputeResult(live) ? live.periods : undefined) : savedGradeResult(subject)?.periods;
-      const scores = assessmentColumns.map(column => scoreByStudentAndAssessment.get(`${student.id}|${column.id}`) ?? null);
-      const effectivePercentages = assessmentColumns.map((column, index) => {
-        const linked = Boolean(column.attendanceSessionDate && column.attendanceSessionCode);
-        const revoked = linked && revokedSessions.has(`${column.attendanceSessionDate}|${column.attendanceSessionCode}`);
-        const attendance = linked
-          ? snapshot.analyticsAttendance.find(record => record.studentId === student.id
-            && record.date === column.attendanceSessionDate
-            && record.sessionCode === column.attendanceSessionCode)
-          : undefined;
-        const score = scores[index];
-        return score === null ? null : effectiveAssessmentPercentage(
-          score,
-          column.maxScore,
-          { transmutationEnabled: column.transmutationEnabled },
-          !linked || revoked ? 'unlinked' : attendance?.status,
-        );
-      });
-      return {
-        studentNumber: student.studentId,
-        studentName: sheetName(student),
-        scores,
-        effectivePercentages,
-        periods,
-      };
-    });
-    const gradeRows = classStudents.map(student => {
-      const subject = (student.enrolledSubjects || []).find(sub => sub.code === selectedClass.courseCode
-        && String(sub.classId ?? student.classId ?? classId) === classId) ?? null;
-      const evaluation = courseEvaluation(subject);
-      // Completion and Notes come from the enrollment's remedial progression in the retention records.
-      const retention = snapshot.retention.find(record => String(record.studentId) === String(student.id)
-        && String(record.classId) === classId && record.subjectCode === selectedClass.courseCode
-        && (!record.schoolYear || record.schoolYear === selectedClass.schoolYear));
-      return ibuGradeSummaryRow({ student, evaluation, progression: retention?.remedialProgression });
-    });
-    const watchlistRows = snapshot.retention
-      .filter(record => String(record.classId) === classId
-        && record.subjectCode === selectedClass.courseCode
-        && record.midtermAtRisk === true
-        && (!record.schoolYear || record.schoolYear === selectedClass.schoolYear))
-      .map(record => ({
-        studentNumber: record.studentNumber ?? '',
-        studentName: nameOf(s => String(s.id) === String(record.studentId), record.studentName ?? 'Student name unavailable'),
-        className: record.className ?? `${selectedClass.courseCode} · ${selectedClass.csName}`,
-        midtermPercentage: record.midtermPercentage,
-        midtermGrade: typeof record.midtermPercentage === 'number' ? percentageToGWA(record.midtermPercentage, 'Midterm') : null,
-        riskStanding: 'At Risk',
-        status: watchlistStatusText(record),
-      }))
-      .sort((a, b) => a.studentName.localeCompare(b.studentName));
-    const attendanceRows = snapshot.attendance.map(record => ({
-      date: record.date,
-      session: record.sessionCode ?? '',
-      studentNumber: record.studentNumber,
-      studentName: nameOf(s => s.studentId === record.studentNumber, record.studentName),
-      courseCode: selectedClass.courseCode,
-      status: record.status ?? 'Not recorded',
-    }));
-    const assessmentAverages = buildAssessmentStatsData(snapshot.analyticsAttendance);
-    const retentionRank: Record<string, number> = { active: 0, cleared: 1, remedial: 2 };
-    const retentionByStudent = new Map<string, string>();
-    snapshot.retention
-      .filter(record => String(record.classId) === classId
-        && (!record.schoolYear || record.schoolYear === selectedClass.schoolYear))
-      .forEach(record => {
-        const state = record.state === 'archived' ? 'active' : record.state;
-        const key = String(record.studentId);
-        const current = retentionByStudent.get(key);
-        if (!current || retentionRank[state] > retentionRank[current]) retentionByStudent.set(key, state);
-      });
-    const retentionCounts: Record<string, number> = { active: 0, cleared: 0, remedial: 0 };
-    retentionByStudent.forEach(state => { retentionCounts[state] = (retentionCounts[state] || 0) + 1; });
-    const analyticsRows = [
-      ...[
-        { name: 'Active Standing', value: retentionCounts.active },
-        { name: 'Cleared (Remedial Passed)', value: retentionCounts.cleared },
-        { name: 'Remedial Programs', value: retentionCounts.remedial },
-      ].filter(item => item.value > 0).map(item => ({ dataset: 'Retention Watch Standings', metric: item.name, value: item.value, unit: 'students' })),
-      ...gradeHistogramData.map(item => ({ dataset: 'Grade Distribution', metric: item.name, value: item.count, unit: 'students' })),
-      ...assessmentAverages.map(item => ({ dataset: 'Assessment Average Success Rates', metric: item.name, value: item.average, unit: '%' })),
-    ];
-    const classLabel = `${selectedClass.courseCode} · ${selectedClass.csName}`;
-    const term = selectedClass.semester && selectedClass.schoolYear
-      ? termLine(String(selectedClass.semester), String(selectedClass.schoolYear))
-      : `S.Y. ${selectedClass.schoolYear || selectedSchoolYear}`;
-    const by = user?.display_name ?? '';
-    const titleInput = (sheet: string, title: string, columns: Parameters<typeof buildReportSheet>[0]['columns'], rows: Array<Array<string | number | Date | null>>) => buildReportSheet({
-      sheet,
-      title,
-      filter: classLabel,
-      term,
-      by,
-      columns,
-      rows,
-    });
-    const assessmentSheet = buildAssessmentScoresSheet({
-      columns: assessmentColumns,
-      rows: assessmentMatrixRows,
-      titleLines: ['Republic of the Philippines', 'BICOL UNIVERSITY', 'COLLEGE OF DENTAL MEDICINE', 'GRADES & ASSESSMENT SCORES', classLabel, term, `Exported by ${by}`, ''],
-    });
-    const sheets = [
-      assessmentSheet,
-      titleInput('Grade Summary', 'MIDTERM, FINALS & COURSE GRADE SUMMARY', IBU_SUMMARY_COLUMNS, gradeRows.map(row => [row.studentNumber, row.fullName, row.status, row.midterm, row.tentative, row.final, row.completion, row.notes])),
-      titleInput('Midterm Watchlist', 'MIDTERM WATCHLIST', [
-        { header: 'Student Number', width: 16 }, { header: 'Student Name', width: 30 }, { header: 'Class', width: 24 },
-        { header: 'Midterm %', width: 14, format: '0.00%' }, { header: 'Midterm Grade', width: 16, format: '0.0' },
-        { header: 'Risk Standing', width: 16 }, { header: 'Status', width: 18 },
-      ], watchlistRows.map(row => [row.studentNumber, row.studentName, row.className,
-        typeof row.midtermPercentage === 'number' ? row.midtermPercentage / 100 : null, row.midtermGrade, row.riskStanding, row.status])),
-      titleInput('Attendance Register', 'ATTENDANCE REGISTER', [
-        { header: 'Date', width: 14 }, { header: 'Session', width: 16 }, { header: 'Student Number', width: 16 },
-        { header: 'Student Name', width: 30 }, { header: 'Course Code', width: 14 }, { header: 'Status', width: 16 },
-      ], attendanceRows.map(row => [dayToDate(row.date) ?? row.date, row.session, row.studentNumber, row.studentName, row.courseCode, row.status])),
-      buildReportSheet({ sheet: 'Interactive Analytics', title: 'INTERACTIVE ANALYTICS', filter: classLabel, term, by,
-        columns: [{ header: 'Dataset', width: 34 }, { header: 'Metric', width: 34 }, { header: 'Value', width: 16, format: '0.00' }, { header: 'Unit', width: 14 }],
-        rows: analyticsRows.map(row => [row.dataset, row.metric, row.value, row.unit]) }),
-    ];
-    return { assessmentColumns, assessmentMatrixRows, gradeRows, watchlistRows, attendanceRows, analyticsRows, sheets, classLabel, term };
-  }
-
-  async function handleExportReportsBundle() {
-    if (!selectedClass) throw new Error('Your classes are still loading. Try Export Excel again in a moment.');
-    const snapshot = await collectReportsBundleSnapshot();
-    const bundle = buildReportsBundleTables(snapshot);
-    const chart = await buildAnalyticsChartImage(bundle.analyticsRows);
-    const chartHeightInRows = Math.ceil((chart.height * 0.75) / 20) + 2;
-    const analyticsSheet = bundle.sheets[4];
-    const analyticsData = [...analyticsSheet.data.slice(0, 8), ...Array.from({ length: chartHeightInRows }, () => [] as XlsxCell[]), ...analyticsSheet.data.slice(8)];
-    bundle.sheets[4] = { ...analyticsSheet, data: analyticsData, stickyRowsCount: 9 + chartHeightInRows, images: [{
-      content: chart.blob, contentType: 'image/png', width: 900, height: chart.height * 0.75, dpi: 96,
-      anchor: { row: 8, column: 1 },
-    }] };
-    const filename = `${selectedClass.courseCode}_${selectedClass.csName}_Grades_Assessments_${selectedClass.schoolYear}_${selectedClass.semester}`
-      .replace(/[^a-zA-Z0-9_.-]+/g, '_');
-    await downloadXlsx(`${filename}.xlsx`, bundle.sheets);
-  }
-
-  async function handlePrintReportsBundle() {
+  const handlePrintAcademicSummary = () => {
     if (!selectedClass) {
-      showFeedback('Your classes are still loading. Try Print PDF again in a moment.', 'info');
+      showFeedback('Select a class before exporting the Grades & Assessment Summary.', 'info');
       return;
     }
-    setIsPreparingBundlePrint(true);
     try {
-      const snapshot = await collectReportsBundleSnapshot();
+      const table = buildAcademicSummaryData();
       const restoreAfterPrint = () => {
-        setReportsBundlePrint(null);
+        setAcademicSummaryPrint(null);
         window.removeEventListener('afterprint', restoreAfterPrint);
       };
       window.addEventListener('afterprint', restoreAfterPrint);
       flushSync(() => {
         setPrintedAt(new Date());
-        setReportsBundlePrint(snapshot);
+        setAcademicSummaryPrint({
+          courseLabel: table.courseLabel,
+          section: table.section,
+          term: table.term,
+          faculty: user?.display_name ?? '',
+          lectureLaboratory: isLectureLaboratoryMode,
+          columns: table.columns.map(column => column.header),
+          rows: table.rows.map(row => row.map(value => value == null ? '—' : String(value))),
+        });
       });
       try {
         window.print();
@@ -1026,18 +839,15 @@ export const Reports: React.FC = () => {
         throw err;
       }
     } catch (err) {
-      showFeedback(err instanceof Error ? err.message : 'Could not prepare the reports PDF.', 'error');
-    } finally {
-      setIsPreparingBundlePrint(false);
+      showFeedback(err instanceof Error ? err.message : 'Could not prepare the Grades & Assessment Summary PDF.', 'error');
     }
-  }
-
+  };
   // Shared by the phone blocks and the wider-screen table of the Grades & Assessments summary.
   const renderCourseGrade = (evaluation: ReturnType<typeof courseEvaluation>) => (
     evaluation.overallGwa !== null ? <GradeValue percentage={evaluation.overallPercentage} grade={evaluation.overallGwa} lecture={selectedGradingConfiguration?.componentMode === 'lecture' && selectedGradingConfiguration.termRatio && evaluation.midtermPercentage !== null && evaluation.finalPercentage !== null ? { midterm: evaluation.midtermPercentage, final: evaluation.finalPercentage, midtermShare: Number(selectedGradingConfiguration.termRatio.midterm), finalShare: Number(selectedGradingConfiguration.termRatio.final) } : null}>{formatCourseGrade(evaluation)}</GradeValue> : formatCourseGrade(evaluation)
   );
   const renderRemark = (remark: string) => (
-    <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+    <span className={`inline-flex whitespace-nowrap px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
       remark === 'FAILED'
         ? 'bg-rose-100 text-rose-700'
         : remark === 'PENDING' || remark === 'RETENTION UNAVAILABLE'
@@ -1115,7 +925,7 @@ export const Reports: React.FC = () => {
         className="no-print"
         tabs={[
           { id: 'academic', label: 'Grades & Assessments', shortLabel: 'Grades', icon: <GraduationCap className="w-4 h-4" /> },
-          { id: 'retention', label: 'Retention Watch Lists', shortLabel: 'Retention', icon: <AlertTriangle className="w-4 h-4" /> },
+          { id: 'retention', label: 'Retention & Remedials', shortLabel: 'Retention', icon: <AlertTriangle className="w-4 h-4" /> },
           { id: 'attendance', label: 'Attendance Registers', shortLabel: 'Attendance', icon: <CalendarDays className="w-4 h-4" /> },
           { id: 'analytics', label: 'Interactive Analytics', shortLabel: 'Analytics', icon: <TrendingUp className="w-4 h-4" /> },
         ]}
@@ -1139,7 +949,7 @@ export const Reports: React.FC = () => {
                 onClick={() => handleExportExcel('academic')}
                 disabled={isExportingAcademic}
                 className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
-                title="Export official grade sheet as an Excel workbook"
+                title="Export the selected grade summary table as an Excel workbook"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>{isExportingAcademic ? 'Exporting…' : 'Export Excel'}</span>
@@ -1147,13 +957,13 @@ export const Reports: React.FC = () => {
               <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
               <button
                 type="button"
-                onClick={handlePrintReportsBundle}
-                disabled={isPreparingBundlePrint || !selectedClass}
+                onClick={handlePrintAcademicSummary}
+                disabled={!selectedClass}
                 className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer disabled:cursor-wait disabled:opacity-60"
-                title="Export or print academic report as PDF document"
+                title="Print the selected grade summary table as a PDF"
               >
                 <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-                <span>{isPreparingBundlePrint ? 'Preparing PDF…' : 'Export PDF'}</span>
+                <span>Export PDF</span>
               </button>
             </div>
           </div>
@@ -1357,19 +1167,61 @@ export const Reports: React.FC = () => {
           TAB 3: ATTENDANCE REPORTS
       ---------------------------------------------------- */}
       {reportTab === 'attendance' && (
-        <Card className="p-0 overflow-hidden no-print">
+        <Card className="relative z-20 p-0 overflow-visible no-print">
           <div className="px-5 py-4 border-b dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex flex-wrap gap-2 justify-between items-center">
             <div className="flex-1 basis-40">
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Authoritative Attendance Register</h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{selectedClass?.courseCode || 'Class unavailable'} · {formatShortDate(attendanceDate)}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="date"
-                value={attendanceDate}
-                onChange={event => setAttendanceDate(event.target.value)}
-                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs"
-              />
+              <div className="relative">
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded={attendanceCalendarOpen}
+                  aria-label={attendanceDate ? `Attendance date ${formatShortDate(attendanceDate)}` : 'Choose attendance session date'}
+                  disabled={attendanceSessionDates.length === 0}
+                  onClick={() => setAttendanceCalendarOpen(open => !open)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                >
+                  <CalendarDays className="h-4 w-4 text-clinical-600 dark:text-clinical-400" />
+                  {attendanceDate ? formatShortDate(attendanceDate) : 'No sessions'}
+                </button>
+                {attendanceCalendarOpen && attendanceSessionDates.length > 0 && (
+                  <div role="dialog" aria-label="Select attendance session date" className="absolute right-0 z-30 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                    <div className="mb-3 flex items-center justify-between">
+                      <button type="button" aria-label="Previous month" onClick={() => setAttendanceCalendarMonth(month => new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"><ChevronLeft className="h-4 w-4" /></button>
+                      <div className="text-sm font-bold text-slate-800 dark:text-slate-100">{attendanceCalendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
+                      <button type="button" aria-label="Next month" onClick={() => setAttendanceCalendarMonth(month => new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"><ChevronRight className="h-4 w-4" /></button>
+                    </div>
+                    <div className="grid grid-cols-7 text-center text-[10px] font-bold uppercase text-slate-400" aria-hidden="true">
+                      {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => <span key={day} className="py-1">{day}</span>)}
+                    </div>
+                    <div role="grid" aria-label={attendanceCalendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} className="grid grid-cols-7 gap-y-1">
+                      {attendanceCalendarCells.map((date, index) => {
+                        if (!date) return <span key={`empty-${index}`} aria-hidden="true" />;
+                        const available = attendanceSessionDateSet.has(date);
+                        const selected = date === attendanceDate;
+                        return (
+                          <button
+                            key={date}
+                            type="button"
+                            role="gridcell"
+                            aria-label={`${Number(date.slice(-2))}${available ? ', attendance session available' : ', no attendance session'}`}
+                            aria-pressed={selected}
+                            disabled={!available}
+                            onClick={() => { setAttendanceDate(date); setAttendanceCalendarOpen(false); }}
+                            className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs ${selected ? 'bg-emerald-700 font-bold text-white' : available ? 'font-semibold text-slate-700 hover:bg-emerald-50 dark:text-slate-200 dark:hover:bg-emerald-950/50' : 'cursor-not-allowed text-slate-300 dark:text-slate-700'}`}
+                          >
+                            {Number(date.slice(-2))}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-400">Only dates with attendance sessions can be selected.</p>
+                  </div>
+                )}
+              </div>
               {attendanceSessions.length > 1 && (
                 <select
                   aria-label="Attendance session"
@@ -1555,128 +1407,58 @@ export const Reports: React.FC = () => {
         if (sheetPrint) {
           return <PrintExportTable table={sheetPrint.table} leftColumns={sheetPrint.leftColumns} generated={formatPrintedAt(printedAt ?? new Date())} faculty={user?.display_name} />;
         }
-        if (reportsBundlePrint && selectedClass) {
-          const bundle = buildReportsBundleTables(reportsBundlePrint);
+        if (academicSummaryPrint && selectedClass) {
           const generated = formatPrintedAt(printedAt ?? new Date());
-          const renderTable = (headers: string[], rows: React.ReactNode[][]) => (
-            <table>
-              <thead><tr>{headers.map((header, index) => <th key={`${header}-${index}`} className={index < 2 ? 'l' : ''}>{header}</th>)}</tr></thead>
-              <tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex} className={cellIndex < 2 ? 'l' : ''}>{cell ?? '—'}</td>)}</tr>)}</tbody>
-            </table>
-          );
-          const matrixGroups = assessmentMatrixGroups(bundle.assessmentColumns);
-          // Columns per group: 3 per categorised assessment (Score, %, Transmuted) plus Average % and Weighted; 2 per uncategorised one.
-          const groupWidth = (group: typeof matrixGroups[number]) => group.indexes.length * (group.categoryId === null ? 2 : 3) + (group.categoryId === null ? 0 : 2);
-          const spanHeaders = (same: (x: typeof matrixGroups[number], y: typeof matrixGroups[number]) => boolean, label: (g: typeof matrixGroups[number]) => string) => {
-            const headers: React.ReactNode[] = [];
-            for (let start = 0; start < matrixGroups.length;) {
-              let end = start + 1, span = groupWidth(matrixGroups[start]);
-              while (end < matrixGroups.length && same(matrixGroups[start], matrixGroups[end])) span += groupWidth(matrixGroups[end++]);
-              headers.push(<th key={start} colSpan={span}>{label(matrixGroups[start])}</th>);
-              start = end;
-            }
-            return headers;
-          };
-          const printPercent = (value: number | null) => (value === null ? '—' : `${value.toFixed(2)}%`);
-          const printNumber = (value: number | null) => (value === null ? '—' : value.toFixed(2));
-          const analyticsGroups = [
-            { title: 'Retention standing', key: 'Retention Watch Standings', color: '#15803d' },
-            { title: 'Grade distribution', key: 'Grade Distribution', color: '#2563eb' },
-            { title: 'Assessment averages', key: 'Assessment Average Success Rates', color: '#0d9488' },
-          ].map(group => {
-            const rows = bundle.analyticsRows.filter(row => row.dataset === group.key);
-            return { ...group, rows, max: Math.max(...rows.map(row => row.value), rows[0]?.unit === '%' ? 100 : 1) };
-          });
-          const sections = [
-            <section key="scores" className="report-bundle-section">
-              <PrintCaption>1. Assessment Scores</PrintCaption>
-              <table className="assessment-matrix">
-                <thead>
-                  <tr><th className="l" rowSpan={5}>Student Number</th><th className="l" rowSpan={5}>Student Name</th>
-                    {spanHeaders((x, y) => x.period === y.period, group => group.period)}</tr>
-                  <tr>{spanHeaders((x, y) => x.period === y.period && x.component === y.component, group => group.component)}</tr>
-                  <tr>{spanHeaders(() => false, group => `${group.component} · ${group.category}`)}</tr>
-                  <tr>{matrixGroups.flatMap((group, groupIndex) => [
-                    ...group.indexes.map(i => <th key={bundle.assessmentColumns[i].id} colSpan={group.categoryId === null ? 2 : 3}>{bundle.assessmentColumns[i].title} (Max {bundle.assessmentColumns[i].maxScore})</th>),
-                    ...(group.categoryId === null ? [] : [<th key={`${groupIndex}-avg`} rowSpan={2}>Average %</th>, <th key={`${groupIndex}-wt`} rowSpan={2}>Weighted ({Number(group.weight ?? 0)}%)</th>]),
-                  ])}</tr>
-                  <tr>{matrixGroups.flatMap(group => group.indexes.flatMap(i => [
-                    <th key={`${i}-score`}>Score</th>, <th key={`${i}-percent`}>%</th>,
-                    ...(group.categoryId === null ? [] : [<th key={`${i}-transmuted`}>Transmuted</th>]),
-                  ]))}</tr>
-                </thead>
-                <tbody>{bundle.assessmentMatrixRows.map((row, rowIndex) => <tr key={rowIndex}>
-                  <td className="id">{row.studentNumber}</td><td className="nm">{row.studentName}</td>
-                  {matrixGroups.flatMap((group, groupIndex) => {
-                    const server = assessmentMatrixCells({ columns: bundle.assessmentColumns, row, group });
-                    return [
-                      ...group.indexes.flatMap(i => {
-                        const score = row.scores[i];
-                        if (group.categoryId === null) {
-                          const effective = row.effectivePercentages[i];
-                          return [<td key={`${i}-score`}>{score === null ? '—' : score}</td>,
-                            <td key={`${i}-percent`}>{effective === null || bundle.assessmentColumns[i].maxScore <= 0 ? '—' : printPercent(effective)}</td>];
-                        }
-                        const transmuted = server.transmuted(i);
-                        return [<td key={`${i}-score`}>{score === null ? '—' : score}</td>,
-                          <td key={`${i}-percent`}>{printPercent(server.percent(i))}</td>,
-                          <td key={`${i}-transmuted`}>{typeof transmuted === 'string' ? transmuted : printPercent(transmuted)}</td>];
-                      }),
-                      ...(group.categoryId === null ? [] : [<td key={`${groupIndex}-avg`}>{printNumber(server.average)}</td>, <td key={`${groupIndex}-wt`}>{printNumber(server.weighted)}</td>]),
-                    ];
-                  })}
-                </tr>)}</tbody>
-              </table>
-            </section>,
-            <section key="grades" className="report-bundle-section" style={{ breakBefore: 'page' }}>
-              <PrintCaption>2. Grade Summary</PrintCaption>
-              {renderTable(IBU_SUMMARY_COLUMNS.map(column => column.header),
-                bundle.gradeRows.map(row => [row.studentNumber, row.fullName, row.status, ...[row.midterm, row.tentative, row.final].map(g => (typeof g === 'number' ? formatGrade(g) : g)), row.completion, row.notes]))}
-            </section>,
-            <section key="watchlist" className="report-bundle-section" style={{ breakBefore: 'page' }}>
-              <PrintCaption>3. Midterm Watchlist</PrintCaption>
-              {renderTable(['Student Number', 'Student Name', 'Class', 'Midterm %', 'Midterm Grade', 'Risk Standing', 'Status'],
-                bundle.watchlistRows.map(row => [row.studentNumber, row.studentName, row.className, formatPercent(row.midtermPercentage ?? null),
-                  row.midtermGrade === null ? '—' : row.midtermGrade.toFixed(1), row.riskStanding, row.status]))}
-            </section>,
-            <section key="attendance" className="report-bundle-section" style={{ breakBefore: 'page' }}>
-              <PrintCaption>4. Attendance Register · {attendanceDate}</PrintCaption>
-              {renderTable(['Date', 'Session', 'Student Number', 'Student Name', 'Course Code', 'Status'],
-                bundle.attendanceRows.map(row => [row.date, row.session || '—', row.studentNumber, row.studentName, row.courseCode, row.status]))}
-            </section>,
-            <section key="analytics" className="report-bundle-section" style={{ breakBefore: 'page' }}>
-              <PrintCaption>5. Interactive Analytics</PrintCaption>
-              <div className="report-analytics-graphs">
-                {analyticsGroups.map(group => <div key={group.key} className="report-analytics-group">
-                  <h3>{group.title}</h3>
-                  {group.rows.length === 0 ? <p>No data available.</p> : group.rows.map(row => (
-                    <div className="report-analytics-row" key={row.metric}>
-                      <span>{row.metric}</span>
-                      <div className="report-analytics-track"><div style={{ width: `${Math.max(0, Math.min(100, row.value / group.max * 100))}%`, backgroundColor: group.color }} /></div>
-                      <strong>{row.value}{row.unit === '%' ? '%' : ` ${row.unit}`}</strong>
-                    </div>
-                  ))}
-                </div>)}
-              </div>
-              <h3 className="analytics-data-heading">Chart Data</h3>
-              {renderTable(['Dataset', 'Metric', 'Value', 'Unit'], bundle.analyticsRows.map(row => [row.dataset, row.metric, row.value, row.unit]))}
-            </section>,
-          ];
+          const widths = academicSummaryPrint.lectureLaboratory
+            ? [9, 19, 8.5, 8.5, 7.5, 8.5, 8.5, 7.5, 10, 12.5]
+            : [13, 30, 12, 12, 14, 19];
           return (
             <div className="print-only hidden bg-white text-slate-900 font-sans ps">
-              <PrintStyle title="Grades & Assessment Report" running={`Grades & Assessment Report · ${selectedClass.courseCode} · ${selectedClass.csName}`} generated={generated} />
+              <PrintStyle title="Class Grade Ledger Report" running={`Class Grade Ledger Report | ${academicSummaryPrint.courseLabel} | ${academicSummaryPrint.section}`} generated={generated} />
               <PrintHeader
-                title="Grades & Assessment Report"
-                sub={`${selectedClass.courseCode}${selectedClass.courseName ? ` · ${selectedClass.courseName}` : ''}`}
+                title="Class Grade Ledger Report"
+                sub={academicSummaryPrint.courseLabel}
                 rows={[
-                  ['Class', `${selectedClass.courseCode} · ${selectedClass.csName}`],
-                  ['Term', bundle.term],
-                  ['Faculty', user?.display_name ?? ''],
-                  ['Students', String(studentsInSelectedSubject.length)],
-                  ['Generated', generated],
+                  ['Section', academicSummaryPrint.section],
+                  ['Term', academicSummaryPrint.term],
+                  ['Faculty', academicSummaryPrint.faculty],
+                  ['Students', String(academicSummaryPrint.rows.length)],
+                  ['Date', generated],
                 ]}
               />
-              {sections}
+              <table>
+                <colgroup>{widths.map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}</colgroup>
+                {academicSummaryPrint.lectureLaboratory ? (
+                  <thead>
+                    <tr>
+                      <th className="l" rowSpan={2}>Student No.</th>
+                      <th className="l" rowSpan={2}>Student Name</th>
+                      <th className="band" scope="colgroup" colSpan={3}>Midterm</th>
+                      <th className="band" scope="colgroup" colSpan={3}>Finals</th>
+                      <th rowSpan={2}>Final Grade</th>
+                      <th className="l" rowSpan={2}>Remarks</th>
+                    </tr>
+                    <tr>
+                      <th scope="col">Lecture %</th>
+                      <th scope="col">Laboratory %</th>
+                      <th scope="col">Midterm %</th>
+                      <th scope="col">Lecture %</th>
+                      <th scope="col">Laboratory %</th>
+                      <th scope="col">Finals %</th>
+                    </tr>
+                  </thead>
+                ) : (
+                  <thead><tr>{academicSummaryPrint.columns.map((column, index) => <th key={`${column}-${index}`} className={index < 2 || column === 'Remarks' ? 'l' : ''}>{column}</th>)}</tr></thead>
+                )}
+                <tbody>
+                  {academicSummaryPrint.rows.length === 0 ? (
+                    <tr><td colSpan={academicSummaryPrint.columns.length} className="l">No matching student grade summaries found.</td></tr>
+                  ) : academicSummaryPrint.rows.map((row, rowIndex) => (
+                    <tr key={rowIndex}>{row.map((value, columnIndex) => <td key={columnIndex} className={columnIndex < 2 || academicSummaryPrint.columns[columnIndex] === 'Remarks' ? 'l' : ''}>{value}</td>)}</tr>
+                  ))}
+                </tbody>
+              </table>
+              <PrintSignatures faculty={academicSummaryPrint.faculty} seal />
             </div>
           );
         }

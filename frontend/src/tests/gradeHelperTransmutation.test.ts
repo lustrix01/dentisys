@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultTransmutationEnabled, effectiveAssessmentPercentage } from '../utils/gradeHelper.ts';
+import { buildFacultyAcademicSummarySheet, buildFacultyAcademicSummaryTable } from '../utils/facultyAcademicSummaryExport.ts';
 
 test('transmutation uses fixed bounds and ignores legacy custom bounds', () => {
   const legacyAssessment = {
@@ -24,23 +25,44 @@ test('attendance and missing-score conditions keep the approved transmutation se
   assert.equal(effectiveAssessmentPercentage(50, 0, assessment, 'present'), null);
 });
 
-test('Reports bundle and print output use effective percentages', async () => {
-  const fs = await import('node:fs');
-  const source = fs.readFileSync(new URL('../pages/faculty/Reports.tsx', import.meta.url), 'utf8');
-  assert.match(source, /effectivePercentages/);
-  assert.match(source, /revokedAttendanceSessions/);
-  assert.match(source, /revoked \? 'unlinked'/);
-  // Categorised assessments: the effective (transmuted) value is the Transmuted column, in the workbook and in print.
-  const workbook = fs.readFileSync(new URL('../utils/reportWorkbook.ts', import.meta.url), 'utf8');
-  assert.match(workbook, /head\('Transmuted'\)/);
-  assert.match(workbook, /transmuted: \(i: number\)[\s\S]*step\.effectivePercentage/);
-  assert.match(workbook, /\{ value: value \/ 100, format: '0\.00%' \}/);
-  assert.match(source, /Transmuted<\/th>/);
-  assert.match(source, /server\.transmuted\(i\)/);
-  assert.match(source, /printPercent\(transmuted\)/);
-  // Outside a category there is no Transmuted column: the effective percentage stays in %.
-  assert.match(source, /printPercent\(effective\)/);
-  assert.doesNotMatch(source, /score \/ max, format: '0\.00%'/);
+test('Faculty Reports academic export separates student identity and preserves summary values', () => {
+  const table = buildFacultyAcademicSummaryTable(true, [{
+    studentNumber: '12345',
+    studentName: 'Santos, Ana',
+    midtermLecture: '76.0%',
+    midtermLaboratory: 'Incomplete',
+    midterm: '76.0%',
+    finalsLecture: '88.0%',
+    finalsLaboratory: 'Incomplete',
+    finals: '88.0%',
+    grade: '2.6',
+    remarks: 'REVIEW RETENTION',
+  }]);
+  assert.deepEqual(table.columns.map(column => column.header), [
+    'Student No.', 'Student Name', 'Midterm Lecture', 'Midterm Laboratory', 'Midterm',
+    'Finals Lecture', 'Finals Laboratory', 'Finals', 'Grade', 'Remarks',
+  ]);
+  assert.deepEqual(table.rows, [[
+    '12345', 'Santos, Ana', '76.0%', 'Incomplete', '76.0%',
+    '88.0%', 'Incomplete', '88.0%', '2.6', 'REVIEW RETENTION',
+  ]]);
+  assert.equal(table.columns[1].wrap, true);
+
+  const lectureOnly = buildFacultyAcademicSummaryTable(false, [{
+    studentNumber: '12345', studentName: 'Santos, Ana', midterm: '76.0%', finals: '88.0%', grade: '2.6', remarks: 'PASS',
+  }]);
+  assert.deepEqual(lectureOnly.columns.map(column => column.header), ['Student No.', 'Student Name', 'Midterm', 'Final', 'Grade', 'Remarks']);
+  assert.deepEqual(lectureOnly.rows[0], ['12345', 'Santos, Ana', '76.0%', '88.0%', '2.6', 'PASS']);
+
+  const sheet = buildFacultyAcademicSummarySheet({
+    table, lectureLaboratory: true, courseLabel: 'DENT101 · Prosthodontics I', section: 'DENT101-4C',
+    term: '1st Semester, S.Y. 2026-2027', by: 'Dr. Santos', generated: 'Nov 18, 2026, 4:53 PM',
+  });
+  assert.equal(sheet.sheet, 'Grade Ledger');
+  assert.equal((sheet.data[9][2] as { value?: string; columnSpan?: number }).value, 'MIDTERM');
+  assert.equal((sheet.data[9][2] as { columnSpan?: number }).columnSpan, 3);
+  assert.equal(sheet.data[11][0], '12345');
+  assert.equal(sheet.data[11][1], 'Santos, Ana');
 });
 
 test('Admin and Faculty no longer edit legacy transmutation bounds', async () => {

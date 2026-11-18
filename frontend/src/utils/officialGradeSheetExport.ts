@@ -14,7 +14,7 @@ import type { Cell, CellObject, XlsxSheet } from './xlsxDownload.ts';
 type Period = 'Midterm' | 'Final';
 type Comp = 'lecture' | 'laboratory';
 
-export interface OfficialSheetStudent { id: string; name: string; firstName?: string; middleName?: string | null; lastName?: string }
+export interface OfficialSheetStudent { id: string; name: string; studentId?: string; firstName?: string; middleName?: string | null; lastName?: string }
 
 export type OfficialSheetAssessment = Pick<Assessment, 'id' | 'title' | 'maxScore'> & Partial<Pick<Assessment,
   'gradingCategoryId' | 'gradingPeriod' | 'dueDate' | 'transmutationEnabled' | 'transmutationMinimumPercentage'
@@ -154,207 +154,194 @@ export function isOfficialLayout(config: FacultyGradingConfiguration | null | un
     && !!(config.midtermCategories?.length || config.finalCategories?.length);
 }
 
+/** One combined grading matrix for Excel and the matching PDF (Owner-approved replacement for the legacy four-tab layout). */
 export function buildOfficialGradeSheet(input: OfficialGradeSheetInput): XlsxSheet[] {
   const { config, course } = input;
+  if (!isOfficialLayout(config)) throw new Error('Set up and save the grade weights (Midterm and Finals) before exporting the grade sheet.');
   const split = config.componentMode === 'lecture_laboratory';
-  const lectureOnly = config.componentMode === 'lecture';
-  if (!isOfficialLayout(config)) {
-    throw new Error('Set up and save the grade weights (Midterm and Finals) before exporting the grade sheet.');
-  }
   const midShare = Number(config.termRatio?.midterm ?? 50);
-  const finShare = Number(config.termRatio?.final ?? 50);
-  const compShare = { lecture: Number(config.componentWeights?.lecture ?? 60), laboratory: Number(config.componentWeights?.laboratory ?? 40) };
-
-  const sorted = [...input.students].sort((a, b) =>
-    lastNameOf(a).toLowerCase().localeCompare(lastNameOf(b).toLowerCase()) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  const finalShare = Number(config.termRatio?.final ?? 50);
+  const components: Array<{ key: Comp; label: string }> = split
+    ? [{ key: 'lecture', label: 'Lecture' }, { key: 'laboratory', label: 'Laboratory' }]
+    : [{ key: 'lecture', label: 'Lecture' }];
+  const sorted = [...input.students].sort((a, b) => lastNameOf(a).toLowerCase().localeCompare(lastNameOf(b).toLowerCase()) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
   const rows: Row[] = sorted.map((student, index) => ({ index, student, result: input.results[student.id] }));
   const scoreOf = new Map(input.scores.map(s => [`${s.studentId}|${s.assessmentId}`, s.score]));
-
-  const periodOf = (r: Row, p: Period): FacultyPeriodBreakdown | undefined => r.result?.periods?.[p === 'Midterm' ? 'midterm' : 'final'];
-  /** The component's whole-percent grade for a period (X24); Lecture-only has just the period grade. */
-  const compGrade = (r: Row, p: Period, comp: Comp): number | null => {
-    const pb = periodOf(r, p);
-    const v = lectureOnly ? pb?.percentage : pb?.components?.[comp]?.percentage;
-    return typeof v === 'number' ? v : null;
-  };
+  const periods: Array<{ key: Period; label: string }> = [{ key: 'Midterm', label: 'Midterm' }, { key: 'Final', label: 'Finals' }];
+  const periodOf = (r: Row, p: Period) => r.result?.periods?.[p === 'Midterm' ? 'midterm' : 'final'];
   const periodGrade = (r: Row, p: Period): number | null => {
-    const v = periodOf(r, p)?.percentage;
-    return typeof v === 'number' ? v : null;
+    const value = periodOf(r, p)?.percentage;
+    return typeof value === 'number' ? value : null;
   };
-  const courseGrade = (r: Row): number | null =>
-    r.result?.status === 'computed' && typeof r.result.percentage === 'number' ? r.result.percentage : null;
-  const courseGwa = (r: Row) => (courseGrade(r) === null ? null : r.result?.gwa);
-
-  const categoriesOf = (p: Period, comp: Comp): FacultyGradingCategoryItem[] =>
-    [...((p === 'Midterm' ? config.midtermCategories : config.finalCategories) ?? [])]
-      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-      .filter(c => {
-        if (lectureOnly) return true;
-        const k = (c.component ?? 'Lecture').toLowerCase();
-        return comp === 'lecture' ? k === 'lecture' : k === 'laboratory' || k === 'lab';
-      });
-  const itemsOf = (cat: FacultyGradingCategoryItem, p: Period) =>
-    input.assessments
-      .filter(a => cat.sourceKind !== 'attendance' && cat.id != null && String(a.gradingCategoryId ?? '') === String(cat.id) && (a.gradingPeriod ?? 'Midterm') === p)
+  const courseGrade = (r: Row): number | null => r.result?.status === 'computed' && typeof r.result.percentage === 'number' ? r.result.percentage : null;
+  const categoriesOf = (p: Period, comp: Comp) => [...((p === 'Midterm' ? config.midtermCategories : config.finalCategories) ?? [])]
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    .filter(category => {
+      if (!split) return true;
+      const component = (category.component ?? 'Lecture').toLowerCase();
+      return comp === 'lecture' ? component === 'lecture' : component === 'laboratory' || component === 'lab';
+    });
+  const groups = periods.flatMap(period => components.flatMap(component => categoriesOf(period.key, component.key).map(category => {
+    const assessments = input.assessments
+      .filter(a => category.sourceKind !== 'attendance' && category.id != null && String(a.gradingCategoryId ?? '') === String(category.id) && (a.gradingPeriod ?? 'Midterm') === period.key)
       .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? '') || a.title.localeCompare(b.title));
-  const detailOf = (r: Row, p: Period, cat: FacultyGradingCategoryItem) =>
-    periodOf(r, p)?.categories?.find(d => String(d.categoryId) === String(cat.id));
-  const itemPercent = (r: Row, a: OfficialSheetAssessment): number | null => {
-    const score = scoreOf.get(`${r.student.id}|${a.id}`);
-    if (score === undefined) return null;
-    const linked = Boolean(a.attendanceSessionDate && a.attendanceSessionCode);
-    return effectiveAssessmentPercentage(score, a.maxScore, a, linked ? input.attendanceStatus?.(r.student.id, a) ?? null : 'unlinked');
-  };
-
-  // ---------- LEC / LAB ----------
-  const componentSheet = (comp: Comp): XlsxSheet => {
-    const cols: Col[] = [
-      { width: 9.5, h7: head('No.', { rowSpan: 3 }), value: r => ({ value: r.index + 1 }) },
-      { width: 51, h7: head('Names', { rowSpan: 3 }), value: r => ({ value: sheetName(r.student), align: 'left' }) },
-    ];
-    const periodTail = (p: Period) => {
-      const share = p === 'Midterm' ? midShare : finShare;
-      const grade = (r: Row) => compGrade(r, p, comp);
-      const part = (r: Row): Cell => {
-        const g = grade(r);
-        if (g === null) return INC;
-        return lectureOnly ? { value: g * share / 100, format: '0.0' } : { value: roundPercent(g * share / 100), format: '0' };
-      };
-      // Over All FG of one component (X24); a Lecture-only course shows the course grade itself.
-      const overall = (r: Row): number | null => {
-        if (lectureOnly) return courseGrade(r);
-        const m = compGrade(r, 'Midterm', comp), f = compGrade(r, 'Final', comp);
-        return m === null || f === null ? null : roundPercent(roundPercent(m * midShare / 100) + roundPercent(f * finShare / 100));
-      };
-      if (p === 'Midterm') {
-        cols.push({ width: 12, h7: head('MIDTERM GRADE', { rowSpan: 3 }), value: r => numCell(grade(r), '0') });
-        cols.push({ width: 9, h7: head('EQUIV.', { rowSpan: 3 }), value: r => equiv(grade(r)) });
-        cols.push({ width: 12, h7: head(`Midterm ${midShare}%`, { rowSpan: 3 }), value: part });
-      } else {
-        cols.push({ width: 12, h7: head('FINAL GRADE', { rowSpan: 3 }), value: r => numCell(grade(r), '0') });
-        cols.push({ width: 12, h7: head(`Final ${finShare}%`, { rowSpan: 3 }), value: part });
-        cols.push({ width: 9, h7: head('EQUIV.', { rowSpan: 3 }), value: r => equiv(grade(r)) });
-        cols.push({ width: 12, h7: head('Over All FG', { rowSpan: 3 }), value: r => numCell(overall(r), '0') });
-        cols.push({ width: 9, h7: head('EQUIV.', { rowSpan: 3 }), value: r => equiv(overall(r), lectureOnly ? courseGwa(r) : undefined) });
-      }
-    };
-
-    (['Midterm', 'Final'] as const).forEach(p => {
-      for (const cat of categoriesOf(p, comp)) {
-        const items = itemsOf(cat, p);
-        const weightHead = head(Math.round(Number(cat.weight) * 100) / 10000, { rowSpan: 3, format: '0.0#' });
-        const weightCol: Col = { width: 9, h7: weightHead, value: r => numCell(detailOf(r, p, cat)?.contribution, '0.00') };
-        const only = items[0];
-        const percentEntry = items.length === 1 && only.maxScore === 100 && !only.transmutationEnabled && alnum(only.title) === alnum(cat.name);
-        if (!items.length || percentEntry) {
-          // Recitation / Lab Performance: one percent entry, no max (the sheet's own layout).
-          cols.push({
-            width: 14, h7: head(cat.name.toUpperCase(), { rowSpan: 3 }),
-            value: r => percentEntry
-              ? (scoreOf.has(`${r.student.id}|${only.id}`) ? { value: scoreOf.get(`${r.student.id}|${only.id}`)! } : null)
-              : numCell(detailOf(r, p, cat)?.earnedPoints, '0.00'),
-          });
-        } else {
-          items.forEach((a, i) => {
-            cols.push({
-              width: 10, h7: i === 0 ? head(cat.name.toUpperCase(), { columnSpan: items.length * 2 }) : null,
-              h8: head(a.title, { columnSpan: 2 }), h9: head(a.maxScore),
-              value: r => scoreOf.has(`${r.student.id}|${a.id}`) ? { value: scoreOf.get(`${r.student.id}|${a.id}`)! } : null,
-            });
-            cols.push({
-              width: 9, h9: head('%'),
-              value: r => { const v = itemPercent(r, a); return v === null ? null : { value: v, format: '0.00' }; },
-            });
-          });
-          if (items.length > 1) cols.push({ width: 10, h7: head('AVE.', { rowSpan: 3 }), value: r => numCell(detailOf(r, p, cat)?.earnedPoints, '0.00') });
-        }
-        cols.push(weightCol);
-      }
-      periodTail(p);
-    });
-
-    const width = cols.length;
-    const blank = (): Cell[] => Array.from({ length: width }, () => null);
-    const sem = parseSemester(course.semester);
-    const term = `${sem === 'SUMMER' ? 'SUMMER' : sem ? `${sem} SEMESTER` : course.semester.toUpperCase()}, AY ${course.schoolYear}`;
-    const titles = [...UNIVERSITY_LINES, `${course.title.toUpperCase()} (${comp === 'lecture' ? 'LEC' : 'LAB'})`, term];
-    const data: Cell[][] = titles.map((t, i) => {
-      const row = blank();
-      row[0] = ibuTitleRow({ value: t, columnSpan: width, align: 'center' }, i) as Cell;
-      return row;
-    });
-    const sectionRow = blank();
-    sectionRow[0] = { value: course.section, fontWeight: 'bold', align: 'left' };
-    const r7 = blank(), r8 = blank(), r9 = blank();
-    cols.forEach((c, i) => { r7[i] = c.h7 ?? null; r8[i] = c.h8 ?? null; r9[i] = c.h9 ?? null; });
-    data.push(sectionRow, r7, r8, r9, ...rows.map(r => cols.map(c => c.value(r))));
-    return { sheet: comp === 'lecture' ? 'LEC' : 'LAB', data, columns: cols.map(c => ({ width: c.width })), stickyRowsCount: 9, stickyColumnsCount: 2, orientation: 'landscape' };
-  };
-
-  // ---------- TFG ----------
-  const tfgSheet = (): XlsxSheet => {
-    const cols: Array<{ title: string; width: number; value: (r: Row) => Cell }> = [
-      { title: 'No.', width: 9.5, value: r => ({ value: r.index + 1 }) },
-      { title: 'NAME', width: 51, value: r => ({ value: sheetName(r.student), align: 'left' }) },
-    ];
-    const M = (r: Row) => periodGrade(r, 'Midterm'), F = (r: Row) => periodGrade(r, 'Final');
-    if (split) {
-      // Component grade x its share with 2 decimals, as the official TFG, so TOTAL adds up (X25).
-      const part = (p: Period, comp: Comp) => (r: Row): Cell => {
-        const g = compGrade(r, p, comp);
-        return g === null ? INC : { value: g * compShare[comp] / 100, format: '0.00' };
-      };
-      const half = (grade: (r: Row) => number | null, share: number) => (r: Row): Cell => {
-        const g = grade(r);
-        return g === null ? INC : { value: roundPercent(g * share / 100), format: '0' };
-      };
-      cols.push(
-        { title: 'MIDTERM LEC GRADE', width: 14, value: part('Midterm', 'lecture') },
-        { title: 'MIDTERM LAB GRADE', width: 14, value: part('Midterm', 'laboratory') },
-        { title: 'TOTAL', width: 10, value: r => numCell(M(r), '0') },
-        { title: `MG (${midShare}%)`, width: 11, value: half(M, midShare) },
-        { title: 'FINAL LEC GRADE', width: 14, value: part('Final', 'lecture') },
-        { title: 'FINAL LAB GRADE', width: 14, value: part('Final', 'laboratory') },
-        { title: 'TOTAL', width: 10, value: r => numCell(F(r), '0') },
-        { title: `TFG (${finShare}%)`, width: 11, value: half(F, finShare) },
-      );
-    } else {
-      // A Lecture-only course rounds once, so MG and TFG keep one decimal and the row adds up (X9).
-      const half = (grade: (r: Row) => number | null, share: number) => (r: Row): Cell => {
-        const g = grade(r);
-        return g === null ? INC : { value: g * share / 100, format: '0.0' };
-      };
-      cols.push(
-        { title: 'MIDTERM GRADE', width: 14, value: r => numCell(M(r), '0') },
-        { title: `MG (${midShare}%)`, width: 11, value: half(M, midShare) },
-        { title: 'FINAL GRADE', width: 14, value: r => numCell(F(r), '0') },
-        { title: `TFG (${finShare}%)`, width: 11, value: half(F, finShare) },
-      );
+    const categoryCells = assessments.length ? assessments.map(assessment => ({ title: assessment.title, max: assessment.maxScore, assessment })) : [{ title: category.name, max: null, assessment: null }];
+    return { period: period.key, periodLabel: period.label, component: component.key, componentLabel: component.label, category, assessments, categoryCells };
+  })));
+  type MatrixGroup = typeof groups[number];
+  const groupWidth = (g: MatrixGroup) => g.categoryCells.length * 3 + 2;
+  const resultWidth = 6;
+  const totalWidth = 2 + groups.reduce((sum, group) => sum + groupWidth(group), 0) + resultWidth;
+  const blank = (): Cell[] => Array.from({ length: totalWidth }, () => null);
+  const periodHeader = blank(), componentHeader = blank(), categoryHeader = blank(), assessmentHeader = blank(), detailHeader = blank();
+  periodHeader[0] = head('Student No.', { rowSpan: 5 });
+  periodHeader[1] = head('Full Name', { rowSpan: 5 });
+  const spans = (row: Cell[], same: (a: MatrixGroup, b: MatrixGroup) => boolean, label: (g: MatrixGroup) => string) => {
+    let i = 0, offset = 2;
+    while (i < groups.length) {
+      let end = i + 1, span = groupWidth(groups[i]);
+      while (end < groups.length && same(groups[i], groups[end])) span += groupWidth(groups[end++]);
+      row[offset] = head(label(groups[i]), { columnSpan: span });
+      offset += span;
+      i = end;
     }
-    cols.push(
-      { title: 'FG (100%)', width: 11, value: r => numCell(courseGrade(r), '0') },
-      { title: 'MG EQUIV', width: 11, value: r => equiv(M(r)) },
-      { title: 'TFG EQUIV', width: 11, value: r => equiv(F(r)) },
-      { title: 'FG EQUIV', width: 11, value: r => equiv(courseGrade(r), courseGwa(r)) },
-    );
-    return {
-      sheet: 'TFG',
-      data: [cols.map(c => head(c.title)), ...rows.map(r => cols.map(c => c.value(r)))],
-      columns: cols.map(c => ({ width: c.width })), stickyRowsCount: 1, stickyColumnsCount: 2, orientation: 'landscape',
-    };
   };
-
-  // ---------- DATA (X10) ----------
-  const dataSheet = (): XlsxSheet => ({
-    sheet: 'DATA',
-    data: [
-      [head('PERCENT %'), head('PS')],
-      ...Array.from({ length: 101 }, (_v, p): Cell[] => [{ value: p, format: '0' }, { value: percentageToGWAExact(p), format: '0.0#' }]),
-    ],
-    columns: [{ width: 12 }, { width: 8 }], stickyRowsCount: 1,
+  spans(periodHeader, (a, b) => a.period === b.period, g => g.periodLabel);
+  spans(componentHeader, (a, b) => a.period === b.period && a.component === b.component, g => g.componentLabel);
+  let at = 2;
+  for (const group of groups) {
+    const categoryTitle = `${group.category.name} (${Number(group.category.weight)}%)`;
+    categoryHeader[at] = head(categoryTitle, { columnSpan: groupWidth(group) });
+    for (const item of group.categoryCells) {
+      const assessment = item.assessment;
+      assessmentHeader[at] = head(assessment ? `${item.title} (Max ${item.max})` : item.title, { columnSpan: 3 });
+      detailHeader[at] = head('Score');
+      detailHeader[at + 1] = head('%');
+      detailHeader[at + 2] = head('Transmuted');
+      at += 3;
+    }
+    assessmentHeader[at] = head('Average %', { rowSpan: 2 });
+    assessmentHeader[at + 1] = head(`Weighted (${Number(group.category.weight)}%)`, { rowSpan: 2 });
+    at += 2;
+  }
+  const resultGroups = [
+    { title: 'Midterm Results', labels: ['Midterm %', 'Grade Eq.'] },
+    { title: 'Finals Results', labels: ['Finals %', 'Grade Eq.'] },
+    { title: 'Overall Result', labels: ['Final Grade %', 'Grade Eq.'] },
+  ];
+  for (const resultGroup of resultGroups) {
+    periodHeader[at] = head(resultGroup.title, { columnSpan: 2 });
+    componentHeader[at] = head('Summary', { columnSpan: 2 });
+    categoryHeader[at] = head('Grade', { columnSpan: 2 });
+    assessmentHeader[at] = head(resultGroup.labels[0]);
+    assessmentHeader[at + 1] = head(resultGroup.labels[1]);
+    at += 2;
+  }
+  const titleTerm = `${parseSemester(course.semester) === 'SUMMER' ? 'SUMMER' : `${parseSemester(course.semester) ?? course.semester.toUpperCase()} SEMESTER`}, AY ${course.schoolYear}`;
+  const titleRows: Cell[][] = [...UNIVERSITY_LINES, `${course.title.toUpperCase()} · COMPREHENSIVE GRADE SHEET`, `${course.section} · ${titleTerm}`].map((title, index) => {
+    const row = blank();
+    row[0] = ibuTitleRow({ value: title, columnSpan: totalWidth, align: 'center' }, index) as Cell;
+    return row;
   });
+  const body = rows.map(row => {
+    const cells: Cell[] = [{ value: row.student.studentId ?? '' }, { value: sheetName(row.student), align: 'left' }];
+    for (const group of groups) {
+      const detail = periodOf(row, group.period)?.categories?.find(item => String(item.categoryId) === String(group.category.id));
+      for (const item of group.categoryCells) {
+        const assessment = item.assessment;
+        if (!assessment) {
+          const points = detail?.earnedPoints;
+          const ratio = detail?.ratio;
+          cells.push(numCell(points, '0.##'), numCell(ratio === undefined ? null : ratio * 100, '0.00'), numCell(ratio === undefined ? null : ratio * 100, '0.00'));
+          continue;
+        }
+        const score = scoreOf.get(`${row.student.id}|${assessment.id}`);
+        const raw = score === undefined || !assessment.maxScore ? null : score / assessment.maxScore * 100;
+        const linked = Boolean(assessment.attendanceSessionDate && assessment.attendanceSessionCode);
+        const effective = score === undefined ? null : effectiveAssessmentPercentage(score, assessment.maxScore, assessment,
+          linked ? input.attendanceStatus?.(row.student.id, assessment) ?? null : 'unlinked');
+        cells.push(score === undefined ? null : { value: score, format: '0.##' }, raw === null ? null : numCell(raw, '0.00'), effective === null ? null : numCell(effective, '0.00'));
+      }
+      cells.push(numCell(detail?.earnedPoints, '0.00'), numCell(detail?.contribution, '0.00'));
+    }
+    const midterm = periodGrade(row, 'Midterm'), finals = periodGrade(row, 'Final'), overall = courseGrade(row);
+    cells.push(numCell(midterm, '0.00'), equiv(midterm), numCell(finals, '0.00'), equiv(finals), numCell(overall, '0.00'), equiv(overall, row.result?.gwa));
+    return cells;
+  });
+  return [{
+    sheet: 'Grade Sheet',
+    data: [...titleRows, periodHeader, componentHeader, categoryHeader, assessmentHeader, detailHeader, ...body],
+    columns: [{ width: 17 }, { width: 30 }, ...groups.flatMap(group => [
+      ...group.categoryCells.flatMap(() => [{ width: 11 }, { width: 10 }, { width: 12 }]), { width: 11 }, { width: 12 },
+    ]), { width: 13 }, { width: 11 }, { width: 13 }, { width: 11 }, { width: 14 }, { width: 11 }],
+    stickyRowsCount: titleRows.length + 5, stickyColumnsCount: 2, orientation: 'landscape',
+  }];
+}
 
-  return [componentSheet('lecture'), ...(split ? [componentSheet('laboratory')] : []), tfgSheet(), dataSheet()];
+/** Print-only pages divide the wide matrix by period; Export Excel keeps its single combined worksheet. */
+export function buildGradeSheetPdfPeriods(sheets: XlsxSheet[]): XlsxSheet[] {
+  const matrix = sheets.find(sheet => sheet.sheet === 'Grade Sheet');
+  if (!matrix) return sheets;
+  const data = matrix.data as Cell[][];
+  const periodHeaderRow = data[5] ?? [];
+  const resultHeaderRow = data[8] ?? [];
+  const assessmentHeaderRow = data[8] ?? [];
+  const resultsStart = resultHeaderRow.findIndex(cell => cell && typeof cell === 'object' && (cell as CellObject).value === 'Midterm %');
+  if (resultsStart < 0) return sheets;
+  const valueOf = (cell: Cell) => cell && typeof cell === 'object' ? (cell as CellObject).value : cell;
+  const spanOf = (cell: Cell) => cell && typeof cell === 'object' && typeof (cell as CellObject).columnSpan === 'number' ? Number((cell as CellObject).columnSpan) : 1;
+    const headers = data.slice(5, 10);
+  const bodyRows = data.slice(10);
+  const periods = [
+    { key: 'Midterm', resultIndexes: [resultsStart, resultsStart + 1] },
+    { key: 'Finals', resultIndexes: [resultsStart + 2, resultsStart + 3, resultsStart + 4, resultsStart + 5] },
+  ];
+  return periods.flatMap(period => {
+    const periodCellIndex = periodHeaderRow.findIndex(cell => valueOf(cell) === period.key);
+    if (periodCellIndex < 0) return [];
+    const periodStart = periodCellIndex;
+    const periodEnd = periodStart + spanOf(periodHeaderRow[periodCellIndex]);
+    const assessmentColumns: number[] = [];
+    for (let column = periodStart; column < periodEnd;) {
+      const headerCell = assessmentHeaderRow[column];
+      const span = spanOf(headerCell);
+      if (headerCell !== null && headerCell !== undefined) assessmentColumns.push(column);
+      column += span;
+    }
+    const selectedColumns = [...new Set([
+      0, 1,
+      ...assessmentColumns,
+      ...period.resultIndexes,
+    ])].sort((a, b) => a - b);
+    const positions = new Map(selectedColumns.map((column, index) => [column, index]));
+    const pageWidth = selectedColumns.length;
+    const pageHeaders = headers.map(row => {
+      const next: Cell[] = Array.from({ length: pageWidth }, () => null);
+      for (let oldColumn = 0; oldColumn < row.length;) {
+        const cell = row[oldColumn];
+        const cellSpan = spanOf(cell);
+        if (cell !== null && cell !== undefined) {
+          const kept = selectedColumns.filter(column => column >= oldColumn && column < oldColumn + cellSpan);
+          if (kept.length) {
+            const newColumn = positions.get(kept[0])!;
+            next[newColumn] = { ...(cell as CellObject), columnSpan: kept.length };
+          }
+        }
+        oldColumn += cellSpan;
+      }
+      return next;
+    });
+    const pageBody = bodyRows.map(row => selectedColumns.map(column => row[column] ?? null));
+    const columns = selectedColumns.map(column => matrix.columns?.[column] ?? { width: 10 });
+    return [{
+      sheet: `${period.key} Grade Sheet`,
+      data: [...pageHeaders, ...pageBody],
+      columns,
+      stickyRowsCount: pageHeaders.length,
+      stickyColumnsCount: 2,
+      orientation: 'landscape',
+    } as XlsxSheet];
+  });
 }
 
 /** Builds the workbook and saves it (Grade Computation and Reports -> Academic, X1). */

@@ -5721,7 +5721,7 @@ function handle_faculty_attendance_session_create(): void
                 safe_error_response($conflict, 409);
                 return;
             }
-            $overlaps = attendance_session_overlap_gate($pdo, $data, $csId, $sessionDate, $openingTime, $classEndTime, $room);
+            $overlaps = attendance_session_overlap_gate($pdo, $data, $csId, $sessionDate, $openingTime, $classEndTime, $room, false);
             $creationStatus = attendance_session_creation_status($sessionDate, $openingTime, $config);
             $secretaryUserId = $lockedClass['secretary_user_id'] !== null
                 ? (int) $lockedClass['secretary_user_id']

@@ -1143,16 +1143,20 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     expect(payloads).toHaveLength(1); // refused in the browser, nothing sent
   });
 
-  test('Start Session asks before booking over another booking, and Book anyway resends with confirmOverlap', async ({ page }) => {
+  test('Start Session blocks an overlap with another Faculty, and Book anyway stays for an own joint session', async ({ page }) => {
     const payloads: Record<string, unknown>[] = [];
+    const ownJoint = { kind: 'schedule', reason: 'room_faculty', classId: 8, classCode: 'PERIO 101', classTitle: 'Periodontics', facultyName: 'Me', isOwn: true, room: 'Dental Clinic Lab 1', weekday: 'Fri', start: '09:00', end: '11:00' };
     await page.route('**/api/faculty/attendance?*', route => route.fulfill({ json: { status: 'ok', worksheet: mockWorksheetSectionA } }));
     await page.route('**/api/faculty/attendance/session', route => {
       payloads.push(route.request().postDataJSON());
       if (payloads.length === 1) {
         return route.fulfill({ status: 409, json: { status: 'error', code: 'SESSION_OVERLAP', message: 'This booking overlaps with other bookings.', overlaps: [
           { kind: 'session', reason: 'room', classId: 7, classCode: 'ORTHO 201', classTitle: 'Orthodontics', facultyName: 'Dr. Reyes', isOwn: false, room: 'Dental Clinic Lab 1', date: '2099-10-02', start: '09:00', end: '11:00' },
-          { kind: 'schedule', reason: 'room_faculty', classId: 8, classCode: 'PERIO 101', classTitle: 'Periodontics', facultyName: 'Me', isOwn: true, room: 'Dental Clinic Lab 1', weekday: 'Fri', start: '09:00', end: '11:00' },
+          ownJoint,
         ] } });
+      }
+      if (payloads.length === 2) {
+        return route.fulfill({ status: 409, json: { status: 'error', code: 'SESSION_OVERLAP', message: 'This booking overlaps with other bookings.', overlaps: [ownJoint] } });
       }
       return route.fulfill({ status: 409, json: { status: 'error', message: 'Stubbed server refusal.' } });
     });
@@ -1167,11 +1171,17 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(popup).toContainText('Booked session');
     await expect(popup).toContainText('Regular schedule');
     await expect(popup).toContainText('Fridays');
-    await expect(popup).toContainText('Dr. Reyes will be notified.');
+    await expect(popup).toContainText('Contact Dr. Reyes to coordinate a different room or time. This session has not been created.');
+    await expect(page.getByRole('heading', { name: 'Session cannot be created' })).toBeVisible();
+    await expect(popup.getByRole('button', { name: 'Book anyway' })).toHaveCount(0);
     expect(payloads[0].confirmOverlap).toBeUndefined();
+    await popup.getByRole('button', { name: 'Go back and change details' }).click();
+    // Only the Faculty's own other class overlaps: a joint session can still be booked anyway.
+    await page.locator('form').getByRole('button', { name: 'Schedule session', exact: true }).click();
+    await expect(popup).toContainText('This overlaps only your own booking, so nobody else is notified.');
     await popup.getByRole('button', { name: 'Book anyway' }).click();
-    await expect.poll(() => payloads.length).toBe(2);
-    expect(payloads[1].confirmOverlap).toBe(true);
+    await expect.poll(() => payloads.length).toBe(3);
+    expect(payloads[2].confirmOverlap).toBe(true);
   });
 
   test('Start Session prefills from the class schedule and a meeting chip replaces hand-edited times', async ({ page }) => {
@@ -4612,7 +4622,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       }
     });
 
-    test('grouped grade summaries show four distinct component columns and export all four values', async ({ page }) => {
+    test('grouped grade summaries show four distinct component columns and export the combined matrix', async ({ page }) => {
       const groupedCategories = [
         { id: 101, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', component: 'Lecture', inUse: true },
         { id: 102, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', component: 'Laboratory', inUse: true },
@@ -4659,7 +4669,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=summaries');
-      await expect(page.getByRole('heading', { name: 'Academic Grade Summaries' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Comprehensive Grade Sheet' })).toBeVisible();
       const recompute = page.getByRole('button', { name: 'Recompute grades' });
       await expect(recompute).toBeEnabled();
       await recompute.click();
@@ -4676,14 +4686,14 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       }
 
       const downloadPromise = page.waitForEvent('download');
-      await page.getByRole('button', { name: 'Export official grade sheet (Excel)' }).click();
+      await page.getByRole('button', { name: 'Export comprehensive grading sheet (Excel)' }).click();
       const download = await downloadPromise;
       expect(download.suggestedFilename()).toMatch(/^CLIN401_.*_Grade_Sheet_2026-2027_1st\.xlsx$/);
       const xlsx = await readDownloadedXlsxText(download);
-      for (const sheet of ['LEC', 'LAB', 'TFG', 'DATA']) expect(xlsx).toContain(`name="${sheet}"`);
-      for (const header of ['MIDTERM LEC GRADE', 'MIDTERM LAB GRADE', 'FINAL LEC GRADE', 'FINAL LAB GRADE', 'MG (30%)', 'TFG (70%)', 'Alice Reyes']) expect(xlsx).toContain(header);
-      // Lecture x 60% and Laboratory x 40% for each period, the period totals, the course grade and its grade equivalent.
-      for (const value of ['48.6', '36.4', '87', '26', '55.8', '33.2', '89', '62', '88.4', '2.1']) expect(xlsx).toContain(`<v>${value}</v>`);
+      expect(xlsx).toContain('name="Grade Sheet"');
+      for (const header of ['Student No.', 'Full Name', 'Midterm', 'Finals', 'Lecture', 'Laboratory', 'Midterm %', 'Finals %', 'Final Grade %', 'Alice Reyes']) expect(xlsx).toContain(header);
+      // The combined matrix retains the period results, overall percentage, and grade equivalent inline.
+      for (const value of ['87', '89', '88.4', '2.1']) expect(xlsx).toContain(`<v>${value}</v>`);
     });
 
     test('legacy combined period grading requires explicit forward conversion and preserves category IDs', async ({ page }) => {

@@ -20,7 +20,7 @@ import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { useApp } from '../../context/AppContext';
 import { StudentUnavailable } from './RealStudentSurfaces';
 import { getStudentAcademicClassesApi, getStudentJoinRequestsApi, joinClassByCodeApi, previewJoinClassApi, type JoinClassPreview, type StudentJoinRequestItem } from '../../services/apiClient';
-import { showFeedback } from '../../components/FeedbackCenter';
+import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
 import { clearJoinReturn, joinCodeFromSearch, normalizeJoinCode, typedJoinCode, formatJoinCode } from '../../utils/classJoinCode';
 import type { StudentAcademicClass } from '../../types';
 import GradeValue, { lectureHoverSteps } from '../../components/GradeValue';
@@ -194,6 +194,14 @@ export const Classes: React.FC = () => {
 
   const submitJoin = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!preview || preview.alreadyEnrolled || preview.pending) return;
+    const className = `${preview.class.courseCode} · ${preview.class.title}, Section ${preview.class.section}, ${preview.class.facultyName || 'Faculty Member'}, ${semesterLabel(preview.class.semester)} ${formatSchoolYear(preview.class.schoolYear)}`;
+    const confirmed = await requestConfirmation(
+      `Continue with ${className}? Class settings may enroll you immediately or send your request to the Faculty for approval.`,
+      'Confirm Class Join',
+      'Continue',
+    );
+    if (!confirmed) return;
     setJoinError(null);
     setJoining(true);
     try {

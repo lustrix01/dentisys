@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { getRoomsApi, type RoomOption } from '../services/apiClient';
+import { Modal } from './Modal';
 
 /** Names match ignoring case, spaces, dashes and dots. */
 export const roomKey = (name: string) => name.toLowerCase().replace(/[\s.\-]+/g, '');
@@ -75,6 +76,9 @@ export const RoomSelector: React.FC<RoomSelectorProps> = ({
     return [...map.entries()];
   }, [rooms]);
   const [isCustom, setIsCustom] = useState(!isKnownRoom && value.trim() !== '');
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customDraft, setCustomDraft] = useState('');
+  const [customError, setCustomError] = useState('');
 
   useEffect(() => {
     if (!isKnownRoom && value.trim() !== '') {
@@ -88,15 +92,33 @@ export const RoomSelector: React.FC<RoomSelectorProps> = ({
     const val = e.target.value;
     if (val === 'CUSTOM') {
       setIsCustom(true);
-      if (isKnownRoom) {
-        onChange('');
-      }
+      setCustomDraft(isKnownRoom ? '' : value);
+      setCustomError('');
+      setCustomOpen(true);
     } else {
       setIsCustom(false);
       onChange(val);
       const picked = rooms.find(room => room.status === 'active' && room.name === val);
       if (picked) onPickRoom?.(picked);
     }
+  };
+
+  const cancelCustom = () => {
+    setCustomOpen(false);
+    setCustomError('');
+    setIsCustom(!isKnownRoom && value.trim() !== '');
+  };
+
+  const saveCustom = () => {
+    const place = customDraft.trim();
+    if (!place) {
+      setCustomError('Enter a room or place name.');
+      return;
+    }
+    onChange(place);
+    setIsCustom(true);
+    setCustomOpen(false);
+    setCustomError('');
   };
 
   return (
@@ -124,16 +146,38 @@ export const RoomSelector: React.FC<RoomSelectorProps> = ({
         <option value="CUSTOM">Other place (custom)…</option>
       </select>
 
-      {(isCustom || (!isKnownRoom && value.trim() !== '')) && (
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Type the place (e.g. Room 405 or PGH Dental Ward)"
-          aria-label="Custom room name"
-          className={fieldClassName ?? "w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs focus:ring-2 focus:ring-accent-500 focus:outline-none animate-fade-in"}
-        />
+      {isCustom && value.trim() !== '' && (
+        <div className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-slate-800/70">
+          <span className="min-w-0 truncate text-slate-600 dark:text-slate-300">Custom place: <strong className="text-slate-800 dark:text-slate-100">{value}</strong></span>
+          <button type="button" onClick={() => { setCustomDraft(value); setCustomError(''); setCustomOpen(true); }} className="shrink-0 font-semibold text-emerald-700 hover:underline dark:text-emerald-300">
+            Edit
+          </button>
+        </div>
       )}
+      <Modal isOpen={customOpen} onClose={cancelCustom} title="Custom room or place" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-300">Enter the room or off-site location for this session.</p>
+          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200" htmlFor={`${id ?? 'room'}-custom-name`}>
+            Room or place name
+            <input
+              id={`${id ?? 'room'}-custom-name`}
+              type="text"
+              maxLength={255}
+              autoFocus
+              value={customDraft}
+              onChange={event => { setCustomDraft(event.target.value); setCustomError(''); }}
+              placeholder="e.g. Room 405 or PGH Dental Ward"
+              aria-invalid={Boolean(customError)}
+              className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-800 outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            />
+            {customError && <span role="alert" className="mt-1 block text-xs font-medium text-rose-600 dark:text-rose-300">{customError}</span>}
+          </label>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={cancelCustom} className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">Cancel</button>
+            <button type="button" onClick={saveCustom} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">Save place</button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

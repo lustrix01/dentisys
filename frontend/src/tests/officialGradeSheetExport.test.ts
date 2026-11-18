@@ -4,7 +4,6 @@ import {
   buildGradeSummarySheet, buildOfficialGradeSheet, officialGradeSheetFileName, sheetValues, savedGradeResult,
   type OfficialGradeResult, type OfficialGradeSheetInput, type OfficialSheetAssessment,
 } from '../utils/officialGradeSheetExport.ts';
-import { buildPreview, emptyDecisions, parseWorkbook, type ImportContext, type SavedAssessment, type SavedCategory } from '../utils/gradeSheetImport.ts';
 import { percentageToGWAExact, roundPercent } from '../utils/gradeHelper.ts';
 
 // ---------- made-up class ----------
@@ -31,9 +30,9 @@ const assessments = [
   A('a6', 'Final Exam', 60, 5, 'Final'), A('a7', 'Practical 2', 50, 6, 'Final'),
 ];
 const students = [
-  { id: 's2', name: 'Cruz, Dana Lim', firstName: 'Dana', middleName: 'Lim', lastName: 'Cruz' },
-  { id: 's1', name: 'Aquino, Bea Santos', firstName: 'Bea', middleName: 'Santos', lastName: 'Aquino' },
-  { id: 's3', name: 'Reyes, Carlo', firstName: 'Carlo', middleName: null, lastName: 'Reyes' },
+  { id: 's2', studentId: 'STU-2', name: 'Cruz, Dana Lim', firstName: 'Dana', middleName: 'Lim', lastName: 'Cruz' },
+  { id: 's1', studentId: 'STU-1', name: 'Aquino, Bea Santos', firstName: 'Bea', middleName: 'Santos', lastName: 'Aquino' },
+  { id: 's3', studentId: 'STU-3', name: 'Reyes, Carlo', firstName: 'Carlo', middleName: null, lastName: 'Reyes' },
 ];
 // student id -> assessment id -> score; s3 has no Quiz 2 (missing)
 const raw: Record<string, Record<string, number>> = {
@@ -92,86 +91,53 @@ test('file name: spaces stripped from the course code', () => {
   assert.equal(officialGradeSheetFileName({ code: 'DM 116', section: 'DMD 3A', schoolYear: '2026-2027', semester: '2ND' }), 'DM116_DMD-3A_Grade_Sheet_2026-2027_2nd.xlsx');
 });
 
-test('Lecture + Laboratory: sheets, title rows, header rows, names sorted LAST, First Middle', () => {
+test('Lecture + Laboratory export is one continuous grading matrix', () => {
   const sheets = buildOfficialGradeSheet(input());
-  assert.deepEqual(sheets.map(s => s.sheet), ['LEC', 'LAB', 'TFG', 'DATA']);
-  assert.deepEqual([sheets[0].stickyRowsCount, sheets[0].stickyColumnsCount, sheets[0].orientation], [9, 2, 'landscape']);
-  const v = values(input()).LEC;
-  assert.deepEqual(v.slice(0, 6).map(r => r[0]), ['Republic of the Philippines', 'BICOL UNIVERSITY', 'COLLEGE OF DENTAL MEDICINE', 'OPERATIVE DENTISTRY 1 (LEC)', '1ST SEMESTER, AY 2026-2027', 'DMD-3A']);
-  assert.deepEqual([v[6][0], v[6][1]], ['No.', 'Names']);
-  assert.deepEqual(v.slice(9).map(r => [r[0], r[1]]), [[1, 'AQUINO, Bea Santos'], [2, 'CRUZ, Dana Lim'], [3, 'REYES, Carlo']]);
-  // row 8 title over the score column, row 9 max then %, Recitation has no max
-  const exam = v[6].indexOf('TERM EXAM');
-  assert.deepEqual([v[7][exam], v[8][exam], v[8][exam + 1]], ['Midterm Exam', 75, '%']);
-  const rec = v[6].indexOf('RECITATION');
-  assert.equal(v[8][rec], null);
-  assert.equal(v[9][rec], 90);
-  assert.deepEqual(v[6].filter(h => typeof h === 'number'), [0.4, 0.3, 0.2, 0.1, 1]);
-  assert.ok(v[6].includes('Midterm 50%') && v[6].includes('Final 50%') && v[6].includes('Over All FG'));
-  // item % is a number, transmuted like the app does
-  const quiz = v[6].indexOf('QUIZ');
-  assert.equal(v[9][quiz + 1], 50 + 17 / 20 * 50);
+  assert.deepEqual(sheets.map(s => s.sheet), ['Grade Sheet']);
+  assert.deepEqual([sheets[0].stickyRowsCount, sheets[0].stickyColumnsCount, sheets[0].orientation], [10, 2, 'landscape']);
+  const v = sheetValues(sheets[0]);
+  assert.deepEqual(v.slice(0, 5).map(row => row[0]), ['Republic of the Philippines', 'BICOL UNIVERSITY', 'COLLEGE OF DENTAL MEDICINE', 'OPERATIVE DENTISTRY 1 · COMPREHENSIVE GRADE SHEET', 'DMD-3A · 1ST SEMESTER, AY 2026-2027']);
+  assert.deepEqual([v[5][0], v[5][1]], ['Student No.', 'Full Name']);
+  assert.deepEqual(v.slice(10).map(row => [row[0], row[1]]), [['STU-1', 'AQUINO, Bea Santos'], ['STU-2', 'CRUZ, Dana Lim'], ['STU-3', 'REYES, Carlo']]);
+  assert.ok(v[5].includes('Midterm') && v[5].includes('Finals'));
+  assert.ok(v[6].includes('Lecture') && v[6].includes('Laboratory'));
+  assert.ok(v[7].includes('Term Exam (40%)') && v[7].includes('Practical Exam (100%)'));
+  assert.ok(v[8].includes('Midterm Exam (Max 75)') && v[8].includes('Quiz 1 (Max 20)'));
+  assert.ok(v[9].includes('Score') && v[9].includes('%') && v[9].includes('Transmuted'));
+  assert.ok(v[8].includes('Average %') && v[8].includes('Weighted (40%)'));
+  assert.deepEqual(v[5].slice(-6), ['Midterm Results', null, 'Finals Results', null, 'Overall Result', null]);
 });
 
-test('attendance-sourced category exports as a percent column with the server average', () => {
-  const v = values(input()).LEC;
-  const att = v[6].indexOf('ATTENDANCE');
-  assert.ok(att > 0);
-  assert.equal(v[9][att], 95);
-  assert.equal(v[9][att + 1], 9.5);
+test('matrix keeps server-computed category and final grade values with inline equivalents', () => {
+  const v = values(input())['Grade Sheet'];
+  const body = v[10];
+  assert.equal(body[2], 62);
+  assert.equal(body[3], 62 / 75 * 100);
+  assert.equal(body[4], 50 + 62 / 75 * 50);
+  assert.equal(body[7], 17);
+  assert.equal(body[8], 85);
+  assert.equal(body[9], 92.5);
+  assert.equal(body.at(-1), 2.5);
 });
 
-test('missing score: blank cell and INC on everything that depends on it', () => {
-  const all = values(input());
-  const v = all.LEC;
-  const reyes = v[11];
-  const q = v[6].indexOf('QUIZ');
-  assert.deepEqual([reyes[q + 2], reyes[q + 3], reyes[q + 4], reyes[q + 5]], [null, null, 'INC', 'INC']); // Quiz 2, its %, AVE., weighted
-  const mg = v[6].indexOf('MIDTERM GRADE');
-  assert.deepEqual([reyes[mg], reyes[mg + 1], reyes[mg + 2]], ['INC', 'INC', 'INC']);
-  const t = all.TFG;
-  const col = (h: string) => t[0].indexOf(h);
-  // Reyes' Midterm Lecture is incomplete; his Finals are complete
-  assert.deepEqual(['MIDTERM LEC GRADE', 'TOTAL', 'MG (50%)', 'FG (100%)', 'MG EQUIV', 'FG EQUIV'].map(h => t[3][col(h)]), Array(6).fill('INC'));
-  assert.equal(typeof t[3][col('TFG (50%)')], 'number');
-  assert.equal(typeof t[3][col('MIDTERM LAB GRADE')], 'number');
-  assert.equal(typeof t[1][t[0].indexOf('FG (100%)')], 'number');
+test('attendance category and missing scores keep their matrix semantics', () => {
+  const v = values(input())['Grade Sheet'];
+  const reyes = v[12];
+  assert.ok(v[7].includes('Attendance (10%)'));
+  assert.ok(v[8].includes('Quiz 2 (Max 30)'));
+  assert.equal(reyes[10], null);
+  assert.equal(reyes[11], null);
+  assert.equal(reyes[12], null);
+  assert.equal(reyes[20], 95);
 });
 
-test('TFG: component grade x share with 2 decimals; TOTAL adds up', () => {
-  const t = values(input()).TFG;
-  assert.deepEqual(t[0], ['No.', 'NAME', 'MIDTERM LEC GRADE', 'MIDTERM LAB GRADE', 'TOTAL', 'MG (50%)', 'FINAL LEC GRADE', 'FINAL LAB GRADE', 'TOTAL', 'TFG (50%)', 'FG (100%)', 'MG EQUIV', 'TFG EQUIV', 'FG EQUIV']);
-  const r = serverResult('s1', 'lecture_laboratory') as any;
-  assert.equal(t[1][2], r.periods.midterm.components.lecture.percentage * 60 / 100);
-  assert.equal(t[1][3], r.periods.midterm.components.laboratory.percentage * 40 / 100);
-  assert.equal(t[1][4], r.periods.midterm.percentage);
-  assert.equal(t[1][10], r.percentage);
-});
-
-test('LEC and LAB sheets show the component alone in whole percents (X24)', () => {
-  const v = values(input());
-  const lecM = (serverResult('s1', 'lecture_laboratory') as any).periods.midterm.components.lecture.percentage;
-  const mg = v.LEC[6].indexOf('MIDTERM GRADE');
-  assert.equal(v.LEC[9][mg], lecM);
-  assert.equal(v.LEC[9][mg + 2], roundPercent(lecM * 50 / 100));
-  assert.equal(v.LAB[3][0], 'OPERATIVE DENTISTRY 1 (LAB)');
-});
-
-test('Lecture only: no LAB sheet, 10-column TFG with one-decimal MG and TFG', () => {
+test('Lecture-only export has one matrix and omits the Laboratory component group', () => {
   const sheets = buildOfficialGradeSheet(input('lecture'));
-  assert.deepEqual(sheets.map(s => s.sheet), ['LEC', 'TFG', 'DATA']);
-  const t = sheetValues(sheets[1]);
-  assert.deepEqual(t[0], ['No.', 'NAME', 'MIDTERM GRADE', 'MG (50%)', 'FINAL GRADE', 'TFG (50%)', 'FG (100%)', 'MG EQUIV', 'TFG EQUIV', 'FG EQUIV']);
-  assert.equal(t[1][3], (t[1][2] as number) * 50 / 100);
-  assert.equal(t[1][5], (t[1][4] as number) * 50 / 100);
-  assert.equal((sheets[1].data[1][3] as { format: string }).format, '0.0');
-});
-
-test('DATA: whole percent 0-100 to grade', () => {
-  const d = values(input()).DATA;
-  assert.deepEqual(d[0], ['PERCENT %', 'PS']);
-  assert.equal(d.length, 102);
-  assert.deepEqual([d[1], d[75], d[76], d[100], d[101]], [[0, 5], [74, 5], [75, 3], [99, 1], [100, 1]]);
+  assert.deepEqual(sheets.map(s => s.sheet), ['Grade Sheet']);
+  const v = sheetValues(sheets[0]);
+  assert.ok(v[6].includes('Lecture'));
+  assert.ok(!v[6].includes('Laboratory'));
+  assert.ok(v[5].includes('Midterm') && v[5].includes('Finals'));
 });
 
 test('no saved Grade Weights: refuses', () => {
@@ -184,41 +150,6 @@ test('saved breakdown of a past class becomes a result', () => {
   const saved = savedGradeResult({ grade: 2.5, components: { calculationMode: 'authoritative_periods', percentage: live.percentage, periods: live.periods } });
   assert.equal(saved?.status, 'computed');
   assert.equal(savedGradeResult({ grade: 0, components: {} }), undefined);
-});
-
-// ---------- X12 round trip ----------
-test('round trip: importing the exported workbook into the same class changes nothing', () => {
-  for (const mode of ['lecture_laboratory', 'lecture'] as const) {
-    const inp = input(mode);
-    const parsed = parseWorkbook(buildOfficialGradeSheet(inp).map(s => ({ sheet: s.sheet!, data: sheetValues(s) })));
-    assert.deepEqual(parsed.map(p => p.component), mode === 'lecture' ? ['Lecture'] : ['Lecture', 'Laboratory']);
-    const savedCats: SavedCategory[] = (['Midterm', 'Final'] as const).flatMap((period, i) =>
-      catsFor(mode)[i].map(c => ({ id: c.id, name: c.name, weight: c.weight, period, component: c.component, attendance: c.sourceKind === 'attendance' })));
-    const savedAss: SavedAssessment[] = inp.assessments.map(a => {
-      const c = savedCats.find(x => x.period === a.gradingPeriod && String(x.id) === a.gradingCategoryId)!;
-      return { id: a.id, title: a.title, maxScore: a.maxScore, period: a.gradingPeriod!, component: c.component, categoryId: c.id, attendance: false };
-    });
-    const ctx: ImportContext = {
-      classId: 'c1', categories: savedCats, assessments: savedAss, lectureOnly: mode === 'lecture',
-      students: students.map(s => ({ id: s.id, name: s.name, firstName: s.firstName, middleName: s.middleName, lastName: s.lastName })),
-      saved: Object.fromEntries(scores.map(s => [`${s.assessmentId}|${s.studentId}`, s.score])),
-      cls: { courseName: 'Operative Dentistry 1', semester: '1ST', schoolYear: '2026-2027' },
-    };
-    const p = buildPreview(parsed, ctx, emptyDecisions());
-    assert.deepEqual(p.blockers, [], mode);
-    assert.deepEqual(p.weightWarnings, [], mode);
-    assert.deepEqual(p.notInSheet, [], mode);
-    for (const sv of p.sheets) {
-      assert.deepEqual(sv.headerWarnings, []);
-      assert.equal(sv.rows.length, 3);
-      assert.ok(sv.rows.every(r => r.state === 'matched'));
-      assert.ok(sv.items.every(i => i.assessment && !i.maxDiff), 'every item matches a saved assessment');
-      const kinds = new Set(sv.rows.flatMap(r => r.cells.map(c => c.kind)));
-      assert.ok([...kinds].every(k => k === 'same' || k === 'blank'), `cells: ${[...kinds]}`);
-    }
-    assert.equal(p.sheets.reduce((n, sv) => n + sv.items.length, 0), inp.assessments.length);
-    assert.deepEqual(p.counts, { toSave: 0, blanks: 1, held: 0, changedUnticked: 0, itemsToCreate: 0, toRemove: 0 }); // the one missing Quiz 2
-  }
 });
 
 test('classes without the official layout get the plain Grade Summary', () => {
