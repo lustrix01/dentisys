@@ -16,7 +16,7 @@ Seeded passwords: `ui-fix-demo/references/dentisys.app.json`. Fresh test account
 - Mail: `.env` must be Mailpit-only (`EMAIL_PROVIDER=mailpit`, SMTP_USER/PASS blank). Read invites at http://localhost:8025. In dev the invite API also returns `invitation_link`.
 - Face/camera can't run in the review browser: use the dev biometric/location mocks (`DEVELOPMENT_LOCATION_FIXTURES`); a real-phone face test is the Owner's.
 - Data-changing flows run locally only. The demo is checked read-only (`scripts/demo-live-check.mjs`, DB counts). No emails from the demo.
-- `scripts/local-states-example.mjs` shows how to force states (new Faculty with no classes, room clash, form errors, approved request label) with Playwright + API.
+- `.claude/skills/user-walkthrough-audit/scripts/local-states-example.mjs` shows how to force states (new Faculty with no classes, room clash, form errors, approved request label) with Playwright + API.
 
 ## Known traps
 - Times: always Manila; raw UTC from the API is a recurring bug (`formatManilaWhen`).
@@ -28,7 +28,7 @@ Seeded passwords: `ui-fix-demo/references/dentisys.app.json`. Fresh test account
 ## Deploy (only when told) — `CLAUDE.local.md` "Demo deploy and test"
 1. `publish-images.ps1 -Tag demo` from a `git worktree add --detach` copy.
 2. New migration → `demo-vps.ps1 migrate` first; then `demo-vps.ps1 wait-deploy <sha12>`.
-3. `demo-test.ps1` (smoke 4/4 + audit chain), then `node scripts/demo-live-check.mjs` adapted to the release.
+3. `demo-test.ps1` (smoke 4/4 + audit chain), then `node .claude/skills/user-walkthrough-audit/scripts/demo-live-check.mjs` adapted to the release.
 4. Report sha + `.\scripts\promote-prod.ps1 -Sha <sha>`. Commit nothing until the Owner promotes (needs HEAD == sha, clean tree).
 
 ## Boundaries

@@ -69,7 +69,7 @@ Project rules (`AGENTS.md`, `CLAUDE.local.md`) win. Screenshots use the `ui-fix-
 
 - Serve base (5181) and theirs (5182).
 - Build the demo with `ui-fix-demo`: Before = base, After = theirs, one card per finding, pills Keep / Needs your OK / Fix / Regression (`.pill.bad`). `shots.mjs` target options:
-  - `mock: [{url, json}]` for states the seed data cannot reach. **Copy objects whole**: fetch the real response once (`POST /api/auth/login`, use `access_token`) or take it from the matching `e2e/*.spec.ts`, then edit only what the case needs. A page error now fails the target instead of saving a blank image.
+  - `mock: [{url, json}]` for states the seed data cannot reach. **Copy objects whole**: fetch the real response once (`POST /api/auth/login`, use `access_token`) or take it from the matching `e2e/*.spec.ts`, then edit only what the case needs. A page error fails the target instead of saving a blank image.
   - `fill` and `click` for typing then clicking.
   - `steps` for click sequences.
   - `upload: [selector, absolute path]` for file inputs. Sample files live in R; never commit them or use the Owner's real files.

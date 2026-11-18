@@ -82,7 +82,7 @@ When a subagent writes each option as file copies (the working tree holds work u
 - Targets: make `text` a regex that only the intended element matches, and add `closest` (e.g. `".grid"`) to frame the right container.
 - Devices come from `audit/devices.json`: a name, or a tier (`quick`, `core`, `full`) for every device in it.
 - Run the scripts from the project root (Playwright resolves from there). On Windows pass paths like `C:/Users/...`; prefix shell commands with `MSYS_NO_PATHCONV=1` when an argument starts with `/`.
-- A demo can lie: once a locator matched the wrong tile and Before and After were identical. verify.py now fails identical pairs and warns when the screen changed outside the close-up; still open the main pair yourself.
+- A demo can lie when a locator matches the wrong element. verify.py fails identical Before/After pairs and warns when the screen changed outside the close-up; still open the main pair yourself.
 
 ## Shape of the conversation
 
