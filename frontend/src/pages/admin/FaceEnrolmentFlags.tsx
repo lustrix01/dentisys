@@ -268,7 +268,7 @@ function ClosedLine({ flag }: { flag: FaceFlag }) {
 }
 
 function Item({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><dt className="text-[10px] font-semibold text-slate-400">{label}</dt><dd className="mt-1 text-xs text-slate-700 dark:text-slate-300">{children}</dd></div>;
+  return <div><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">{label}</dt><dd className="mt-1 text-xs text-slate-700 dark:text-slate-300">{children}</dd></div>;
 }
 
 /** Row menu copied from RowMenu in PeopleAndAccounts.tsx. */

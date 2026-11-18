@@ -173,7 +173,7 @@ export const CourseCatalog: React.FC = () => {
                   <td className="px-4 py-4 text-slate-500 dark:text-slate-400">{shownUnits(course.lectureUnits)}</td>
                   <td className="px-4 py-4 text-slate-500 dark:text-slate-400">{shownUnits(course.labUnits)}</td>
                   <td className="px-4 py-4 font-semibold text-slate-700 dark:text-slate-200">{course.units}</td>
-                  <td className="px-4 py-4 text-slate-500 dark:text-slate-400">{course.classCount} <span className="text-slate-400">({course.currentClassCount} this year)</span></td>
+                  <td className="px-4 py-4 text-slate-500 dark:text-slate-400">{course.classCount} <span>({course.currentClassCount} this year)</span></td>
                   <td className="px-4 py-3"><div className="flex justify-end gap-1.5">{actions(course)}</div></td>
                 </tr>
               ))}</tbody>
@@ -182,7 +182,7 @@ export const CourseCatalog: React.FC = () => {
           <div className="space-y-3 sm:hidden">{filtered.map(course => (
             <article key={course.id} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-extrabold tracking-wide text-accent-700 dark:text-accent-300">{course.courseCode}</p><h3 className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100">{course.name}</h3></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${course.status === 'active' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{course.status === 'active' ? 'Active' : 'Retired'}</span></div>
-              <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">{[['Lecture Units', shownUnits(course.lectureUnits)], ['Laboratory Units', shownUnits(course.labUnits)], ['Total Units', String(course.units)], ['Classes', `${course.classCount} (${course.currentClassCount} this year)`]].map(([label, value]) => <div key={label}><dt className="text-[10px] font-semibold text-slate-400">{label}</dt><dd className="mt-1 text-xs text-slate-700 dark:text-slate-300">{value}</dd></div>)}</dl>
+              <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">{[['Lecture Units', shownUnits(course.lectureUnits)], ['Laboratory Units', shownUnits(course.labUnits)], ['Total Units', String(course.units)], ['Classes', `${course.classCount} (${course.currentClassCount} this year)`]].map(([label, value]) => <div key={label}><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">{label}</dt><dd className="mt-1 text-xs text-slate-700 dark:text-slate-300">{value}</dd></div>)}</dl>
               <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">{actions(course)}</div>
             </article>
           ))}</div>
