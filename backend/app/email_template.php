@@ -292,6 +292,17 @@ function email_dean_transferred_html(string $name, array $lines): string
     ]);
 }
 
+/** The Superadmin moved a class between Faculty members; $lines say what happened for this person (already HTML-safe). */
+function email_class_faculty_changed_html(string $name, string $preheader, array $lines): string
+{
+    return email_render([
+        'preheader' => $preheader,
+        'greeting' => $name !== '' ? "Hello {$name}," : 'Hello,',
+        'intro' => $lines,
+        'signature' => ['name' => 'DentiSYS Support', 'lines' => ['Bicol University College of Dental Medicine']],
+    ]);
+}
+
 /** AUTH-006: the Superadmin reset this person's authenticator 2FA. */
 function email_two_factor_reset_html(string $name, string $email): string
 {

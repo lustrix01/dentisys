@@ -46,9 +46,28 @@ test('Part C: People & Accounts deactivates and reactivates through the API and 
   assert.doesNotMatch(people, /Preview data|PREVIEW_ACCOUNTS|Deans/);
   assert.match(people, /faculty_has_current_classes/);
   assert.match(people, /Reassign or archive them first\./);
-  assert.match(people, /Link to="\/(admin|superadmin)\/classes"/); // the blocked case lists the classes as links, now a Superadmin page
+  assert.match(people, /Link to=\{`\/superadmin\/classes\?facultyId=\$\{target\.userId\}`\}/); // D16: each blocking class links to the Superadmin Classes page filtered to that Faculty member
+  assert.doesNotMatch(people, /Link to="\/(admin|superadmin)\/classes"/); // never the unfiltered page
   assert.match(people, /Reason \(optional\)/);
   assert.match(people, /Class Secretary, the Secretary sign-in is blocked too/);
+});
+
+test('Superadmin Classes (superadmin-classes.md): the page is live; read-only except Change Faculty; no preview data, no Create Class', () => {
+  const classes = read('../pages/admin/Classes.tsx');
+  for (const call of ['getAdminClassesApi', 'getAdminClassFiltersApi', 'getAdminClassDetailApi', 'changeClassFacultyApi']) assert.ok(classes.includes(`${call}(`), call);
+  for (const route of ['/admin/classes?', '/admin/classes/filters', '/admin/classes/detail?csId=', '/admin/classes/change-faculty']) assert.ok(api.includes(route), route);
+  assert.doesNotMatch(classes, /Preview data|PREVIEW|Preview roster only|Sample data/i); // no sample data, no notice banner
+  assert.doesNotMatch(classes, /Create Class|Add Class|Edit Class|Archive Class|Restore/); // creating, editing, archiving and restoring stay with Faculty
+  assert.match(classes, /Change Faculty/);
+  assert.match(classes, /UserRoundCog/); // D17: the icon button
+  assert.match(classes, /item\.canChangeFaculty &&/); // hidden, not disabled, where the server says no (D17)
+  assert.match(classes, /Class Secretary/); // Class Details shows the Secretary row
+  assert.match(classes, /useSearchParams/); // D16: ?facultyId= filters the page
+  assert.match(classes, /\(deactivated\)/); // D15
+  assert.match(classes, /Enter a reason\./);
+  assert.match(classes, /Active Classes/);
+  assert.match(classes, /Archived Classes/);
+  assert.match(classes, /Clear filters/);
 });
 
 test('DS22 My Activity: the Dean Audit Trail has the Faculty settings, no list switch, no role filter, no attention cards', () => {

@@ -17,13 +17,13 @@ The Superadmin sees every Faculty member's class sections and rosters, read-only
 
 ## Data
 
-No migration. The owner of a class is `class_sections.instructor_user_id`; Change Faculty updates that one column. Everything else stays on the class: students, assessments, scores, grades, attendance records, scheduled and auto sessions, remedials, retention entries, Class Secretary, join code and pending join requests, room and schedule. Audit rows keep their real actor.
+No migration. The owner of a class is `class_sections.instructor_user_id`; Change Faculty updates that column. Grade weights are not on the class: they belong to Faculty member + course + semester + school year (`grading_configs` with `grading_categories` and `grading_category_periods`, shared by all of that person's sections of the course), and assessments point at those categories (`assessments.grading_category_id`). So Change Faculty also copies the previous Faculty member's configuration for the class's course and term to the new Faculty member and points this class's assessments at the copied categories, so every grade stays the same; the previous Faculty member's configuration is left as it is for their other sections (D20). Everything else stays on the class: students, assessments, scores, grades, attendance records, scheduled and auto sessions, remedials, retention entries, Class Secretary, join code and pending join requests, room and schedule. Audit rows keep their real actor.
 
 ## API (Superadmin only; others 403, no token 401)
 
 | Method | Path | Input | Output |
 |---|---|---|---|
-| GET | `/api/admin/classes` | `view=active\|archived` (default active), `schoolYear`, `semester=1ST\|2ND\|Summer`, `courseId`, `facultyId`, `q` (course code, title, section, Faculty name), `page` (50 per page). Unknown value: 422 | `{classes:[ClassRow], total, page, pageSize, counts:{active, archived}}` |
+| GET | `/api/admin/classes` | `view=active\|archived` (default active), `schoolYear`, `semester=1ST\|2ND\|Summer`, `courseId`, `facultyId`, `q` (course code, title, section, Faculty name), `page` (50 per page). A malformed or unknown `view`/`semester`/`schoolYear`/`page`, or a malformed id: 422; a well-formed `courseId`/`facultyId` that matches nothing gives an empty list, like People & Accounts | `{classes:[ClassRow], total, page, pageSize, counts:{active, archived}}` |
 | GET | `/api/admin/classes/filters` | none | `{schoolYears:[...], currentSchoolYear, courses:[{courseId, courseCode, title}], faculty:[{userId, name, status}]}`; faculty includes deactivated members, shown "(deactivated)" (D15) |
 | GET | `/api/admin/classes/detail` | `csId` | `{class: ClassRow, roster:[{studentNo, name, email, yearLevel, status}]}` |
 | POST | `/api/admin/classes/change-faculty` | `{csId, toUserId, reason}` | `{status:"ok", message, class: ClassRow}` |
@@ -44,11 +44,12 @@ POST /api/admin/classes/change-faculty
 
 | Code | HTTP | When | Message |
 |---|---|---|---|
-| `validation` | 422 | missing `csId`, `toUserId` or a reason under 5 characters | "Enter a reason." |
+| `validation` | 422 | missing `csId` or `toUserId` ("Choose a class and a Faculty member."), or a reason under 5 characters ("Enter a reason.") | as listed |
 | `class_not_found` | 404 | no such class | "Class not found." |
 | `class_not_current` | 409 | past school year or archived | "Past and archived classes are view-only." |
 | `same_faculty` | 409 | `toUserId` already teaches it | "This class already belongs to that Faculty member." |
 | `faculty_not_eligible` | 409 | target is not an active Faculty account (deactivated, invited, Dean, Student, Superadmin) | "Choose an active Faculty member." |
+| `grading_weights_clash` | 409 | the new Faculty member already has grade weights for this course, semester and school year (they teach another section of it) and the class has a configuration to carry over | "Dr. Ana Cruz already has grade weights for DENT 101, 1st Semester 2026-2027. Choose another Faculty member." (D20) |
 | `session_open` | 409 | an attendance session for the class is open | "End the open attendance session first, or wait until it ends at 10:00 AM." (the session's end time; it ends on its own, `attendance_session_auto_ended`) |
 
 Runs in one transaction with `FOR UPDATE` on the class row, like `faculty_class_archive_change`.
@@ -59,7 +60,7 @@ Runs in one transaction with `FOR UPDATE` on the class row, like `faculty_class_
   - Previous Faculty member, subject "Class moved": "DENT 101 (CDM-1A) was moved to Dr. Ana Cruz by the Superadmin. Reason: <reason>. It no longer appears in your classes."
   - New Faculty member, subject "Class assigned to you": "DENT 101 (CDM-1A) is now yours. Its students, grades, attendance and sessions came with it. Reason: <reason>." (D12)
 - Class Secretary, if any: in-app notice "Your class DENT 101 (CDM-1A) now has Dr. Ana Cruz as its Faculty member." Students: nothing (D14).
-- Audit `class_faculty_changed`, actor Superadmin, scope the class, reason, before `{instructor_user_id, name}` and after the same. Shown in the Superadmin Audit Trail under class work.
+- Audit `class_faculty_changed`, actor Superadmin, scope the class, reason, before `{instructor_user_id, name}` and after the same. Registered like `class_archive` (People area, on the Superadmin Overview and Audit Trail); the trail shows "Faculty: Old → New". The copied grade configuration is part of the same row's details, not a separate grading event.
 
 ## Screen (copies the current preview page, which already follows "Page patterns")
 
@@ -82,7 +83,7 @@ Create Class button and the Create/Edit/Archive/Restore dialogs are removed.
 
 ## Spec amendment (replaces `spec.md` line 1177; Owner OK 2026-11-19, D18)
 
-> Owner decision (2026-11-19): The Superadmin's Classes screen lists every Faculty member's class sections (Active and Archived, all school years; Cancelled and Created-by-mistake apart from Completed) with their rosters, read-only. Its one action is Change Faculty: the Superadmin moves an active class section of the current school year, also during its term, to another active Faculty member (not the Dean), one class at a time and with a reason. It is refused while an attendance session for that class is open. The class keeps its students, grades, attendance, scheduled and automatic sessions, Class Secretary and join code. The new Faculty member gets full access, and the class leaves the previous Faculty member's classes and reports; their past actions stay in the audit log. Both Faculty members get an in-app notice and an email (a failed email does not undo the change), the Class Secretary gets an in-app notice, and the change is audited. Creating, editing, archiving and restoring stay with Faculty (CLS-001, CLS-003).
+> Owner decision (2026-11-19): The Superadmin's Classes screen lists every Faculty member's class sections (Active and Archived, all school years; Cancelled and Created-by-mistake apart from Completed) with their rosters, read-only. Its one action is Change Faculty: the Superadmin moves an active class section of the current school year, also during its term, to another active Faculty member (not the Dean), one class at a time and with a reason. It is refused while an attendance session for that class is open. The class keeps its students, grades, attendance, scheduled and automatic sessions, Class Secretary and join code, and its grade weights are copied to the new Faculty member; it is refused when the new Faculty member already has their own grade weights for that course and term. The new Faculty member gets full access, and the class leaves the previous Faculty member's classes and reports; their past actions stay in the audit log. Both Faculty members get an in-app notice and an email (a failed email does not undo the change), the Class Secretary gets an in-app notice, and the change is audited. Creating, editing, archiving and restoring stay with Faculty (CLS-001, CLS-003).
 
 ADM-001's Superadmin list (line 1199) already names Classes; no change there.
 
@@ -121,3 +122,4 @@ ADM-001's Superadmin list (line 1199) already names Classes; no change there.
 | D17 | The Change Faculty button is hidden on past and archived classes. |
 | D18 | Spec amendment text above approved. |
 | D19 | The work is priority P1 above the backlog (`docs/PRODUCT_BACKLOG.md`). |
+| D20 | Grade weights: copy the previous Faculty member's weights for the course and term to the new one and point the class's assessments at the copy; refuse (`grading_weights_clash`) when the new Faculty member already has weights for that course and term. Owner, 2026-11-19, found during the build. |

@@ -12,7 +12,6 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 Owner, 2026-11-19: these come before every backlog item, in this order.
 
-- **P1** Superadmin Classes with live records: the page lists every Faculty member's real classes and rosters, read-only, with one action, Change Faculty. Contract: [superadmin-classes.md](contracts/superadmin-classes.md).
 - **P2** Superadmin pages responsive on the device list.
 - **P3** Merge `owhie-responsive` (the colleague's UI work and fixes) into `lighthal9-responsive`, then `lighthal9-superadmin` into `lighthal9-responsive`. How is decided with the Owner before starting.
 
@@ -44,6 +43,7 @@ Owner, 2026-11-19: these come before every backlog item, in this order.
 Requested by the Owner. Each starts with the contract (fields, errors, examples) and the Owner's `/grill-me`, and any spec change needs the Owner's approval first.
 
 - **12.6** UI formality pass (Owner, 2026-11-16): make every screen clean, polished and formal: remove messiness, inconsistencies and unnecessary elements, and bring each page part to one standard look. Starts like the other items: a contract listing the screens and rules, the Owner's rulings, then Before/After demos from the real app.
+- **12.7** Optional (Owner, 2026-11-19): Superadmin full class management: create, edit, archive and restore class sections from the Superadmin Classes page, on top of P1's view and Change Faculty. Today only Faculty do these (CLS-001, CLS-003), so it needs a spec change, a contract and `/grill-me` (~4–6 days). Not scheduled.
 - **12.5** Dropped (Owner, 2026-11-15): check-out with geofencing. In a classroom a Student who leaves is noticed, and a second check would double the time attendance takes; face enrolment flags (12.2) cover the real abuse.
 
 ---
@@ -71,6 +71,7 @@ The full report text, what DentiSYS did at the time, the gaps, open questions an
 
 Full text and Owner decisions of these items: [backlog items closed before 2026-11-14](archive/backlog-done-2026-11.md).
 
+- **P1** Superadmin Classes with live records: every Faculty member's real classes and rosters, read-only, with one action, Change Faculty (grade weights copied to the new Faculty member). Contract: [superadmin-classes.md](contracts/superadmin-classes.md).
 - **13.9** Dean and Superadmin as separate roles and accounts: the Dean keeps Dashboard, Reports & Analytics, Faculty Invitations and My Activity; the Superadmin (one account, created by the server script, 2FA required at the first sign-in) gets setup, accounts, the audit trail and the Dean handover. Contract: [dean-superadmin-split.md](contracts/dean-superadmin-split.md).
 - **9.14** Notice banner, empty state and loading state standards on the Faculty, Secretary and Student pages (small dashboard panels keep a one-line message).
 - **9.15** People & Accounts phone cards wrap emails only before "@".

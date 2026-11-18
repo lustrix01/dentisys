@@ -7908,6 +7908,7 @@ require __DIR__ . '/lecture_only_grading_integration.php';
 require __DIR__ . '/audit_read_integration.php';
 require __DIR__ . '/superadmin_integration.php';
 require __DIR__ . '/superadmin_split_integration.php';
+require __DIR__ . '/superadmin_classes_integration.php';
 require __DIR__ . '/face_flags_integration.php';
 require __DIR__ . '/audit_chain_integration.php';
 

@@ -452,4 +452,7 @@ $pdo->prepare("UPDATE attendance_sessions SET status = 'revoked', revoked_at = C
 
 require __DIR__ . '/overnight_sessions_integration.php';
 
+// The fixture's sessions sit a few days ahead (08:00-11:00): left scheduled, they block the seed Faculty's
+// bookings in later live tests whenever that date is a weekday they use (e.g. class-from-class-list on Mondays).
+$pdo->prepare("UPDATE attendance_sessions SET status = 'revoked', revoked_at = CURRENT_TIMESTAMP WHERE cs_id = ? AND status = 'scheduled'")->execute([$meetingClassId]);
 $pdo->prepare("UPDATE class_sections SET status = 'Archived' WHERE cs_id = ?")->execute([$meetingClassId]);

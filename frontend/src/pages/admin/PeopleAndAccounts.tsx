@@ -437,7 +437,7 @@ export const PeopleAndAccounts: React.FC = () => {
             {blocked ? (
               <div role="alert" className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
                 <p className="flex items-start gap-2"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />{blocked.message}</p>
-                <ul className="space-y-1 pl-6">{blocked.classes.map(c => <li key={c.csId}><Link to="/superadmin/classes" className="font-bold underline">{c.label}</Link></li>)}</ul>
+                <ul className="space-y-1 pl-6">{blocked.classes.map(c => <li key={c.csId}><Link to={`/superadmin/classes?facultyId=${target.userId}`} className="font-bold underline">{c.label}</Link></li>)}</ul>
               </div>
             ) : (
               <>

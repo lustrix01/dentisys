@@ -18,6 +18,7 @@ require_once dirname(__DIR__) . '/controllers/NotificationController.php';
 require_once dirname(__DIR__) . '/controllers/AdminController.php';
 require_once dirname(__DIR__) . '/controllers/RoomController.php';
 require_once dirname(__DIR__) . '/controllers/SuperadminController.php';
+require_once dirname(__DIR__) . '/controllers/SuperadminClassesController.php';
 require_once dirname(__DIR__) . '/controllers/FacultyController.php';
 require_once dirname(__DIR__) . '/controllers/ClassJoinController.php';
 require_once dirname(__DIR__) . '/controllers/AutoSessionsController.php';
@@ -46,6 +47,10 @@ return [
     ['method' => 'POST', 'path' => '/api/admin/people/transfer-dean', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/invitation/resend', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/invitation/revoke', 'handler' => 'handle_admin_people'],
+    ['method' => 'GET', 'path' => '/api/admin/classes', 'handler' => 'handle_admin_classes'],
+    ['method' => 'GET', 'path' => '/api/admin/classes/filters', 'handler' => 'handle_admin_classes'],
+    ['method' => 'GET', 'path' => '/api/admin/classes/detail', 'handler' => 'handle_admin_classes'],
+    ['method' => 'POST', 'path' => '/api/admin/classes/change-faculty', 'handler' => 'handle_admin_classes'],
     ['method' => 'GET', 'path' => '/api/faculty/classes/join', 'handler' => 'handle_class_join_faculty_get'],
     ['method' => 'POST', 'path' => '/api/faculty/classes/join/code', 'handler' => 'handle_class_join_faculty_new_code'],
     ['method' => 'POST', 'path' => '/api/faculty/classes/join/settings', 'handler' => 'handle_class_join_faculty_settings'],

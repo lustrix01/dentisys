@@ -100,6 +100,7 @@ function audit_catalogue(): array
         'class_schedule_overlap_confirmed' => ['Class schedule booked over an overlap', $P, true, false],
         'class_archive' => ['Class archived', $P, true, false],
         'class_restore' => ['Class restored', $P, true, false],
+        'class_faculty_changed' => ['Class Faculty changed', $P, true, false],
         'account_deactivated' => ['Account deactivated', $P, true, false],
         'account_reactivated' => ['Account reactivated', $P, true, false],
         'sessions_ended_by_dean' => ['Signed out everywhere', $P, true, false],
@@ -651,6 +652,9 @@ function audit_row_changes(array $r, ?array $before, ?array $after): array
             }
         }
         return $out;
+    }
+    if ($code === 'class_faculty_changed') {
+        return [$line('Faculty', $before['name'] ?? null, $after['name'] ?? null)];
     }
     if ($code === 'class_archive' || $code === 'class_restore') {
         $reason = static fn(mixed $v): string => ['finished' => 'Finished', 'mistake' => 'Created by mistake', 'cancelled' => 'Cancelled'][(string) $v] ?? '—';

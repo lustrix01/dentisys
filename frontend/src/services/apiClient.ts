@@ -2704,6 +2704,34 @@ export type PeopleFilterOptions = { status?: string; yearLevels?: number[]; cour
 export function getAdminPeopleFiltersApi(): Promise<PeopleFilterOptions> {
   return request('GET', '/admin/people/filters');
 }
+// Superadmin Classes (docs/contracts/superadmin-classes.md): every Faculty member's classes, read-only, plus Change Faculty.
+export type AdminClassRow = {
+  csId: number; courseCode: string; courseTitle: string; section: string; schoolYear: string; semester: string; yearLevel: number;
+  faculty: { userId: number; name: string }; schedule: Array<{ day: string; start: string; end: string }>; rooms: { lecture: string | null; laboratory: string | null };
+  studentCount: number; secretary: { name: string } | null; archiveReason: 'finished' | 'cancelled' | 'mistake' | 'completed' | null; archivedAt: string | null;
+  current: boolean; canChangeFaculty: boolean;
+};
+export type AdminClassRosterStudent = { studentNo: string; name: string; email: string; yearLevel: number; status: string };
+export type AdminClassFilters = {
+  schoolYears: string[]; currentSchoolYear: string; courses: Array<{ courseId: number; courseCode: string; title: string }>;
+  faculty: Array<{ userId: number; name: string; status: string }>;
+};
+export function getAdminClassesApi(params: { view?: 'active' | 'archived'; schoolYear?: string; semester?: string; courseId?: number; facultyId?: number; q?: string; page?: number }): Promise<{ classes: AdminClassRow[]; total: number; page: number; pageSize: number; counts: { active: number; archived: number } }> {
+  const search = new URLSearchParams({ view: params.view ?? 'active', page: String(params.page ?? 1) });
+  if (params.q) search.set('q', params.q);
+  for (const key of ['schoolYear', 'semester'] as const) if (params[key]) search.set(key, params[key] as string);
+  for (const key of ['courseId', 'facultyId'] as const) if (params[key]) search.set(key, String(params[key]));
+  return request('GET', `/admin/classes?${search.toString()}`);
+}
+export function getAdminClassFiltersApi(): Promise<AdminClassFilters> {
+  return request('GET', '/admin/classes/filters');
+}
+export function getAdminClassDetailApi(csId: number): Promise<{ class: AdminClassRow; roster: AdminClassRosterStudent[] }> {
+  return request('GET', `/admin/classes/detail?csId=${csId}`);
+}
+export function changeClassFacultyApi(csId: number, toUserId: number, reason: string): Promise<{ status: string; message: string; class: AdminClassRow }> {
+  return request('POST', '/admin/classes/change-faculty', { csId, toUserId, reason });
+}
 export type FaceFlag = {
   flagId: number; kind: 'F1' | 'F2'; status: 'open' | 'dismissed' | 'revoked';
   student: { studentId: number; userId: number; name: string; studentNo: string };

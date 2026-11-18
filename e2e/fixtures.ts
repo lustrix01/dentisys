@@ -34,8 +34,8 @@ export const MOCK_ROOMS = SEEDED_ROOMS.map(([name, group]) => ({ name, group, st
 export const roomsJson = (extra: Array<Record<string, unknown>> = []) => ({ status: 'ok', rooms: [...MOCK_ROOMS, ...extra] });
 
 const KNOWN_API_PATHS = new Set([
-  '/api/rooms', '/api/admin/people', '/api/admin/courses', '/api/admin/rooms', '/api/admin/overview', '/api/admin/face-flags', '/api/admin/people/filters',
-  '/api/admin/people/transfer-dean', '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/google', '/api/auth/google/link', '/api/auth/google/link/profile', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/faculty/activate', '/api/auth/mfa/enroll/start',
+  '/api/rooms', '/api/admin/people', '/api/admin/courses', '/api/admin/rooms', '/api/admin/overview', '/api/admin/face-flags', '/api/admin/people/filters', '/api/admin/classes', '/api/admin/classes/filters', '/api/admin/classes/detail',
+  '/api/admin/people/transfer-dean', '/api/admin/classes/change-faculty', '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/google', '/api/auth/google/link', '/api/auth/google/link/profile', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/faculty/activate', '/api/auth/mfa/enroll/start',
   '/api/auth/mfa/enroll/confirm', '/api/auth/mfa/verify', '/api/auth/mfa/recover', '/api/auth/mfa/settings',
   '/api/auth/mfa/settings/recovery-codes', '/api/auth/mfa/settings/revoke', '/api/auth/me', '/api/auth/refresh', '/api/auth/theme',
   '/api/auth/logout', '/api/auth/password/reset-request', '/api/auth/password/reset-confirm',
@@ -61,7 +61,7 @@ const KNOWN_API_PATHS = new Set([
 ]);
 
 const GET_ONLY_API_PATHS = new Set([
-  '/api/rooms', '/api/admin/email-logs', '/api/admin/people', '/api/admin/courses', '/api/admin/rooms', '/api/admin/overview', '/api/admin/face-flags', '/api/admin/people/filters',
+  '/api/rooms', '/api/admin/email-logs', '/api/admin/people', '/api/admin/courses', '/api/admin/rooms', '/api/admin/overview', '/api/admin/face-flags', '/api/admin/people/filters', '/api/admin/classes', '/api/admin/classes/filters', '/api/admin/classes/detail',
   '/api/health', '/api/runtime-config', '/api/auth/me', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/student/invitation', '/api/auth/mfa/settings', '/api/admin/faculty-invitations',
   '/api/admin/dashboard/kpis', '/api/admin/audit-logs', '/api/admin/reports/summary', '/api/secretary/invitation', '/api/secretary/invitations',
   '/api/secretary/dashboard/kpis', '/api/secretary/attendance', '/api/secretary/attendance/session/active', '/api/secretary/profile', '/api/secretary/settings',
@@ -107,6 +107,9 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname === '/api/admin/face-flags') return { status: 'ok', flags: [], total: 0, page: 1, pageSize: 50 };
   if (pathname === '/api/admin/people/filters') return { status: 'ok', courses: [], classes: [] };
   if (pathname === '/api/admin/courses') return { status: 'ok', courses: [] };
+  if (pathname === '/api/admin/classes') return { classes: [], total: 0, page: 1, pageSize: 50, counts: { active: 0, archived: 0 } };
+  if (pathname === '/api/admin/classes/filters') return { schoolYears: [], currentSchoolYear: '2026-2027', courses: [], faculty: [] };
+  if (pathname === '/api/admin/classes/detail') return { class: null, roster: [] };
   if (pathname === '/api/admin/rooms') return { status: 'ok', rooms: [], categories: [] };
   if (pathname === '/api/admin/overview') return {
     status: 'ok',
