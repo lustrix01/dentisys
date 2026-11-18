@@ -3676,6 +3676,16 @@ foreach ($facultyReportBody['reports']['students'] ?? [] as $facultyReportRow) {
 }
 expect_true(is_array($facultyReportStudent), 'Faculty report lists a student with current and past-year enrollments');
 expect_true(($facultyReportStudent['status'] ?? null) === 'remedial', 'Faculty report standing uses the most serious retention state, not the first row');
+$facultyReportNameStmt = $pdo->prepare(
+    "SELECT COALESCE(pi.first_name, s.first_name) AS first_name, COALESCE(pi.middle_name, s.middle_name) AS middle_name,
+            COALESCE(pi.last_name, s.last_name) AS last_name
+       FROM students s LEFT JOIN person_identities pi ON pi.person_id = s.person_id WHERE s.student_id = ?"
+);
+$facultyReportNameStmt->execute([$invitedStudentId]);
+$facultyReportNameRow = $facultyReportNameStmt->fetch(PDO::FETCH_ASSOC);
+expect_same((string) $facultyReportNameRow['first_name'], (string) ($facultyReportStudent['firstName'] ?? ''), 'Faculty report student carries firstName for last-name-order exports');
+expect_same((string) ($facultyReportNameRow['middle_name'] ?? ''), (string) ($facultyReportStudent['middleName'] ?? ''), 'Faculty report student carries middleName for last-name-order exports');
+expect_same((string) $facultyReportNameRow['last_name'], (string) ($facultyReportStudent['lastName'] ?? ''), 'Faculty report student carries lastName for last-name-order exports');
 expect_same(2.66, (float) ($facultyReportStudent['gwaBySchoolYear']['2025-2026'] ?? 0), 'Faculty report gives the past school year its own GWA');
 $facultyReportGwaStmt = $pdo->prepare(
     "SELECT ROUND(SUM(COALESCE(egb.final_gwa, e.final_gwa) * CASE WHEN c.units > 0 THEN c.units ELSE 1 END)

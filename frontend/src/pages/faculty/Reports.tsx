@@ -635,14 +635,13 @@ export const Reports: React.FC = () => {
           assignedSubjects.includes(sub.code)
           && retentionIsAtRisk(retentionForStudentSubject(student, sub))
         ).length;
-        const riskLevel = retentionUnavailable ? 'UNAVAILABLE' : atRiskCourses && atRiskCourses > 0 ? 'At Risk' : '';
         const gwa = standingGwa(student);
-        return [student.studentId, sheetName(student), gwa !== null ? gwa : 'N/A', atRiskCourses ?? 'UNAVAILABLE', riskLevel, remedialStatusFor(student)];
+        return [student.studentId, sheetName(student), gwa !== null ? gwa : 'N/A', atRiskCourses ?? 'UNAVAILABLE', remedialStatusFor(student)];
       });
       await downloadXlsx('Retention_Report.xlsx', [buildReportSheet({
         sheet: 'Retention', title: 'RETENTION REPORT', filter: 'All assigned classes', term: selectedSchoolYear === 'all' ? 'All school years' : `AY ${selectedSchoolYear}`, by,
         columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Standing Grade', width: 15, format: '0.00' },
-          { header: 'At-Risk Courses', width: 16 }, { header: 'Risk Level', width: 14 }, { header: 'Remedial Status', width: 20 }],
+          { header: 'Remedial Courses', width: 17 }, { header: 'Remedial Status', width: 20 }],
         rows,
       })]);
       return;
@@ -1313,8 +1312,7 @@ export const Reports: React.FC = () => {
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
                   <th className="px-5 py-3" aria-sort={ariaSort(retentionSort, 'name')}><SortableHeader label="Student Details" sortKey="name" sort={retentionSort} onSort={setRetentionSort} /></th>
                   <th className="px-5 py-3 text-center" aria-sort={ariaSort(retentionSort, 'grade')}><SortableHeader label="Standing Grade" sortKey="grade" sort={retentionSort} onSort={setRetentionSort} /></th>
-                  <th className="px-5 py-3 text-center">At-Risk Courses</th>
-                  <th className="px-5 py-3 text-center">Risk Level</th>
+                  <th className="px-5 py-3 text-center">Remedial Courses</th>
                   <th className="px-5 py-3">Remedial Program Status</th>
                 </tr>
               </thead>
@@ -1324,7 +1322,6 @@ export const Reports: React.FC = () => {
                     assignedSubjects.includes(sub.code)
                     && retentionIsAtRisk(retentionForStudentSubject(student, sub))
                   );
-                  const isAtRisk = !retentionUnavailable && warnings.length > 0;
                   const gwa = standingGwa(student);
                   const remedialStatus = remedialStatusFor(student);
 
@@ -1338,13 +1335,6 @@ export const Reports: React.FC = () => {
                         {gwa !== null ? gwa.toFixed(2) : '—'}
                       </td>
                       <td className="px-5 py-3.5 text-center font-semibold text-rose-500">{retentionUnavailable ? 'Unavailable' : warnings.length}</td>
-                      <td className="px-5 py-3.5 text-center">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                          retentionUnavailable ? 'bg-slate-100 text-slate-600' : isAtRisk ? 'bg-rose-100 text-rose-700' : ''
-                        }`}>
-                          {retentionUnavailable ? 'UNAVAILABLE' : isAtRisk ? 'At risk' : ''}
-                        </span>
-                      </td>
                       <td className="px-5 py-3.5 dark:text-slate-400">
                         {remedialStatus === 'No remedial' || remedialStatus === 'Unavailable' ? (
                           <span className="font-medium text-slate-500 dark:text-slate-400">{remedialStatus}</span>
