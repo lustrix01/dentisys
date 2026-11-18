@@ -109,7 +109,9 @@ for (const [k, list] of groups) {
         await page.screenshot({ path: join(dirs.crop, name + '.png'), clip: meta.clip });
       } else {
         meta.matchCount = null;
-        await page.screenshot({ path: join(dirs.crop, name + '.png'), fullPage: !!(t.full || t.print) });
+        // printTop: N frames a print close-up on the page's first N px (header, counts, first rows); the vp shot keeps the full page
+        const top = t.print && t.printTop ? { clip: { x: 0, y: 0, width: page.viewportSize().width, height: t.printTop } } : {};
+        await page.screenshot({ path: join(dirs.crop, name + '.png'), fullPage: !!(t.full || t.print), ...top });
       }
       await page.screenshot({ path: join(dirs.vp, name + '.png'), fullPage: !!t.print });
       if (t.print) await page.emulateMedia({ media: 'screen' });

@@ -38,6 +38,8 @@ def enc(path, scale):
     scale = min(scale, 1600 / im.size[0])  # wide desktops: 1600px is plenty on screen and keeps the page small
     if scale != 1.0:
         im = im.resize((round(im.size[0] * scale), round(im.size[1] * scale)), Image.LANCZOS)
+    if im.size[1] > 1400:  # full-page print shots: the top (header, counts, first rows) is what the Owner reads
+        im = im.crop((0, 0, im.size[0], 1400))
     buf = io.BytesIO()
     im.save(buf, 'JPEG', quality=82, optimize=True)  # JPEG at <= 1.5x keeps a 20-fix page well under 16MB
     return 'data:image/jpeg;base64,' + base64.b64encode(buf.getvalue()).decode()
@@ -53,7 +55,7 @@ def kind(m):
 
 
 stamp = os.path.join(root, 'verified.ok')
-newest = max(os.path.getmtime(os.path.join(dp, f)) for dp, _, fs in os.walk(root) for f in fs if f.endswith(('.png', '.json')) and 'contact' not in dp and os.path.relpath(dp, root).split(os.sep)[0] != 'review')
+newest = max(os.path.getmtime(os.path.join(dp, f)) for dp, _, fs in os.walk(root) for f in fs if f.endswith(('.png', '.json')) and dp != root and 'contact' not in dp and os.path.relpath(dp, root).split(os.sep)[0] != 'review')  # root holds demo.json and review zooms, not shots
 if not os.path.exists(stamp) or os.path.getmtime(stamp) < newest:
     sys.exit('shots not verified since the last capture - run verify.py, fix every FAIL and look at every contact sheet first')
 review = os.path.join(root, 'review.md')

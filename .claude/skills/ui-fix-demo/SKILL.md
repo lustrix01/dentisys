@@ -71,7 +71,7 @@ When a subagent writes each option as file copies (the working tree holds work u
 
 ## Files, print views and flows
 
-- Print/PDF views: a target with `"print": true` (window.print is stubbed, print media, full page). When the PDF is a menu item, open it with `steps` (trigger, then `{"role": "menuitem", "name": "..."}`), not `click`, which only opens the menu. Export files: open the downloaded `.xlsx` and show its rows on the demo or attach the file; say which seed data it came from.
+- Print/PDF views: a target with `"print": true` (window.print is stubbed, print media, full page); add `"printTop": 700` so the close-up is the top of a long print (header, counts, first rows). `build-demo.py` keeps only the top 1400 px of any taller shot. When the PDF is a menu item, open it with `steps` (trigger, then `{"role": "menuitem", "name": "..."}`), not `click`, which only opens the menu. Export files: open the downloaded `.xlsx` and show its rows on the demo or attach the file; say which seed data it came from.
 - Flows and dialogs (how it behaves, not how it looks) copy the 2026-10-12 Artifact demos named in `CLAUDE.local.md`. A hand-written demo page is never allowed: if a page needs something the template lacks, change the template once.
 
 ## Shot details that bite
