@@ -7,9 +7,10 @@ Copy these and fill the `<…>` parts. They are the texts that worked in the Owh
 ```
 **Verdict: <don't merge as is | merge with fixes | merge as is>.** <one sentence: tests on theirs vs base, e.g. "43 of 241 browser tests fail on theirs; all 43 pass on base">.
 
+**Their own words:** <the colleague's message to the Owner, quoted, plus each commit subject>.
 **Not in their changelog:** <commits/files the message never mentions>.
 
-**Findings, worst first**
+**Findings, worst first** (each line also gives its commit and Intended / Unclear / Defect with the evidence; an R or F is only a Defect when a test, crash or wrong data proves it)
 R1 <regression>: <what the user sees>. <file:line>
 F1 <good idea with a defect>: … 
 N1 <needs your OK: product choice or spec/contract edit; quote any claimed approval date>: …

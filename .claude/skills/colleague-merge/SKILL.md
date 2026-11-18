@@ -46,6 +46,12 @@ Project rules (`AGENTS.md`, `CLAUDE.local.md`) win. Screenshots use the `ui-fix-
   - `rtk proxy git diff --stat base...theirs`.
   - Files both sides touched (`comm -12` of the two `--name-only` lists).
   - Their changelog against the actual commits. Unmentioned files get reviewed hardest.
+- **Their intent first** (Owner ruling 2026-11-19; earlier merges "fixed" things the colleague meant to do). The colleague works on the backlog with the Owner's approval.
+  - Before judging any hunk, read every commit message (`git log --format='%h %ad%n%B' base..theirs`). Ask the Owner for the colleague's own message or changelog, and quote it in the report as context.
+  - Map each finding to its commit (`git log --format=%h base..theirs -- <file>`). Then mark it **Intended** (their message, commit subject, spec, contract or docs edit, or on-screen wording says so), **Unclear** (not mentioned anywhere), or **Defect** (proven broken by a failing test, a crash or wrong data, and nothing else). Being missing from their message makes a finding Unclear, not wrong.
+  - Never call a change a bug, and never propose undoing it, because it differs from ours or "looks unintended". Flag every possibly broken item with that mark, its commit, the evidence and what it affects (screen, test or data). The Owner rules on each one.
+  - When their intended change breaks one of our tests, the default fix updates the test to their behaviour, not the code back to ours.
+  - Present findings one at a time when the Owner asks, with proof. Nothing the colleague added is removed or reverted without the Owner's ruling on that item.
   - AI trailers in their commits (the commit-msg hook sees only the merge commit): `git log --format=%B base..theirs | grep -iE '^\W*(co-authored-by: *claude|claude-session:|generated with \[?claude code)'`. Any hit is a finding: the Owner decides between a squash merge without those lines and asking the colleague to rewrite his branch before the merge.
 - **Read every hunk**, logic first:
   - API calls added or removed.
@@ -88,7 +94,7 @@ Project rules (`AGENTS.md`, `CLAUDE.local.md`) win. Screenshots use the `ui-fix-
 
 ## 4. Fix (same subagent)
 
-- Send brief C: one numbered item per finding, with exact behaviour and verbatim wording.
+- Send brief C: one numbered item per finding the Owner ruled Fix (never Intended or Unclear items without a ruling), with exact behaviour and verbatim wording.
 - Review every hunk, then look at the real screens yourself. Screenshots caught what code review missed (a split label, a missing breadcrumb, lost day-room pairing, an unedited page copy, a select-all ticking flagged rows).
 - Small fixes (≲20 lines, one file) you make yourself.
 
