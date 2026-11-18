@@ -24,9 +24,18 @@ UTF-16 / mojibake / invalid UTF-8 text, and a `PreToolUse` hook in
 `.claude/settings.json` refuses the 5.1 write commands above before they run.
 After editing config files, `node .githooks/check-staged-encoding.mjs` verifies the
 staged content (run `git add` first).
-A `commit-msg` hook in `.githooks/` requires a `Demo: <artifact link>` or
-`Demo: none - <reason>` line when a commit changes `frontend/src` .tsx/.css files
-outside tests.
+A `commit-msg` hook in `.githooks/` (rules in `check-commit-msg.mjs`) refuses:
+- any AI trailer (`Co-Authored-By: Claude`, `Claude-Session:`, "Generated with Claude Code");
+- a `fix:` commit that stages no test file and has no `Test: none - <reason>` line;
+- a `feat:` commit with no backlog or spec id in the subject (`(13.3)`, `(GRA-03)`) and
+  no `Contract: <where>` line;
+- a commit that changes `frontend/src` .tsx/.css files outside tests without a
+  `Demo: <artifact link>` or `Demo: none - <reason>` line.
+
+Merge, revert, fixup and squash commits skip all but the trailer rule. A commit that
+stages `spec.md` without a `Spec-approved: <date>` line gets a reminder, not a refusal.
+The hooks run only in a clone with `git config core.hooksPath .githooks`, and
+`--no-verify` skips them: use it only with the Owner's OK.
 
 ## Kinds of work
 
