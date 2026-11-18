@@ -720,7 +720,7 @@ function handle_admin_reports_summary(): void
         // unquoted aliases, and the page reads these camelCase keys.
         $attStmt = $pdo->prepare(
             "SELECT r.record_id AS id, s.student_id AS \"studentId\", r.session_date AS date,
-                    c.course_code AS \"subjectCode\", cs.cs_name AS \"className\", r.status
+                    c.course_code AS \"subjectCode\", cs.cs_name AS \"className\", cs.cs_id AS \"classId\", r.status
              FROM attendance_records r
              JOIN enrollments e ON e.enrollment_id = r.enrollment_id
              JOIN students s ON s.student_id = e.student_id
@@ -738,6 +738,7 @@ function handle_admin_reports_summary(): void
             'date' => $row['date'],
             'subjectCode' => $row['subjectCode'],
             'className' => $row['className'],
+            'classId' => (string) $row['classId'],
             'status' => $row['status'],
         ], $attStmt->fetchAll(PDO::FETCH_ASSOC));
 
@@ -795,6 +796,9 @@ function handle_admin_reports_summary(): void
                     'remedialProgression' => $progression,
                     'retentionState' => $s['retention_state'],
                     'className' => $s['cs_name'],
+                    'classId' => (string) $s['cs_id'],
+                    'instructorName' => $s['instructor_name'],
+                    'classFinished' => $s['archive_reason'] === 'finished',
                     'code' => $s['course_code'], 'name' => $s['course_name'],
                     'units' => (float) $s['units'], 'grade' => $s['final_gwa'] !== null ? (float) $s['final_gwa'] : null,
                     'percentage' => $s['final_percentage'] !== null ? (float) $s['final_percentage'] : null,

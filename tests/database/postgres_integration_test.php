@@ -5047,6 +5047,15 @@ $adminReportDupRows = array_values(array_filter(
 ));
 expect_true(count($adminReportDupRows) >= 4, 'Dean report attendance rows expose the className key');
 expect_true(($adminReportDupRows[0]['studentId'] ?? '') !== '' && ($adminReportDupRows[0]['subjectCode'] ?? '') !== '', 'Dean report attendance rows expose studentId and subjectCode keys');
+expect_true(($adminReportDupRows[0]['classId'] ?? '') !== '', 'Dean report attendance rows expose the classId key');
+$adminReportClassIdStmt = $pdo->prepare('SELECT cs_id FROM enrollments WHERE enrollment_id = ?');
+foreach ($adminReportBody['reports']['students'] ?? [] as $adminReportStudent) {
+    $adminReportSubjects = $adminReportStudent['enrolledSubjects'] ?? [];
+    foreach ($adminReportSubjects as $adminReportSubject) {
+        $adminReportClassIdStmt->execute([(int) $adminReportSubject['enrollmentId']]);
+        expect_true(($adminReportSubject['classId'] ?? '') !== '' && (string) $adminReportClassIdStmt->fetchColumn() === ($adminReportSubject['classId'] ?? null), 'Dean report enrolled subject carries the classId of its own enrollment');
+    }
+}
 [$adminReportPastStatus, $adminReportPastBody] = integration_http_get_json('/api/admin/reports/summary?schoolYear=2025-2026', $adminAccessToken);
 expect_same(200, $adminReportPastStatus, 'Dean report summary loads for a past school year');
 $adminReportPastStudentIds = array_map(static fn(array $row): string => (string) ($row['id'] ?? ''), $adminReportPastBody['reports']['students'] ?? []);

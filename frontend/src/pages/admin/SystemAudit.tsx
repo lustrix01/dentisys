@@ -22,6 +22,7 @@ import { buildReportSheet, clinicHoursText, dayToDate } from '../../utils/report
 import { sheetName } from '../../utils/officialGradeSheetExport';
 
 import { STANDING_LABELS, classStanding, pageStanding } from './deanStanding';
+import { attendanceForClass, buildClassCards, standingInClass, studentInClass } from './deanClasses';
 
 type ReportTab = 'students' | 'retention' | 'attendance';
 
@@ -116,58 +117,13 @@ export const DeanReports: React.FC = () => {
 
   // Aggregate student records into distinct class representations
   const classCardsData = useMemo(() => {
-    const map = new Map<string, {
-      id: string;
-      name: string;
-      yearLevel: number | null;
-      subjectCode?: string;
-      subjectName?: string;
-      instructorName?: string | null;
-      finished?: boolean;
-      students: any[];
-      isArchived: boolean;
-      activeCount: number;
-      noGradeCount: number;
-      remedialCount: number;
-    }>();
-
-    students.forEach((s: any) => {
-      const clsId = s.classId || 'unassigned';
-      const clsName = s.className || (clsId === 'unassigned' ? 'Unassigned' : `Class ${clsId}`);
-      if (!map.has(clsId)) {
-        const isPastSy = schoolYear !== 'current' && currentSchoolYear ? schoolYear < currentSchoolYear : false;
-        const isArchived = Boolean(
-          s.classStatus?.toLowerCase() === 'archived' ||
-          s.status?.toLowerCase() === 'archived' ||
-          s.isArchived ||
-          isPastSy
-        );
-        const subj = s.enrolledSubjects?.[0];
-        map.set(clsId, {
-          id: clsId,
-          name: clsName,
-          yearLevel: s.yearLevel ?? null,
-          subjectCode: subj?.code,
-          subjectName: subj?.name,
-          instructorName: s.instructorName ?? null,
-          finished: Boolean(s.classFinished),
-          students: [],
-          isArchived,
-          activeCount: 0,
-          noGradeCount: 0,
-          remedialCount: 0,
-        });
-      }
-      const item = map.get(clsId)!;
-      item.students.push(s);
-      if (s.yearLevel && !item.yearLevel) item.yearLevel = s.yearLevel;
-      const st = String(s.status || '');
-      if (st === 'active' || st === 'cleared') item.activeCount++;
-      else if (st === 'noGrade') item.noGradeCount++;
-      else if (st === 'remedial') item.remedialCount++;
-    });
-
-    return Array.from(map.values());
+    const isPastSy = schoolYear !== 'current' && currentSchoolYear ? schoolYear < currentSchoolYear : false;
+    return buildClassCards(students, (s: any) => Boolean(
+      s.classStatus?.toLowerCase() === 'archived' ||
+      s.status?.toLowerCase() === 'archived' ||
+      s.isArchived ||
+      isPastSy
+    ));
   }, [students, schoolYear, currentSchoolYear]);
 
   const activeClasses = useMemo(() => {
@@ -209,17 +165,19 @@ export const DeanReports: React.FC = () => {
   }, [classFilter, selectedClassId, statusFilter, search, activeTab]);
 
   // ── Filtered students ────────────────────────────────────
+  // The class the page is scoped to (drill-down or class dropdown); null = all classes.
+  const classTarget = selectedClassId ?? (classFilter !== 'all' ? classFilter : null);
+  const standingOf = (s: any) => (classTarget ? standingInClass(s, classTarget) : s.status);
   const filtered = useMemo(() => {
     return students.filter((s: any) => {
-      const targetClass = selectedClassId ? selectedClassId : classFilter;
-      const matchClass = targetClass === 'all' || (s.classId || 'unassigned') === targetClass;
-      const matchStatus = statusFilter === 'all' || s.status === statusFilter;
+      const matchClass = !classTarget || studentInClass(s, classTarget);
+      const matchStatus = statusFilter === 'all' || standingOf(s) === statusFilter;
       const matchSearch = !search
         || s.name.toLowerCase().includes(search.toLowerCase())
         || s.studentId.toLowerCase().includes(search.toLowerCase());
       return matchClass && matchStatus && matchSearch;
     });
-  }, [students, classFilter, selectedClassId, statusFilter, search]);
+  }, [students, classTarget, statusFilter, search]);
 
   const paginatedStudents = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -232,8 +190,7 @@ export const DeanReports: React.FC = () => {
   const classAttendanceMap = useMemo(() => {
     const map = new Map<string, { total: number; present: number; rate: number }>();
     classCardsData.forEach(c => {
-      const clsStudents = c.students;
-      const recs = attendanceRecords.filter(r => clsStudents.some(s => s.id === r.studentId));
+      const recs = attendanceForClass(attendanceRecords, c.id);
       const total = recs.length;
       const present = recs.filter(r => r.status === 'present' || r.status === 'late' || r.status === 'excused').length;
       const rate = total > 0 ? Math.round((present / total) * 100) : 0;
@@ -243,27 +200,27 @@ export const DeanReports: React.FC = () => {
   }, [classCardsData, attendanceRecords]);
 
   // Attendance tab: per-class summary and the history rows, shared by the screen and the PDF.
-  const classSummaries = Array.from(new Set(filtered.map(s => s.classId).filter(Boolean))).map(cls => {
-    const clsStudents = filtered.filter(s => s.classId === cls);
-    const recs = attendanceRecords.filter(r => clsStudents.some(s => s.id === r.studentId));
+  const classSummaries = classCardsData.filter(c => c.id !== 'unassigned' && (!classTarget || c.id === classTarget)).flatMap(c => {
+    const clsStudents = filtered.filter(s => studentInClass(s, c.id));
+    if (clsStudents.length === 0) return [];
+    const recs = attendanceForClass(attendanceRecords, c.id).filter(r => clsStudents.some(s => s.id === r.studentId));
     const total = recs.length;
     const present = recs.filter(r => r.status === 'present' || r.status === 'late' || r.status === 'excused').length;
-    return { cls, count: clsStudents.length, name: clsStudents[0]?.className || cls, total, rate: total > 0 ? Math.round((present / total) * 100) : 0 };
+    return [{ cls: c.id, count: clsStudents.length, name: c.name, total, rate: total > 0 ? Math.round((present / total) * 100) : 0 }];
   });
 
   const historyRows = useMemo(() => {
     const filteredIds = new Set(filtered.map(s => s.id));
-    return attendanceRecords
+    const scoped = classTarget ? attendanceForClass(attendanceRecords, classTarget) : attendanceRecords;
+    return scoped
       .filter(r => filteredIds.has(r.studentId))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [filtered, attendanceRecords]);
+  }, [filtered, attendanceRecords, classTarget]);
 
   const classAttendanceRecords = useMemo(() => {
     if (!selectedClassId) return [];
-    const clsStudents = currentSelectedClass?.students || [];
-    const studentIdSet = new Set(clsStudents.map(s => s.id));
-    return attendanceRecords.filter(r => studentIdSet.has(r.studentId));
-  }, [selectedClassId, currentSelectedClass, attendanceRecords]);
+    return attendanceForClass(attendanceRecords, selectedClassId);
+  }, [selectedClassId, attendanceRecords]);
 
   const filteredAttendanceRows = useMemo(() => {
     let rows = selectedClassId ? classAttendanceRecords : historyRows;
@@ -292,10 +249,7 @@ export const DeanReports: React.FC = () => {
 
   const totalAttendancePages = Math.ceil(filteredAttendanceRows.length / pageSize) || 1;
 
-  const exportClassName = selectedClassId
-    ? (currentSelectedClass?.name ?? null)
-    : (classFilter !== 'all' ? (students.find(s => s.classId === classFilter)?.className ?? null) : null);
-  const exportRows = useMemo(() => exportEnrollmentRows(byLastName(filtered), exportClassName), [filtered, exportClassName]);
+  const exportRows = useMemo(() => exportEnrollmentRows(byLastName(filtered), classTarget), [filtered, classTarget]);
 
   // ── Excel export ─────────────────────────────────────────
   const handleExportExcel = async () => {
@@ -315,7 +269,7 @@ export const DeanReports: React.FC = () => {
         ...withCount, sheet: 'Students', title: 'STUDENT SUMMARY',
         columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 }, { header: 'Course Code', width: 14 }, { header: 'Year Level', width: 11 },
           { header: 'Grade', width: 9 }, { header: 'Status', width: 12 }, { header: 'Face Enrolled', width: 14 }],
-        rows: exportRows.map(({ student: s, className, courseCode, grade }) => [s.studentId, sheetName(s), className, courseCode, s.yearLevel, gradeText(grade), STANDING_LABELS[s.status] ?? s.status, s.faceEnrolled ? 'Yes' : 'No']),
+        rows: exportRows.map(({ student: s, className, courseCode, grade, standing }) => [s.studentId, sheetName(s), className, courseCode, s.yearLevel, gradeText(grade), STANDING_LABELS[standing] ?? standing, s.faceEnrolled ? 'Yes' : 'No']),
       });
     } else if (activeTab === 'retention') {
       fileName = `Retention_Report_${ts}.xlsx`;
@@ -323,7 +277,7 @@ export const DeanReports: React.FC = () => {
         ...withCount, sheet: 'Retention', title: 'RETENTION REPORT',
         columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 }, { header: 'Course Code', width: 14 },
           { header: 'Grade', width: 9 }, { header: 'Status', width: 12 }, { header: 'Pending Remedials', width: 18 }],
-        rows: exportRows.map(({ student: s, className, courseCode, grade }) => [s.studentId, sheetName(s), className, courseCode, gradeText(grade), STANDING_LABELS[s.status] ?? s.status,
+        rows: exportRows.map(({ student: s, className, courseCode, grade, standing }) => [s.studentId, sheetName(s), className, courseCode, gradeText(grade), STANDING_LABELS[standing] ?? standing,
           Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0]),
       });
     } else {
@@ -793,13 +747,13 @@ export const DeanReports: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
                     {paginatedStudents.map((s: any) => {
-                      const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
+                      const sub = s.enrolledSubjects?.find((item: any) => item.classId === selectedClassId) || s.enrolledSubjects?.[0];
                       const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
                       return (
                         <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                           <td className="py-3 px-3 font-mono text-slate-500">{s.studentId}</td>
                           <td className="py-3 px-3 font-bold text-slate-800 dark:text-slate-200">{s.name}</td>
-                          <td className="py-3 px-3 text-slate-500">{s.className || '—'}</td>
+                          <td className="py-3 px-3 text-slate-500">{sub?.className || s.className || '—'}</td>
                           <td className="py-3 px-3 text-slate-500">Year {s.yearLevel}</td>
                           <td className="py-3 px-3 font-extrabold text-slate-700 dark:text-slate-300">
                             {gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? (
@@ -808,7 +762,7 @@ export const DeanReports: React.FC = () => {
                               <span className="text-slate-500 dark:text-slate-400 font-normal">—</span>
                             )}
                           </td>
-                          <td className="py-3 px-3"><StatusBadge status={s.status} /></td>
+                          <td className="py-3 px-3"><StatusBadge status={standingOf(s)} /></td>
                           <td className="py-3 px-3">
                             <span className={`text-[9px] font-bold ${s.faceEnrolled ? 'text-emerald-600' : 'text-slate-500 dark:text-slate-400'}`}>
                               {s.faceEnrolled ? '✓ Enrolled' : 'Not enrolled'}
@@ -1098,9 +1052,9 @@ export const DeanReports: React.FC = () => {
             {/* Class-level Summary Row */}
             <div className="grid grid-cols-3 gap-2.5 sm:gap-3 no-print">
               {[
-                { label: 'Good Standing', val: filtered.filter((s: any) => s.status === 'active').length, color: 'text-emerald-600' },
-                { label: 'Remedial', val: filtered.filter((s: any) => s.status === 'remedial').length, color: 'text-violet-600' },
-                { label: 'Cleared', val: filtered.filter((s: any) => s.status === 'cleared').length, color: 'text-sky-600' },
+                { label: 'Good Standing', val: filtered.filter((s: any) => standingOf(s) === 'active').length, color: 'text-emerald-600' },
+                { label: 'Remedial', val: filtered.filter((s: any) => standingOf(s) === 'remedial').length, color: 'text-violet-600' },
+                { label: 'Cleared', val: filtered.filter((s: any) => standingOf(s) === 'cleared').length, color: 'text-sky-600' },
               ].map(item => (
                 <Card key={item.label} className="p-2.5 sm:p-3 text-center">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{item.label}</p>
@@ -1133,12 +1087,12 @@ export const DeanReports: React.FC = () => {
                     {paginatedStudents.map((s: any) => {
                       const flagged = (s.enrolledSubjects || []).filter(failsRetention).length;
                       const pendingRem = Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0;
-                      const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
+                      const sub = s.enrolledSubjects?.find((item: any) => item.classId === selectedClassId) || s.enrolledSubjects?.[0];
                       const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
                       return (
                         <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                           <td className="py-3 px-3 font-bold text-slate-800 dark:text-slate-200">{s.name}</td>
-                          <td className="py-3 px-3 text-slate-500">{s.className || '—'}</td>
+                          <td className="py-3 px-3 text-slate-500">{sub?.className || s.className || '—'}</td>
                           <td className="py-3 px-3 font-extrabold text-slate-700 dark:text-slate-300">
                             {gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? (
                               <GradeValue percentage={sub?.percentage} grade={Number(gradeVal)}>{formatGrade(Number(gradeVal))}</GradeValue>
@@ -1146,7 +1100,7 @@ export const DeanReports: React.FC = () => {
                               <span className="text-slate-500 dark:text-slate-400 font-normal">—</span>
                             )}
                           </td>
-                          <td className="py-3 px-3"><StatusBadge status={s.status} /></td>
+                          <td className="py-3 px-3"><StatusBadge status={standingOf(s)} /></td>
                           <td className="py-3 px-3 text-slate-500">{clinicHoursText(s.clinicHoursCompleted)}</td>
                           <td className="py-3 px-3">
                             {pendingRem > 0
@@ -1556,11 +1510,11 @@ export const DeanReports: React.FC = () => {
         const sy = schoolYear === 'current' ? (currentSchoolYear ?? 'Current') : schoolYear;
         const classLabel = selectedClassId
           ? (currentSelectedClass?.name || selectedClassId)
-          : (classFilter === 'all' ? 'All classes' : (students.find(s => s.classId === classFilter)?.className || classFilter));
+          : (classFilter === 'all' ? 'All classes' : (classCardsData.find(c => c.id === classFilter)?.name || classFilter));
         const statusLabel = statusFilter === 'all' ? 'All statuses' : (STANDING_LABELS[statusFilter] ?? statusFilter);
         const gwa = (s: any) => (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : '—');
         const pending = (s: any) => (Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0);
-        const standingBad = (s: any) => String(s.status || '').toLowerCase() === 'remedial';
+        const standingBad = (standing: string) => String(standing || '').toLowerCase() === 'remedial';
         const rowCount = activeTab === 'attendance' ? String(historyRows.length) : exportCountLine(exportRows);
         const widths: Record<ReportTab, number[]> = {
           students: [11, 21, 13, 9, 7, 8, 11, 12, 8],
@@ -1622,7 +1576,7 @@ export const DeanReports: React.FC = () => {
                       <td className="id">{row.courseCode}</td>
                       <td>Year {s.yearLevel}</td>
                       <td className={`grade ${printCellClass(gradeStr)}`}>{gradeStr}</td>
-                      <td className={`${STANDING_LABELS[s.status] ? '' : 'cap'} ${standingBad(s) ? 'bad' : ''}`}>{STANDING_LABELS[s.status] ?? s.status}</td>
+                      <td className={`${STANDING_LABELS[row.standing] ? '' : 'cap'} ${standingBad(row.standing) ? 'bad' : ''}`}>{STANDING_LABELS[row.standing] ?? row.standing}</td>
                       <td>{s.faceEnrolled ? 'Enrolled' : 'Not enrolled'}</td>
                       <td>{pending(s)}</td>
                     </tr>
@@ -1639,8 +1593,8 @@ export const DeanReports: React.FC = () => {
                       <td className="nm">{sheetName(s)}</td>
                       <td className={`l ${printCellClass(row.className)}`}>{row.className}</td>
                       <td className="id">{row.courseCode}</td>
-                      <td className={`grade ${standingBad(s) ? 'bad' : printCellClass(gradeStr)}`}>{gradeStr}</td>
-                      <td className={`${STANDING_LABELS[s.status] ? '' : 'cap'} ${standingBad(s) ? 'bad' : ''}`}>{STANDING_LABELS[s.status] ?? s.status}</td>
+                      <td className={`grade ${standingBad(row.standing) ? 'bad' : printCellClass(gradeStr)}`}>{gradeStr}</td>
+                      <td className={`${STANDING_LABELS[row.standing] ? '' : 'cap'} ${standingBad(row.standing) ? 'bad' : ''}`}>{STANDING_LABELS[row.standing] ?? row.standing}</td>
                       <td>{clinicHoursText(s.clinicHoursCompleted)}</td>
                       <td className={pend > 0 ? 'bad' : ''}>{pend > 0 ? `${pend} Pending` : 'None'}</td>
                       <td className={flagged > 0 ? 'bad' : ''}>{flagged > 0 ? `${flagged} Subject${flagged > 1 ? 's' : ''}` : 'Clear'}</td>

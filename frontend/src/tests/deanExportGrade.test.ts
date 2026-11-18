@@ -5,10 +5,11 @@ import { exportCountLine, exportEnrollmentRows } from '../pages/admin/exportGrad
 const student = {
   id: 's1',
   className: 'DMD 1-A',
+  status: 'remedial',
   overallGWA: 2.25,
   enrolledSubjects: [
-    { code: 'DENT 202', className: 'DMD 1-B', grade: 3.0 },
-    { code: 'DENT 101', className: 'DMD 1-A', grade: 1.5 },
+    { code: 'DENT 202', classId: '20', className: 'DMD 1-B', grade: 3.0, retentionState: 'remedial' },
+    { code: 'DENT 101', classId: '10', className: 'DMD 1-A', grade: 1.5, retentionState: 'active' },
   ],
 };
 
@@ -20,20 +21,32 @@ test('13.3 bug 2: no class filter gives one row per course enrollment', () => {
   ]);
 });
 
-test('a class name keeps only that class enrollments', () => {
-  const rows = exportEnrollmentRows([student], 'DMD 1-B');
+test('a class id keeps only that class enrollments', () => {
+  const rows = exportEnrollmentRows([student], '20');
   assert.equal(rows.length, 1);
   assert.equal(rows[0].courseCode, 'DENT 202');
   assert.equal(rows[0].grade, 3.0);
 });
 
+test('each row carries the standing of its own enrollment, not the student worst state', () => {
+  const rows = exportEnrollmentRows([student]);
+  assert.deepEqual(rows.map(r => [r.courseCode, r.standing]), [['DENT 101', 'active'], ['DENT 202', 'remedial']]);
+});
+
 test('a student with no enrollments still gets one row with no grade', () => {
-  const rows = exportEnrollmentRows([{ id: 's2', className: 'DMD 1-A', overallGWA: 2.0, enrolledSubjects: [] }]);
+  const rows = exportEnrollmentRows([{ id: 's2', className: 'DMD 1-A', status: 'noGrade', overallGWA: 2.0, enrolledSubjects: [] }]);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].courseCode, '—');
   assert.equal(rows[0].grade, null);
+  assert.equal(rows[0].standing, 'noGrade');
 });
 
 test('count line counts distinct students and enrollments', () => {
   assert.equal(exportCountLine(exportEnrollmentRows([student])), '1 student · 2 course enrollments');
+});
+
+test('count line does not count the placeholder row of a student with no enrollments', () => {
+  const empty = { id: 's2', status: 'noGrade', enrolledSubjects: [] };
+  const other = { id: 's3', status: 'active', enrolledSubjects: [{ code: 'DENT 101', classId: '10', className: 'DMD 1-A', grade: 1.5, retentionState: 'active' }] };
+  assert.equal(exportCountLine(exportEnrollmentRows([student, empty, other])), '3 students · 3 course enrollments');
 });
