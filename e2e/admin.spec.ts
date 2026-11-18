@@ -7,19 +7,21 @@ const deanReportStudents = [
   {
     id: '101', studentId: '2023-0101', name: 'Alex Example', yearLevel: 4, status: 'remedial',
     overallGWA: 2.3, faceEnrolled: false, classId: '21', className: 'CLINIC, "4A"\nSpecial',
-    clinicHoursCompleted: 18, enrolledSubjects: [{ code: 'CLIN401', name: 'Oral Surgery', grade: 2.3, isClinical: true }],
+    clinicHoursCompleted: 18, enrolledSubjects: [{ classId: '21', className: 'CLINIC, "4A"\nSpecial', code: 'CLIN401', name: 'Oral Surgery', grade: 2.3, isClinical: true, retentionState: 'remedial' }],
     remedialExams: [{ status: 'pending' }],
   },
   {
     id: '102', studentId: '2023-0102', name: 'Missing Class Name', yearLevel: 3, status: 'active',
     overallGWA: null, faceEnrolled: false, classId: '22', className: null,
-    clinicHoursCompleted: 5, enrolledSubjects: [], remedialExams: [],
+    clinicHoursCompleted: 5,
+    enrolledSubjects: [{ classId: '22', className: null, code: 'CLIN402', name: 'Oral Surgery II', grade: null, isClinical: true, retentionState: 'active' }],
+    remedialExams: [],
   },
 ];
 
 const deanReportAttendance = [
-  { id: '201', studentId: '101', date: '2026-09-22', subjectCode: 'CLIN401-HISTORY', className: 'CLINIC-4A at attendance', status: 'present' },
-  { id: '202', studentId: '102', date: '2026-09-21', subjectCode: 'CLIN402-HISTORY', className: null, status: 'absent' },
+  { id: '201', studentId: '101', date: '2026-09-22', subjectCode: 'CLIN401-HISTORY', classId: '21', className: 'CLINIC-4A at attendance', status: 'present' },
+  { id: '202', studentId: '102', date: '2026-09-21', subjectCode: 'CLIN402-HISTORY', classId: '22', className: null, status: 'absent' },
 ];
 
 const deanReportFormulaStudents = [
@@ -36,7 +38,7 @@ const deanReportFormulaStudents = [
   overallGWA: 2.8,
   faceEnrolled: false,
   clinicHoursCompleted: 0,
-  enrolledSubjects: [],
+  enrolledSubjects: [{ classId: student.classId, className: student.className, code: 'CLIN401', name: 'Oral Surgery', grade: 2.8, retentionState: 'active' }],
   remedialExams: [],
 }));
 
@@ -229,7 +231,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
   });
 
   test('Dean report tables show supplied class names and preserve class filtering and report values', async ({ page }) => {
-    const unassigned = { ...deanReportStudents[1], id: '109', studentId: '2023-0109', name: 'No Class Student', classId: null, className: null };
+    const unassigned = { ...deanReportStudents[1], id: '109', studentId: '2023-0109', name: 'No Class Student', classId: null, className: null, enrolledSubjects: [] };
     await mockDeanReportSummary(page, [...deanReportStudents, unassigned]);
     await page.goto('/admin/reports');
 
@@ -326,7 +328,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
   });
 
   // X31 / X32: Dean Reports export the attendance sheet of one class and the remedial summary of every class.
-  const remedialSubject = (over: Record<string, unknown>) => ({ code: 'CLIN401', name: 'Oral Surgery', grade: 3, isClinical: true, className: 'CLINIC-4A', ...over });
+  const remedialSubject = (over: Record<string, unknown>) => ({ classId: '21', code: 'CLIN401', name: 'Oral Surgery', grade: 3, isClinical: true, className: 'CLINIC-4A', ...over });
   const deanSheetStudents = [
     { ...deanReportStudents[0], name: 'Alex Example', firstName: 'Alex', lastName: 'Example', enrolledSubjects: [remedialSubject({
       enrollmentId: '901', retentionState: 'remedial',
@@ -335,7 +337,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
         { attemptNumber: 2, scheduledDate: '2026-11-24', percentage: null, outcome: 'pending', actorUserId: null, createdAt: '', updatedAt: '' },
       ] },
     })] },
-    { ...deanReportStudents[1], name: 'Missing Class Name', firstName: 'Missing', lastName: 'Name', enrolledSubjects: [remedialSubject({ enrollmentId: '902', grade: 1.5, retentionState: 'active' })] },
+    { ...deanReportStudents[1], name: 'Missing Class Name', firstName: 'Missing', lastName: 'Name', enrolledSubjects: [remedialSubject({ enrollmentId: '902', classId: '22', className: null, grade: 1.5, retentionState: 'active' })] },
   ];
 
   test('Dean attendance sheet needs one class and exports the whole term as Excel', async ({ page }) => {
@@ -445,7 +447,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     const many = Array.from({ length: 14 }, (_, i) => ({
       id: String(300 + i), studentId: `2023-03${String(i).padStart(2, '0')}`, name: `Bulk Student ${i}`, yearLevel: 2, status: 'active',
       overallGWA: 1.8, faceEnrolled: true, classId: '21', className: 'CLINIC-4A', clinicHoursCompleted: 2,
-      enrolledSubjects: [{ code: 'CLIN401', name: 'Oral Surgery', grade: 1.8, isClinical: false, components: { quizzes: 90 } }], remedialExams: [],
+      enrolledSubjects: [{ classId: '21', className: 'CLINIC-4A', code: 'CLIN401', name: 'Oral Surgery', grade: 1.8, isClinical: false, retentionState: 'active', components: { quizzes: 90 } }], remedialExams: [],
     }));
     await mockDeanReportSummary(page, [...many, ...deanReportStudents]);
     await page.goto('/admin/reports');
