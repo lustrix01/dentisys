@@ -4,9 +4,9 @@ Status: agreed in /grill-me 2026-11-15; decisions 2026-11-16 in section 6; spec 
 
 ## 1. What exists now
 
-One pop-up, **Start Session** (`components/StartSessionModal.tsx`), used by Faculty (Attendance Monitoring) and Secretaries (Attendance List): class, date, the class's weekly meetings as chips (they fill the times), four required times (`SessionTimeFields`: opening, Present cutoff, Late cutoff, class end), room (Dean's list or custom), Face biometric (on by default), Geofence (off by default) with map and radius 50–2,000 m, then the overlap check (Go back / Book anyway).
+One pop-up, **Start Session** (components/StartSessionModal.tsx), used by Faculty (Attendance Monitoring) and Secretaries (Attendance List): class, any valid session date, the class's weekly meetings as optional presets, four required times (SessionTimeFields: opening, Present cutoff, Late cutoff, class end), room (Dean's list or custom), Face biometric (on by default), Geofence (off by default) with map and radius 50–2,000 m. If a manual start or scheduled session overlaps, a blocking modal identifies the conflicting booking and Faculty member; the user must go back and coordinate another room or time.
 
-Fixed points kept: UI-001 wording "Start session", "Schedule session", "Sessions"; the session panel hides while a session is live; the overlap pop-up, the 12-hour limit, the required room and sessions that end after midnight ("next day") (ATT-001).
+Fixed points kept: UI-001 wording "Start session", "Schedule session", "Sessions"; the session panel hides while a session is live; overlap checks, the 12-hour limit, the required room and sessions that end after midnight ("next day") (ATT-001).
 
 Owner's pain point: setting up a session is tedious, above all picking times from a long scrolling drop-down.
 

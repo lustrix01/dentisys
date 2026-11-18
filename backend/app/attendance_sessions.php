@@ -262,11 +262,11 @@ function attendance_session_overlaps(PDO $pdo, int $csId, string $date, ?string 
     return $overlaps;
 }
 
-/** Throws the SESSION_OVERLAP 409 unless the request confirmed it; returns the overlaps to record after saving. */
-function attendance_session_overlap_gate(PDO $pdo, array $data, int $csId, string $date, ?string $opening, string $end, ?string $room): array
+/** Throws the SESSION_OVERLAP 409 unless the request confirmed it; manual creation can make overlaps non-overridable. */
+function attendance_session_overlap_gate(PDO $pdo, array $data, int $csId, string $date, ?string $opening, string $end, ?string $room, bool $allowConfirmation = true): array
 {
     $overlaps = attendance_session_overlaps($pdo, $csId, $date, $opening, $end, $room);
-    if ($overlaps !== [] && ($data['confirmOverlap'] ?? null) !== true) throw new BookingOverlapException($overlaps);
+    if ($overlaps !== [] && (!$allowConfirmation || ($data['confirmOverlap'] ?? null) !== true)) throw new BookingOverlapException($overlaps);
     return $overlaps;
 }
 

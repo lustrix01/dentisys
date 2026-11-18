@@ -1445,7 +1445,7 @@ function handle_secretary_attendance_session_start(): void
                 safe_error_response($conflict, 409);
                 return;
             }
-            $overlaps = attendance_session_overlap_gate($pdo, $data, $csId, $sessionDate, $openingTime, $classEndTime, $room);
+            $overlaps = attendance_session_overlap_gate($pdo, $data, $csId, $sessionDate, $openingTime, $classEndTime, $room, false);
             $creationStatus = attendance_session_creation_status($sessionDate, $openingTime, $config);
 
             $insert = $pdo->prepare(

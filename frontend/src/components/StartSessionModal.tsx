@@ -168,9 +168,8 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   useEffect(() => { if (timeProblem && /cutoff/i.test(timeProblem)) setMoreOpen(true); }, [timeProblem]);
 
   const selectedMeeting = chosen === null ? null : sortedMeetings[chosen] ?? null;
-  const meetingDateError = selectedMeeting && weekdayForSessionDate(sessionDate) !== selectedMeeting.day
-    ? `Choose a ${selectedMeeting.day} date for the selected class meeting.`
-    : null;
+  const sessionWeekday = weekdayForSessionDate(sessionDate);
+  const meetingsOnSessionDay = sessionWeekday ? sortedMeetings.filter(meeting => meeting.day === sessionWeekday) : [];
 
   const handleAcquireLocation = () => {
     if (fixtureLat !== undefined && fixtureLng !== undefined) {
@@ -209,7 +208,6 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   const submit = async (confirmOverlap: boolean) => {
     const blocked = precheck?.();
     if (blocked) { setError(blocked); return; }
-    if (meetingDateError) return;
     if (!sessionDate || sessionDate < manilaToday()) { setError('Choose today or a future date (Asia/Manila).'); return; }
     if (!room.trim()) { setError('Choose a room or type the place where the session happens.'); return; }
     const retired = retiredRoomError(rooms, room);
@@ -229,7 +227,8 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
     setError(null);
     try {
       await onSubmit({
-        sessionDate, room: room.trim(), ...times, meetingDay: selectedMeeting?.day ?? null,
+        sessionDate, room: room.trim(), ...times,
+        meetingDay: selectedMeeting && weekdayForSessionDate(sessionDate) === selectedMeeting.day ? selectedMeeting.day : null,
         biometricRequired, geofenceEnabled, geofenceRadiusMeters: parseRadius(geofenceRadius) ?? 100, location,
       }, confirmOverlap);
       setOverlaps(null);
@@ -304,8 +303,12 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
         {note}
 
         <label className="block font-bold text-slate-700 dark:text-slate-300">Session Date (Asia/Manila)
-          <input type="date" required min={manilaToday()} value={sessionDate} aria-invalid={Boolean(meetingDateError)} aria-describedby={meetingDateError ? 'session-meeting-date-error' : undefined} onChange={event => { setSessionDate(event.target.value); setError(null); }} className={`mt-1 block w-full rounded-xl border bg-white px-3 py-2.5 dark:bg-slate-900 ${meetingDateError ? 'border-rose-400 dark:border-rose-700' : 'border-slate-200 dark:border-slate-700'}`} />
-          {meetingDateError && <span id="session-meeting-date-error" role="alert" className="mt-1 block font-medium text-rose-600 dark:text-rose-300">{meetingDateError}</span>}
+          <input type="date" required min={manilaToday()} value={sessionDate} onChange={event => {
+            const nextDate = event.target.value;
+            if (weekdayForSessionDate(nextDate) !== sessionWeekday) setChosen(null);
+            setSessionDate(nextDate);
+            setError(null);
+          }} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900" />
         </label>
         <div>
           <label htmlFor="start-session-room" className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Room or Session Location</label>
@@ -325,18 +328,20 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
                 <button
                   key={`${meeting.day}-${meeting.component}-${meeting.startTime}-${index}`}
                   type="button"
-                  aria-pressed={chosen === index}
+                  aria-pressed={meeting.day === sessionWeekday}
                   onClick={() => { applyMeeting(index); setError(null); }}
-                  className={`rounded-xl border px-3 py-2 text-left font-bold ${chosen === index ? a.outline : 'border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-200'}`}
+                  className={`rounded-xl border px-3 py-2 text-left font-bold ${meeting.day === sessionWeekday ? a.outline : 'border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-200'}`}
                 >
                   {meeting.day} · {meeting.component} · {formatVisibleTime(meeting.startTime)}–{formatVisibleTime(meeting.endTime)} · {meeting.room}
                 </button>
               ))}
             </div>
             <p className="mt-1 text-slate-500 dark:text-slate-400">
-              {chosen === null
-                ? 'No class meeting today. Pick a meeting or edit the times.'
-                : `Times from ${sortedMeetings[chosen].day} · ${sortedMeetings[chosen].component} · ${formatVisibleTime(sortedMeetings[chosen].startTime)}–${formatVisibleTime(sortedMeetings[chosen].endTime)}. Pick another meeting or edit the times.`}
+              {selectedMeeting && selectedMeeting.day === sessionWeekday
+                ? `Prefilled from ${selectedMeeting.day} · ${selectedMeeting.component}. Date, times and room can be changed for this session.`
+                : meetingsOnSessionDay.length > 0
+                  ? `Meetings on ${sessionWeekday} are highlighted. Select one to prefill its times and room, or customize them.`
+                  : `No class meetings on ${sessionWeekday ?? 'this day'}. You can still create a session for this date.`}
             </p>
           </div>
         )}
@@ -398,7 +403,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
         </div>
       </form>
     </Modal>
-    <OverlapConfirmModal overlaps={overlaps} accent={accent} busy={submitting} onCancel={() => setOverlaps(null)} onConfirm={() => void submit(true)} />
+    <OverlapConfirmModal overlaps={overlaps} accent={accent} blocking busy={submitting} onCancel={() => setOverlaps(null)} />
     </>
   );
 };
