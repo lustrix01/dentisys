@@ -128,12 +128,7 @@ The three-way page is the approval page. It shows Before (ours), theirs and Afte
 
 ## 8. Push and demo deploy (only when told)
 
-1. Push.
-2. `scripts/publish-images.ps1 -Tag demo` from a detached worktree at the commit. It prints the 12-character sha.
-3. `scripts/demo-vps.ps1 migrate` only if `git diff <old ours>..<merge> -- database` is non-empty.
-4. `scripts/demo-vps.ps1 wait-deploy <sha12>`.
-5. `scripts/demo-test.ps1`, plus a temporary read-only `e2e/live/zz-<name>-check.spec.ts` asserting the changed screens per role. Run it with `demo-test.ps1 <spec>`, then delete it.
-6. Report and end with `.\scripts\promote-prod.ps1 -Sha <sha12>`. Only the Owner promotes prod.
+Follow `docs/release-guide.md` steps 2–7. For a merge, step 4 applies when `git diff <old ours>..<merge> -- database` is not empty, and step 6 adds a temporary read-only `e2e/live/zz-<name>-check.spec.ts` asserting the changed screens per role: run it with `demo-test.ps1 <spec>`, then delete it.
 
 ## Always
 

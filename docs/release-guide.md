@@ -40,8 +40,8 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\<script>.ps1 <arguments>
 |---|---|---|---|
 | 1 | Agree the change, build it, update the current-reference docs it affects, run the checks. **Docs updated?** Every changed behaviour, setup step, env var, script or screen is described as it is now in README, `docs/`, `spec.md` and `.env.example`. | Claude, Owner approves | `.\scripts\check.ps1` (its docs contract fails on an env var missing from `.env.example`, a broken docs link, or a dated file outside `docs/archive/`) |
 | 2 | Push the commit | Claude, when the Owner says "push" | `git push` |
-| 3 | Publish the demo images | Claude | `.\scripts\publish-images.ps1 -Tag demo`. It prints the 12-character sha. It refuses a commit whose files have not passed `check.ps1` (plus `check-postgres.ps1` when server-side files changed); Usual path: commit, then run the gates with nothing else uncommitted. `-Force` overrides it with a warning. |
-| 4 | Database migrations (only if the release adds them) | Claude | `.\scripts\demo-vps.ps1 migrate`. It backs up the database first. Watchtower alone is not enough. |
+| 3 | Publish the demo images | Claude | `.\scripts\publish-images.ps1 -Tag demo`. It prints the 12-character sha. It refuses a commit whose files have not passed `check.ps1` (plus `check-postgres.ps1` when server-side files changed); Usual path: commit, then run the gates with nothing else uncommitted. It also refuses a dirty working tree: when the Owner has uncommitted work, publish from `git worktree add --detach <path> <sha>` instead of setting that work aside. `-Force` overrides the checks with a warning and is used only with the Owner's OK. |
+| 4 | Database migrations (only if the release adds them: `git diff <last release sha>..<sha> -- database` is not empty) | Claude | `.\scripts\demo-vps.ps1 migrate`. It backs up the database first. Watchtower alone is not enough. |
 | 5 | Wait until the demo runs the new version | Claude | `.\scripts\demo-vps.ps1 wait-deploy <sha>`. It waits up to 15 minutes for every container to run that sha and be healthy. |
 | 6 | Test the demo | Claude | `.\scripts\demo-test.ps1` signs in as each role through the tunnel on the `DEMO_LOCAL_PORT` port of `demo.env` (`http://localhost:<DEMO_LOCAL_PORT>`), plus any checks specific to the feature. |
 | 7 | Report | Claude → Owner | Pass/fail in chat, ending with the approved sha and the exact command: `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\promote-prod.ps1 -Sha <sha>`. The change doc is updated only when the Owner asks. |
@@ -92,6 +92,14 @@ It reads `~\.dentisys\prod-test.env` (yours only: `PROD_BASE_URL` and an email a
 ### Rolling back
 
 To go back to the previous version, promote the previous approved sha the same way (step 9). Database migrations only ever add, so older code runs on the newer database. Keep the sha of the last good release from Claude's report.
+
+### Notes for Claude's steps
+
+- After a tested demo deploy, commit nothing until the Owner has promoted that sha: `promote-prod.ps1` needs HEAD to equal it. If something must land first, publish and test the new head on the demo again.
+- `demo-vps.ps1` sends its commands base64-encoded. Run it from the PowerShell tool when an argument holds a `/tmp` or other `/…` path: Git Bash rewrites those into Windows paths.
+- The demo firewall blocks SSH after 6 connections in 30 seconds (`ufw limit`). Batch remote commands into one call.
+- After `upload-vps.ps1 -Deploy` recreates Traefik on the demo, the test entrance answers 502 until it is restarted: `.\scripts\demo-vps.ps1 run "cd /opt/dentisys && sudo docker compose -p dentisys-tunnel --env-file /opt/dentisys/.env -f docker-compose.demo-tunnel.yml restart"`.
+- Compose changes reach a server only through `upload-vps.ps1`; `promote-prod.ps1` ships images only.
 
 ## Things the Owner renews or keeps safe
 

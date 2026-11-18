@@ -34,6 +34,9 @@ Repo `C:\Users\decha\Desktop\Github\dentisys`. Rules in `AGENTS.md` and `CLAUDE.
 - Open menus and popovers never print: their panel carries `no-print` (2026-11-18).
 - Time entry is the clock-style wheel (`components/TimePicker.tsx`), never a grid of tap buttons.
 - Demo shots keep the page's existing toolbar in frame, or the Owner reads the toolbar as removed.
+- Proposed controls stay as close to today's look as possible: no extra information folded into a control's text (a picker showing "CLINIC-4B · Section #22" was rejected as clutter); add a minimal affordance such as a ▾ instead.
+- When the Owner reviews only some pages, their verdict covers only those: show each other page instead of reverting or changing it on their behalf.
+- Justify each change honestly, and say when a page needs no change.
 - Colours:
   - Dead Tailwind classes become whatever renders today's look.
   - Small grey text is `text-slate-500 dark:text-slate-400`, except placeholders, disabled text and icons.
@@ -41,10 +44,4 @@ Repo `C:\Users\decha\Desktop\Github\dentisys`. Rules in `AGENTS.md` and `CLAUDE.
 - Look demos come only from `assets/template.html` via `build-demo.py`. Reuse one link per series (Stage 1 options and Stage 2 final share it).
 
 ## Ship (only when the Owner says push/deploy)
-Follow `CLAUDE.local.md` "Demo deploy and test":
-1. Run `publish-images.ps1 -Tag demo` from a `git worktree add --detach` copy, because it refuses a dirty tree.
-2. Run `demo-vps.ps1 wait-deploy <sha12>`.
-3. Run `demo-test.ps1`, plus live checks of the changed spots.
-4. Report the sha, and give the Owner `.\scripts\promote-prod.ps1 -Sha <sha>`. Only the Owner promotes prod.
-
-`promote-prod` needs a clean tree with HEAD equal to that sha.
+Follow `docs/release-guide.md` steps 2–7, with live checks of the changed spots in step 6.

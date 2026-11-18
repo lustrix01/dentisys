@@ -25,11 +25,8 @@ Seeded passwords: `ui-fix-demo/references/dentisys.app.json`. Fresh test account
 - Gates: `scripts/check.ps1` and `scripts/check-postgres.ps1` in **separate** processes; never `git stash` while one runs. New migrations: `scripts/migrate.ps1` locally (backs up first).
 - Mocked e2e: `scripts/test-e2e.ps1` with NO_COLOR/FORCE_COLOR unset.
 
-## Deploy (only when told) — `CLAUDE.local.md` "Demo deploy and test"
-1. `publish-images.ps1 -Tag demo` from a `git worktree add --detach` copy.
-2. New migration → `demo-vps.ps1 migrate` first; then `demo-vps.ps1 wait-deploy <sha12>`.
-3. `demo-test.ps1` (smoke 4/4 + audit chain), then `node .claude/skills/user-walkthrough-audit/scripts/demo-live-check.mjs` adapted to the release.
-4. Report sha + `.\scripts\promote-prod.ps1 -Sha <sha>`. Commit nothing until the Owner promotes (needs HEAD == sha, clean tree).
+## Deploy (only when told)
+Follow `docs/release-guide.md` steps 2–7. In step 6, after `demo-test.ps1` (smoke 4/4 + audit chain), run `node .claude/skills/user-walkthrough-audit/scripts/demo-live-check.mjs` adapted to the release.
 
 ## Boundaries
 Never touch the production VPS, its credentials or `:prod` images. Never read `~/.dentisys/demo.env` values into chat. Dean invite user_id 1 is the Owner's. The Owner's real class lists/spreadsheets in Downloads are never committed, uploaded or printed. spec.md changes only with explicit Owner approval.
