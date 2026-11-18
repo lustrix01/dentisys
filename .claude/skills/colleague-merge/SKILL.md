@@ -46,6 +46,7 @@ Project rules (`AGENTS.md`, `CLAUDE.local.md`) win. Screenshots use the `ui-fix-
   - `rtk proxy git diff --stat base...theirs`.
   - Files both sides touched (`comm -12` of the two `--name-only` lists).
   - Their changelog against the actual commits. Unmentioned files get reviewed hardest.
+  - AI trailers in their commits (the commit-msg hook sees only the merge commit): `git log --format=%B base..theirs | grep -iE '^\W*(co-authored-by: *claude|claude-session:|generated with \[?claude code)'`. Any hit is a finding: the Owner decides between a squash merge without those lines and asking the colleague to rewrite his branch before the merge.
 - **Read every hunk**, logic first:
   - API calls added or removed.
   - Fallbacks that show a missing value as a positive label.

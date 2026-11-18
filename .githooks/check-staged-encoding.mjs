@@ -129,6 +129,6 @@ Fix the file, then re-stage and commit:
   Rewrite without BOM from Node:   fs.writeFileSync(path, text, 'utf8')
   Rewrite without BOM from PowerShell:
     [System.IO.File]::WriteAllText($path, $text, [System.Text.UTF8Encoding]::new($false))
-Bypass once only if you are certain: git commit --no-verify
+Only the Owner bypasses a hook, from their own terminal.
 `);
 process.exit(1);

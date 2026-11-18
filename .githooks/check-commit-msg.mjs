@@ -16,14 +16,17 @@ const msgFile = process.argv[2];
 if (!msgFile) process.exit(0);
 
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
-const lines = readFileSync(msgFile, 'utf8').split(/\r?\n/).filter((l) => !l.startsWith('#'));
+// The message as git stores it: no BOM, nothing below the `git commit -v` scissors line, no # comments.
+const raw = readFileSync(msgFile, 'utf8').replace(/^﻿/, '').split(/\r?\n/);
+const scissors = raw.findIndex((l) => /^# -+ >8 -+$/.test(l));
+const lines = (scissors >= 0 ? raw.slice(0, scissors) : raw).filter((l) => !l.startsWith('#'));
 const first = (lines.find((l) => l.trim() !== '') ?? '');
 const has = (re) => lines.some((l) => re.test(l));
 const errors = [];
 
 if (has(/^co-authored-by:.*claude/i) || has(/^claude-session:/i) || has(/^\W*generated with \[?claude code/i)) {
   errors.push('It carries an AI trailer (Co-Authored-By: Claude, Claude-Session: or "Generated with Claude Code"). ' +
-    'Commits are authored as the Owner and carry none: remove the line.');
+    'Commits in this repo carry none: remove the line.');
 }
 
 const merging = existsSync(git('rev-parse', '--git-path', 'MERGE_HEAD'));
@@ -62,5 +65,5 @@ if (!exempt) {
 
 if (errors.length === 0) process.exit(0);
 console.error('commit-msg: refused.\n\n- ' + errors.join('\n\n- ') +
-  '\n\nBypass only with git commit --no-verify and only with the Owner\'s OK.');
+  '\n\nFix the message. Only the Owner bypasses a hook, from their own terminal.');
 process.exit(1);

@@ -6,11 +6,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"C:/Users/decha/Desktop/Github/dentisys/.claude/hooks/guard-encoding.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-encoding.mjs\""
           },
           {
             "type": "command",
-            "command": "node \"C:/Users/decha/Desktop/Github/dentisys/.claude/hooks/guard-no-verify.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-no-verify.mjs\""
           }
         ]
       },
@@ -19,11 +19,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"C:/Users/decha/Desktop/Github/dentisys/.claude/hooks/guard-encoding.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-encoding.mjs\""
           },
           {
             "type": "command",
-            "command": "node \"C:/Users/decha/Desktop/Github/dentisys/.claude/hooks/guard-no-verify.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-no-verify.mjs\""
           }
         ]
       },
@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"C:/Users/decha/Desktop/Github/dentisys/.claude/hooks/guard-demo-page.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-demo-page.mjs\""
           }
         ]
       }

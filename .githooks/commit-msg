@@ -1,11 +1,11 @@
 #!/bin/sh
 # commit message rules: see check-commit-msg.mjs.
-# Installed via: git config core.hooksPath .githooks
+# Turned on by npm ci (.githooks/install.mjs).
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
 
 if ! command -v node >/dev/null 2>&1; then
   echo "commit-msg: node not found on PATH; cannot check the commit message." >&2
-  echo "commit-msg: install Node.js, or bypass with: git commit --no-verify" >&2
+  echo "commit-msg: install Node.js; only the Owner bypasses a hook, from their own terminal" >&2
   exit 1
 fi
 

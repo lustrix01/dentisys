@@ -11,7 +11,7 @@ The Owner decides what DentiSys does; Claude makes it real without surprises. Ev
 
 - Read only the `spec.md` sections the feature touches, and the nearest existing page or endpoint that does the same kind of job (`docs/frontend.md` "Page patterns" for screens).
 - Write the contract in chat: the rule in one sentence; per-role behaviour; data and migration (additive); API fields, errors and examples; each screen part and the existing part it copies; what the audit log records; spec lines it conflicts with, with the exact amendment proposed.
-- The Owner runs `/grill-me` on it when it touches `spec.md`, the data model, roles and permissions, or an API contract. Otherwise the Owner's OK on the contract in chat is enough. Settle every product question before code; facts are Claude's to look up.
+- Ask the Owner to run `/grill-me` on the draft contract before any code, for every feature, unless the Owner says in chat that this one doesn't need it. Claude never decides to skip it. Settle every product question before code; facts are Claude's to look up.
 
 ## 2. Proposal demo (only when something is visible)
 

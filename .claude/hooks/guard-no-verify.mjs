@@ -4,7 +4,7 @@
  *
  * Refuses commands that skip this repo's git hooks (.githooks/):
  *  - git commit with --no-verify or -n (also inside a short-flag cluster such as -an);
- *  - git push / merge / rebase / cherry-pick / revert / am with --no-verify;
+ *  - git push / merge / rebase / cherry-pick / revert / am with --no-verify (or a prefix git accepts, --no-veri);
  *  - git -c core.hooksPath=... (a one-off hooks path);
  *  - git config that sets or unsets core.hooksPath.
  * The Owner can still run these in their own terminal. Exit 2 blocks the call; the
@@ -54,11 +54,13 @@ function check(tokens) {
     const rest = tokens.slice(i + 1);
     if (sub === 'config') {
       const k = rest.findIndex((t) => /^core\.hookspath$/i.test(t));
-      if (k >= 0 && (rest.some((t) => /^--unset(-all)?$/.test(t)) || rest.length > k + 1)) return 'a change to core.hooksPath';
+      // --unset/--unset-all, or the newer `git config unset`, or any value after the key
+      if (k >= 0 && (rest.some((t) => /^(--)?unset(-all)?$/.test(t)) || rest.length > k + 1)) return 'a change to core.hooksPath';
       continue;
     }
     if (!NO_VERIFY_SUBCOMMANDS.has(sub)) continue;
-    if (rest.includes('--no-verify')) return `git ${sub} --no-verify`;
+    // git accepts unambiguous prefixes: --no-veri, --no-verif (--no-ver is ambiguous with --no-verbose)
+    if (rest.some((t) => /^--no-veri(f(y)?)?$/.test(t))) return `git ${sub} --no-verify`;
     if (sub !== 'commit') continue;
     for (let j = 0; j < rest.length; j++) {
       const t = rest[j];

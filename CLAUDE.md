@@ -34,7 +34,9 @@ A `commit-msg` hook in `.githooks/` (rules in `check-commit-msg.mjs`) refuses:
 
 Merge, revert, fixup and squash commits skip all but the trailer rule. A commit that
 stages `spec.md` without a `Spec-approved: <date>` line gets a reminder, not a refusal.
-A message-only amend (nothing staged) skips the `fix:` test check. `npm ci` turns the
+A message-only amend (nothing staged) skips the `fix:` test check; an amend that adds
+files to a `fix:` commit whose test is already in it needs `Test: none - test is in the
+amended commit`. `npm ci` turns the
 hooks on in a clone (`node .githooks/install.mjs` does the same alone). In Claude
 sessions, a `PreToolUse` hook (`.claude/hooks/guard-no-verify.mjs`) refuses
 `--no-verify`, `git commit -n`, `git -c core.hooksPath=…` and changes to
@@ -51,7 +53,7 @@ row). The checks are defined in `AGENTS.md` "Validation".
 | Trivial edit: typo, one file, ≲20 lines, no new logic | Edit and commit. | `npx tsc -b` in `frontend/`, or `git diff --check` for text |
 | Bug fix | "Fixing bugs" below. | the reproducing test, then `./scripts/check.ps1` |
 | How a screen looks: wording, colour, spacing, layout, a new control | `ui-fix-demo` skill; its Route C is the short path for small text, colour or spacing changes. | the skill's demo and design review, then `./scripts/check.ps1` |
-| Feature or behaviour change | `feature` skill: contract first (the Owner runs `/grill-me` on it when it touches `spec.md`, the data model, roles or an API contract), a demo when anything is visible, build, tests, then the real built screens before commit. | focused tests, then `./scripts/check.ps1` |
+| Feature or behaviour change | `feature` skill: contract first, and the Owner runs `/grill-me` on it before any code unless the Owner waives it for that feature; a demo when anything is visible, build, tests, then the real built screens before commit. | focused tests, then `./scripts/check.ps1` |
 | Spec decision | `AGENTS.md` "Product specification": propose the exact line; edit `spec.md` only after the Owner's OK, in the same commit as the change. | as for the change |
 | Database migration | `database/README.md` "Migration rules": a new ordered `NNN_description.sql`, never an edit to an applied one. It must keep working with the previous images, because a rollback ships images only; the demo runs it (release step 4) before the code that needs it. | `./scripts/check-postgres.ps1`; release step 4 runs it on the demo |
 | Dependency, Dockerfile or Compose change | | `docker compose config --quiet`, build the service, `./scripts/check-postgres.ps1` |
@@ -86,8 +88,8 @@ A bug is fixed only when a test proves it, not when the code looks right.
 - Commit when the work is validated and, for anything visible, approved by the Owner.
   Push only when the Owner says so. Never force-push, and never switch or merge
   branches without asking.
-- Commits are authored as the Owner (Light505) and carry no AI trailers
-  (`Co-Authored-By: Claude…`, `Claude-Session: …`, "Generated with Claude Code").
-  Cloud sessions add them by default: check `git log --format=%B` on a branch they
-  pushed before it is merged.
+- Commits carry no AI trailers (`Co-Authored-By: Claude…`, `Claude-Session: …`,
+  "Generated with Claude Code"); in the Owner's sessions they are authored as Light505.
+  The hook checks only new commits: a colleague's or cloud session's branch is checked
+  before it is merged (`colleague-merge` step 1).
 - Don't touch files the Owner has modified but not committed unless the task needs them.

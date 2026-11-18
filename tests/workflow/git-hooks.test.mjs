@@ -12,14 +12,26 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const commitMsg = join(root, '.githooks', 'check-commit-msg.mjs');
 const guard = join(root, '.claude', 'hooks', 'guard-no-verify.mjs');
+// Never inherit GIT_DIR / GIT_INDEX_FILE etc.: run from inside a hook, they would point git at the real repo.
+const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
+
+// A throwaway repo with one empty commit, so `git reset` clears the stage between cases.
+function tempRepo() {
+  const repo = mkdtempSync(join(tmpdir(), 'dentisys-hooks-'));
+  const git = (...args) => execFileSync('git', args, { cwd: repo, stdio: 'pipe', env });
+  git('init', '-q');
+  git('-c', 'user.name=test', '-c', 'user.email=test@example.invalid', '-c', 'core.hooksPath=', '-c', 'commit.gpgsign=false',
+    'commit', '-q', '--allow-empty', '-m', 'init');
+  const check = (message) => {
+    writeFileSync(join(repo, 'msg.txt'), message);
+    return spawnSync(process.execPath, [commitMsg, 'msg.txt'], { cwd: repo, encoding: 'utf8', env });
+  };
+  return { repo, git, check };
+}
 
 test('commit-msg rules', () => {
-  const repo = mkdtempSync(join(tmpdir(), 'dentisys-hooks-'));
-  const git = (...args) => execFileSync('git', args, { cwd: repo, stdio: 'pipe' });
+  const { repo, git, check } = tempRepo();
   try {
-    git('init', '-q');
-    // a first commit, so `git reset` clears the stage between cases
-    git('-c', 'user.name=test', '-c', 'user.email=test@example.invalid', '-c', 'core.hooksPath=', 'commit', '-q', '--allow-empty', '-m', 'init');
     for (const d of ['backend', 'tests/backend', 'frontend/src/pages', 'frontend/src/tests', 'e2e']) mkdirSync(join(repo, d), { recursive: true });
     const cases = [
       // [expected exit, staged files, message]
@@ -50,12 +62,14 @@ test('commit-msg rules', () => {
       [0, ['README'], 'docs: explain the rule\n\nWe refuse lines like Generated with Claude Code in messages.'],
       [1, ['README'], 'docs: x\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)'],
       [0, [], 'fix(api): better wording'], // message-only amend: nothing staged
+      [1, ['backend/a.php'], '﻿fix: z'], // a BOM does not hide the subject
+      [0, ['README'], 'docs: x\n# ------------------------ >8 ------------------------\n+ Generated with Claude Code is refused'], // git commit -v diff
+      [0, ['frontend/src/tests/x.test.tsx'], 'test: x'], // test files are not UI files
     ];
     for (const [expected, files, message] of cases) {
       git('reset', '-q');
       for (const f of files) { appendFileSync(join(repo, f), `${Math.random()}\n`); git('add', f); }
-      writeFileSync(join(repo, 'msg.txt'), message);
-      const run = spawnSync(process.execPath, [commitMsg, 'msg.txt'], { cwd: repo, encoding: 'utf8' });
+      const run = check(message);
       assert.equal(run.status, expected, `${JSON.stringify(message)} with ${files.join(', ')}\n${run.stderr}`);
     }
   } finally {
@@ -63,18 +77,29 @@ test('commit-msg rules', () => {
   }
 });
 
-test('spec.md without Spec-approved prints a reminder only', () => {
-  const repo = mkdtempSync(join(tmpdir(), 'dentisys-hooks-'));
+test('a merge in progress skips all but the trailer rule', () => {
+  const { repo, git, check } = tempRepo();
   try {
-    execFileSync('git', ['init', '-q'], { cwd: repo });
+    mkdirSync(join(repo, 'frontend/src/pages'), { recursive: true });
+    writeFileSync(join(repo, 'frontend/src/pages/A.tsx'), 'x\n');
+    git('add', 'frontend/src/pages/A.tsx');
+    writeFileSync(join(repo, '.git', 'MERGE_HEAD'), `${git('rev-parse', 'HEAD').toString().trim()}\n`);
+    assert.equal(check('fix: resolve conflicts').status, 0);
+    assert.equal(check('fix: resolve conflicts\n\nCo-Authored-By: Claude <x>').status, 1);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('spec.md without Spec-approved prints a reminder only', () => {
+  const { repo, git, check } = tempRepo();
+  try {
     writeFileSync(join(repo, 'spec.md'), 'x\n');
-    execFileSync('git', ['add', 'spec.md'], { cwd: repo });
-    writeFileSync(join(repo, 'msg.txt'), 'docs(spec): x');
-    let run = spawnSync(process.execPath, [commitMsg, 'msg.txt'], { cwd: repo, encoding: 'utf8' });
+    git('add', 'spec.md');
+    let run = check('docs(spec): x');
     assert.equal(run.status, 0);
     assert.match(run.stderr, /reminder/);
-    writeFileSync(join(repo, 'msg.txt'), 'docs(spec): x\n\nSpec-approved: 2026-11-18');
-    run = spawnSync(process.execPath, [commitMsg, 'msg.txt'], { cwd: repo, encoding: 'utf8' });
+    run = check('docs(spec): x\n\nSpec-approved: 2026-11-18');
     assert.equal(run.status, 0);
     assert.doesNotMatch(run.stderr, /reminder/);
   } finally {
@@ -88,6 +113,10 @@ test('guard-no-verify', () => {
     [2, 'git commit --no-verify -m "x"'],
     [2, 'git commit -n -m x'],
     [2, 'git commit -anm "wip"'],
+    [2, 'git commit --no-veri -m x'],
+    [2, 'git push --no-verif origin main'],
+    [0, 'git commit --no-verbose -m x'],
+    [2, 'git config unset core.hooksPath'],
     [2, 'cd repo && git commit -qn -F msg.txt'],
     [2, 'git status; git commit -n -m x'],
     [2, 'git push --no-verify origin main'],
