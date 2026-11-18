@@ -8,6 +8,16 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 ---
 
+# Priority (above the backlog)
+
+Owner, 2026-11-19: these come before every backlog item, in this order.
+
+- **P1** Superadmin Classes with live records: the page lists every Faculty member's real classes and rosters, read-only, with one action, Change Faculty. Contract: [superadmin-classes.md](contracts/superadmin-classes.md).
+- **P2** Superadmin pages responsive on the device list.
+- **P3** Merge `owhie-responsive` (the colleague's UI work and fixes) into `lighthal9-responsive`, then `lighthal9-superadmin` into `lighthal9-responsive`. How is decided with the Owner before starting.
+
+---
+
 # 1. Standing rules
 
 - **Interface:** follow spec UI-001. New screens reuse the shared shell, sidebar/header, Card, table, modal, alert and form patterns; no role-specific shells, second design system or unrelated redesign.
