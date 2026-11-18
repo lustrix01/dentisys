@@ -20,7 +20,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { Card } from '../../components/Card';
-import { showFeedback } from '../../components/FeedbackCenter';
+import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
 import { LocationPicker } from '../../components/LocationPicker';
 import { RoomSelector, RetiredRoomWarning, retiredRoomError, useRooms } from '../../components/RoomSelector';
 import { OverlapConfirmModal, overlapsFrom, type BookingOverlap } from '../../components/OverlapConfirmModal';
@@ -581,6 +581,17 @@ export const AttendanceMonitoring: React.FC = () => {
       setCorrectionReasonError('A justification reason is required when overriding attendance.');
       return;
     }
+
+    const attendanceChange = correctionTarget.status
+      ? `Change ${correctionTarget.studentName}'s status from ${correctionTarget.status} to ${targetStatus}`
+      : `Record ${correctionTarget.studentName}'s status as ${targetStatus}`;
+    const classLabel = selectedClass ? `${selectedClass.courseCode} · ${selectedClass.block}` : 'the selected class';
+    const confirmed = await requestConfirmation(
+      `${attendanceChange} in ${classLabel} on ${formatShortDate(selectedDate)}?${trimmedReason ? `\nReason: ${trimmedReason}` : ''}`,
+      'Confirm Attendance Change',
+      correctionTarget.status ? 'Save correction' : 'Record attendance',
+    );
+    if (!confirmed) return;
 
     setSubmittingCorrection(true);
     const writeScope = beginWorksheetMutation();

@@ -58,6 +58,31 @@ export const FeedbackCenter: React.FC = () => {
   };
 
   const Icon = toast?.kind === 'success' ? CheckCircle2 : toast?.kind === 'error' ? AlertCircle : Info;
+  const confirmationTone = confirmation
+    ? /delete|remove|revoke|discard|cancel/i.test(`${confirmation.title ?? ''} ${confirmation.confirmLabel ?? ''}`)
+      ? 'danger'
+      : /archive|end session|new code|replace|conversion|reset|turn off/i.test(`${confirmation.title ?? ''} ${confirmation.confirmLabel ?? ''}`)
+        ? 'caution'
+        : 'standard'
+    : 'standard';
+  const ConfirmationIcon = confirmationTone === 'danger' ? TriangleAlert : confirmationTone === 'caution' ? AlertCircle : Info;
+  const confirmationColors = confirmationTone === 'danger'
+    ? {
+        icon: 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300',
+        panel: 'border-rose-200/80 bg-rose-50/50 dark:border-rose-900/70 dark:bg-rose-950/20',
+        button: 'bg-rose-600 hover:bg-rose-700 focus-visible:ring-rose-500',
+      }
+    : confirmationTone === 'caution'
+      ? {
+          icon: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
+          panel: 'border-amber-200/80 bg-amber-50/50 dark:border-amber-900/70 dark:bg-amber-950/20',
+          button: 'bg-amber-600 hover:bg-amber-700 focus-visible:ring-amber-500',
+        }
+      : {
+          icon: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
+          panel: 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900',
+          button: 'bg-emerald-600 hover:bg-emerald-700 focus-visible:ring-emerald-500',
+        };
 
   return (
     <>
@@ -82,18 +107,26 @@ export const FeedbackCenter: React.FC = () => {
       <Modal
         isOpen={Boolean(confirmation)}
         onClose={() => settle(false)}
-        title={confirmation?.title || 'Confirm Action'}
+        size="md"
+        title={
+          <span className="flex min-w-0 items-center gap-3">
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${confirmationColors.icon}`}>
+              <ConfirmationIcon className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <span>{confirmation?.title || 'Confirm Action'}</span>
+          </span>
+        }
       >
         <div className="space-y-5">
-          <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-800 dark:text-amber-300">
-            <TriangleAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <p className="whitespace-pre-line">{confirmation?.message}</p>
+          <div className={`rounded-2xl border p-4 sm:p-5 ${confirmationColors.panel}`}>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Review this action</p>
+            <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700 dark:text-slate-200">{confirmation?.message}</p>
           </div>
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => settle(false)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+            <button type="button" onClick={() => settle(false)} className="min-h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
               Cancel
             </button>
-            <button type="button" onClick={() => settle(true)} className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700">
+            <button type="button" onClick={() => settle(true)} className={`min-h-11 rounded-xl px-5 text-sm font-semibold text-white shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900 ${confirmationColors.button}`}>
               {confirmation?.confirmLabel || 'Confirm'}
             </button>
           </div>

@@ -339,6 +339,26 @@ export const EmailManagement: React.FC = () => {
       return;
     }
 
+    const isSecretaryAppointment = tab === 'secretary';
+    const selectedSectionNames = Array.from(new Set(selected.map(key => {
+      const [studentKey, sectionIdFromKey] = isSecretaryAppointment ? key.split('|') : [key, ''];
+      const student = safeStudents.find(candidate => candidate.id === studentKey || candidate.studentId === studentKey);
+      const sectionId = sectionIdFromKey || (student ? invitationClassId(student) : null);
+      return student?.classSections?.find(section => String(section.classId) === String(sectionId))?.className;
+    }).filter((className): className is string => Boolean(className))));
+    const sectionSummary = selectedSectionNames.length > 0
+      ? `${selectedSectionNames.slice(0, 3).join(', ')}${selectedSectionNames.length > 3 ? `, and ${selectedSectionNames.length - 3} more` : ''}`
+      : 'the selected class sections';
+    const confirmationMessage = isSecretaryAppointment
+      ? `Confirm ${selected.length} Class Secretary appointment${selected.length === 1 ? '' : 's'} for ${sectionSummary}? Selected Students will gain attendance-management access. Students without DentiSYS accounts will receive an invitation; ineligible entries will be skipped.`
+      : `Send Student account invitations for ${selected.length} selected student${selected.length === 1 ? '' : 's'} in ${sectionSummary}? Already registered Students and ineligible addresses may be skipped.`;
+    const confirmed = await requestConfirmation(
+      confirmationMessage,
+      isSecretaryAppointment ? 'Confirm Class Secretary Appointments' : 'Send Student Invitations',
+      isSecretaryAppointment ? 'Appoint and send' : 'Send invitations',
+    );
+    if (!confirmed) return;
+
     setIsSending(true);
     setNotice(null);
 

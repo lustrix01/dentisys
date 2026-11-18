@@ -1432,7 +1432,6 @@ export const ClassesAndRosters: React.FC = () => {
   };
 
 const handleSendAllStudentInvites = async () => {
-    setIsSendingInvitations(true);
     const needsInvitation = filteredStudents.filter(student => {
       const accountStatus = student.accountStatus ?? 'none';
       return accountStatus === 'none' || accountStatus === 'pending';
@@ -1440,6 +1439,18 @@ const handleSendAllStudentInvites = async () => {
     const invitable = needsInvitation.filter(student => isOfficialBicolEmail(student.email));
     const unsupportedEmailCount = needsInvitation.length - invitable.length;
     const alreadyRegistered = filteredStudents.length - needsInvitation.length;
+    if (invitable.length > 0) {
+      const classLabel = selectedClass
+        ? `${selectedClass.courseCode} · ${selectedClass.block}`
+        : 'the currently filtered roster';
+      const confirmed = await requestConfirmation(
+        `Send Student account invitations to ${invitable.length} eligible student${invitable.length === 1 ? '' : 's'} in ${classLabel}? Already registered Students and unsupported email addresses will be skipped.`,
+        'Send Student Invitations',
+        `Send ${invitable.length} invitation${invitable.length === 1 ? '' : 's'}`,
+      );
+      if (!confirmed) return;
+    }
+    setIsSendingInvitations(true);
     const emailActionId = crypto.randomUUID(); // one id for the whole bulk click
     const results = await Promise.all(invitable.map(async student => {
       const classId = invitationClassId(student);
