@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { signInSuperadmin } from './superadminSignIn';
 
-test('Dean term dates persist and Faculty selects only current-year Dean terms', async ({ page }) => {
-  await page.goto('/login');
-  await page.locator('input[inputmode="email"]').fill('admin@bicol-u.edu.ph');
-  await page.locator('input[type="password"]').fill('Admin123!');
-  await page.locator('button[type="submit"]').click();
-  await expect(page).toHaveURL('/');
-  await page.locator('a[href="/admin/terms"]').click();
+// The Superadmin sign-in may wait up to 30 s for a fresh authenticator step.
+test.describe.configure({ timeout: 120_000 });
+
+test('Superadmin term dates persist and Faculty selects only current-year defined terms', async ({ page }) => {
+  await signInSuperadmin(page);
+  await page.locator('a[href="/superadmin/terms"]').click();
   const section = page.locator('#academic-terms');
   await section.getByRole('button', { name: 'Add term', exact: true }).click();
   let dialog = page.getByRole('dialog');
@@ -27,7 +27,7 @@ test('Dean term dates persist and Faculty selects only current-year Dean terms',
   await page.getByRole('dialog').getByRole('button', { name: 'Delete term' }).click();
   await expect(row).toHaveCount(0);
 
-  // A fresh browser context clears the Dean session before Faculty login.
+  // A fresh browser context clears the Superadmin session before Faculty login.
   const facultyContext = await page.context().browser()!.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:15173' });
   const facultyPage = await facultyContext.newPage();
   try {

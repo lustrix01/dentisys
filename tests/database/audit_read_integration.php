@@ -15,6 +15,7 @@ $readUser = static function (string $email) use ($pdo): array {
 };
 $readFaculty = $readUser('faculty@bicol-u.edu.ph');
 $readDean = $readUser('admin@bicol-u.edu.ph');
+$readSuper = $readUser($superEmail); // 13.9: the Superadmin sees the overview, the Dean only his own rows
 $readWrite = static function (?array $actor, string $module, string $code, string $status, string $description, array $extra = []) use ($pdo, $readKey): void {
     $pdo->beginTransaction();
     audit_finish_operation($pdo, audit_begin_operation($pdo), [
@@ -50,6 +51,7 @@ for ($i = 1; $i <= 3; $i++) {
 }
 $readWrite($readFaculty, 'auth', 'login_success', 'Success', "Faculty sign-in {$readTag}", ['target_type' => 'user_account', 'target_id' => (string) $readFaculty['user_id']]);
 $readWrite($readDean, 'auth', 'login_success', 'Success', "Dean sign-in {$readTag}", ['target_type' => 'user_account', 'target_id' => (string) $readDean['user_id']]);
+$readWrite($readSuper, 'auth', 'login_success', 'Success', "Superadmin sign-in {$readTag}", ['target_type' => 'user_account', 'target_id' => (string) $readSuper['user_id']]);
 $readWrite(null, 'auth', 'login_failed', 'Failed', "Password sign-in failed for {$readTag}@example.test: wrong password.");
 $readWrite($readFaculty, 'auth', 'refresh_rotation', 'Success', "Rotation {$readTag}");
 
@@ -58,25 +60,25 @@ $readGet = static function (string $path, string $token) use ($readTag): array {
 };
 $readWhat = static fn(array $body): array => array_column($body['entries'] ?? [], 'what');
 
-// Dean: overview only. Never class work or other people's successful sign-ins; failures and his own (behind the chip) yes.
-[$deanReadStatus, $deanRead] = $readGet('/api/admin/audit-logs?q=' . rawurlencode($readTag), $adminAccessToken);
-expect_same(200, $deanReadStatus, 'Dean audit read loads');
-expect_true(!in_array('Scores changed', $readWhat($deanRead), true), 'Dean never sees class-work rows');
-expect_true(!in_array('Signed in', $readWhat($deanRead), true), 'Dean sees no successful sign-ins without the Sign-ins filter');
-expect_true(in_array('Sign-in failed', $readWhat($deanRead), true), 'Dean sees failed sign-ins');
+// Superadmin: overview only. Never class work or other people's successful sign-ins; failures and its own (behind the chip) yes.
+[$deanReadStatus, $deanRead] = $readGet('/api/admin/audit-logs?q=' . rawurlencode($readTag), $superAccessToken);
+expect_same(200, $deanReadStatus, 'Superadmin audit read loads');
+expect_true(!in_array('Scores changed', $readWhat($deanRead), true), 'Superadmin never sees class-work rows in the overview');
+expect_true(!in_array('Signed in', $readWhat($deanRead), true), 'Superadmin sees no successful sign-ins without the Sign-ins filter');
+expect_true(in_array('Sign-in failed', $readWhat($deanRead), true), 'Superadmin sees failed sign-ins');
 $readFailed = array_values(array_filter($deanRead['entries'], static fn(array $e): bool => $e['what'] === 'Sign-in failed'))[0];
 expect_same("Unknown account (typed: {$readTag}@example.test)", $readFailed['whoText'] ?? null, 'A failed sign-in with no account shows the typed email');
-expect_true(($deanRead['attention']['failedSignIns'] ?? 0) >= 1, 'Dean attention counts failed sign-ins');
-[, $deanSignins] = $readGet('/api/admin/audit-logs?signins=1&q=' . rawurlencode($readTag), $adminAccessToken);
+expect_true(($deanRead['attention']['failedSignIns'] ?? 0) >= 1, 'Superadmin attention counts failed sign-ins');
+[, $deanSignins] = $readGet('/api/admin/audit-logs?signins=1&q=' . rawurlencode($readTag), $superAccessToken);
 $readSignedIn = array_values(array_filter($deanSignins['entries'] ?? [], static fn(array $e): bool => $e['what'] === 'Signed in'));
-expect_same(1, count($readSignedIn), 'The Sign-ins filter adds only the Dean\'s own successful sign-in, not Faculty\'s');
-expect_same($readDean['login_email'], $readSignedIn[0]['who']['email'] ?? null, 'The Dean\'s own sign-in row belongs to the Dean');
-expect_same(1, count(array_filter($deanRead['entries'], static fn(array $e): bool => $e['what'] === 'Enrolled 3 students')), 'A batch of 3 rows is one entry in the Dean overview');
+expect_same(1, count($readSignedIn), 'The Sign-ins filter adds only the Superadmin own successful sign-in, not Faculty or Dean rows (DS8)');
+expect_same($readSuper['login_email'], $readSignedIn[0]['who']['email'] ?? null, 'The Superadmin own sign-in row belongs to the Superadmin');
+expect_same(1, count(array_filter($deanRead['entries'], static fn(array $e): bool => $e['what'] === 'Enrolled 3 students')), 'A batch of 3 rows is one entry in the Superadmin overview');
 $readBatchEntry = array_values(array_filter($deanRead['entries'], static fn(array $e): bool => $e['batch'] !== null))[0];
 expect_same(3, $readBatchEntry['batch']['count'] ?? null, 'The batch entry counts its rows');
 expect_same(3, count($readBatchEntry['batch']['members'] ?? []), 'The batch entry lists its members');
 expect_same('b:' . $readBatch, $readBatchEntry['id'] ?? null, 'The batch entry id is the batch id');
-expect_true(isset($readBatchEntry['details']['technical']), 'The Dean gets technical details');
+expect_true(isset($readBatchEntry['details']['technical']), 'The Superadmin gets technical details');
 
 // Faculty: only own rows, class work included, sign-ins behind the chip, hidden codes never.
 [$facReadStatus, $facRead] = $readGet('/api/faculty/activity?q=' . rawurlencode($readTag), $facultyActivityAccessToken);
@@ -89,7 +91,7 @@ $readScores = array_values(array_filter($facRead['entries'], static fn(array $e)
 expect_true(str_starts_with((string) $readScores['record'], 'Quiz 2'), 'Score rows fall back to the stored assessment title when the assessment is gone');
 expect_same('Ann Cruz (2020-1) · Quiz 2 · Score', $readScores['details']['changes'][0]['field'] ?? null, 'Score rows list each changed cell');
 expect_same(['7', '9'], [$readScores['details']['changes'][0]['before'] ?? null, $readScores['details']['changes'][0]['after'] ?? null], 'Score rows show before and after');
-expect_true(!isset($readScores['details']['technical']), 'Technical details are Dean-only');
+expect_true(!isset($readScores['details']['technical']), 'Technical details are Superadmin-only');
 [, $facSignins] = $readGet('/api/faculty/activity?signins=1&q=' . rawurlencode($readTag), $facultyActivityAccessToken);
 expect_true(in_array('Signed in', $readWhat($facSignins), true), 'The Sign-ins filter shows Faculty\'s own sign-ins');
 expect_same(1, count(array_filter($facRead['entries'], static fn(array $e): bool => $e['batch'] !== null)), 'The Faculty batch is one expandable entry');
@@ -103,13 +105,13 @@ expect_true(($facAll['total'] ?? 0) > 100 && count($facAll['entries']) === 50 &&
 expect_true(count($facPage3['entries'] ?? []) >= 1, 'My Activity page 3 holds older rows');
 
 // Filters.
-[, $byStatus] = $readGet('/api/admin/audit-logs?status=Failed&q=' . rawurlencode($readTag), $adminAccessToken);
+[, $byStatus] = $readGet('/api/admin/audit-logs?status=Failed&q=' . rawurlencode($readTag), $superAccessToken);
 expect_same(['Sign-in failed'], $readWhat($byStatus), 'The status filter works on the server');
-[, $byArea] = $readGet('/api/admin/audit-logs?area=' . rawurlencode('Settings & terms') . '&q=' . rawurlencode($readTag), $adminAccessToken);
-expect_same([], $byArea['entries'] ?? ['x'], 'The area filter narrows the Dean overview');
-[, $byRole] = $readGet('/api/admin/audit-logs?role=faculty&q=' . rawurlencode($readTag), $adminAccessToken);
+[, $byArea] = $readGet('/api/admin/audit-logs?area=' . rawurlencode('Settings & terms') . '&q=' . rawurlencode($readTag), $superAccessToken);
+expect_same([], $byArea['entries'] ?? ['x'], 'The area filter narrows the Superadmin overview');
+[, $byRole] = $readGet('/api/admin/audit-logs?role=faculty&q=' . rawurlencode($readTag), $superAccessToken);
 expect_true(count($byRole['entries'] ?? []) >= 1 && !in_array('Sign-in failed', $readWhat($byRole), true), 'The role filter works on the server');
-[, $byDate] = $readGet('/api/admin/audit-logs?from=2999-01-01&q=' . rawurlencode($readTag), $adminAccessToken);
+[, $byDate] = $readGet('/api/admin/audit-logs?from=2999-01-01&q=' . rawurlencode($readTag), $superAccessToken);
 expect_same([], $byDate['entries'] ?? ['x'], 'The date filter works on the server');
 $readToday = (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d');
 [, $byToday] = $readGet("/api/faculty/activity?from={$readToday}&to={$readToday}&q=" . rawurlencode($readTag), $facultyActivityAccessToken);
@@ -126,6 +128,6 @@ if ($readOtherClass > 0) {
     expect_same(422, $otherClassStatus, 'Faculty cannot filter by a class that is not theirs');
 }
 [$badStatus] = $readGet('/api/faculty/activity?status=Maybe', $facultyActivityAccessToken);
-[$badSort] = $readGet('/api/admin/audit-logs?sort=sideways', $adminAccessToken);
+[$badSort] = $readGet('/api/admin/audit-logs?sort=sideways', $superAccessToken);
 expect_same([422, 422], [$badStatus, $badSort], 'Invalid filter values are rejected');
 echo "PASS: Audit read side integration coverage completed.\n";

@@ -89,7 +89,7 @@ export const AutoSessionsPanel: React.FC<{ csId: number }> = ({ csId }) => {
         {radiusError && <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400">{radiusError}</p>}
         <p className="text-[10px] text-slate-500 dark:text-slate-400">DentiSYS keeps sessions for the next 7 days and adds more each day.</p>
         {missing.length > 0 && (
-          <p className="text-[10px] text-slate-500 dark:text-slate-400">Geofence needs a saved location for every meeting room. Ask the Dean to set it in Rooms. Missing: {missing.join(', ')}.</p>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400">Geofence needs a saved location for every meeting room. Ask the Superadmin to set it in Rooms. Missing: {missing.join(', ')}.</p>
         )}
       </div>
       <OverlapConfirmModal

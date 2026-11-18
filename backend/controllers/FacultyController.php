@@ -7590,7 +7590,7 @@ function handle_faculty_profile_update(): void
         if ($sqlState === '23505') {
             safe_error_response('That email address is already used by another account.', 409);
         } elseif ($sqlState === '23514' || $sqlState === 'P0001') {
-            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the Dean.', 409);
+            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the Superadmin.', 409);
         } else {
             safe_error_response('Internal server error.', 500);
         }
@@ -8268,7 +8268,7 @@ function faculty_resolve_catalog_course(
     $find->execute([$courseCode]);
     $existing = $find->fetch(PDO::FETCH_ASSOC);
     if (is_array($existing) && $existing['status'] === 'retired') { // ADM-001 SA16: a retired code cannot be typed again
-        throw new AttendanceSessionException('This course was retired by the Dean. Ask the Dean to restore it.', 409, 'course_retired');
+        throw new AttendanceSessionException('This course was retired. Ask the Superadmin to restore it.', 409, 'course_retired');
     }
     if (is_array($existing)) {
         // Record the lecture/lab split once for older courses that never had it.
@@ -8411,7 +8411,7 @@ function handle_faculty_class_create(): void
             if ($catalog === false) {
                 $courseId = 0;
             } elseif ($catalog['status'] === 'retired') {
-                throw new AttendanceSessionException('This course was retired by the Dean. Ask the Dean to restore it.', 409, 'course_retired');
+                throw new AttendanceSessionException('This course was retired. Ask the Superadmin to restore it.', 409, 'course_retired');
             } else {
                 $courseTitle = faculty_class_course_title($courseName, (string) $catalog['name']);
             }

@@ -70,9 +70,9 @@ test.describe('Workflow Characterization (mocked UI only)', () => {
     });
 
     test('Workflow: User Management Audit Logs', async ({ page }) => {
-      await page.locator('[aria-label="Account view"] button').nth(1).click(); await page.click('a[href="/superadmin/audit-trail"]');
-      await expect(page).toHaveURL('/superadmin/audit-trail');
-      await expect(page.locator('body')).toContainText(/Audit Trail|Activity Log/i);
+      await page.click('a[href="/admin/audit-trail"]'); // the Dean's Audit Trail is My Activity (13.9 DS17)
+      await expect(page).toHaveURL('/admin/audit-trail');
+      await expect(page.locator('body')).toContainText(/My Activity/i);
     });
   });
 

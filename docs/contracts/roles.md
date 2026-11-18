@@ -1,6 +1,6 @@
 # Account management contract (backlog 12.1): v4, agreed in /grill-me 2026-11-15
 
-Status: decisions agreed with the Owner in `/grill-me` (2026-11-15). The spec amendment (section 9) still needs the Owner's approval of its exact text. No code yet.
+Status: partly superseded by [dean-superadmin-split.md](dean-superadmin-split.md) (backlog 13.9, 2026-11-18): the Dean and the Superadmin are now separate accounts; the Superadmin does the in-app actions below (also on the Dean's account) and hands the Dean role over in the app; the server script creates the Superadmin and moves only the Superadmin's email, and `transfer-dean` is gone. Section 1's first two rulings and section 7's `transfer-dean` row no longer apply. Decisions agreed with the Owner in `/grill-me` (2026-11-15). The spec amendment (section 9) still needs the Owner's approval of its exact text. No code yet.
 
 ## 1. Owner rulings
 

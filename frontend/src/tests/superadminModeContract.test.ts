@@ -4,11 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// ADM-001 Superadmin mode (docs/contracts/superadmin.md SA1-SA4): the mode is the route, only the Dean has the switch.
+// Backlog 13.9 (docs/contracts/dean-superadmin-split.md DS16-DS19, DS24): the Superadmin is its own role and account; there is no mode.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (rel: string): string => fs.readFileSync(path.join(here, rel), 'utf8');
 const layout = read('../components/Layout.tsx');
 const app = read('../App.tsx');
+const authTypes = read('../types/auth.ts');
 
 const between = (src: string, from: string, to: string): string => {
   const a = src.indexOf(from);
@@ -16,65 +17,83 @@ const between = (src: string, from: string, to: string): string => {
   assert.ok(a >= 0 && b > a, `${from} ... ${to} not found`);
   return src.slice(a, b);
 };
+// Every sidebar entry in source order: name, path (an icon marks a sidebar entry, not a breadcrumb).
+const sidebar = [...layout.matchAll(/name: '([^']+)', path: '([^']+)', icon:/g)].map(m => [m[1], m[2]] as [string, string]);
 
-test('SA1 the mode is the route: no stored state, no header, no flag', () => {
-  assert.match(layout, /const superadminView = user\?\.role === 'admin' && location\.pathname\.startsWith\('\/superadmin\/'\);/);
+test('D1 the Superadmin is a fifth role on its own account', () => {
+  assert.match(authTypes, /UserRole = [^;]*'superadmin'/);
+  assert.match(layout, /user\?\.role === 'superadmin'/);
+});
+
+test('DS18 the Dean / Superadmin switcher and the Superadmin chip are gone', () => {
+  assert.doesNotMatch(layout, /Dean \/ Superadmin View Switcher/);
+  assert.doesNotMatch(layout, /label: 'Superadmin', tip: 'Superadmin view'/);
+  assert.doesNotMatch(layout, /label: 'Dean', tip: 'Dean view'/);
+  assert.doesNotMatch(layout, /\{superadminView && <span/);
   assert.doesNotMatch(layout, /localStorage\.(get|set)Item\(['"][^'"]*superadmin/i);
-  const api = read('../services/apiClient.ts');
-  assert.doesNotMatch(api, /X-DentiSys-(View|Mode)|superadminMode/i);
+  assert.doesNotMatch(read('../services/apiClient.ts'), /X-DentiSys-(View|Mode)|superadminMode/i);
 });
 
-test('SA2 only the Dean sees the Dean / Superadmin switch; it copies the Secretary switcher markup', () => {
-  const block = between(layout, '{/* Dean / Superadmin View Switcher', '{/* Navigation Items */}');
-  assert.match(block, /\{user\?\.role === 'admin' && \(/);
-  assert.match(block, /aria-label="Account view"/);
-  assert.match(block, /aria-pressed=\{on\}/);
-  assert.match(block, /label: 'Dean', tip: 'Dean view', to: '\/'/);
-  assert.match(block, /label: 'Superadmin', tip: 'Superadmin view', to: '\/superadmin\/overview'/);
-  // Same container classes as the Secretary / Student switcher.
-  const secretary = between(layout, '{/* Secretary / Student Role Switcher */}', '{/* Dean / Superadmin View Switcher');
-  const shell = 'mb-4 rounded-xl bg-slate-200/60 dark:bg-slate-800/80 p-1 flex';
-  assert.ok(secretary.includes(shell) && block.includes(shell));
-  assert.match(secretary, /\{user\?\.role === 'secretary' && \(/); // the Secretary switcher is still Secretary-only
-});
-
-test('SA3 the Superadmin sidebar has four pages: Overview, People & Accounts, Face Enrolment Flags, Audit Trail', () => {
-  const nav = between(layout, 'if (superadminView) {', "if (currentUser.role === 'admin') {");
-  assert.deepEqual([...nav.matchAll(/name: '([^']+)', path: '([^']+)'/g)].map(m => [m[1], m[2]]), [
+test('DS16 the Superadmin sidebar: Overview, People & Accounts, Classes, Course Catalog, Academic Terms, Rooms, Face Enrolment Flags, Audit Trail', () => {
+  assert.deepEqual(sidebar.filter(([, p]) => p.startsWith('/superadmin/')), [
     ['Overview', '/superadmin/overview'],
     ['People & Accounts', '/superadmin/people'],
+    ['Classes', '/superadmin/classes'],
+    ['Course Catalog', '/superadmin/course-catalog'],
+    ['Academic Terms', '/superadmin/terms'],
+    ['Rooms', '/superadmin/rooms'],
     ['Face Enrolment Flags', '/superadmin/face-flags'],
     ['Audit Trail', '/superadmin/audit-trail'],
   ]);
-  assert.doesNotMatch(nav, /Classes/); // Class Sections stays a Dean-view preview (answer 4)
+  // Profile and Settings of the Superadmin live in the account menu, under /superadmin/.
+  assert.match(layout, /\/superadmin\/profile/);
+  assert.match(layout, /\/superadmin\/settings/);
 });
 
-test('SA4 the Dean view: Dashboard, Reports, Classes, the setup pages and its own Audit Trail', () => {
-  const nav = between(layout, "if (currentUser.role === 'admin') {", "if (currentUser.role === 'secretary') {");
-  assert.deepEqual([...nav.matchAll(/name: '([^']+)', path: '([^']+)'/g)].map(m => [m[1], m[2]]), [
+test('DS17 the Dean sidebar: Dashboard, Reports & Analytics, Faculty Invitations, My Activity', () => {
+  const i = sidebar.findIndex(([n, p]) => n === 'Reports & Analytics' && p === '/admin/reports');
+  assert.ok(i > 0);
+  assert.deepEqual(sidebar.slice(i - 1, i + 3), [
     ['Dashboard', '/'],
     ['Reports & Analytics', '/admin/reports'],
-    ['Classes', '/admin/classes'],
     ['Faculty Invitations', '/admin/faculty-invite'],
-    ['Course Catalog', '/admin/course-catalog'],
-    ['Academic Terms', '/admin/terms'],
-    ['Rooms', '/admin/rooms'],
-    ['Audit Trail', '/admin/audit-trail'],
+    ['My Activity', '/admin/audit-trail'],
   ]);
+  const deanPaths = sidebar.slice(i - 1, i + 3).map(([, p]) => p);
+  for (const moved of ['/admin/terms', '/admin/rooms', '/admin/course-catalog', '/admin/classes']) assert.ok(!sidebar.some(([, p]) => p === moved), `${moved} is no Dean sidebar entry`);
+  assert.equal(deanPaths.length, 4);
 });
 
-test('SA4 routes: setup pages live under /admin/, old /superadmin/ setup paths redirect; /superadmin/* is Dean-only; the top bar shows a Superadmin chip', () => {
-  assert.match(app, /path="\/admin\/people" element=\{<Navigate to="\/" replace \/>\}/);
-  const adminRoutes = between(app, "<ProtectedRoute allowedRoles={['admin']} />", "<ProtectedRoute allowedRoles={['secretary']} />");
-  for (const p of ['overview', 'audit-trail', 'people']) assert.match(adminRoutes, new RegExp(`path="/superadmin/${p}" element=\\{<(?!Navigate)`));
-  for (const p of ['terms', 'rooms', 'faculty-invite', 'course-catalog', 'audit-trail']) assert.match(adminRoutes, new RegExp(`path="/admin/${p}" element=\\{<(?!Navigate)`));
-  assert.match(adminRoutes, /path="\/superadmin" element=\{<Navigate to="\/superadmin\/overview" replace \/>\}/);
-  const redirects: Array<[string, string]> = [
-    ['superadmin/terms', 'terms'], ['superadmin/rooms', 'rooms'], ['superadmin/faculty-invite', 'faculty-invite'], ['superadmin/course-catalog', 'course-catalog'],
-    ['admin/academic-terms', 'terms'], ['admin/faculty-approval', 'faculty-invite'], ['admin/audit', 'audit-trail'],
-  ];
-  for (const [from, to] of redirects) assert.match(adminRoutes, new RegExp(`path="/${from}" element=\\{<Navigate to="/admin/${to}" replace />\\}`));
-  assert.match(adminRoutes, /path="\/admin\/audit-trail" element=\{<DeanAuditTrail \/>\}/);
-  assert.equal((layout.match(/>Superadmin<\/span>/g) ?? []).length, 2); // desktop header and phone page title
-  assert.match(layout, /\{superadminView && <span/);
+test('DS19 /superadmin/* is Superadmin-only and every page of the sidebar has a route', () => {
+  const block = between(app, "<ProtectedRoute allowedRoles={['superadmin']} />", '</Route>');
+  for (const p of ['overview', 'people', 'classes', 'course-catalog', 'terms', 'rooms', 'face-flags', 'audit-trail', 'profile', 'settings']) {
+    assert.match(block, new RegExp(`path="/superadmin/${p}" element=\\{<(?!Navigate)`), `/superadmin/${p}`);
+  }
+  assert.match(block, /path="\/superadmin" element=\{<Navigate to="\/superadmin\/overview" replace \/>\}/);
+  // The Dean group no longer owns the moved pages, and the old /superadmin -> /admin redirects are gone.
+  const dean = between(app, "<ProtectedRoute allowedRoles={['admin']} />", "<ProtectedRoute allowedRoles={['superadmin']} />");
+  for (const p of ['terms', 'rooms', 'course-catalog', 'classes']) assert.doesNotMatch(dean, new RegExp(`path="/admin/${p}" element=\\{<(?!Navigate)`));
+  for (const p of ['terms', 'rooms', 'course-catalog']) assert.doesNotMatch(app, new RegExp(`path="/superadmin/${p}" element=\\{<Navigate to="/admin/`));
+});
+
+test('DS19 old /admin paths redirect to the matching /superadmin page', () => {
+  for (const [from, to] of [['terms', 'terms'], ['rooms', 'rooms'], ['course-catalog', 'course-catalog'], ['classes', 'classes'], ['academic-terms', 'terms']]) {
+    assert.match(app, new RegExp(`path="/admin/${from}" element=\\{<Navigate to="/superadmin/${to}" replace />\\}`), `/admin/${from}`);
+  }
+});
+
+test('DS19 a wrong role goes to its own home; the Superadmin home is the Overview', () => {
+  const guard = read('../components/ProtectedRoute.tsx');
+  assert.match(guard, /allowedRoles\.includes\(user\.role\)[\s\S]{0,300}<Navigate to="\/" replace/);
+  assert.match(app, /user\.role === 'superadmin'\) return <Navigate to="\/superadmin\/overview"/);
+});
+
+test('DS24 first sign-in opens Set Up 2FA at /2fa/setup, outside the protected routes', () => {
+  assert.match(app, /path="\/2fa\/setup" element=\{<MfaSetup \/>\}/);
+  const setup = read('../pages/auth/MfaSetup.tsx');
+  assert.match(setup, /Set Up 2FA/);
+  assert.match(setup, /The Superadmin account needs 2FA\. Scan the code with your authenticator app, then type the 6-digit code\./);
+  const auth = read('../services/apiClient.ts') + read('../pages/auth/SsoLogin.tsx');
+  assert.match(auth, /two_factor_setup_required/);
+  assert.match(auth, /\/2fa\/setup/);
 });

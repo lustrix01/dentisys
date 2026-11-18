@@ -15,6 +15,26 @@ function mfa_authenticated_context(PDO $pdo, array $config): array
     return auth_verify_access_token($pdo, $config, $token, $jwtKey);
 }
 
+/** DS12: the two enrol routes also accept the Superadmin's short-lived setup token (no session yet). It opens nothing else. */
+function mfa_enroll_context(PDO $pdo, array $config): array
+{
+    $token = auth_extract_bearer_token(request_header('Authorization') ?? '');
+    $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
+    try {
+        $claims = jwt_decode($token, $jwtKey, 'mfa_setup');
+    } catch (\Throwable $e) {
+        return auth_verify_access_token($pdo, $config, $token, $jwtKey);
+    }
+    // The token dies with the account's sessions: still an Active Superadmin with the same token_version.
+    $stmt = $pdo->prepare('SELECT role, status, token_version FROM user_accounts WHERE user_id = ?');
+    $stmt->execute([(int) $claims['sub']]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row || $row['role'] !== 'superadmin' || $row['status'] !== 'Active' || (int) $row['token_version'] !== (int) $claims['token_version']) {
+        throw new AuthException('Authentication required.');
+    }
+    return ['user_id' => (int) $claims['sub'], 'role' => 'superadmin', 'token_version' => (int) $claims['token_version'], 'session_id' => 0, 'setup_claims' => $claims];
+}
+
 function mfa_require_step_up(PDO $pdo, array $config, int $userId, string $code): void
 {
     if (!preg_match('/^\d{6}$/', $code)) {
@@ -184,6 +204,14 @@ function handle_mfa_settings_revoke(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = mfa_authenticated_context($pdo, $config);
+        if (($authCtx['role'] ?? null) === 'superadmin') { // DS13
+            auth_controller_emit(auth_build_no_store_json_response([
+                'status' => 'error',
+                'code' => 'two_factor_required',
+                'message' => '2FA is required for the Superadmin and cannot be turned off.',
+            ], 403));
+            return;
+        }
         $body = request_body();
         $code = $body['has_body'] ? (string) ($body['data']['code'] ?? '') : '';
         mfa_settings_confirm_rate_limit($config, (int) $authCtx['user_id']);
@@ -246,11 +274,11 @@ function handle_mfa_enroll_start(): void
             'endpoint' => request_path(),
         ];
 
-        $authCtx = mfa_authenticated_context($pdo, $config);
+        $authCtx = mfa_enroll_context($pdo, $config);
         $claims = [
             'sub' => (int) $authCtx['user_id'],
             'token_version' => (int) $authCtx['token_version'],
-            'session_id' => (int) $authCtx['session_id'],
+            'session_id' => isset($authCtx['setup_claims']) ? null : (int) $authCtx['session_id'],
         ];
 
         $result = mfa_runtime_enroll_start($pdo, $config, $claims, $context);
@@ -289,7 +317,7 @@ function handle_mfa_enroll_confirm(): void
             'endpoint' => request_path(),
         ];
 
-        $authCtx = mfa_authenticated_context($pdo, $config);
+        $authCtx = mfa_enroll_context($pdo, $config);
         $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
         $body = request_body();
 
@@ -314,10 +342,56 @@ function handle_mfa_enroll_confirm(): void
 
         $result = mfa_runtime_enroll_confirm($pdo, $config, $claims, $code, $context);
 
-        $response = auth_build_no_store_json_response([
+        $payload = [
             'status' => 'ok',
             'recovery_codes' => $result['recovery_codes'],
-        ], 200);
+        ];
+        $cred = null;
+        if (isset($authCtx['setup_claims'])) {
+            // DS12: 2FA is now on, so issue the session exactly like a direct login.
+            $setup = $authCtx['setup_claims'];
+            $pdo->beginTransaction();
+            try {
+                $locked = auth_lock_user_for_session($pdo, (int) $authCtx['user_id']);
+                if ($locked['status'] !== 'Active') {
+                    throw new InactiveAccountException($locked['status']);
+                }
+                $cred = auth_issue_credentials(
+                    $pdo,
+                    $locked,
+                    $config,
+                    $context,
+                    (string) ($setup['authentication_source'] ?? 'password'),
+                    isset($setup['pending_google_subject']) ? (string) $setup['pending_google_subject'] : null
+                );
+                audit_record_action(
+                    $pdo,
+                    $config,
+                    ['user_id' => (int) $locked['user_id'], 'login_email' => $locked['login_email'], 'role' => $locked['role'], 'display_name' => $locked['display_name']],
+                    'auth',
+                    'login_success',
+                    'user_account',
+                    (string) $locked['user_id'],
+                    ($setup['authentication_source'] ?? 'password') === 'google' ? 'Signed in with Google after setting up 2FA.' : 'Signed in with password after setting up 2FA.',
+                    ['context' => $context]
+                );
+                $pdo->commit();
+            } catch (\Throwable $e) {
+                if ($pdo->inTransaction()) { $pdo->rollBack(); }
+                throw $e;
+            }
+            $payload['access_token'] = $cred['access_token'];
+            $payload['user'] = ['user_id' => $cred['session']['user_id']];
+        }
+
+        $response = auth_build_no_store_json_response($payload, 200);
+        if ($cred !== null) {
+            $response['headers'] = array_merge($response['headers'], build_refresh_cookie_header(
+                $cred['refresh_token'],
+                $cred['cookie_ttl'],
+                request_is_https($config, $_SERVER)
+            ));
+        }
 
         auth_controller_emit($response);
     } catch (ChallengeException | AuthException | \RuntimeException $e) {

@@ -10,7 +10,7 @@ class InactiveAccountException extends \RuntimeException
     public function __construct(string $status, string $message = '')
     {
         $this->accountStatus = $status;
-        parent::__construct($message ?: "Account status: $status" . ($status === 'Disabled' ? '. Contact the Dean.' : ''), 403);
+        parent::__construct($message ?: "Account status: $status" . ($status === 'Disabled' ? '. Contact the Superadmin.' : ''), 403);
     }
 }
 class ChallengeException extends \RuntimeException {}
@@ -126,6 +126,10 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
     }
     $authenticatorEnabled = $authenticatorCount === 1;
 
+    if (!$authenticatorEnabled && $user['role'] === 'superadmin') {
+        return auth_issue_mfa_setup($config, $user, 'password'); // DS11: no session until 2FA is set up
+    }
+
     if (!$authenticatorEnabled) {
         $wasInTx = $pdo->inTransaction();
         if (!$wasInTx) { $pdo->beginTransaction(); }
@@ -194,6 +198,36 @@ function auth_issue_two_factor_challenge(array $config, array $user, string $aut
         'two_factor_challenge_token' => $token,
         'expires_in' => 300,
         'user' => $user,
+    ];
+}
+
+/** DS11: the Superadmin has no 2FA yet, so no session; this short-lived token opens only the two MFA enrol routes. */
+function auth_issue_mfa_setup(array $config, array $user, string $authenticationSource = 'password', ?string $pendingGoogleSubject = null): array
+{
+    $now = time();
+    $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
+    $token = jwt_encode([
+        'sub' => (int) $user['user_id'],
+        'jti' => jwt_generate_jti(),
+        'token_type' => 'mfa_setup',
+        'token_version' => (int) $user['token_version'],
+        'authentication_source' => $authenticationSource,
+        'pending_google_subject' => $pendingGoogleSubject,
+        'iat' => $now,
+        'exp' => $now + 300,
+    ], $jwtKey);
+
+    return ['type' => 'mfa_setup_required', 'two_factor_setup_token' => $token, 'expires_in' => 300, 'user' => $user];
+}
+
+function auth_mfa_setup_payload(array $setup): array
+{
+    return [
+        'type' => 'two_factor_setup_required',
+        'two_factor_required' => true,
+        'two_factor_enrolled' => false,
+        'two_factor_setup_token' => $setup['two_factor_setup_token'],
+        'expires_in' => $setup['expires_in'],
     ];
 }
 

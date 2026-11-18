@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 /*
  * Account administration for the system administrator (docs/contracts/roles.md section 7). Not an app feature:
- * the Dean role and the Dean's own email change only here, on the server. Every command prints what it will do,
+ * the Superadmin account is created, its email moved and its 2FA reset (lockout) only here, on the server. Every command prints what it will do,
  * asks "Type YES to continue", runs in one transaction and audits as System with the reason.
  *
  * Usage (inside the web container):
- *   docker compose exec web php /var/www/html/backend/bin/account-admin.php transfer-dean --to <faculty email> --old-dean faculty|deactivate --reason "..."
+ *   docker compose exec web php /var/www/html/backend/bin/account-admin.php create-superadmin --email <e> --first <f> --last <l> [--prefix <p> --middle <m> --suffix <s>] --reason "..."
+ *   docker compose exec web php /var/www/html/backend/bin/account-admin.php reset-superadmin-2fa --reason "..."
  *   docker compose exec web php /var/www/html/backend/bin/account-admin.php move-email --to <new email> --reason "..."
  *   docker compose exec web php /var/www/html/backend/bin/account-admin.php unretire-email <email> --reason "..."
  */
@@ -16,6 +17,7 @@ declare(strict_types=1);
 require __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../controllers/StudentAuthController.php';
 require_once __DIR__ . '/../controllers/SuperadminController.php';
+require_once __DIR__ . '/../controllers/FacultyInvitationController.php';
 
 function account_admin_fail(string $message): never
 {
@@ -38,32 +40,11 @@ function account_admin_args(array $argv): array
     return [$command, $options];
 }
 
-function account_admin_dean(PDO $pdo): array
+/** The one Superadmin account (any status), locked; null when none exists. */
+function account_admin_superadmin(PDO $pdo): ?array
 {
-    $rows = $pdo->query("SELECT user_id, login_email, display_name, role, status FROM user_accounts WHERE role = 'admin' AND status = 'Active' FOR UPDATE")->fetchAll(PDO::FETCH_ASSOC);
-    if (count($rows) !== 1) account_admin_fail('Expected exactly one active Dean account, found ' . count($rows) . '.');
-    return $rows[0];
-}
-
-/** Why the Dean role cannot move now: a term is in progress, or the new Dean has a class whose term has not ended. Null when it can. */
-function account_admin_transfer_blocker(PDO $pdo, int $newDeanId): ?string
-{
-    $today = (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d');
-    $terms = academic_terms_read($pdo);
-    foreach ($terms as $t) {
-        if ($t['start_date'] <= $today && $t['end_date'] >= $today) return "A term is in progress ({$t['school_year']} {$t['semester']}, {$t['start_date']} to {$t['end_date']}).";
-    }
-    $stmt = $pdo->prepare('SELECT cs_name, school_year, semester, term_start_date, term_end_date FROM class_sections WHERE instructor_user_id = ? AND archived_at IS NULL');
-    $stmt->execute([$newDeanId]);
-    $current = academic_current_school_year($pdo);
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $class) {
-        $end = academic_resolve_class_term_dates($class, $terms)['endDate'];
-        // shortcut: a class with no term dates counts as not ended while its school year is the current or a later one.
-        if ($end === null ? strcmp((string) $class['school_year'], $current) >= 0 : (string) $end >= $today) {
-            return "The new Dean has a class whose term has not ended ({$class['cs_name']}, {$class['school_year']}). Archive or reassign it first.";
-        }
-    }
-    return null;
+    $row = $pdo->query("SELECT user_id, login_email, display_name, role, status FROM user_accounts WHERE role = 'superadmin' FOR UPDATE")->fetch(PDO::FETCH_ASSOC);
+    return $row === false ? null : $row;
 }
 
 function account_admin_confirm(array $plan): void
@@ -78,8 +59,8 @@ $config = app_config();
 $pdo = create_pdo($config);
 [$command, $options] = account_admin_args($argv);
 $reason = trim((string) ($options['reason'] ?? ''));
-if (!in_array($command, ['transfer-dean', 'move-email', 'unretire-email'], true)) {
-    account_admin_fail('Usage: account-admin.php transfer-dean|move-email|unretire-email ... --reason "..."');
+if (!in_array($command, ['create-superadmin', 'reset-superadmin-2fa', 'move-email', 'unretire-email'], true)) {
+    account_admin_fail('Usage: account-admin.php create-superadmin|reset-superadmin-2fa|move-email|unretire-email ... --reason "..."');
 }
 if (mb_strlen($reason) < 8 || mb_strlen($reason) > 240) account_admin_fail('--reason is required (8 to 240 characters).');
 $systemActor = ['user_id' => null, 'login_email' => null, 'role' => 'system', 'display_name' => 'System', 'session_id' => null];
@@ -88,43 +69,53 @@ $context = ['request_id' => 'account-admin-' . uuid_v4_string(), 'ip_address' =>
 
 try {
     $afterCommit = [];
-    if ($command === 'transfer-dean') {
-        $oldDeanChoice = (string) ($options['old-dean'] ?? '');
-        if (!in_array($oldDeanChoice, ['faculty', 'deactivate'], true)) account_admin_fail('--old-dean faculty|deactivate is required (there is no default).');
-        $email = validate_institutional_email((string) ($options['to'] ?? ''));
-        $stmt = $pdo->prepare("SELECT user_id, login_email, display_name FROM user_accounts WHERE login_email = ? AND role = 'faculty' AND status = 'Active'");
-        $stmt->execute([$email]);
-        $target = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($target === false) account_admin_fail("{$email} is not an active Faculty account.");
+    if ($command === 'create-superadmin') {
         $pdo->beginTransaction();
-        $dean = account_admin_dean($pdo);
-        $blocker = account_admin_transfer_blocker($pdo, (int) $target['user_id']);
-        if ($blocker !== null) account_admin_fail("Refused: {$blocker}");
-        account_admin_confirm(["make {$target['display_name']} ({$target['login_email']}) the Dean",
-            $oldDeanChoice === 'faculty' ? "make {$dean['display_name']} ({$dean['login_email']}) a Faculty member again (still teaches)" : "deactivate {$dean['display_name']} ({$dean['login_email']}) (left)",
-            'sign both out everywhere and email both']);
-        $pdo->prepare("UPDATE user_accounts SET role = 'admin', updated_at = CURRENT_TIMESTAMP(6) WHERE user_id = ?")->execute([$target['user_id']]);
-        $pdo->prepare("UPDATE user_accounts SET role = 'faculty', status = ?, disabled_at = " . ($oldDeanChoice === 'deactivate' ? 'CURRENT_TIMESTAMP(6)' : 'NULL') . ', updated_at = CURRENT_TIMESTAMP(6) WHERE user_id = ?')
-            ->execute([$oldDeanChoice === 'deactivate' ? 'Disabled' : 'Active', $dean['user_id']]);
-        foreach ([(int) $target['user_id'], (int) $dean['user_id']] as $id) people_end_sessions($pdo, $id, 'Dean role transferred');
-        audit_record_action($pdo, $config, $systemActor, 'people', 'dean_transferred', 'user_account', (string) $target['user_id'],
-            "Dean role transferred from {$dean['display_name']} to {$target['display_name']}; the outgoing Dean " . ($oldDeanChoice === 'faculty' ? 'is Faculty again.' : 'was deactivated.'),
-            ['before' => ['Dean' => $dean['display_name']], 'after' => ['Dean' => $target['display_name'], 'Outgoing Dean' => $oldDeanChoice === 'faculty' ? 'Faculty' : 'Deactivated'],
-                'reason' => $reason, 'context' => $context]);
+        $invitation = superadmin_invitation_issue($pdo, $config, [
+            'email' => (string) ($options['email'] ?? ''), 'prefix' => $options['prefix'] ?? null, 'firstName' => $options['first'] ?? null,
+            'middleName' => $options['middle'] ?? null, 'lastName' => $options['last'] ?? null, 'suffix' => $options['suffix'] ?? null,
+        ], $reason, $systemActor, $context);
+        account_admin_confirm(["create the Superadmin account for {$invitation['name']} ({$invitation['email']}) as Pending Activation, or replace its still-unused set-password link",
+            'email a set-password link to that address (expires in 7 days); the Superadmin sets up 2FA at the first sign-in']);
         $pdo->commit();
-        $afterCommit[] = [$target, ["You are now the Dean of DentiSYS ({$reason})."]];
-        $afterCommit[] = [$dean, ['You are no longer the Dean of DentiSYS' . ($oldDeanChoice === 'faculty' ? '; your account is a Faculty account again.' : ' and your account was deactivated.')]];
-        foreach ($afterCommit as [$person, $lines]) {
-            send_email((string) $person['login_email'], 'The DentiSYS Dean role changed', email_dean_transferred_html((string) $person['display_name'], $lines), $config, true);
+        $link = app_url($config, '/activate-faculty', ['token' => $invitation['token']]);
+        // Recorded in the email outbox (Email History) like Faculty invitations; there is no acting user, so the account is its own sender.
+        $sent = faculty_invitation_send_recorded($pdo, $config, (int) $invitation['userId'], $invitation['email'], $invitation['name'], 'DentiSYS Superadmin Invitation',
+            'Superadmin Invitation', email_superadmin_invitation_html($invitation['name'], $invitation['email'], $link), (int) $invitation['userId']);
+        if (!$sent) {
+            $pdo->prepare("UPDATE security_tokens SET revoked_at = CURRENT_TIMESTAMP(6), revocation_reason = 'Superadmin invitation email delivery failed' WHERE token_id = ? AND used_at IS NULL AND revoked_at IS NULL")
+                ->execute([$invitation['tokenId']]);
+            account_admin_fail('The invitation email was not delivered and its link was revoked. Fix mail delivery and run the command again.');
         }
+        echo "Invitation email sent to {$invitation['email']}.\n";
+        if (!empty($config['show_dev_invitation_link'])) echo "Development invitation link: {$link}\n";
+    } elseif ($command === 'reset-superadmin-2fa') {
+        $pdo->beginTransaction();
+        $superadmin = account_admin_superadmin($pdo);
+        if ($superadmin === null || $superadmin['status'] !== 'Active') account_admin_fail('Refused: there is no active Superadmin account.');
+        account_admin_confirm(["remove the authenticator and recovery codes of the Superadmin {$superadmin['display_name']} ({$superadmin['login_email']})",
+            'sign the Superadmin out everywhere; the next sign-in opens Set up 2FA']);
+        $revoke = $pdo->prepare(
+            "UPDATE security_tokens
+             SET mfa_status = CASE WHEN purpose = 'mfa_credential' THEN 'revoked' ELSE mfa_status END,
+                 revoked_at = ?, revocation_reason = 'Reset on the server'
+             WHERE user_id = ? AND purpose IN ('mfa_credential', 'mfa_recovery') AND revoked_at IS NULL"
+        );
+        $revoke->execute([(new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u'), $superadmin['user_id']]);
+        if ($revoke->rowCount() === 0) account_admin_fail('Refused: the Superadmin does not use 2FA.');
+        people_end_sessions($pdo, (int) $superadmin['user_id'], '2FA reset on the server');
+        audit_record_action($pdo, $config, $systemActor, 'people', 'superadmin_2fa_reset', 'user_account', (string) $superadmin['user_id'],
+            "Reset 2FA for the Superadmin {$superadmin['display_name']} on the server.", ['reason' => $reason, 'context' => $context]);
+        $pdo->commit();
     } elseif ($command === 'move-email') {
         $email = validate_institutional_email((string) ($options['to'] ?? ''));
         $pdo->beginTransaction();
-        $dean = account_admin_dean($pdo);
-        account_move_email_check($pdo, $dean, $email);
-        account_admin_confirm(["move the Dean {$dean['display_name']} from {$dean['login_email']} to {$email}", "retire {$dean['login_email']} for good",
-            'sign the Dean out, remove the password, 2FA and Google link, and email a password-setup link to the new address only']);
-        $send = account_move_email($pdo, $config, array_merge($systemActor, ['context' => $context]), $dean, $email, $reason, false);
+        $superadmin = account_admin_superadmin($pdo);
+        if ($superadmin === null || $superadmin['status'] !== 'Active') account_admin_fail('Refused: there is no active Superadmin account.');
+        account_move_email_check($pdo, $superadmin, $email);
+        account_admin_confirm(["move the Superadmin {$superadmin['display_name']} from {$superadmin['login_email']} to {$email}", "retire {$superadmin['login_email']} for good",
+            'sign the Superadmin out, remove the password, 2FA and Google link, and email a password-setup link to the new address only']);
+        $send = account_move_email($pdo, $config, array_merge($systemActor, ['context' => $context]), $superadmin, $email, $reason, false);
         $pdo->commit();
         $send();
     } else {
@@ -140,7 +131,7 @@ try {
             "Released the retired email {$email}.", ['reason' => $reason, 'context' => $context]);
         $pdo->commit();
     }
-} catch (SuperadminConflict | ValidationException $e) {
+} catch (SuperadminConflict | ValidationException | DomainException $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     account_admin_fail('Refused: ' . ($e instanceof ValidationException ? ($e->getErrors()[0]['message'] ?? 'invalid input') : $e->getMessage()));
 } catch (Throwable $e) {

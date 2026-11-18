@@ -16,7 +16,9 @@ const apiClient = read('../services/apiClient.ts');
 test('4.2 Dean Dashboard: metrics are server-backed and no Quick Actions block exists', () => {
   assert.match(deanDashboard, /getAdminDashboardKpisApi\(/);
   assert.doesNotMatch(deanDashboard, /quick\s*actions?/i);
-  assert.match(deanDashboard, /recentAuditEvents/); // at-a-glance info stays
+  // 13.9 D13: Latest Audit Events moved to the Superadmin Overview.
+  assert.doesNotMatch(deanDashboard, /recentAuditEvents|Latest Audit Events/);
+  assert.match(read('../pages/admin/SuperadminOverview.tsx'), /recentAuditEvents/);
 });
 
 test('4.3 Faculty invitation record type carries no token material', () => {

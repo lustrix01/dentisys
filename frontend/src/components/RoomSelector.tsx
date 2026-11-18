@@ -26,7 +26,7 @@ export const isRetiredRoom = (rooms: RoomOption[], name: string | null | undefin
 /** The message for a picked or typed room that the Dean retired, else null. Uses the room's own name. */
 export const retiredRoomError = (rooms: RoomOption[], name: string | null | undefined): string | null => {
   const room = retiredMatch(rooms, name);
-  return room ? `${room.name} was retired by the Dean. Pick another room.` : null;
+  return room ? `${room.name} was retired. Pick another room.` : null;
 };
 
 /** Yellow warning shown next to a retired room. Shows nothing unless a given room is retired. */

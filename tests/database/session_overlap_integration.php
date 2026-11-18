@@ -162,7 +162,7 @@ expect_same(200, $ovStatus, 'Giving the old session a room lets the edit save');
 // (f) A retired room is refused for sessions (create and edit) and for the class save.
 $ovRetiredName = 'Retired OV ' . $ovSuffix;
 $pdo->prepare("INSERT INTO rooms (name, category_id, status, retired_at) VALUES (?, (SELECT MIN(category_id) FROM room_categories), 'retired', CURRENT_TIMESTAMP)")->execute([$ovRetiredName]);
-$ovRetiredMessage = $ovRetiredName . ' was retired by the Dean. Pick another room.';
+$ovRetiredMessage = $ovRetiredName . ' was retired. Pick another room.';
 [$ovStatus, $ovBody] = integration_http_json('/api/faculty/attendance/session', $seedFacultyAccessToken, $ovSession($ovA, $ovDay(43), '08:00', '10:00', strtolower(str_replace(' ', '', $ovRetiredName))));
 expect_same([422, $ovRetiredMessage], [$ovStatus, $ovRoomMessage($ovBody)], 'A retired room typed as a custom room is refused for Faculty');
 [$ovStatus] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, $ovSession($ovA, $ovDay(43), '08:00', '10:00', $ovRetiredName));

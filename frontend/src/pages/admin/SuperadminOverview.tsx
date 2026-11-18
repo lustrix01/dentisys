@@ -4,6 +4,7 @@ import { CalendarX, ChevronRight } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { semesterLabel } from '../../utils/academicTermDefaults';
 import { getAdminOverviewApi } from '../../services/apiClient';
+import { AuditCompactList } from '../../components/AuditTrailPage';
 import type { AdminOverview } from '../../services/apiClient';
 import { formatSchoolYear as schoolYearText } from '../../utils/schoolYear';
 import { yearLevelLabel } from './peopleHelpers';
@@ -32,7 +33,7 @@ export function attentionRows(a: AdminOverview['attention']): Array<{ count: num
     { count: a.inactive30.faculty, text: a.inactive30.faculty === 1 ? 'Faculty account inactive for 30+ days' : 'Faculty accounts inactive for 30+ days', to: '/superadmin/people?kind=faculty&activity=inactive30' },
     { count: a.inactive30.students, text: a.inactive30.students === 1 ? 'Student account inactive for 30+ days' : 'Student accounts inactive for 30+ days', to: '/superadmin/people?kind=student&activity=inactive30' },
   ].filter(r => r.count > 0) as Array<{ count: number | null; text: string; to: string }>;
-  return a.nextTermMissing ? [...rows, { count: null, text: 'The next term has no dates yet', to: '/admin/terms' }] : rows;
+  return a.nextTermMissing ? [...rows, { count: null, text: 'The next term has no dates yet', to: '/superadmin/terms' }] : rows;
 }
 
 export const SuperadminOverview: React.FC = () => {
@@ -85,9 +86,9 @@ export const SuperadminOverview: React.FC = () => {
 
   const term = data.setup.currentTerm;
   const tiles: Tile[] = [
-    { label: 'Current Term', value: term ? semesterLabel(term.semester) : 'No current term', sub: term ? `${schoolYearText(term.schoolYear)}${term.endDate ? ` · ends ${shortDate(term.endDate)}` : ''}` : 'Add the term dates', to: '/admin/terms' },
-    { label: 'Courses', value: String(data.setup.courses.active), sub: `${data.setup.courses.retired} retired`, to: '/admin/course-catalog' },
-    { label: 'Rooms', value: String(data.setup.rooms.active), sub: `${data.setup.rooms.retired} retired`, to: '/admin/rooms' },
+    { label: 'Current Term', value: term ? semesterLabel(term.semester) : 'No current term', sub: term ? `${schoolYearText(term.schoolYear)}${term.endDate ? ` · ends ${shortDate(term.endDate)}` : ''}` : 'Add the term dates', to: '/superadmin/terms' },
+    { label: 'Courses', value: String(data.setup.courses.active), sub: `${data.setup.courses.retired} retired`, to: '/superadmin/course-catalog' },
+    { label: 'Rooms', value: String(data.setup.rooms.active), sub: `${data.setup.rooms.retired} retired`, to: '/superadmin/rooms' },
     { label: 'Face enrolment flags', value: String(data.faceFlagsOpen ?? 0), sub: 'open', to: '/superadmin/face-flags' },
   ];
 
@@ -246,6 +247,19 @@ export const SuperadminOverview: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {/* 13.9 D13: moved here from the Dean Dashboard, markup copied as is */}
+      <section aria-label="Latest audit events" className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Latest Audit Events</h3>
+          <button type="button" onClick={() => navigate('/superadmin/audit-trail')} className="text-xs font-bold whitespace-nowrap text-accent-600 hover:underline cursor-pointer">View audit trail</button>
+        </div>
+        {data.recentAuditEvents.length === 0 ? (
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">No audit events recorded yet.</p>
+        ) : (
+          <AuditCompactList entries={data.recentAuditEvents} />
+        )}
+      </section>
     </div>
   );
 };

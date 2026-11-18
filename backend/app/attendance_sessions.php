@@ -157,7 +157,7 @@ function attendance_session_require_room(PDO $pdo, ?string $room): void
         throw new ValidationException(['room' => 'Choose a room or type the place where the session happens.']);
     }
     $retired = room_retired_by_name($pdo, $room);
-    if ($retired !== null) throw new ValidationException(['room' => "{$retired} was retired by the Dean. Pick another room."]);
+    if ($retired !== null) throw new ValidationException(['room' => "{$retired} was retired. Pick another room."]);
 }
 
 /** 409 that asks the user to confirm a booking overlap; $errorCode is SESSION_OVERLAP or CLASS_SESSION_OVERLAP. */

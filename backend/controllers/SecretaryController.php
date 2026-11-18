@@ -2384,7 +2384,7 @@ function handle_secretary_profile_update(): void
         if ($sqlState === '23505') {
             safe_error_response('That email address is already used by another account.', 409);
         } elseif ($sqlState === '23514' || $sqlState === 'P0001') {
-            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the Dean.', 409);
+            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the Superadmin.', 409);
         } else {
             safe_error_response('Internal server error.', 500);
         }

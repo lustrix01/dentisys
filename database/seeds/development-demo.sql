@@ -21,7 +21,7 @@ BEGIN
 END
 $guard$;
 
--- 1. Accounts (admin, faculty, secretaries, students). Existing e-mails are left untouched.
+-- 1. Accounts (admin, superadmin, faculty, secretaries, students). Existing e-mails are left untouched.
 INSERT INTO user_accounts (user_id, login_email, password_hash, role, display_name, title, status, created_at, approved_at,
                            name_prefix, first_name, middle_name, last_name, name_suffix)
 SELECT v.user_id::integer, v.login_email, v.password_hash, v.role, v.display_name, v.title, v.status,
@@ -153,12 +153,21 @@ FROM (VALUES
     (124, 'anthony.zamora@bicol-u.edu.ph', '$2y$10$C4JygFNbn/ISoVUs6J1HMeSItSvxMk.8ZMlzch4J284p9777BJoDq', 'student', 'Anthony Sarmiento Zamora', 'Student', 'Active', '2026-08-10 01:00:00', NULL, NULL, 'Anthony', 'Sarmiento', 'Zamora', NULL),
     (125, 'samuel.barrameda@bicol-u.edu.ph', '$2y$10$C4JygFNbn/ISoVUs6J1HMeSItSvxMk.8ZMlzch4J284p9777BJoDq', 'student', 'Samuel Espiritu Barrameda', 'Student', 'Active', '2026-08-10 01:00:00', NULL, NULL, 'Samuel', 'Espiritu', 'Barrameda', NULL),
     (126, 'frances.feliciano@bicol-u.edu.ph', '$2y$10$C4JygFNbn/ISoVUs6J1HMeSItSvxMk.8ZMlzch4J284p9777BJoDq', 'student', 'Frances Ignacio Feliciano', 'Student', 'Active', '2026-08-10 01:00:00', NULL, NULL, 'Frances', 'Ignacio', 'Feliciano', NULL),
-    (127, 'markanthony.rosales@bicol-u.edu.ph', '$2y$10$C4JygFNbn/ISoVUs6J1HMeSItSvxMk.8ZMlzch4J284p9777BJoDq', 'student', 'Mark Anthony Fernandez Rosales', 'Student', 'Active', '2026-08-10 01:00:00', NULL, NULL, 'Mark Anthony', 'Fernandez', 'Rosales', NULL)
+    (127, 'markanthony.rosales@bicol-u.edu.ph', '$2y$10$C4JygFNbn/ISoVUs6J1HMeSItSvxMk.8ZMlzch4J284p9777BJoDq', 'student', 'Mark Anthony Fernandez Rosales', 'Student', 'Active', '2026-08-10 01:00:00', NULL, NULL, 'Mark Anthony', 'Fernandez', 'Rosales', NULL),
+    (128, 'superadmin@bicol-u.edu.ph', '$2y$10$uZbI3OxqhoD8TC4dipeipePgmY1pAm1ZVzby50yHFpu7oVFMdo26O', 'superadmin', 'Dev Superadmin', 'Superadmin', 'Active', '2024-01-05 01:00:00', '2024-01-05 01:00:00', NULL, 'Dev', NULL, 'Superadmin', NULL)
 ) AS v(user_id, login_email, password_hash, role, display_name, title, status, created_at, approved_at,
        name_prefix, first_name, middle_name, last_name, name_suffix)
 WHERE (SELECT go FROM seed_run)
   AND NOT EXISTS (SELECT 1 FROM user_accounts ua WHERE ua.login_email = v.login_email::citext)
   AND NOT EXISTS (SELECT 1 FROM user_accounts ua WHERE ua.user_id = v.user_id);
+
+-- 1b. The Superadmin authenticator (2FA is required for that role). Development secret: JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP (base32, 6 digits, 30 s).
+INSERT INTO security_tokens (purpose, user_id, issued_at, ciphertext, nonce, auth_tag, enc_key_version, enc_algorithm,
+                             totp_algorithm, digit_count, period_seconds, mfa_status, mfa_verified_at)
+SELECT 'mfa_credential', ua.user_id, LOCALTIMESTAMP, decode('1d7ccfa89f951fa1870bdf8d14d8ef708fffaf171424b18330c2e374091f9286', 'hex'), decode('646576737570657261646d69', 'hex'),
+       decode('8f4b4cf560eeed895522cef201815cb4', 'hex'), 1, 'AES-256-GCM', 'sha1', 6, 30, 'enabled', LOCALTIMESTAMP
+FROM user_accounts ua
+WHERE (SELECT go FROM seed_run) AND ua.role = 'superadmin';
 
 -- 2. Course catalogue
 INSERT INTO courses (course_code, name, units, year_level, semester, description, is_clinical, grading_config)

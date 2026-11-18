@@ -733,7 +733,7 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(page.getByRole('status')).toContainText('Face Registration unavailable');
   });
 
-  test('Admin audit trail displays and filters Student events', async ({ page }) => {
+  test('Superadmin audit trail displays and filters Student events', async ({ page }) => { // 13.9: the Dean sees only own rows
     await page.route('**/api/runtime-config', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(ENABLED_RUNTIME_CONFIG) });
     });
@@ -742,7 +742,7 @@ test.describe('P03 Student identity and authentication', () => {
     });
     await page.route('**/api/auth/me', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
-        user_id: 1, login_email: 'admin@bicol-u.edu.ph', display_name: 'Dean Admin', role: 'admin',
+        user_id: 1, login_email: 'superadmin@bicol-u.edu.ph', display_name: 'Dev Superadmin', role: 'superadmin',
         session_uuid: 'admin-session', authentication_source: 'password',
       }) });
     });
@@ -769,7 +769,7 @@ test.describe('P03 Student identity and authentication', () => {
         }),
       });
     });
-    await page.goto('/admin/audit-trail');
+    await page.goto('/superadmin/audit-trail');
     await expect(page.getByText('Student sign-in denied').first()).toBeVisible();
     await expect(page.getByText('Profile updated').first()).toBeVisible();
     await page.getByRole('button', { name: 'More filters' }).click();

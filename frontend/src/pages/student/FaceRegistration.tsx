@@ -816,10 +816,10 @@ export const FaceRegistration: React.FC = () => {
                 <strong>Protected reference:</strong> An encrypted reference derived from your enrollment is kept so attendance can be checked. It expires every semester, and you must re-enroll to keep using face check-in.
               </li>
               <li>
-                <strong>Revocation and deletion:</strong> You may revoke at any time on this page. Your reference is deleted when you revoke, when the Dean revokes your enrollment, when you re-enroll (the old reference is replaced), when it expires at the end of the semester, when your Student account becomes inactive, or when your account is deleted.
+                <strong>Revocation and deletion:</strong> You may revoke at any time on this page. Your reference is deleted when you revoke, when the Superadmin revokes your enrollment, when you re-enroll (the old reference is replaced), when it expires at the end of the semester, when your Student account becomes inactive, or when your account is deleted.
               </li>
               <li>
-                <strong>Who can see your enrollment status:</strong> You, the Faculty of your classes, and the Dean can see whether you are enrolled. No one can see your reference or camera captures.
+                <strong>Who can see your enrollment status:</strong> You, the Faculty of your classes, the Dean and the Superadmin can see whether you are enrolled. No one can see your reference or camera captures.
               </li>
               <li>
                 <strong>Manual attendance alternative:</strong> Face check-in is voluntary. If you refuse, revoke, or cannot use it, authorized manual attendance by your Class Secretary or Faculty remains available, and it never affects your standing.

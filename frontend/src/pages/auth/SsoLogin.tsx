@@ -42,7 +42,7 @@ export function SsoLogin() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialEmail = searchParams.get('email') || '';
-  const { beginLogin, storeTwoFactorChallenge, setAccessToken, setUser, setAuthenticated } = useAuth();
+  const { beginLogin, storeTwoFactorChallenge, storeTwoFactorSetup, setAccessToken, setUser, setAuthenticated } = useAuth();
   const runtimeConfig = useRuntimeConfig();
   const mockIdentityEnabled = runtimeConfig.features.student_auth_enabled
     && runtimeConfig.providers.identity.development_mock.enabled;
@@ -84,6 +84,9 @@ export function SsoLogin() {
       } else if (result.type === 'two_factor_required' && result.two_factor_challenge_token) {
         storeTwoFactorChallenge(result.two_factor_challenge_token);
         navigate('/2fa/verify');
+      } else if (result.type === 'two_factor_setup_required' && result.two_factor_setup_token) {
+        storeTwoFactorSetup(result.two_factor_setup_token);
+        navigate('/2fa/setup');
       } else if (result.type === 'account_link_required' && result.link_challenge_token) {
         setEmail(result.email ?? email);
         setLinkChallengeToken(result.link_challenge_token);
@@ -168,6 +171,9 @@ export function SsoLogin() {
       } else if (result.type === 'two_factor_required' && result.two_factor_challenge_token) {
         storeTwoFactorChallenge(result.two_factor_challenge_token);
         navigate('/2fa/verify');
+      } else if (result.type === 'two_factor_setup_required' && result.two_factor_setup_token) {
+        storeTwoFactorSetup(result.two_factor_setup_token);
+        navigate('/2fa/setup');
       } else {
         setError('Unexpected linking response.');
       }
@@ -227,6 +233,9 @@ export function SsoLogin() {
       } else if (result.type === 'two_factor_required' && result.two_factor_challenge_token) {
         storeTwoFactorChallenge(result.two_factor_challenge_token);
         navigate('/2fa/verify');
+      } else if (result.type === 'two_factor_setup_required' && result.two_factor_setup_token) {
+        storeTwoFactorSetup(result.two_factor_setup_token);
+        navigate('/2fa/setup');
       } else {
         setError('Unexpected authentication response.');
       }

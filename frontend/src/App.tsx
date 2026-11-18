@@ -62,6 +62,7 @@ import { ActivateSecretary } from './pages/auth/ActivateSecretary';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { ResetPassword } from './pages/auth/ResetPassword';
 import { MfaVerify } from './pages/auth/MfaVerify';
+import { MfaSetup } from './pages/auth/MfaSetup';
 import { RecoveryCodes } from './pages/auth/RecoveryCodes';
 
 import { LandingShell } from './pages/landing/LandingShell';
@@ -74,6 +75,7 @@ import { ContactPage } from './pages/landing/ContactPage';
 function RoleDashboard() {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
+  if (user.role === 'superadmin') return <Navigate to="/superadmin/overview" replace />;
   if (user.role === 'admin') return <DeanDashboard />;
   if (user.role === 'secretary') return <SecretaryDashboard />;
   if (user.role === 'student') {
@@ -208,6 +210,7 @@ function App() {
             <Route path="/login/dev" element={<Navigate to="/login" replace />} />
             <Route path="/dev-login" element={<Navigate to="/login" replace />} />
             <Route path="/2fa/verify" element={<MfaVerify />} />
+            <Route path="/2fa/setup" element={<MfaSetup />} />
             <Route path="/mfa/verify" element={<Navigate to="/2fa/verify" replace />} />
             <Route path="/recovery-codes" element={<RecoveryCodes />} />
 
@@ -260,24 +263,19 @@ function App() {
                   <Route path="/student/profile" element={<StudentProfileRoute />} />
                 </Route>
 
+                {/* DS19: old Dean setup links open the Superadmin page; the /superadmin guard sends a Dean home. */}
+                <Route element={<ProtectedRoute allowedRoles={['admin', 'superadmin']} />}>
+                  <Route path="/admin/terms" element={<Navigate to="/superadmin/terms" replace />} />
+                  <Route path="/admin/rooms" element={<Navigate to="/superadmin/rooms" replace />} />
+                  <Route path="/admin/classes" element={<Navigate to="/superadmin/classes" replace />} />
+                  <Route path="/admin/course-catalog" element={<Navigate to="/superadmin/course-catalog" replace />} />
+                  <Route path="/admin/academic-terms" element={<Navigate to="/superadmin/terms" replace />} />
+                </Route>
+
                 <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
-                  <Route path="/admin/terms" element={<AcademicTerms />} />
-                  <Route path="/admin/rooms" element={<Rooms />} />
                   <Route path="/admin/people" element={<Navigate to="/" replace />} />
-                  <Route path="/admin/classes" element={<Classes />} />
-                  <Route path="/admin/course-catalog" element={<CourseCatalog />} />
                   <Route path="/admin/faculty-invite" element={<FacultyInvitation />} />
                   <Route path="/admin/audit-trail" element={<DeanAuditTrail />} />
-                  <Route path="/superadmin" element={<Navigate to="/superadmin/overview" replace />} />
-                  <Route path="/superadmin/overview" element={<SuperadminOverview />} />
-                  <Route path="/superadmin/people" element={<PeopleAndAccounts />} />
-<Route path="/superadmin/face-flags" element={<FaceEnrolmentFlags />} />
-                  <Route path="/superadmin/audit-trail" element={<SuperadminAuditTrail />} />
-                  <Route path="/superadmin/terms" element={<Navigate to="/admin/terms" replace />} />
-                  <Route path="/superadmin/rooms" element={<Navigate to="/admin/rooms" replace />} />
-                  <Route path="/superadmin/faculty-invite" element={<Navigate to="/admin/faculty-invite" replace />} />
-                  <Route path="/superadmin/course-catalog" element={<Navigate to="/admin/course-catalog" replace />} />
-                  <Route path="/admin/academic-terms" element={<Navigate to="/admin/terms" replace />} />
                   <Route path="/admin/faculty-approval" element={<Navigate to="/admin/faculty-invite" replace />} />
                   <Route path="/admin/retention-criteria" element={<Navigate to="/admin/reports" replace />} />
                   <Route path="/admin/reports" element={<DeanReports />} />
@@ -286,6 +284,20 @@ function App() {
                   <Route path="/admin/profile" element={<DeanProfile />} />
                   <Route path="/admin/settings" element={<DeanSettings />} />
                   <Route path="/admin/rules" element={<Navigate to="/admin/settings" replace />} />
+                </Route>
+
+                <Route element={<ProtectedRoute allowedRoles={['superadmin']} />}>
+                  <Route path="/superadmin" element={<Navigate to="/superadmin/overview" replace />} />
+                  <Route path="/superadmin/overview" element={<SuperadminOverview />} />
+                  <Route path="/superadmin/people" element={<PeopleAndAccounts />} />
+                  <Route path="/superadmin/classes" element={<Classes />} />
+                  <Route path="/superadmin/course-catalog" element={<CourseCatalog />} />
+                  <Route path="/superadmin/terms" element={<AcademicTerms />} />
+                  <Route path="/superadmin/rooms" element={<Rooms />} />
+                  <Route path="/superadmin/face-flags" element={<FaceEnrolmentFlags />} />
+                  <Route path="/superadmin/audit-trail" element={<SuperadminAuditTrail />} />
+                  <Route path="/superadmin/profile" element={<DeanProfile />} />
+                  <Route path="/superadmin/settings" element={<DeanSettings />} />
                 </Route>
 
                 <Route element={<ProtectedRoute allowedRoles={['secretary']} />}>

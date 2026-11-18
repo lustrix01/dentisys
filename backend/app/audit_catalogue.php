@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 /**
  * Audit read side (docs/contracts/audit-logging.md sections 3-5, rules R12/R13).
- * One table of action codes (label, area, Dean-visible, sign-in row) and one
- * reader used by the Dean Audit Trail, the Dashboard, and Faculty/Secretary
- * My Activity. Nothing here writes or alters a stored row.
+ * One table of action codes (label, area, in the Superadmin overview, sign-in row) and one
+ * reader used by the Superadmin Audit Trail and Overview, and by My Activity (Dean, Faculty, Secretary).
+ * Nothing here writes or alters a stored row.
  */
 
 const AUDIT_AREA_SECURITY = 'Sign-in & security';
@@ -31,7 +31,7 @@ const AUDIT_BATCH_MEMBER_CAP = 500;
 /** Codes that are stored but never shown on any screen (contract 5.1 STOP, 5.5 face-check evidence). */
 const AUDIT_HIDDEN_CODES = ['refresh_rotation', 'biometric_attendance_recorded'];
 
-/** code => [label, area, Dean sees it, sign-in row (behind the Sign-ins chip in My Activity)]. */
+/** code => [label, area, in the Superadmin overview ("Dean-visible" flag, index 2), sign-in row (behind the Sign-ins chip in My Activity)]. */
 function audit_catalogue(): array
 {
     static $map = null;
@@ -60,7 +60,8 @@ function audit_catalogue(): array
         'mfa_verification_failed' => ['Wrong 2FA or recovery code', $S, true, true],
         'mfa_recovery_codes_regenerated' => ['Recovery codes regenerated', $S, true, false],
         'mfa_revoked' => ['2FA turned off', $S, true, false],
-        'mfa_reset_by_dean' => ['2FA reset by the Dean', $S, true, false],
+        'mfa_reset_by_dean' => ['2FA reset', $S, true, false],
+        'superadmin_2fa_reset' => ['Superadmin 2FA reset on the server', $S, true, false],
         'refresh_reuse_detected' => ['Stolen sign-in token blocked', $S, true, true],
         'profile_updated' => ['Name changed', $S, true, false],
         // Old steps that are no longer written (R13): labelled, own view only, behind the Sign-ins chip.
@@ -68,6 +69,7 @@ function audit_catalogue(): array
         'mfa_enrollment_started' => ['2FA setup started', $S, false, true],
         'development_mock_student_session_created' => ['Development mock sign-in', $S, false, true],
         // 5.2 People, accounts and roles
+        'superadmin_invited' => ['Superadmin invited', $P, true, false],
         'first_dean_invited' => ['First Dean invited', $P, true, false],
         'first_dean_invitation_delivery_failed' => ['First Dean invitation failed', $P, true, false],
         'faculty_invited' => ['Faculty invited', $P, true, false],
@@ -101,11 +103,11 @@ function audit_catalogue(): array
         'account_deactivated' => ['Account deactivated', $P, true, false],
         'account_reactivated' => ['Account reactivated', $P, true, false],
         'sessions_ended_by_dean' => ['Signed out everywhere', $P, true, false],
-        'student_invitation_resent_by_dean' => ['Student invitation resent by the Dean', $P, true, false],
-        'student_invitation_revoked_by_dean' => ['Student invitation revoked by the Dean', $P, true, false],
+        'student_invitation_resent_by_dean' => ['Student invitation resent',$P, true, false],
+        'student_invitation_revoked_by_dean' => ['Student invitation revoked',$P, true, false],
         'account_email_moved' => ['Account moved to a new email', $P, true, false],
-        'account_name_changed_by_dean' => ['Name corrected by the Dean', $P, true, false],
-        'dean_transferred' => ['Dean role transferred', $P, true, false],
+        'account_name_changed_by_dean' => ['Name corrected', $P, true, false],
+        'dean_transferred' => ['Dean role handed over',$P, true, false],
         'email_unretired' => ['Retired email released', $P, true, false],
         // 5.3 Settings and terms
         'system_settings_updated' => ['System settings changed', $T, true, false],
@@ -209,7 +211,8 @@ function audit_sql_codes(callable $keep): string
 function audit_areas_for(string $role): array
 {
     return match ($role) {
-        'admin' => [AUDIT_AREA_SECURITY, AUDIT_AREA_PEOPLE, AUDIT_AREA_SETTINGS, AUDIT_AREA_BIOMETRICS],
+        'superadmin' => [AUDIT_AREA_SECURITY, AUDIT_AREA_PEOPLE, AUDIT_AREA_SETTINGS, AUDIT_AREA_BIOMETRICS],
+        'admin' => [AUDIT_AREA_SECURITY, AUDIT_AREA_PEOPLE, AUDIT_AREA_SETTINGS, AUDIT_AREA_RETENTION, AUDIT_AREA_BIOMETRICS], // the Dean's own rows (My Activity)
         'secretary' => [AUDIT_AREA_SECURITY, AUDIT_AREA_PEOPLE, AUDIT_AREA_ATTENDANCE, AUDIT_AREA_BIOMETRICS],
         default => [AUDIT_AREA_SECURITY, AUDIT_AREA_PEOPLE, AUDIT_AREA_GRADING, AUDIT_AREA_ATTENDANCE, AUDIT_AREA_RETENTION],
     };
@@ -245,7 +248,7 @@ function audit_read_params(array $get, string $role): array
     if ($scope !== '' && !in_array($scope, ['overview', 'class_work'], true)) {
         $errors[] = ['field' => 'scope', 'message' => 'Scope must be overview or class_work.'];
     }
-    $classWork = $role === 'admin' && $scope === 'class_work';
+    $classWork = $role === 'superadmin' && $scope === 'class_work';
     $ids = [];
     foreach (['facultyId', 'classId', 'studentId'] as $key) {
         $v = trim((string) ($get[$key] ?? ''));
@@ -264,7 +267,7 @@ function audit_read_params(array $get, string $role): array
         $errors[] = ['field' => 'status', 'message' => 'Status must be Success, Warning or Failed.'];
     }
     $filterRole = trim((string) ($get['role'] ?? ''));
-    if ($role === 'admin' && $filterRole !== '' && !in_array($filterRole, ['admin', 'faculty', 'secretary', 'student', 'system'], true)) {
+    if ($role === 'superadmin' && $filterRole !== '' && !in_array($filterRole, ['superadmin', 'admin', 'faculty', 'secretary', 'student', 'system'], true)) {
         $errors[] = ['field' => 'role', 'message' => 'Unknown role.'];
     }
     $cls = trim((string) ($get['cls'] ?? ''));
@@ -272,7 +275,7 @@ function audit_read_params(array $get, string $role): array
         $errors[] = ['field' => 'cls', 'message' => 'Class must be a class id.'];
     }
     $card = trim((string) ($get['card'] ?? ''));
-    if ($role === 'admin' && $card !== '' && !array_key_exists($card, AUDIT_ATTENTION_CARDS)) {
+    if ($role === 'superadmin' && $card !== '' && !array_key_exists($card, AUDIT_ATTENTION_CARDS)) {
         $errors[] = ['field' => 'card', 'message' => 'Unknown attention card.'];
     }
     $signins = (string) ($get['signins'] ?? '');
@@ -293,8 +296,8 @@ function audit_read_params(array $get, string $role): array
 
     return [
         'q' => $q, 'area' => $area, 'from' => $from, 'to' => $to, 'status' => $status,
-        'role' => $role === 'admin' ? $filterRole : '', 'cls' => $role === 'faculty' ? $cls : '',
-        'card' => $role === 'admin' ? $card : '', 'scope' => $classWork ? 'class_work' : 'overview',
+        'role' => $role === 'superadmin' ? $filterRole : '', 'cls' => $role === 'faculty' ? $cls : '',
+        'card' => $role === 'superadmin' ? $card : '', 'scope' => $classWork ? 'class_work' : 'overview',
         'facultyId' => $ids['facultyId'], 'classId' => $ids['classId'], 'studentId' => $ids['studentId'],
         'signins' => $signins === '1', 'sort' => $sort === 'oldest' ? 'ASC' : 'DESC', 'page' => (int) $page,
         'pageSize' => AUDIT_PAGE_SIZE,
@@ -336,17 +339,18 @@ function audit_read_entries(PDO $pdo, array $viewer, array $p): array
     $where = ["e.action_code NOT IN ({$hidden})"];
     $params = [];
     $classWorkCodes = audit_sql_codes(static fn(array $c): bool => in_array($c[1], AUDIT_CLASS_WORK_AREAS, true) && !$c[2]);
-    if ($role === 'admin' && $p['scope'] === 'class_work') {
+    if ($role === 'superadmin' && $p['scope'] === 'class_work') {
         $where[] = "e.action_code IN ({$classWorkCodes})"; // read-only list of class work, nothing else
-    } elseif ($role === 'admin') {
-        // Overview codes always (failures and alerts included); anything else only the Dean's own, sign-ins behind the chip.
+    } elseif ($role === 'superadmin') {
+        // Overview codes always (failures and alerts included); anything else only the Superadmin's own, sign-ins behind the chip.
         $deanCodes = audit_sql_codes(static fn(array $c): bool => $c[2]);
         $ownSql = 'e.actor_user_id = ?' . ($p['signins'] ? '' : " AND e.action_code NOT IN ({$signinCodes})");
         $where[] = "(e.action_code IN ({$deanCodes}) OR ({$ownSql}))";
         $params[] = $me;
     } else {
-        $where[] = 'e.actor_user_id = ?' . ($p['signins'] ? '' : " AND e.action_code NOT IN ({$signinCodes})");
-        $params[] = $me;
+        // Own rows; a Dean handover also shows in the new Dean's own list (contract section 7).
+        $where[] = '((e.actor_user_id = ?' . ($p['signins'] ? '' : " AND e.action_code NOT IN ({$signinCodes})") . ") OR (e.action_code = 'dean_transferred' AND e.target_id = ?))";
+        array_push($params, $me, (string) $me);
     }
     $dateWhere = [];
     $dateParams = [];
@@ -450,7 +454,7 @@ function audit_read_entries(PDO $pdo, array $viewer, array $p): array
         $lookups = audit_read_lookups($pdo, array_merge(...array_values($byGroup)));
         foreach ($groups as $g) {
             if (isset($byGroup[$g['gkey']])) {
-                $entries[] = audit_build_entry($byGroup[$g['gkey']], (int) $g['n'], $lookups, $role === 'admin');
+                $entries[] = audit_build_entry($byGroup[$g['gkey']], (int) $g['n'], $lookups, $role === 'superadmin');
             }
         }
     }
@@ -467,8 +471,8 @@ function audit_read_entries(PDO $pdo, array $viewer, array $p): array
             $pdo->query("SELECT DISTINCT ua.user_id, ua.display_name FROM user_accounts ua JOIN class_sections cs ON cs.instructor_user_id = ua.user_id
                           WHERE cs.cs_id IN ({$used}) ORDER BY ua.display_name")->fetchAll(PDO::FETCH_ASSOC));
     }
-    if ($role === 'admin') {
-        // Attention cards: same date range, every Dean-visible failure/alert (not narrowed by the other filters).
+    if ($role === 'superadmin') {
+        // Attention cards: same date range, every overview failure/alert (not narrowed by the other filters).
         $attWhere = array_merge(["e.action_code IN ('login_failed','google_login_denied','refresh_reuse_detected','mfa_verification_failed','mfa_revoked','mfa_reset_by_dean')"], $dateWhere);
         $att = $pdo->prepare('SELECT e.action_code, COUNT(*) FROM audit_events e WHERE ' . implode(' AND ', $attWhere) . ' GROUP BY 1');
         $att->execute($dateParams);
@@ -787,7 +791,7 @@ function audit_who(array $r): array
     if ($name !== '' || $email !== '') {
         return [[
             'name' => $name !== '' ? $name : $email, 'email' => $email !== '' ? $email : null, 'role' => $role,
-            'roleLabel' => ['admin' => 'Dean', 'faculty' => 'Faculty', 'secretary' => 'Secretary', 'student' => 'Student'][$role] ?? ucfirst($role),
+            'roleLabel' => ['superadmin' => 'Superadmin', 'admin' => 'Dean', 'faculty' => 'Faculty', 'secretary' => 'Secretary', 'student' => 'Student'][$role] ?? ucfirst($role),
         ], null];
     }
     $unknown = $r['actor_user_id'] === null && in_array($code, ['login_failed', 'google_login_denied', 'student_auth_eligibility_denied'], true);

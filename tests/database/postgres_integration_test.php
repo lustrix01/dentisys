@@ -58,11 +58,24 @@ function integration_retire_fixture_classes(PDO $pdo, array $csIds, array $cours
     }
 }
 
+// INTEGRATION_CONTINUE_ON_FAIL=1: a failed check prints FAIL and the run goes on; the full FAIL list is printed and the
+// run exits 1 at the end. Use it once to collect every failure instead of fixing them one run at a time; gates run without it.
+$GLOBALS['integration_failures'] = [];
+if (getenv('INTEGRATION_CONTINUE_ON_FAIL') === '1') {
+    register_shutdown_function(static function (): void {
+        if ($GLOBALS['integration_failures'] === []) return;
+        fwrite(STDERR, "\n" . count($GLOBALS['integration_failures']) . " FAILED CHECKS:\n- " . implode("\n- ", $GLOBALS['integration_failures']) . "\n");
+        exit(1);
+    });
+}
+
 function expect_true(bool $condition, string $label): void
 {
     if (!$condition) {
         fwrite(STDERR, "FAIL: {$label}\n");
-        exit(1);
+        if (getenv('INTEGRATION_CONTINUE_ON_FAIL') !== '1') exit(1);
+        $GLOBALS['integration_failures'][] = $label;
+        return;
     }
     echo "PASS: {$label}\n";
 }
@@ -308,6 +321,7 @@ $expectedMigrations = [
     '065_class_session_defaults.sql',
     '066_class_join_codes.sql',
     '067_auto_sessions.sql',
+    '068_superadmin_role.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -470,6 +484,28 @@ foreach ($demoPasswords as $demoEmail => $demoPassword) {
 expect_same(200, $adminLoginStatus, 'Admin settings integration login returns HTTP 200');
 $adminAccessToken = (string) ($adminLoginBody['access_token'] ?? '');
 expect_true($adminAccessToken !== '', 'Admin settings integration login returns an access token');
+
+// 13.9: the Superadmin is its own account. Its routes are tested with $superAccessToken. The dev-seed row is reused; a database without
+// it gets one here. $superSession() mints a fresh session token after a test ended the old ones (sign-out, handover, 2FA reset).
+$superUserId = (int) $pdo->query("SELECT user_id FROM user_accounts WHERE role = 'superadmin'")->fetchColumn();
+$superFromSeed = $superUserId !== 0; // false: this test created the row, so the dev-seed checks do not apply
+if ($superUserId === 0) {
+    $superInsert = $pdo->prepare("INSERT INTO user_accounts (login_email, password_hash, role, display_name, status, created_at) VALUES ('superadmin@bicol-u.edu.ph', ?, 'superadmin', 'Super Admin', 'Active', CURRENT_TIMESTAMP(6)) RETURNING user_id");
+    $superInsert->execute([password_hash('Superadmin123!', PASSWORD_DEFAULT)]);
+    $superUserId = (int) $superInsert->fetchColumn();
+}
+$superEmail = (string) $pdo->query("SELECT login_email FROM user_accounts WHERE user_id = {$superUserId}")->fetchColumn();
+$superSession = static function () use ($pdo, $superUserId): string {
+    $superConfig = app_config();
+    $pdo->beginTransaction();
+    $locked = auth_lock_user_for_session($pdo, $superUserId);
+    $session = auth_create_session($pdo, $locked, '127.0.0.1', 'PostgreSQL Integration Test', null, new DateTimeImmutable('+1 hour', new DateTimeZone('UTC')));
+    $pdo->commit();
+    return auth_issue_access_token($locked, $session, config_key_bytes_at_least($superConfig['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY'))['token'];
+};
+$superAccessToken = $superSession();
+[$superMeStatus] = integration_http_get_json('/api/admin/overview', $superAccessToken);
+expect_same(200, $superMeStatus, 'The Superadmin session token opens the Superadmin routes');
 
 // Owner decision 2026-09-27: Admin is restricted to its own pages and APIs.
 foreach (['/api/faculty/classes', '/api/faculty/dashboard/kpis', '/api/secretary/dashboard/kpis', '/api/secretary/profile'] as $adminForbiddenPath) {
@@ -1323,12 +1359,15 @@ $pdo->prepare(
 
 [$deanDashboardStatus, $deanDashboardBody] = integration_http_get_json('/api/admin/dashboard/kpis', $adminAccessToken);
 expect_same(200, $deanDashboardStatus, 'Dean Dashboard data loads');
-$deanRecentEvents = $deanDashboardBody['recentAuditEvents'] ?? null;
-expect_true(is_array($deanRecentEvents) && count($deanRecentEvents) >= 1 && count($deanRecentEvents) <= 20, 'Dean Dashboard returns up to the newest 20 overview entries');
-[$deanOverviewStatus, $deanOverviewBody] = integration_http_get_json('/api/admin/audit-logs', $adminAccessToken);
-expect_same(200, $deanOverviewStatus, 'Dean Audit Trail overview loads');
-expect_same(array_column(array_slice($deanOverviewBody['entries'] ?? [], 0, count($deanRecentEvents)), 'id'), array_column($deanRecentEvents, 'id'), 'The Dashboard lists the newest Audit Trail overview entries in the same order');
-expect_true(array_key_exists('who', $deanRecentEvents[0] ?? []) && array_key_exists('occurredAt', $deanRecentEvents[0] ?? []), 'Each Dashboard entry carries the recorded name and Manila time');
+expect_true(!array_key_exists('recentAuditEvents', $deanDashboardBody) && !array_key_exists('academicTermReminder', $deanDashboardBody), 'DS5: the Dean Dashboard no longer carries recentAuditEvents or academicTermReminder');
+[$superOverviewStatus, $superOverviewBody] = integration_http_get_json('/api/admin/overview', $superAccessToken);
+expect_same(200, $superOverviewStatus, 'Superadmin Overview data loads');
+$deanRecentEvents = $superOverviewBody['recentAuditEvents'] ?? null;
+expect_true(is_array($superOverviewBody) && is_array($deanRecentEvents) && count($deanRecentEvents) >= 1 && count($deanRecentEvents) <= 10, 'DS6: the Overview returns up to the newest 10 audit entries');
+[$deanOverviewStatus, $deanOverviewBody] = integration_http_get_json('/api/admin/audit-logs', $superAccessToken);
+expect_same(200, $deanOverviewStatus, 'Superadmin Audit Trail overview loads');
+expect_same(array_column(array_slice($deanOverviewBody['entries'] ?? [], 0, count($deanRecentEvents)), 'id'), array_column($deanRecentEvents, 'id'), 'The Overview lists the newest Superadmin Audit Trail entries in the same order');
+expect_true(array_key_exists('who', $deanRecentEvents[0] ?? []) && array_key_exists('occurredAt', $deanRecentEvents[0] ?? []), 'Each Overview entry carries the recorded name and Manila time');
 [$adminSettingsGetStatus, $adminSettingsGetBody] = integration_http_get_json('/api/admin/settings', $adminAccessToken);
 expect_same(200, $adminSettingsGetStatus, 'Existing Admin transmutation defaults can be read through the API');
 $adminSettingsBefore = $adminSettingsGetBody['settings'] ?? [];
@@ -7412,8 +7451,8 @@ expect_same(1, (int) $mfaRevokeAuditStmt->fetchColumn(), 'Disabling authenticato
 
 // Dean audit trail: server-side filters and paging, with target, reason and
 // the display name recorded at the time.
-[$auditTrailStatus, $auditTrailBody] = integration_http_get_json('/api/admin/audit-logs?area=' . rawurlencode('Sign-in & security') . '&q=' . rawurlencode('mfa-revoke-'), $adminAccessToken);
-expect_same(200, $auditTrailStatus, 'Dean audit trail loads');
+[$auditTrailStatus, $auditTrailBody] = integration_http_get_json('/api/admin/audit-logs?area=' . rawurlencode('Sign-in & security') . '&q=' . rawurlencode('mfa-revoke-'), $superAccessToken);
+expect_same(200, $auditTrailStatus, 'Superadmin audit trail loads');
 $auditTrailRevoke = null;
 foreach ($auditTrailBody['entries'] ?? [] as $auditTrailRow) {
     if (($auditTrailRow['details']['technical']['actionCode'] ?? null) === 'mfa_revoked' && str_starts_with((string) ($auditTrailRow['who']['email'] ?? ''), 'mfa-revoke-')) {
@@ -7428,12 +7467,12 @@ expect_same('Google MFA Integration User', $auditTrailRevoke['who']['name'] ?? n
 expect_true(preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/', (string) ($auditTrailRevoke['occurredAt'] ?? '')) === 1, 'Audit trail times are Asia/Manila ISO-8601');
 expect_true(in_array('Sign-in & security', $auditTrailBody['areas'] ?? [], true) && in_array('People & accounts', $auditTrailBody['areas'] ?? [], true), 'Audit trail area list is not narrowed by the area filter');
 expect_true(($auditTrailBody['attention']['mfaTurnedOff'] ?? 0) >= 1, 'Audit trail attention counts include the 2FA turned off event');
-[$auditPageOneStatus, $auditPageOne] = integration_http_get_json('/api/admin/audit-logs?page=1', $adminAccessToken);
-[$auditPageTwoStatus, $auditPageTwo] = integration_http_get_json('/api/admin/audit-logs?page=2', $adminAccessToken);
+[$auditPageOneStatus, $auditPageOne] = integration_http_get_json('/api/admin/audit-logs?page=1', $superAccessToken);
+[$auditPageTwoStatus, $auditPageTwo] = integration_http_get_json('/api/admin/audit-logs?page=2', $superAccessToken);
 expect_same([200, 200], [$auditPageOneStatus, $auditPageTwoStatus], 'Audit trail pages load');
 expect_same(min(50, (int) ($auditPageOne['total'] ?? 0)), count($auditPageOne['entries'] ?? []), 'Audit trail pages hold 50 entries');
 expect_true(($auditPageOne['entries'][0]['id'] ?? null) !== ($auditPageTwo['entries'][0]['id'] ?? ''), 'Audit trail page 2 returns different rows');
-[$auditBadDateStatus] = integration_http_get_json('/api/admin/audit-logs?from=yesterday', $adminAccessToken);
+[$auditBadDateStatus] = integration_http_get_json('/api/admin/audit-logs?from=yesterday', $superAccessToken);
 expect_same(422, $auditBadDateStatus, 'Audit trail rejects a malformed date');
 
 // BIO-002 / BIO-005: the Dean can revoke an enrollment, an inactive Student's
@@ -7468,14 +7507,14 @@ $pdo->prepare(
      VALUES (?, 'approved', 1, 'active', 'integration-stored-reference', '2099-12-31', CURRENT_TIMESTAMP(6))"
 )->execute([$bioStudents['Stored']]);
 
-[$deanRevokeStatus] = integration_http_json('/api/admin/biometrics/revoke', $adminAccessToken, [
+[$deanRevokeStatus] = integration_http_json('/api/admin/biometrics/revoke', $superAccessToken, [
     'studentId' => $bioStudents['Dean'],
     'reason' => 'Enrollment captured in poor lighting',
 ]);
-expect_same(200, $deanRevokeStatus, 'The Dean can revoke a Student biometric enrollment');
+expect_same(200, $deanRevokeStatus, 'The Superadmin can revoke a Student biometric enrollment');
 $bioStatusStmt->execute([$bioStudents['Dean']]);
 expect_same(['enrollment_status' => 'revoked', 'consent_status' => 'approved'], $bioStatusStmt->fetch(PDO::FETCH_ASSOC), 'Dean revocation deletes the enrollment and keeps consent so the Student can re-enroll');
-[$deanRevokeAgainStatus] = integration_http_json('/api/admin/biometrics/revoke', $adminAccessToken, [
+[$deanRevokeAgainStatus] = integration_http_json('/api/admin/biometrics/revoke', $superAccessToken, [
     'studentId' => $bioStudents['Dean'],
     'reason' => 'Enrollment captured in poor lighting',
 ]);
@@ -7484,8 +7523,10 @@ expect_same(409, $deanRevokeAgainStatus, 'Revoking an enrollment that is no long
     'studentId' => $bioStudents['Inactive'],
     'reason' => 'Faculty must not revoke enrollments',
 ]);
-expect_same(403, $facultyRevokeStatus, 'Only the Dean can revoke a Student biometric enrollment');
-[$storedRevokeStatus] = integration_http_json('/api/admin/biometrics/revoke', $adminAccessToken, [
+expect_same(403, $facultyRevokeStatus, 'Faculty cannot revoke a Student biometric enrollment');
+[$deanRevokeDeniedStatus] = integration_http_json('/api/admin/biometrics/revoke', $adminAccessToken, ['studentId' => $bioStudents['Inactive'], 'reason' => 'The Dean no longer revokes enrollments']);
+expect_same(403, $deanRevokeDeniedStatus, 'Only the Superadmin can revoke a Student biometric enrollment (4.1)');
+[$storedRevokeStatus] = integration_http_json('/api/admin/biometrics/revoke', $superAccessToken, [
     'studentId' => $bioStudents['Stored'],
     'reason' => 'Stored reference cannot be deleted here',
 ]);
@@ -7866,6 +7907,7 @@ require __DIR__ . '/grouped_grading_integration.php';
 require __DIR__ . '/lecture_only_grading_integration.php';
 require __DIR__ . '/audit_read_integration.php';
 require __DIR__ . '/superadmin_integration.php';
+require __DIR__ . '/superadmin_split_integration.php';
 require __DIR__ . '/face_flags_integration.php';
 require __DIR__ . '/audit_chain_integration.php';
 

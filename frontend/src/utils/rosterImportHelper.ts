@@ -304,7 +304,7 @@ export function termForHeader(header: RosterPDFHeader, currentSchoolYear: string
   const fileYear = header.schoolYear?.replace(/\s/g, '') ?? '';
   if (fileYear && fileYear !== currentSchoolYear.replace(/\s/g, '')) return { termId: '', noTerm: `This file is for ${formatSchoolYear(fileYear)}. Choose a ${formatSchoolYear(currentSchoolYear)} term to create the class here.` };
   const term = header.semester && fileYear && terms.find(item => item.id !== null && item.schoolYear.replace(/\s/g, '') === fileYear && semesterCode(item.semester) === header.semester);
-  return term ? { termId: String(term.id) } : { termId: '', noTerm: `No Dean-defined term matches ${formatSchoolYear(fileYear)} ${header.semester ? semesterName[header.semester] : ''}. Choose a term from the list or ask the Dean to add it.`.replace(/\s+/g, ' ').trim() };
+  return term ? { termId: String(term.id) } : { termId: '', noTerm: `No defined term matches ${formatSchoolYear(fileYear)} ${header.semester ? semesterName[header.semester] : ''}. Choose a term from the list or ask the Superadmin to add it.`.replace(/\s+/g, ' ').trim() };
 }
 
 /** N3a: DentiSys keeps the units it has recorded for a course; say so when the file disagrees. */

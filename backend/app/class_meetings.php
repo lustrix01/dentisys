@@ -126,7 +126,7 @@ function class_rooms_require_active(PDO $pdo, ?string $lecRoom, ?string $labRoom
     foreach ($meetings as $meeting) $candidates[] = ['meetings', $meeting['room']];
     foreach ($candidates as [$field, $room]) {
         $retired = room_retired_by_name($pdo, $room);
-        if ($retired !== null) throw new ValidationException([$field => "{$retired} was retired by the Dean. Pick another room."]);
+        if ($retired !== null) throw new ValidationException([$field => "{$retired} was retired. Pick another room."]);
     }
 }
 

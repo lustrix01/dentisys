@@ -115,6 +115,7 @@ Development-only credentials (every account of a role shares the password):
 
 | Role | E-mail | Password |
 | --- | --- | --- |
+| Superadmin | `superadmin@bicol-u.edu.ph` | `Superadmin123!`, then the 6-digit code for authenticator secret `JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP` |
 | Dean (Admin) | `admin@bicol-u.edu.ph` | `Admin123!` |
 | Faculty | `faculty@bicol-u.edu.ph` | `Faculty123!` |
 | Secretary | `secretary@bicol-u.edu.ph` | `Secretary123!` |
@@ -368,21 +369,23 @@ If the settings were empty on the first start, fill them in and run the start sc
 
 If invitation delivery fails, fix the mail configuration and run the start script again. The failed token is revoked and the retry sends a fresh invitation for the same pending Dean account. An invitation whose delivery succeeded is left pending without being resent on each start.
 
-### B5a. Dean changes and retired emails (system administrator only)
+### B5a. The Superadmin account and retired emails (system administrator only)
 
-The Dean role and the Dean's own login email change only through a server script, never in the app (`docs/contracts/roles.md`). Run it inside the web container; add the single-server `--env-file` and `-f` flags from B6 on a single server:
+There is exactly one Superadmin (spec SYS-001). The server script creates it and changes its login email; everything else the Superadmin changes itself in its Profile, and the Superadmin hands the Dean role over in the app (People & Accounts). Run the script inside the web container; add the single-server `--env-file` and `-f` flags from B6 on a single server:
 
 ```bash
-docker compose exec web php /var/www/html/backend/bin/account-admin.php transfer-dean --to new.dean@bicol-u.edu.ph --old-dean faculty --reason "New Dean appointed"
-docker compose exec web php /var/www/html/backend/bin/account-admin.php move-email --to new.address@bicol-u.edu.ph --reason "Old mailbox compromised"
+docker compose exec web php /var/www/html/backend/bin/account-admin.php create-superadmin --email it.admin@bicol-u.edu.ph --first Paolo --last Ramos --reason "College IT office runs DentiSYS"
+docker compose exec web php /var/www/html/backend/bin/account-admin.php reset-superadmin-2fa --reason "Lost phone and recovery codes"
+docker compose exec web php /var/www/html/backend/bin/account-admin.php move-email --to new.address@bicol-u.edu.ph --reason "New person in the job"
 docker compose exec web php /var/www/html/backend/bin/account-admin.php unretire-email old.address@bicol-u.edu.ph --reason "College gave the address back"
 ```
 
-- `transfer-dean` makes an active Faculty member the Dean. `--old-dean faculty` keeps the outgoing Dean as Faculty; `--old-dean deactivate` deactivates them (there is no default). Both are signed out and emailed. It refuses while a term is in progress (today in Asia/Manila is between any academic term's start and end dates), when the new Dean has a class whose term has not ended, or when the target is not an active Faculty member.
-- `move-email` moves the Dean's own account to a new address: the old address is retired, the password, 2FA and Google link are removed, every session ends, and a password-setup link goes to the new address only.
-- `unretire-email` removes an address from the retired list. Moved-away addresses (including those the Dean moves in the app) can never be used again until then.
+- `create-superadmin` creates the Superadmin and emails a set-password link (7 days). Optional `--prefix`, `--middle` and `--suffix` complete the name. Running it again while the account is still pending sends a new link and revokes the old one; a different `--email` replaces a mistyped one. It refuses once the Superadmin has activated, and an address that is not `@bicol-u.edu.ph`, already used, or retired.
+- On the first sign-in the Superadmin must set up authenticator 2FA before any page opens, and cannot turn it off later. `reset-superadmin-2fa` is for a lockout only (phone and recovery codes both lost): it removes the authenticator and recovery codes and signs the Superadmin out everywhere; the next sign-in sets 2FA up again.
+- `move-email` moves the Superadmin's account to a new address (also how a new person takes the job): the old address is retired, the password, 2FA and Google link are removed, every session ends, and a password-setup link goes to the new address only.
+- `unretire-email` removes an address from the retired list. Moved-away addresses (including those the Superadmin moves in the app) can never be used again until then.
 
-Each command prints what it will do, waits for `YES` on the keyboard, runs in one transaction and writes an Audit Trail row as System. `--reason` (8 to 240 characters) is required.
+Each command prints what it will do, waits for `YES` on the keyboard, runs in one transaction and writes an Audit Trail row as System. `--reason` (8 to 240 characters) is required. No command takes or prints a password.
 
 ### B6. Stop, upgrade, and restore
 

@@ -89,6 +89,13 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\demo-test.ps1 -Prod
 
 It reads `~\.dentisys\prod-test.env` (yours only: `PROD_BASE_URL` and an email and password for each role's test account), signs in as each role, and checks the audit chain over SSH with your `prod.env` settings. Claude has no access to either file.
 
+### A site without a Superadmin
+
+The Superadmin account exists only after the server script creates it (spec SYS-001, README B5a). When a release brings the Superadmin role (migration `068_superadmin_role.sql`) to a site that has no Superadmin yet, the Dean loses the setup and account pages at once, so create the Superadmin right after the new version runs:
+
+- Demo: Claude, right after step 5, runs `account-admin.php create-superadmin` in the demo's web container through `.\scripts\demo-vps.ps1 run` (pipe `YES` to it), with the demo Superadmin address from `~/.dentisys/demo.env`.
+- Production: the Owner, right after step 9, runs the same command on the production server with the college's Superadmin address. The link goes to that address; the Superadmin sets the password and, at the first sign-in, 2FA.
+
 ### Rolling back
 
 To go back to the previous version, promote the previous approved sha the same way (step 9). Database migrations only ever add, so older code runs on the newer database. Keep the sha of the last good release from Claude's report.

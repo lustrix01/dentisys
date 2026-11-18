@@ -37,6 +37,7 @@ interface AuthState {
   phase: AuthPhase;
   errorMessage: string;
   twoFactorToken: string | null;
+  twoFactorSetupToken: string | null;
   accessToken: string | null;
   user: SafeUser | null;
   recoveryCodes: string[];
@@ -45,6 +46,7 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   beginLogin: () => void;
   storeTwoFactorChallenge: (token: string) => void;
+  storeTwoFactorSetup: (token: string) => void;
   setAccessToken: (token: string) => void;
   setUser: (user: SafeUser) => void;
   setAuthenticated: () => void;
@@ -61,6 +63,7 @@ const initialState: AuthState = {
   phase: 'bootstrapping',
   errorMessage: '',
   twoFactorToken: null,
+  twoFactorSetupToken: null,
   accessToken: null,
   user: null,
   recoveryCodes: [],
@@ -170,6 +173,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({
       ...prev,
       twoFactorToken: token,
+      phase: 'two_factor_verification_required',
+      errorMessage: '',
+    }));
+  }, []);
+
+  const storeTwoFactorSetup = useCallback((token: string) => {
+    setState(prev => ({
+      ...prev,
+      twoFactorSetupToken: token,
       phase: 'two_factor_verification_required',
       errorMessage: '',
     }));
@@ -308,6 +320,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ...state,
     beginLogin,
     storeTwoFactorChallenge,
+    storeTwoFactorSetup,
     setAccessToken,
     setUser,
     setAuthenticated,

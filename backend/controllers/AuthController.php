@@ -54,6 +54,8 @@ function handle_login(): void
 
             auth_controller_emit($response);
             return;
+        } elseif ($result['type'] === 'mfa_setup_required') {
+            $payload = auth_mfa_setup_payload($result);
         } else {
             $payload = [
                 'type' => 'two_factor_required',

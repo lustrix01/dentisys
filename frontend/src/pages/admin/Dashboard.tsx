@@ -5,7 +5,6 @@ import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import { getAdminDashboardKpisApi } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
-import { AuditCompactList } from '../../components/AuditTrailPage';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -49,7 +48,6 @@ export const Dashboard: React.FC = () => {
     { label: 'Irregular reenrollment', count: Number(apiData?.statusCounts?.irregular_reenrollment) || 0, color: '#e11d48' },
   ];
   const classAttendance: Array<{ name: string; rate: number }> = apiData?.classAttendance ?? [];
-  const recentAuditEvents = apiData?.recentAuditEvents ?? [];
   const hasGrades = gradeDistribution.some(bucket => bucket.count > 0);
   const hasStanding = standing.some(item => item.count > 0);
 
@@ -97,10 +95,6 @@ export const Dashboard: React.FC = () => {
         />
       </div>
 
-      {apiData?.academicTermReminder && <div role="status" className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200">
-        This term ends on {apiData.academicTermReminder.endDate}. Add dates for {apiData.academicTermReminder.semester} {apiData.academicTermReminder.schoolYear}.
-        <button type="button" onClick={() => navigate('/admin/terms')} className="ml-2 font-bold underline">Open academic terms</button>
-      </div>}
       {/* 2-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
@@ -115,7 +109,7 @@ export const Dashboard: React.FC = () => {
                   Faculty Email Invitations & Operations
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-lg leading-relaxed">
-                  Send email invitations to new faculty members, monitor registered accounts, and analyze audit logs.
+                  Send email invitations to new faculty members, and monitor registered accounts.
                 </p>
               </div>
 
@@ -225,19 +219,6 @@ export const Dashboard: React.FC = () => {
               </div>
             </section>
           </div>
-
-          {/* 4. Latest audit events */}
-          <section aria-label="Latest audit events" className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Latest Audit Events</h3>
-              <button type="button" onClick={() => navigate('/admin/audit-trail')} className="text-xs font-bold whitespace-nowrap text-accent-600 hover:underline cursor-pointer">View audit trail</button>
-            </div>
-            {recentAuditEvents.length === 0 ? (
-              <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">No audit events recorded yet.</p>
-            ) : (
-              <AuditCompactList entries={recentAuditEvents} />
-            )}
-          </section>
 
         </div>
 

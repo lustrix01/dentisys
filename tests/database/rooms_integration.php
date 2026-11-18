@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 // Included by the full disposable PostgreSQL suite after Faculty/Admin login (ROOM-001).
-$roomPost = static fn(string $path, array $body): array => integration_http_json('/api/admin/rooms' . $path, $adminAccessToken, $body);
+$roomPost = static fn(string $path, array $body): array => integration_http_json('/api/admin/rooms' . $path, $superAccessToken, $body);
 
 [$roomForbidden] = integration_http_get_json('/api/admin/rooms', $seedFacultyAccessToken);
-expect_same(403, $roomForbidden, 'Faculty cannot manage Dean rooms');
+expect_same(403, $roomForbidden, 'Faculty cannot manage rooms');
 [$roomForbiddenPost] = integration_http_json('/api/admin/rooms', $seedFacultyAccessToken, ['name' => 'X', 'group' => 'Y']);
 expect_same(403, $roomForbiddenPost, 'Faculty cannot create rooms');
 [$roomAnon] = integration_http_get_json('/api/rooms', '');
@@ -13,10 +13,10 @@ expect_same(401, $roomAnon, 'Room list requires authentication');
 [$roomFacultyStatus, $roomFaculty] = integration_http_get_json('/api/rooms', $seedFacultyAccessToken);
 expect_same(200, $roomFacultyStatus, 'Faculty can read the room list');
 expect_true(count($roomFaculty['rooms'] ?? []) >= 3 && !isset($roomFaculty['rooms'][0]['usage']), 'Faculty room list has the starting rooms and no usage');
-[, $roomAdminList] = integration_http_get_json('/api/admin/rooms', $adminAccessToken);
-expect_true(in_array('Lecture/Laboratory', $roomAdminList['groups'] ?? [], true), 'Dean list returns active category names');
+[, $roomAdminList] = integration_http_get_json('/api/admin/rooms', $superAccessToken);
+expect_true(in_array('Lecture/Laboratory', $roomAdminList['groups'] ?? [], true), 'Superadmin list returns active category names');
 expect_same(['CDM-1', 'CDM-2', 'CDM-3'], array_column(array_filter($roomAdminList['rooms'], static fn(array $r): bool => $r['group'] === 'Lecture/Laboratory'), 'name'), 'Starting rooms are CDM-1..3 (old seed removed)');
-expect_true(isset($roomAdminList['categories'][0]['roomCount'], $roomAdminList['categories'][0]['activeRoomCount']), 'Dean list returns categories with counts');
+expect_true(isset($roomAdminList['categories'][0]['roomCount'], $roomAdminList['categories'][0]['activeRoomCount']), 'Superadmin list returns categories with counts');
 
 // Create, validation, unique key including retired rooms.
 [$roomCreateStatus, $roomCreate] = $roomPost('', ['name' => '  Zz   Test Room ', 'group' => 'Test Group', 'latitude' => 13.1, 'longitude' => 123.7, 'radiusMeters' => 100]);
@@ -61,7 +61,7 @@ $roomSession->execute([$roomClassId, $roomFacultyId, $roomFacultyId, 'ROOM-SCHED
 $roomScheduledId = (int) $roomSession->fetchColumn();
 $roomSession->execute([$roomClassId, $roomFacultyId, $roomFacultyId, 'ROOM-REV', 'revoked', '2099-01-02 00:00:00']);
 $roomRevokedId = (int) $roomSession->fetchColumn();
-[, $roomListed] = integration_http_get_json('/api/admin/rooms', $adminAccessToken);
+[, $roomListed] = integration_http_get_json('/api/admin/rooms', $superAccessToken);
 $roomListedRow = array_values(array_filter($roomListed['rooms'], static fn(array $r): bool => $r['roomId'] === $roomId))[0];
 expect_same(['classes' => 2, 'meetings' => 1, 'scheduledSessions' => 1], $roomListedRow['usage'], 'In-use counts ignore case, spaces and a legacy schedule suffix, not longer names, past-year classes or ended sessions');
 expect_same(true, $roomListedRow['inUse'], 'A room used by a current class is in use');
@@ -135,25 +135,25 @@ $roomPost('/retire', ['roomId' => $roomHistId]);
 expect_same(200, $roomHistDelStatus, 'A retired room used only in the past is deleted');
 
 // Categories: retire/delete rules and restoring into a retired category.
-[$catStatus, $cat] = integration_http_json('/api/admin/room-categories', $adminAccessToken, ['name' => ' Zz  Cat ']);
+[$catStatus, $cat] = integration_http_json('/api/admin/room-categories', $superAccessToken, ['name' => ' Zz  Cat ']);
 expect_same(201, $catStatus, 'Dean creates a category');
 $catId = (int) $cat['category']['categoryId'];
-[$catDupStatus, $catDup] = integration_http_json('/api/admin/room-categories', $adminAccessToken, ['name' => 'zz-cat']);
+[$catDupStatus, $catDup] = integration_http_json('/api/admin/room-categories', $superAccessToken, ['name' => 'zz-cat']);
 expect_same(409, $catDupStatus, 'Category names ignore case, spaces and dashes');
 expect_same('CATEGORY_NAME_TAKEN', $catDup['code'] ?? '', 'Duplicate category code');
-[$catRenameStatus] = integration_http_json('/api/admin/room-categories/update', $adminAccessToken, ['categoryId' => $catId, 'name' => 'Zz Cat Renamed']);
+[$catRenameStatus] = integration_http_json('/api/admin/room-categories/update', $superAccessToken, ['categoryId' => $catId, 'name' => 'Zz Cat Renamed']);
 expect_same(200, $catRenameStatus, 'Dean renames a category');
 [, $catRoom] = $roomPost('', ['name' => 'Zz Cat Room', 'categoryId' => $catId]);
 $catRoomId = (int) $catRoom['room']['roomId'];
 expect_same('Zz Cat Renamed', $catRoom['room']['group'], 'A room reads its category name');
-[$catRetireBlocked, $catRetireBlockedBody] = integration_http_json('/api/admin/room-categories/retire', $adminAccessToken, ['categoryId' => $catId]);
+[$catRetireBlocked, $catRetireBlockedBody] = integration_http_json('/api/admin/room-categories/retire', $superAccessToken, ['categoryId' => $catId]);
 expect_same(409, $catRetireBlocked, 'A category with an active room cannot be retired');
 expect_same('CATEGORY_HAS_ACTIVE_ROOMS', $catRetireBlockedBody['code'] ?? '', 'Category retire refusal code');
-[$catDelBlocked, $catDelBlockedBody] = integration_http_json('/api/admin/room-categories/delete', $adminAccessToken, ['categoryId' => $catId]);
+[$catDelBlocked, $catDelBlockedBody] = integration_http_json('/api/admin/room-categories/delete', $superAccessToken, ['categoryId' => $catId]);
 expect_same(409, $catDelBlocked, 'A category with rooms cannot be deleted');
 expect_same('CATEGORY_NOT_EMPTY', $catDelBlockedBody['code'] ?? '', 'Category delete refusal code');
 $roomPost('/retire', ['roomId' => $catRoomId]);
-[$catRetireOk] = integration_http_json('/api/admin/room-categories/retire', $adminAccessToken, ['categoryId' => $catId]);
+[$catRetireOk] = integration_http_json('/api/admin/room-categories/retire', $superAccessToken, ['categoryId' => $catId]);
 expect_same(200, $catRetireOk, 'A category whose rooms are all retired can be retired');
 [$catRestoreRoom, $catRestoreRoomBody] = $roomPost('/restore', ['roomId' => $catRoomId]);
 expect_same(409, $catRestoreRoom, 'A room cannot be restored into a retired category');
@@ -161,14 +161,14 @@ expect_same('ROOM_CATEGORY_RETIRED', $catRestoreRoomBody['code'] ?? '', 'Restore
 [$catAddRoom, $catAddRoomBody] = $roomPost('', ['name' => 'Zz Cat Room 2', 'categoryId' => $catId]);
 expect_same(409, $catAddRoom, 'A room cannot be added to a retired category');
 expect_same('ROOM_CATEGORY_RETIRED', $catAddRoomBody['code'] ?? '', 'Add into retired category code');
-[$catRestoreOk] = integration_http_json('/api/admin/room-categories/restore', $adminAccessToken, ['categoryId' => $catId]);
+[$catRestoreOk] = integration_http_json('/api/admin/room-categories/restore', $superAccessToken, ['categoryId' => $catId]);
 expect_same(200, $catRestoreOk, 'Dean restores a category');
 [$catRoomRestoreOk] = $roomPost('/restore', ['roomId' => $catRoomId]);
 expect_same(200, $catRoomRestoreOk, 'A room is restored once its category is active');
 $roomPost('/retire', ['roomId' => $catRoomId]);
 $roomPost('/delete', ['roomId' => $catRoomId]);
-integration_http_json('/api/admin/room-categories/retire', $adminAccessToken, ['categoryId' => $catId]);
-[$catDelOk] = integration_http_json('/api/admin/room-categories/delete', $adminAccessToken, ['categoryId' => $catId]);
+integration_http_json('/api/admin/room-categories/retire', $superAccessToken, ['categoryId' => $catId]);
+[$catDelOk] = integration_http_json('/api/admin/room-categories/delete', $superAccessToken, ['categoryId' => $catId]);
 expect_same(200, $catDelOk, 'An empty category is deleted');
 expect_true((int) $pdo->query("SELECT COUNT(*) FROM audit_events WHERE action_code IN ('room_category_created','room_category_updated','room_category_retired','room_category_restored','room_category_deleted')")->fetchColumn() >= 5, 'Category changes are audited');
 

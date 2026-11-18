@@ -35,7 +35,7 @@ export const roomsJson = (extra: Array<Record<string, unknown>> = []) => ({ stat
 
 const KNOWN_API_PATHS = new Set([
   '/api/rooms', '/api/admin/people', '/api/admin/courses', '/api/admin/rooms', '/api/admin/overview', '/api/admin/face-flags', '/api/admin/people/filters',
-  '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/google', '/api/auth/google/link', '/api/auth/google/link/profile', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/faculty/activate', '/api/auth/mfa/enroll/start',
+  '/api/admin/people/transfer-dean', '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/google', '/api/auth/google/link', '/api/auth/google/link/profile', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/faculty/activate', '/api/auth/mfa/enroll/start',
   '/api/auth/mfa/enroll/confirm', '/api/auth/mfa/verify', '/api/auth/mfa/recover', '/api/auth/mfa/settings',
   '/api/auth/mfa/settings/recovery-codes', '/api/auth/mfa/settings/revoke', '/api/auth/me', '/api/auth/refresh', '/api/auth/theme',
   '/api/auth/logout', '/api/auth/password/reset-request', '/api/auth/password/reset-confirm',
@@ -114,8 +114,11 @@ function responseFor(pathname: string, method: string): unknown {
     faceFlagsOpen: 0,
     accounts: { faculty: { active: 0, invited: 0, deactivated: 0 }, students: { active: 0, invited: 0, deactivated: 0 } },
     signIns: [], security: { twoFactor: { faculty: { on: 0, total: 0 }, students: { on: 0, total: 0 } }, failedSignIns: [] },
+    recentAuditEvents: [],
     yearLevels: [], sectionsByCourse: [], setup: { currentTerm: null, courses: { active: 0, retired: 0 }, rooms: { active: 0, retired: 0 } },
   };
+  if (pathname === '/api/auth/mfa/enroll/start') return { confirmation_token: 'mock-confirmation', provisioning_uri: 'otpauth://totp/DentiSYS:superadmin?secret=JBSWY3DPEHPK3PXP', qr_code_data_uri: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', base32_secret: 'JBSWY3DPEHPK3PXP' };
+  if (pathname === '/api/auth/mfa/enroll/confirm') return { status: 'ok', recovery_codes: ['AAAA-1111', 'BBBB-2222', 'CCCC-3333', 'DDDD-4444', 'EEEE-5555', 'FFFF-6666', 'GGGG-7777', 'HHHH-8888'], access_token: 'mock-superadmin-session' };
   if (pathname === '/api/runtime-config') return { status: 'ok', ...DEFAULT_RUNTIME_CONFIG };
   if (pathname === '/api/auth/refresh') return { access_token: 'mock-refresh-token', user: { user_id: 100 } };
   if (pathname === '/api/auth/me') return { id: 100, user_id: 100, login_email: 'mock@bicol-u.edu.ph', display_name: 'Mock User', role: 'faculty', session_uuid: 'server-fixture-session', authentication_source: 'password' };
@@ -307,4 +310,15 @@ export async function openAccountMenu(page: Page) {
   const phoneAvatar = page.getByTitle('Profile menu');
   if (await phoneAvatar.isVisible()) await phoneAvatar.click();
   else await page.locator('header button:has(.lucide-chevron-down)').click();
+}
+
+// 13.9: signs in through the real login form with a mocked account of the given role. The Superadmin lands on its Overview, everyone else on '/'.
+export async function signInAs(page: Page, role: 'admin' | 'superadmin', displayName = role === 'admin' ? 'Dr. Dean Admin' : 'Sam Superadmin') {
+  await page.route('**/api/auth/login', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ type: 'direct_login', access_token: `mock-${role}-token` }) }));
+  await page.route('**/api/auth/me', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 100, user_id: 100, login_email: `${role}@bicol-u.edu.ph`, display_name: displayName, role }) }));
+  await page.goto('/login');
+  await page.fill('input[inputmode="email"]', `${role}@bicol-u.edu.ph`);
+  await page.fill('input[type="password"]', 'Password123!');
+  await page.click('button[type="submit"]');
+  await expect(page).toHaveURL(role === 'superadmin' ? '/superadmin/overview' : '/');
 }

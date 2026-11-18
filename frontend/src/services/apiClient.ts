@@ -269,7 +269,7 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
   if (status === 404) return backendMessage || 'The requested record was not found.';
   if (status === 409) return backendMessage || 'This request conflicts with the current account state.';
   if (status === 401) return 'Authentication failed. Sign in again.';
-  if (status === 403) return 'Access denied. Contact the Dean.';
+  if (status === 403) return 'Access denied.';
   if (status === 429 && backendMessage) return backendMessage;
   if (status === 429) return 'Too many sign-in attempts. Wait before trying again.';
   if (status === 503) return 'Service is temporarily unavailable. Try again later.';
@@ -440,7 +440,7 @@ export function login(email: string, password: string): Promise<LoginResponse> {
 }
 
 export interface GoogleLoginResponse extends LoginResponse {
-  type: 'direct_login' | 'two_factor_required' | 'account_link_required' | 'google_linked';
+  type: 'direct_login' | 'two_factor_required' | 'two_factor_setup_required' | 'account_link_required' | 'google_linked';
   account_link_required?: boolean;
   email?: string;
   link_challenge_token?: string;
@@ -497,12 +497,12 @@ export function createDevelopmentMockStudentSession(): Promise<LoginResponse> {
   return request<LoginResponse>('POST', '/auth/development/mock-student-session', {});
 }
 
-export function startEnrollment(): Promise<EnrollStartResponse> {
-  return request<EnrollStartResponse>('POST', '/auth/mfa/enroll/start');
+export function startEnrollment(token?: string): Promise<EnrollStartResponse> {
+  return request<EnrollStartResponse>('POST', '/auth/mfa/enroll/start', undefined, token);
 }
 
-export function confirmEnrollment(confirmationToken: string, code: string): Promise<EnrollConfirmResponse> {
-  return request<EnrollConfirmResponse>('POST', '/auth/mfa/enroll/confirm', { confirmation_token: confirmationToken, code });
+export function confirmEnrollment(confirmationToken: string, code: string, token?: string): Promise<EnrollConfirmResponse> {
+  return request<EnrollConfirmResponse>('POST', '/auth/mfa/enroll/confirm', { confirmation_token: confirmationToken, code }, token);
 }
 
 export function verifyMfa(mfaSessionToken: string, code: string): Promise<MfaSuccessResponse> {
@@ -758,7 +758,6 @@ export function getAdminDashboardKpisApi(schoolYear?: string): Promise<SchoolYea
   gwaBuckets: Array<{ range: string; count: number; color: string }>;
   statusCounts: { active: number; noGrade: number; remedial: number; irregular_reenrollment: number };
   classAttendance: Array<{ name: string; rate: number }>;
-  recentAuditEvents?: AuditEntry[];
 }> {
   return request('GET', `/admin/dashboard/kpis${schoolYearQuery(schoolYear)}`);
 }
@@ -2670,7 +2669,7 @@ export function restoreCourseApi(id: number): Promise<{ course: CatalogCourse }>
 }
 export type PersonClass = { csId: number; label: string; schoolYear: string; current: boolean };
 export type AdminPerson = {
-  userId: number; name: string; email: string; kind: 'faculty' | 'student'; status: 'active' | 'deactivated' | 'invited';
+  userId: number; name: string; email: string; kind: 'faculty' | 'student'; status: 'active' | 'deactivated' | 'invited'; isDean?: boolean;
   invitation?: { sentAt: string | null; expiresAt: string | null; expired: boolean }; faceEnrolled?: boolean; studentId?: number;
   disabledAt: string | null; twoFactor: boolean; lastActivityAt: string | null;
   classes?: PersonClass[]; studentNo?: string; enrolledClasses?: PersonClass[];
@@ -2681,6 +2680,11 @@ export type AdminPeopleFilters = {
   courseId?: number; classId?: number; twoFactor?: 'on' | 'off'; activity?: 'never' | 'inactive30'; classes?: 'current' | 'none'; secretary?: boolean; face?: 'enrolled' | 'not_enrolled';
   yearLevel?: number; invitation?: 'expired'; sort?: 'name' | 'studentNo' | 'lastActivity' | 'classes'; dir?: 'asc' | 'desc';
 };
+/** 13.9 DS (contract 4.3): the Superadmin hands the Dean role to an active Faculty member. */
+export function transferDeanApi(toUserId: number, oldDean: 'faculty' | 'deactivate', reason: string): Promise<{ status: string }> {
+  return request('POST', '/admin/people/transfer-dean', { toUserId, oldDean, reason });
+}
+
 export function getAdminPeopleApi(params: { kind: 'faculty' | 'student'; status?: 'active' | 'deactivated' | 'invited' | 'all'; q?: string; page?: number } & AdminPeopleFilters): Promise<{ status: string; people: AdminPerson[]; total: number; page: number; pageSize: number }> {
   const search = new URLSearchParams({ kind: params.kind, status: params.status ?? 'all', page: String(params.page ?? 1) });
   if (params.q) search.set('q', params.q);
@@ -2726,6 +2730,7 @@ export type AdminOverview = {
   sectionsByCourse: Array<{ courseCode: string; sections: number }>;
   faceFlagsOpen: number;
   setup: { currentTerm: { semester: string; schoolYear: string; endDate: string | null } | null; courses: { active: number; retired: number }; rooms: { active: number; retired: number } };
+  recentAuditEvents: AuditEntry[];
 };
 export function getAdminOverviewApi(): Promise<AdminOverview> {
   return request('GET', '/admin/overview');

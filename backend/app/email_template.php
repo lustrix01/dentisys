@@ -224,6 +224,28 @@ function email_dean_invitation_html(string $name, string $email, string $link): 
     ]);
 }
 
+/** DS3/D19: the Superadmin's first set-password link (same layout and 7-day expiry as the first Dean's invitation). */
+function email_superadmin_invitation_html(string $name, string $email, string $link): string
+{
+    return email_render([
+        'preheader' => 'Superadmin account invitation',
+        'greeting' => $name !== '' ? "Hello {$name}," : 'Hello,',
+        'intro' => ['You have been invited to set up the Superadmin account for DentiSYS.'],
+        'details' => [
+            'title' => 'Superadmin Account Invitation',
+            'rows' => [
+                ['Name', $name !== '' ? $name : 'Not provided'],
+                ['Email', $email],
+                ['Role', 'Superadmin'],
+            ],
+        ],
+        'action_text' => 'Use the link below to set your password and activate the account. You will set up two-factor authentication the first time you sign in.',
+        'button' => ['label' => 'Accept invitation', 'url' => $link],
+        'notice' => 'This link expires in <strong>7 days</strong>. If you were not expecting this invitation, you can ignore this email.',
+        'signature' => ['name' => 'DentiSYS', 'lines' => ['Bicol University College of Dental Medicine']],
+    ]);
+}
+
 function email_password_reset_html(string $name, string $email, string $link): string
 {
     return email_render([
@@ -258,7 +280,7 @@ function email_account_moved_html(string $name, string $email, string $link): st
     ]);
 }
 
-/** 12.1: the system administrator moved the Dean role; $lines say what changed for this person. */
+/** 12.1: the Superadmin moved the Dean role; $lines say what changed for this person. */
 function email_dean_transferred_html(string $name, array $lines): string
 {
     return email_render([
@@ -270,13 +292,13 @@ function email_dean_transferred_html(string $name, array $lines): string
     ]);
 }
 
-/** AUTH-006: the Dean reset this person's authenticator 2FA. */
+/** AUTH-006: the Superadmin reset this person's authenticator 2FA. */
 function email_two_factor_reset_html(string $name, string $email): string
 {
     return email_render([
-        'preheader' => 'The Dean reset your DentiSYS two-factor authentication.',
+        'preheader' => 'The Superadmin reset your DentiSYS two-factor authentication.',
         'greeting' => $name !== '' ? "Hello {$name}," : 'Hello,',
-        'intro' => ['The Dean reset your DentiSYS two-factor authentication. Your authenticator app and recovery codes no longer work, and you were signed out on every device.'],
+        'intro' => ['The Superadmin reset your DentiSYS two-factor authentication. Your authenticator app and recovery codes no longer work, and you were signed out on every device.'],
         'details' => [
             'title' => 'Account',
             'rows' => [
@@ -284,7 +306,7 @@ function email_two_factor_reset_html(string $name, string $email): string
             ],
         ],
         'action_text' => 'Sign in with your password. You can set up two-factor authentication again in your profile.',
-        'notice' => 'If you did not expect this change, contact the Dean.',
+        'notice' => 'If you did not expect this change, contact the Superadmin.',
         'signature' => ['name' => 'DentiSYS Support', 'lines' => ['Bicol University College of Dental Medicine']],
     ]);
 }

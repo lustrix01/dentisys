@@ -43,6 +43,7 @@ return [
     ['method' => 'POST', 'path' => '/api/admin/people/reset-2fa', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/move-email', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/name', 'handler' => 'handle_admin_people'],
+    ['method' => 'POST', 'path' => '/api/admin/people/transfer-dean', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/invitation/resend', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/invitation/revoke', 'handler' => 'handle_admin_people'],
     ['method' => 'GET', 'path' => '/api/faculty/classes/join', 'handler' => 'handle_class_join_faculty_get'],

@@ -10,7 +10,7 @@ import {
 } from './apiClient.ts';
 import { normalizePersonName } from '../utils/nameNormalization.ts';
 
-export type UserRole = 'admin' | 'faculty' | 'secretary';
+export type UserRole = 'superadmin' | 'admin' | 'faculty' | 'secretary';
 export type AccountStatus = 'Active' | 'Pending Activation' | 'Pending Invitation';
 
 export interface RegisteredUser {

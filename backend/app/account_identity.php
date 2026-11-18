@@ -404,7 +404,7 @@ function update_account_identity(PDO $pdo, int $userId, string $displayName, ?st
         if (!hash_equals(mb_strtolower((string) $currentEmail), mb_strtolower($loginEmail))) {
             throw new ValidationException([[
                 'field' => 'email',
-                'message' => 'Your login email cannot be changed. Contact the Dean if it is wrong.',
+                'message' => 'Your login email cannot be changed. Contact the Superadmin if it is wrong.',
             ]]);
         }
         $emailChanged = false;
@@ -433,6 +433,7 @@ function update_account_identity(PDO $pdo, int $userId, string $displayName, ?st
 function account_identity_role_label(string $role): string
 {
     return match ($role) {
+        'superadmin' => 'Superadmin',
         'admin' => 'Dean',
         'faculty' => 'Faculty',
         'secretary' => 'Class Secretary',
@@ -462,7 +463,7 @@ function account_identity_email_role_conflict(PDO $pdo, string $email, string $i
         'SELECT user_id, role FROM user_accounts WHERE lower(login_email) = lower(?) ORDER BY user_id'
     );
     $accountStmt->execute([$email]);
-    $staffRoles = ['admin', 'faculty'];
+    $staffRoles = ['superadmin', 'admin', 'faculty'];
     foreach ($accountStmt->fetchAll(PDO::FETCH_ASSOC) as $account) {
         if ($ignoreUserId !== null && (int) $account['user_id'] === $ignoreUserId) {
             continue;

@@ -30,7 +30,6 @@ import {
   CheckCheck,
   Loader2,
   DoorOpen,
-  ShieldCheck,
   ScanFace,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -56,6 +55,7 @@ type NavItem = {
 
 const ROLE_TITLES: Record<string, string> = {
   admin: 'Office of the Dean',
+  superadmin: 'Superadmin',
   faculty: 'Dental Faculty Member',
   secretary: 'Class Secretary',
   student: 'Dental Student',
@@ -71,12 +71,13 @@ const ProfileMenu: React.FC<{
   onClose: () => void;
   onLogout: () => void;
 }> = ({ email, viewRole, accountRole, onClose, onLogout }) => {
-  const profilePath = viewRole === 'admin' ? '/admin/profile'
+  const profilePath = viewRole === 'superadmin' ? '/superadmin/profile'
+    : viewRole === 'admin' ? '/admin/profile'
     : accountRole === 'secretary' ? '/secretary/profile'
     : viewRole === 'student' ? '/student/profile'
     : '/faculty/profile';
   const profileLabel = viewRole === 'admin' ? 'My Dean profile'
-    : (accountRole === 'secretary' || viewRole === 'student') ? 'My profile'
+    : (viewRole === 'superadmin' || accountRole === 'secretary' || viewRole === 'student') ? 'My profile'
     : 'My Faculty profile';
   const itemClass = 'flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-slate-100/50 dark:hover:bg-slate-900/50 dark:hover:text-slate-100 text-xs font-semibold transition-all';
 
@@ -96,7 +97,7 @@ const ProfileMenu: React.FC<{
 
         {viewRole !== 'student' && (
           <Link
-            to={viewRole === 'admin' ? '/admin/settings' : viewRole === 'secretary' ? '/secretary/settings' : '/faculty/settings'}
+            to={viewRole === 'superadmin' ? '/superadmin/settings' : viewRole === 'admin' ? '/admin/settings' : viewRole === 'secretary' ? '/secretary/settings' : '/faculty/settings'}
             onClick={onClose}
             className={itemClass}
           >
@@ -122,8 +123,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const linkedStudentView = user?.role === 'secretary' && Boolean(user.student)
     && location.pathname.startsWith('/student/');
-  // ADM-001 SA1: Superadmin mode is the route, like the Secretary's Student view. The server never knows it (SA5).
-  const superadminView = user?.role === 'admin' && location.pathname.startsWith('/superadmin/');
+  const superadminView = user?.role === 'superadmin';
   const currentUser = {
     name: user?.display_name ?? '',
     email: user?.login_email ?? '',
@@ -145,6 +145,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const getRoleColors = (role: string) => {
     switch (role) {
       case 'admin':
+      case 'superadmin':
         return {
           pillActive: 'text-accent-600 dark:text-accent-400 font-bold hover:bg-slate-100/60 dark:hover:bg-slate-800/40',
           iconActive: 'text-accent-600 dark:text-accent-400',
@@ -280,6 +281,10 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       return [
         { name: 'Overview', path: '/superadmin/overview', icon: LayoutDashboard, short: 'Overview' },
         { name: 'People & Accounts', path: '/superadmin/people', icon: Users, short: 'People' },
+        { name: 'Classes', path: '/superadmin/classes', icon: BookOpen },
+        { name: 'Course Catalog', path: '/superadmin/course-catalog', icon: Library, short: 'Courses' },
+        { name: 'Academic Terms', path: '/superadmin/terms', icon: CalendarDays, short: 'Terms' },
+        { name: 'Rooms', path: '/superadmin/rooms', icon: DoorOpen },
         { name: 'Face Enrolment Flags', path: '/superadmin/face-flags', icon: ScanFace, short: 'Flags' },
         { name: 'Audit Trail', path: '/superadmin/audit-trail', icon: ListChecks, short: 'Audit' },
       ];
@@ -289,12 +294,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
         { name: 'Reports & Analytics', path: '/admin/reports', icon: FileSpreadsheet, short: 'Reports' },
-        { name: 'Classes', path: '/admin/classes', icon: BookOpen },
         { name: 'Faculty Invitations', path: '/admin/faculty-invite', icon: UserPlus, short: 'Invites' },
-        { name: 'Course Catalog', path: '/admin/course-catalog', icon: Library, short: 'Courses' },
-        { name: 'Academic Terms', path: '/admin/terms', icon: CalendarDays, short: 'Terms' },
-        { name: 'Rooms', path: '/admin/rooms', icon: DoorOpen },
-        { name: 'Audit Trail', path: '/admin/audit-trail', icon: ListChecks, short: 'Audit' },
+        { name: 'My Activity', path: '/admin/audit-trail', icon: ListChecks, short: 'Activity' },
       ];
     }
 
@@ -541,6 +542,10 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'Dean Settings', path: '/admin/settings' });
     } else if (path === '/superadmin/overview') {
       crumbs.push({ name: 'Overview', path: '/superadmin/overview' });
+    } else if (path === '/superadmin/profile') {
+      crumbs.push({ name: 'Superadmin Profile', path: '/superadmin/profile' });
+    } else if (path === '/superadmin/settings') {
+      crumbs.push({ name: 'Superadmin Settings', path: '/superadmin/settings' });
     } else if (path === '/admin/terms') {
       crumbs.push({ name: 'Academic Terms', path: '/admin/terms' });
     } else if (path === '/admin/rooms') {
@@ -550,7 +555,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     } else if (path === '/superadmin/audit-trail') {
       crumbs.push({ name: 'Audit Trail', path: '/superadmin/audit-trail' });
     } else if (path === '/admin/audit-trail') {
-      crumbs.push({ name: 'Audit Trail', path: '/admin/audit-trail' });
+      crumbs.push({ name: 'My Activity', path: '/admin/audit-trail' });
     } else if (path === '/admin/course-catalog') {
       crumbs.push({ name: 'Course Catalog', path: '/admin/course-catalog' });
     } else if (path === '/superadmin/people') {
@@ -809,47 +814,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           </div>
         )}
 
-        {/* Dean / Superadmin View Switcher (same markup as the Secretary / Student switcher) */}
-        {user?.role === 'admin' && (
-          <div
-            className={`mb-4 rounded-xl bg-slate-200/60 dark:bg-slate-800/80 p-1 flex ${
-              isSidebarCollapsed ? 'flex-col items-center gap-1' : 'gap-1'
-            }`}
-            aria-label="Account view"
-          >
-            {([
-              { label: 'Dean', tip: 'Dean view', to: '/', on: !superadminView, Icon: LayoutDashboard },
-              { label: 'Superadmin', tip: 'Superadmin view', to: '/superadmin/overview', on: superadminView, Icon: ShieldCheck },
-            ]).map(({ label, tip, to, on, Icon }) => (
-              <button
-                key={label}
-                type="button"
-                aria-pressed={on}
-                onClick={() => {
-                  setIsSidebarOpen(false);
-                  navigate(to);
-                }}
-                className={`group relative flex items-center justify-center rounded-lg transition-all ${
-                  isSidebarCollapsed ? 'w-10 h-10' : 'flex-1 px-2 py-2 gap-1.5 text-[11px]'
-                } font-bold ${
-                  on
-                    ? 'bg-white dark:bg-slate-700 text-accent-600 dark:text-accent-300 shadow-xs'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-                }`}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                {!isSidebarCollapsed && <span>{label}</span>}
-                {isSidebarCollapsed && (
-                  <div className="pointer-events-none absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 text-white text-xs font-bold rounded-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap shadow-xl border border-slate-700/50 flex items-center">
-                    {tip}
-                    <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-
         {/* Navigation Items */}
         <nav className={`flex-1 space-y-1 ${isSidebarCollapsed ? 'overflow-visible' : 'overflow-y-auto overflow-x-hidden'}`}>
           {navItems.map((item, idx) => {
@@ -963,8 +927,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
           {/* Right Header Navigation Panel */}
           <div className="flex items-center space-x-3">
-            {superadminView && <span className="rounded-full bg-accent-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-accent-700 dark:bg-accent-950/60 dark:text-accent-300">Superadmin</span>}
-
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
@@ -1037,7 +999,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         <main className={`flex-1 min-w-0 p-4 sm:p-5 xl:p-8 print:!p-0 ${currentUser.role === 'student' ? 'pt-3 sm:pt-4 xl:pt-8' : ''}`}>
           <div className={`md:hidden print:hidden flex items-center gap-3 ${currentUser.role === 'student' ? 'mb-3' : 'mb-5'}`} aria-label="Current page">
             <span className={`w-9 h-9 shrink-0 rounded-xl border flex items-center justify-center ${
-              currentUser.role === 'admin'
+              (currentUser.role === 'admin' || currentUser.role === 'superadmin')
                 ? 'bg-accent-50 dark:bg-accent-950/40 border-accent-200/70 dark:border-accent-900/60 text-accent-600 dark:text-accent-400'
                 : currentUser.role === 'faculty'
                   ? 'bg-clinical-50 dark:bg-clinical-950/40 border-clinical-200/70 dark:border-clinical-900/60 text-clinical-600 dark:text-clinical-400'
@@ -1046,7 +1008,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
               <CurrentPageIcon className="w-4 h-4" aria-hidden="true" />
             </span>
             <h1 className="text-base sm:text-lg font-semibold font-heading tracking-tight text-slate-800 dark:text-slate-100">{currentPageTitle}</h1>
-            {superadminView && <span className="rounded-full bg-accent-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-accent-700 dark:bg-accent-950/60 dark:text-accent-300">Superadmin</span>}
           </div>
           {currentUser.role === 'student' && isDevelopmentMockStudent(user, config) && !studentPrototypeEnabled && (
             <div className="mb-6 p-4 rounded-2xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">

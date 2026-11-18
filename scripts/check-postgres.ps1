@@ -2,6 +2,8 @@
 # own ports and volume), applies the demo seed twice, runs the database/PHP integration tests and the live
 # Playwright tests, then removes the project. It never touches the development database. -KeepStack keeps it
 # for inspection; -ComposeProject, -BackendHttpPort, -FrontendHttpPort and -MailpitUiPort change names and ports.
+# With $env:INTEGRATION_CONTINUE_ON_FAIL = '1' the PHP integration test lists every failed check instead of stopping at
+# the first (it still fails the run); use it to collect failures, then run the gate without it.
 [CmdletBinding()]
 param(
     [switch] $KeepStack,
@@ -33,7 +35,8 @@ $env:BACKEND_HTTP_PORT = [string] $BackendHttpPort
 $env:FRONTEND_HTTP_PORT = [string] $FrontendHttpPort
 $env:MAILPIT_UI_PORT = [string] $MailpitUiPort
 $env:JWT_SIGNING_KEY_B64 = 'SkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSko='
-$env:MFA_ENCRYPTION_KEY_B64 = 'RUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUU='
+# The committed development MFA key: the demo seed's Superadmin authenticator is encrypted with it, so live sign-in works.
+$env:MFA_ENCRYPTION_KEY_B64 = 'ZGVudGlzeXMtZGV2LW1mYS1lbmNyeXB0LWtleS0zMmI='
 $env:AUDIT_MAC_KEY_B64 = 'TU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU0='
 $env:STUDENT_AUTH_ENABLED = 'true'
 # Keep the disposable browser gate deterministic and offline. Real Google
@@ -290,7 +293,7 @@ FROM (
     }
 
     Invoke-Compose @('exec', '-T', 'web', 'php', '/var/www/html/tests/database/ui_migration_test.php')
-    Invoke-Compose @('exec', '-T', '-e', 'DB_TEST_HOST=db', '-e', 'DB_TEST_PORT=5432', '-e', 'DB_TEST_NAME=dentisys', '-e', 'DB_TEST_USER=dentisys', '-e', 'DB_TEST_PASS=integration-development-password', 'web', 'php', '/var/www/html/tests/database/postgres_integration_test.php')
+    Invoke-Compose @('exec', '-T', '-e', 'INTEGRATION_CONTINUE_ON_FAIL', '-e', 'DB_TEST_HOST=db', '-e', 'DB_TEST_PORT=5432', '-e', 'DB_TEST_NAME=dentisys', '-e', 'DB_TEST_USER=dentisys', '-e', 'DB_TEST_PASS=integration-development-password', 'web', 'php', '/var/www/html/tests/database/postgres_integration_test.php')
     Invoke-Compose @('exec', '-T', 'web', 'php', '/var/www/html/backend/bin/audit-verify-chain.php', '--strict')
 
     & (Join-Path $PSScriptRoot 'smoke.ps1') -BackendUrl $backendBaseUrl

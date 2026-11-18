@@ -13,7 +13,7 @@ export const emailParts = (email: string): string[] => {
 /** Dialog bullets of Revoke face enrollment; also used by Face Enrolment Flags. */
 export const REVOKE_FACE_BULLETS = ['Their face check-in enrollment is deleted; they must re-enroll to use face check-in.', 'Manual attendance stays available.', 'They get a notification with your reason.'];
 
-export type PersonAction = 'edit-name' | 'move-email' | 'sign-out' | 'reset-2fa' | 'revoke-face' | 'deactivate' | 'reactivate' | 'resend' | 'revoke-invite';
+export type PersonAction = 'edit-name' | 'move-email' | 'sign-out' | 'reset-2fa' | 'revoke-face' | 'deactivate' | 'reactivate' | 'resend' | 'revoke-invite' | 'handover';
 
 /** Row menu items by account state (9.16). */
 export function personActions(person: AdminPerson, selfUserId?: number): PersonAction[] {
@@ -22,6 +22,7 @@ export function personActions(person: AdminPerson, selfUserId?: number): PersonA
   if (person.status === 'deactivated') return [...own, 'reactivate'];
   const items: PersonAction[] = [...own, 'sign-out'];
   if (person.twoFactor) items.push('reset-2fa');
+  if (person.isDean) return [...items, 'handover']; // 13.9 D14: the Dean is never deactivated, only handed over
   if (person.kind === 'student' && person.faceEnrolled && person.studentId) items.push('revoke-face');
   items.push('deactivate');
   return items;

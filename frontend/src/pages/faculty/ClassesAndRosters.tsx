@@ -1061,7 +1061,7 @@ export const ClassesAndRosters: React.FC = () => {
     if (newComponents !== 'lab' && parseUnitsInput(newLectureUnits) === null) add('lecUnits', 'Lecture Units', unitsMsg);
     if (newComponents !== 'lecture' && parseUnitsInput(newLabUnits) === null) add('labUnits', 'Laboratory Units', unitsMsg);
     if (!newBlock.trim()) add('block', 'Section / Block', 'Enter the section or block.');
-    if (academicTerms.length === 0) add('term', 'Academic term', `No open term is available for ${newSchoolYear}. Ask the Dean to add the term, then try again.`);
+    if (academicTerms.length === 0) add('term', 'Academic term', `No open term is available for ${newSchoolYear}. Ask the Superadmin to add the term, then try again.`);
     else if (!newTermId || !academicTerms.some(term => String(term.id) === newTermId)) add('term', 'Academic term', 'Choose an academic term.');
     sessionSlots.forEach(slot => {
       const kind = slot.type.toLowerCase();
@@ -2456,7 +2456,7 @@ const handleSendAllStudentInvites = async () => {
               </span>
             </div>
 
-            {academicTerms.length === 0 && <p role="status" className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">No open term. Ask the Dean to add the terms for {newSchoolYear}.</p>}
+            {academicTerms.length === 0 && <p role="status" className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">No open term. Ask the Superadmin to add the terms for {newSchoolYear}.</p>}
             {/* Course Code & Title */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>

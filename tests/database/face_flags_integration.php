@@ -92,50 +92,50 @@ $pdo->commit();
 
 // Routes.
 foreach ([['GET', '/api/admin/face-flags'], ['POST', '/api/admin/face-flags/dismiss']] as [$ffMethod, $ffPath]) {
-    foreach ([['Faculty', $seedFacultyAccessToken, 403], ['anonymous', '', 401]] as [$ffWho, $ffToken, $ffWant]) {
+    foreach ([['Faculty', $seedFacultyAccessToken, 403], ['Dean', $adminAccessToken, 403], ['anonymous', '', 401]] as [$ffWho, $ffToken, $ffWant]) {
         [$ffStatus] = $ffMethod === 'GET' ? integration_http_get_json($ffPath, $ffToken) : integration_http_json($ffPath, $ffToken, ['flagId' => 1, 'note' => 'Long enough note']);
         expect_same($ffWant, $ffStatus, "{$ffWho} gets {$ffWant} on {$ffMethod} {$ffPath}");
     }
 }
-[$ffListStatus, $ffList] = integration_http_get_json('/api/admin/face-flags?q=' . rawurlencode($ffTag), $adminAccessToken);
-expect_true($ffListStatus === 200 && ($ffList['status'] ?? '') === 'ok' && $ffList['total'] === 3 && $ffList['pageSize'] === 50 && $ffList['page'] === 1, 'The Dean lists the open flags of this run');
+[$ffListStatus, $ffList] = integration_http_get_json('/api/admin/face-flags?q=' . rawurlencode($ffTag), $superAccessToken);
+expect_true($ffListStatus === 200 && ($ffList['status'] ?? '') === 'ok' && $ffList['total'] === 3 && $ffList['pageSize'] === 50 && $ffList['page'] === 1, 'The Superadmin lists the open flags of this run');
 $ffF2 = null;
 foreach ($ffList['flags'] as $ffRow) if ($ffRow['student']['studentId'] === $ffMismatch) $ffF2 = $ffRow;
 expect_true($ffF2 !== null && $ffF2['kind'] === 'F2' && $ffF2['status'] === 'open' && is_array($ffF2['classes']) && $ffF2['closedBy'] === null && $ffF2['closedNote'] === null
     && $ffF2['student']['studentNo'] === "FF-{$ffTag}-Mismatch" && preg_match('/^\d{4}-\d\d-\d\dT[\d:]+\+08:00$/', (string) $ffF2['updatedAt']) === 1 && isset($ffF2['detail']['enrolledAt']), 'A flag row has the contracted shape with Manila dates');
 expect_true(!str_contains(json_encode($ffList), 'score'), 'The list never carries a score');
-[, $ffOnlyF1] = integration_http_get_json('/api/admin/face-flags?kind=F1&q=' . rawurlencode($ffTag), $adminAccessToken);
+[, $ffOnlyF1] = integration_http_get_json('/api/admin/face-flags?kind=F1&q=' . rawurlencode($ffTag), $superAccessToken);
 expect_same([2, true], [$ffOnlyF1['total'], array_unique(array_column($ffOnlyF1['flags'], 'kind')) === ['F1']], 'The kind filter narrows the list');
 foreach (['status=sometimes', 'kind=F3', 'page=0', 'classId=2147480000'] as $ffBad) {
-    [$ffBadStatus] = integration_http_get_json('/api/admin/face-flags?' . $ffBad, $adminAccessToken);
+    [$ffBadStatus] = integration_http_get_json('/api/admin/face-flags?' . $ffBad, $superAccessToken);
     expect_same(422, $ffBadStatus, "An unknown filter value is a validation error ({$ffBad})");
 }
-[, $ffOverview] = integration_http_get_json('/api/admin/overview', $adminAccessToken);
+[, $ffOverview] = integration_http_get_json('/api/admin/overview', $superAccessToken);
 expect_same((int) $pdo->query("SELECT COUNT(*) FROM face_enrolment_flags WHERE status = 'open'")->fetchColumn(), $ffOverview['faceFlagsOpen'] ?? null, 'The overview counts the open flags');
 
 $ffMismatchFlag = (int) $ffF2['flagId'];
-[$ffShortStatus] = integration_http_json('/api/admin/face-flags/dismiss', $adminAccessToken, ['flagId' => $ffMismatchFlag, 'note' => 'short']);
+[$ffShortStatus] = integration_http_json('/api/admin/face-flags/dismiss', $superAccessToken, ['flagId' => $ffMismatchFlag, 'note' => 'short']);
 expect_same(422, $ffShortStatus, 'A dismissal note under 8 characters is refused');
-[$ffMissingStatus, $ffMissing] = integration_http_json('/api/admin/face-flags/dismiss', $adminAccessToken, ['flagId' => 2147480000, 'note' => 'Saw the Student in person']);
+[$ffMissingStatus, $ffMissing] = integration_http_json('/api/admin/face-flags/dismiss', $superAccessToken, ['flagId' => 2147480000, 'note' => 'Saw the Student in person']);
 expect_true($ffMissingStatus === 404 && ($ffMissing['code'] ?? '') === 'flag_not_found', 'Dismissing an unknown flag is 404 flag_not_found');
-[$ffDismissStatus, $ffDismissed] = integration_http_json('/api/admin/face-flags/dismiss', $adminAccessToken, ['flagId' => $ffMismatchFlag, 'note' => 'New phone, saw them in person']);
+[$ffDismissStatus, $ffDismissed] = integration_http_json('/api/admin/face-flags/dismiss', $superAccessToken, ['flagId' => $ffMismatchFlag, 'note' => 'New phone, saw them in person']);
 expect_true($ffDismissStatus === 200 && ($ffDismissed['flag']['status'] ?? '') === 'dismissed' && ($ffDismissed['flag']['closedNote'] ?? '') === 'New phone, saw them in person'
-    && is_string($ffDismissed['flag']['closedAt'] ?? null) && is_string($ffDismissed['flag']['closedBy']['name'] ?? null), 'The Dean dismisses an open flag with a note');
-[$ffAgainStatus, $ffAgain] = integration_http_json('/api/admin/face-flags/dismiss', $adminAccessToken, ['flagId' => $ffMismatchFlag, 'note' => 'New phone, saw them in person']);
+    && is_string($ffDismissed['flag']['closedAt'] ?? null) && is_string($ffDismissed['flag']['closedBy']['name'] ?? null), 'The Superadmin dismisses an open flag with a note');
+[$ffAgainStatus, $ffAgain] = integration_http_json('/api/admin/face-flags/dismiss', $superAccessToken, ['flagId' => $ffMismatchFlag, 'note' => 'New phone, saw them in person']);
 expect_true($ffAgainStatus === 409 && ($ffAgain['code'] ?? '') === 'flag_closed' && ($ffAgain['message'] ?? '') === 'This flag is already closed.', 'A closed flag cannot be dismissed again (409 flag_closed)');
 $ffDismissAudit = $pdo->prepare("SELECT reason FROM audit_events WHERE action_code = 'face_flag_dismissed' AND target_id = ?");
 $ffDismissAudit->execute([(string) $ffMismatch]);
 expect_same('New phone, saw them in person', $ffDismissAudit->fetchColumn(), 'The dismissal is audited with the note');
-[, $ffDismissedList] = integration_http_get_json('/api/admin/face-flags?status=dismissed&q=' . rawurlencode($ffTag), $adminAccessToken);
-[, $ffAllList] = integration_http_get_json('/api/admin/face-flags?status=all&q=' . rawurlencode($ffTag), $adminAccessToken);
+[, $ffDismissedList] = integration_http_get_json('/api/admin/face-flags?status=dismissed&q=' . rawurlencode($ffTag), $superAccessToken);
+[, $ffAllList] = integration_http_get_json('/api/admin/face-flags?status=all&q=' . rawurlencode($ffTag), $superAccessToken);
 expect_same([1, 3], [$ffDismissedList['total'], $ffAllList['total']], 'The status filter separates dismissed from all');
 $ffEnrol($ffMismatch, true, true, false);
 expect_same(2, count($ffFlags($ffMismatch)), 'After a dismissal, the next non-matching update opens a new flag');
 
-// A Dean revoke closes the Student's open flags as revoked. The fixture holds no stored reference (the sidecar is off here).
+// A Superadmin revoke closes the Student's open flags as revoked. The fixture holds no stored reference (the sidecar is off here).
 $pdo->prepare("UPDATE biometric_profiles SET enrollment_status = 'enrolling' WHERE student_id = ?")->execute([$ffWithdrew]);
-[$ffRevokeStatus] = integration_http_json('/api/admin/biometrics/revoke', $adminAccessToken, ['studentId' => $ffWithdrew, 'reason' => 'Face does not belong to the Student']);
-expect_same(200, $ffRevokeStatus, 'The Dean revokes the flagged Student\'s enrollment');
+[$ffRevokeStatus] = integration_http_json('/api/admin/biometrics/revoke', $superAccessToken, ['studentId' => $ffWithdrew, 'reason' => 'Face does not belong to the Student']);
+expect_same(200, $ffRevokeStatus, 'The Superadmin revokes the flagged Student\'s enrollment');
 $ffRows = $ffFlags($ffWithdrew);
 expect_same(['revoked'], array_column($ffRows, 'status'), 'The revoke closes the open flag as revoked');
 $ffClosed = $pdo->prepare('SELECT closed_at IS NOT NULL AND closed_by_user_id IS NOT NULL FROM face_enrolment_flags WHERE flag_id = ?');

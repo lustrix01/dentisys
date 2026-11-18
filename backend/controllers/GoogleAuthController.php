@@ -139,6 +139,11 @@ function handle_google_login(): void
                     auth_controller_emit(auth_build_no_store_json_response(google_auth_mfa_payload($challenge), 200));
                     return;
                 }
+                if ($locked['role'] === 'superadmin') { // DS11: no session until 2FA is set up
+                    $pdo->commit();
+                    auth_controller_emit(auth_build_no_store_json_response(auth_mfa_setup_payload(auth_issue_mfa_setup($config, $locked, 'google')), 200));
+                    return;
+                }
                 $credentials = auth_issue_credentials($pdo, $locked, $config, $context, 'google');
                 google_auth_audit($pdo, $config, $context, 'google_login_success', 'Success', (int) $locked['user_id'], 'Google Sign-In completed.');
                 $pdo->commit();
@@ -246,6 +251,12 @@ function handle_google_link(): void
                 $challenge = auth_issue_two_factor_challenge($config, $user, 'google', (string) $claims['pending_google_subject']);
                 $pdo->commit();
                 auth_controller_emit(auth_build_no_store_json_response(google_auth_mfa_payload($challenge), 200));
+                return;
+            }
+            if ($user['role'] === 'superadmin') { // DS11: no session until 2FA is set up
+                $setup = auth_issue_mfa_setup($config, $user, 'google', (string) $claims['pending_google_subject']);
+                $pdo->commit();
+                auth_controller_emit(auth_build_no_store_json_response(auth_mfa_setup_payload($setup), 200));
                 return;
             }
 

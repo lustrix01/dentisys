@@ -10,7 +10,7 @@ import { showFeedback } from '../../components/FeedbackCenter';
 import { useAuth } from '../../context/AuthContext';
 import {
   ApiError, deactivatePersonApi, editPersonNameApi, getAdminPeopleApi, getAdminPeopleFiltersApi, movePersonEmailApi, reactivatePersonApi, resendInvitationApi,
-  resetPersonTwoFactorApi, revokeInvitationApi, revokeStudentBiometricApi, signOutPersonApi,
+  resetPersonTwoFactorApi, revokeInvitationApi, revokeStudentBiometricApi, signOutPersonApi, transferDeanApi,
 } from '../../services/apiClient';
 import type { AdminPerson, PeopleFilterOptions, PersonClass } from '../../services/apiClient';
 import { formatManilaWhen } from '../../services/auditService';
@@ -61,6 +61,8 @@ const ACTIONS: Record<PersonAction, ActionInfo> = {
     bullets: p => ['A new invitation email is sent and the old link stops working.', 'The new link expires in 7 days.', ...(p.kind === 'student' ? ['It keeps the original Faculty member and class.'] : [])] },
   'revoke-invite': { label: 'Revoke invitation', Icon: X, destructive: true, title: 'Revoke Invitation', confirm: 'Revoke invitation', reason: 'none', done: 'invitation revoked',
     bullets: () => ['The invitation link stops working. Faculty can be invited again from Faculty Invitations; Students from their class roster.'] },
+  handover: { label: 'Hand over Dean role', Icon: ShieldCheck, title: 'Hand Over Dean Role', confirm: 'Hand over Dean role', reason: 'required', done: 'Dean role handed over',
+    bullets: () => ['Both people are signed out on every device and emailed.', 'Refused while a term is in progress, or while the new Dean still teaches a class whose term has not ended.'] },
 };
 
 export const PeopleAndAccounts: React.FC = () => {
@@ -90,6 +92,8 @@ export const PeopleAndAccounts: React.FC = () => {
   const [nameParts, setNameParts] = useState<PersonNameParts>(emptyNameParts);
   const [newEmail, setNewEmail] = useState('');
   const [idChecked, setIdChecked] = useState(false);
+  const [newDeanId, setNewDeanId] = useState('');
+  const [oldDean, setOldDean] = useState<'' | 'faculty' | 'deactivate'>('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
   const [blocked, setBlocked] = useState<Blocked | null>(null);
@@ -162,6 +166,8 @@ export const PeopleAndAccounts: React.FC = () => {
     setFormError('');
     setNewEmail('');
     setIdChecked(false);
+    setNewDeanId('');
+    setOldDean('');
     const np = person.nameParts;
     setNameParts(np ? { prefix: np.prefix ?? '', firstName: np.firstName ?? '', middleName: np.middleName ?? '', lastName: np.lastName ?? '', suffix: np.suffix ?? '' } : emptyNameParts);
     const current = next === 'deactivate' && person.kind === 'faculty' ? classesOf(person).filter(c => c.current) : [];
@@ -174,8 +180,16 @@ export const PeopleAndAccounts: React.FC = () => {
     if (!target) return;
     const info = ACTIONS[action];
     const note = reason.trim();
+    if (action === 'handover') {
+      const errors: Record<string, string> = {};
+      if (!newDeanId) errors.toUserId = 'Choose the new Dean.';
+      if (!oldDean) errors.oldDean = 'Choose what happens to the current Dean.';
+      setFieldErrors(errors);
+      if (note.length < 8 || note.length > 240) setReasonError('Enter a reason of 8 to 240 characters.');
+      if (Object.keys(errors).length > 0 || note.length < 8 || note.length > 240) return;
+    }
     if (info.reason === 'required' && (note.length < 8 || note.length > 240)) { setReasonError('Enter a reason of 8 to 240 characters.'); return; }
-    const form = action === 'edit-name' || action === 'move-email';
+    const form = action === 'edit-name' || action === 'move-email' || action === 'handover';
     if (action === 'move-email') {
       const check = validateBicolUEmail(fullEmail(newEmail), [EMAIL_DOMAIN]);
       const errors: Record<string, string> = {};
@@ -189,6 +203,7 @@ export const PeopleAndAccounts: React.FC = () => {
     try {
       if (action === 'edit-name') await editPersonNameApi(target.userId, nameParts, note);
       else if (action === 'move-email') await movePersonEmailApi(target.userId, fullEmail(newEmail), note);
+      else if (action === 'handover') await transferDeanApi(Number(newDeanId), oldDean as 'faculty' | 'deactivate', note);
       else if (action === 'deactivate') await deactivatePersonApi(target.userId, note || undefined);
       else if (action === 'reactivate') await reactivatePersonApi(target.userId);
       else if (action === 'sign-out') await signOutPersonApi(target.userId, note || undefined);
@@ -209,7 +224,7 @@ export const PeopleAndAccounts: React.FC = () => {
       setBlocked(null);
       load();
     } catch (err) {
-      if (form && err instanceof ApiError) {
+      if (form && err instanceof ApiError && err.code !== 'term_in_progress' && err.code !== 'new_dean_has_classes') {
         const list = Array.isArray(err.errors) ? (err.errors as Array<{ field: string; message: string }>) : [];
         if (err.status === 422 && list.length > 0) {
           const next: Record<string, string> = {};
@@ -219,7 +234,9 @@ export const PeopleAndAccounts: React.FC = () => {
         return;
       }
       const classes = err instanceof ApiError ? (err.details?.classes as Array<{ csId: number; label: string }> | undefined) : undefined;
-      if (err instanceof ApiError && err.code === 'faculty_has_current_classes' && classes) {
+      if (err instanceof ApiError && (err.code === 'term_in_progress' || err.code === 'new_dean_has_classes')) {
+        setBlocked({ message: String(err.details?.message ?? err.message), classes: (classes ?? []).map(c => ({ ...c, schoolYear: '', current: true })) });
+      } else if (err instanceof ApiError && err.code === 'faculty_has_current_classes' && classes) {
         setBlocked({ message: err.message, classes: classes.map(c => ({ ...c, schoolYear: '', current: true })) });
       } else {
         setTarget(null);
@@ -366,7 +383,7 @@ export const PeopleAndAccounts: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {people.map(person => (
                     <tr key={person.userId} className="align-middle hover:bg-slate-50/70 dark:hover:bg-slate-800/30">
-                      <td className="px-5 py-4"><div className="font-bold text-slate-800 dark:text-slate-100">{person.name}</div></td>
+                      <td className="px-5 py-4"><div className="font-bold text-slate-800 dark:text-slate-100">{person.name}</div>{person.isDean && <div className="mt-1"><DeanPill /></div>}</td>
                       <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{person.email}</td>
                       {kind === 'student' && <td className="px-4 py-4 text-slate-500 dark:text-slate-400">{person.studentNo}</td>}
                       <td className="px-4 py-4 text-slate-500 dark:text-slate-400">{classSummary(person)}</td>
@@ -383,7 +400,7 @@ export const PeopleAndAccounts: React.FC = () => {
               {people.map(person => (
                 <article key={person.userId} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-50 text-accent-700 dark:bg-accent-950/50 dark:text-accent-300"><UserRound className="h-5 w-5" /></span><div className="min-w-0"><h3 className="break-words text-sm font-bold text-slate-800 dark:text-slate-100">{person.name}</h3><p className="break-words text-xs text-slate-500 dark:text-slate-400"><Email value={person.email} /></p></div></div>
+                    <div className="flex min-w-0 items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-50 text-accent-700 dark:bg-accent-950/50 dark:text-accent-300"><UserRound className="h-5 w-5" /></span><div className="min-w-0"><h3 className="break-words text-sm font-bold text-slate-800 dark:text-slate-100">{person.name}</h3>{person.isDean && <div className="my-1"><DeanPill /></div>}<p className="break-words text-xs text-slate-500 dark:text-slate-400"><Email value={person.email} /></p></div></div>
                     <RowMenu person={person} selfUserId={user?.user_id} onSelect={next => openAction(person, next)} />
                   </div>
                   <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
@@ -415,12 +432,12 @@ export const PeopleAndAccounts: React.FC = () => {
           <div className="space-y-4 p-5 sm:p-6">
             <div>
               <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{target.name}</p>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{target.email} · {target.kind === 'faculty' ? 'Faculty' : 'Student'}</p>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{target.email} · {target.isDean ? 'Dean' : target.kind === 'faculty' ? 'Faculty' : 'Student'}</p>
             </div>
             {blocked ? (
               <div role="alert" className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
                 <p className="flex items-start gap-2"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />{blocked.message}</p>
-                <ul className="space-y-1 pl-6">{blocked.classes.map(c => <li key={c.csId}><Link to="/admin/classes" className="font-bold underline">{c.label}</Link></li>)}</ul>
+                <ul className="space-y-1 pl-6">{blocked.classes.map(c => <li key={c.csId}><Link to="/superadmin/classes" className="font-bold underline">{c.label}</Link></li>)}</ul>
               </div>
             ) : (
               <>
@@ -441,9 +458,30 @@ export const PeopleAndAccounts: React.FC = () => {
                     {fieldErrors.newEmail && <span role="alert" className="mt-1 block text-xs font-semibold text-rose-600 dark:text-rose-400">{fieldErrors.newEmail}</span>}
                   </label>
                 )}
+                {action === 'handover' && (
+                  <>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">New Dean
+                      <select id="handover-to" value={newDeanId} onChange={event => { setNewDeanId(event.target.value); setFieldErrors(e => ({ ...e, toUserId: '' })); }} className={inputClass}>
+                        <option value="">Choose an active Faculty member</option>
+                        {people.filter(p => p.kind === 'faculty' && p.status === 'active' && !p.isDean).map(p => <option key={p.userId} value={p.userId}>{p.name}</option>)}
+                      </select>
+                      {fieldErrors.toUserId && <span role="alert" className="mt-1 block text-xs font-semibold text-rose-600 dark:text-rose-400">{fieldErrors.toUserId}</span>}
+                    </label>
+                    <fieldset>
+                      <legend className="text-xs font-bold text-slate-700 dark:text-slate-300">The Current Dean Becomes</legend>
+                      {([['faculty', 'Faculty', 'Still teaches; keeps every record.'], ['deactivate', 'Deactivated', 'Left the college; records are kept and sign-in is refused.']] as const).map(([value, label, hint]) => (
+                        <label key={value} className="mt-1.5 flex min-h-11 cursor-pointer items-start gap-2.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+                          <input id={`handover-old-${value}`} type="radio" name="handover-old" checked={oldDean === value} onChange={() => { setOldDean(value); setFieldErrors(e => ({ ...e, oldDean: '' })); }} className="mt-0.5 h-4 w-4 shrink-0 accent-accent-600" />
+                          <span>{label}<span className="block font-normal text-slate-500 dark:text-slate-400">{hint}</span></span>
+                        </label>
+                      ))}
+                      {fieldErrors.oldDean && <span role="alert" className="mt-1 block text-xs font-semibold text-rose-600 dark:text-rose-400">{fieldErrors.oldDean}</span>}
+                    </fieldset>
+                  </>
+                )}
                 {info.reason !== 'none' && (
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">{info.reason === 'required' ? 'Reason (8 to 240 characters)' : 'Reason (optional)'}
-                    <input maxLength={info.reason === 'required' ? 240 : 500} value={reason} onChange={event => { setReason(event.target.value); setReasonError(''); }} className={inputClass} />
+                    <input id={action === 'handover' ? 'handover-reason' : undefined} maxLength={info.reason === 'required' ? 240 : 500} value={reason} onChange={event => { setReason(event.target.value); setReasonError(''); }} className={inputClass} />
                     {reasonError && <span role="alert" className="mt-1 block text-xs font-semibold text-rose-600 dark:text-rose-400">{reasonError}</span>}
                   </label>
                 )}
@@ -493,6 +531,11 @@ function StatusPill({ person }: { person: AdminPerson }) {
     : active
       ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/15 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-400/20'
       : 'bg-slate-100 text-slate-600 ring-slate-500/15 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-400/20'}`}><Icon className="h-3 w-3" />{statusLabel(person)}</span>;
+}
+
+/** 13.9 DS21: the Dean's row badge, the StatusPill shape in the accent colours. */
+function DeanPill() {
+  return <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ring-inset bg-accent-50 text-accent-700 ring-accent-600/15 dark:bg-accent-950/40 dark:text-accent-300 dark:ring-accent-400/20"><ShieldCheck className="h-3 w-3" />Dean</span>;
 }
 
 function TwoFactor({ on }: { on: boolean }) {

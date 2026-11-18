@@ -70,11 +70,11 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [], academicTerms: [] }) }));
     await page.click('a[href="/classes"]');
     await page.getByRole('button', { name: 'Create class', exact: true }).first().click();
-    await expect(page.getByText('No open term. Ask the Dean to add the terms for 2026-2027.')).toBeVisible();
+    await expect(page.getByText('No open term. Ask the Superadmin to add the terms for 2026-2027.')).toBeVisible();
     await expect(page.getByLabel('Academic Term *')).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Save class section' })).toBeEnabled();
     await page.getByRole('button', { name: 'Save class section' }).click();
-    await expect(page.getByText('No open term is available for 2026-2027. Ask the Dean to add the term, then try again.').first()).toBeVisible();
+    await expect(page.getByText('No open term is available for 2026-2027. Ask the Superadmin to add the term, then try again.').first()).toBeVisible();
   });
 
   test('faculty dashboard renders properly', async ({ page }) => {
@@ -334,7 +334,7 @@ test.describe('Faculty Module E2E Tests', () => {
 
     await page.click('a[href="/classes"]');
     const warning = page.getByTestId('retired-room-warning');
-    await expect(warning).toHaveText('Simulation Lab was retired by the Dean. Pick another room.');
+    await expect(warning).toHaveText('Simulation Lab was retired. Pick another room.');
     await page.getByTitle('Edit class section details').first().click();
     const lab = page.getByLabel('Laboratory Room Venue');
     await expect(lab.locator('option:checked')).toHaveText('Simulation Lab (retired)');

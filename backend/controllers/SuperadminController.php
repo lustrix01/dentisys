@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 /**
- * ADM-001 Superadmin mode (docs/contracts/superadmin.md): Course Catalog (Part B) and People & Accounts (Part C).
- * The mode is a view only (SA5): every route here needs the Dean role and nothing else. Same shape as RoomController.
+ * ADM-001 Superadmin (docs/contracts/superadmin.md, dean-superadmin-split.md): Course Catalog (Part B) and People & Accounts (Part C).
+ * Every route here needs the Superadmin role (superadmin_verify_auth) and nothing else. Same shape as RoomController.
  */
 
 class SuperadminConflict extends \RuntimeException
@@ -137,7 +137,7 @@ function handle_admin_courses(): void
     try {
         $config = app_config();
         $pdo = create_pdo($config);
-        $actor = admin_verify_auth($pdo, $config);
+        $actor = superadmin_verify_auth($pdo, $config);
         if (request_method() === 'GET') {
             $status = (string) ($_GET['status'] ?? 'all');
             if (!in_array($status, ['active', 'retired', 'all'], true)) {
@@ -193,16 +193,16 @@ function superadmin_conflict_response(?PDO $pdo, SuperadminConflict $e): void
 const PEOPLE_PAGE_SIZE = 50;
 
 /**
- * The Faculty or Student account behind a user id, or 404. Secretary-only accounts, Deans and unknown ids are not people (SA23).
+ * The Faculty, Dean or Student account behind a user id, or 404. The Dean counts as Faculty (DS9). Secretary-only accounts, the Superadmin and unknown ids are not people (SA23).
  * A Student's canonical account is students.student_account_user_id (its role may be 'secretary' for a Class Secretary).
  */
 function people_fetch(PDO $pdo, int $userId, bool $lock = false): array
 {
     $stmt = $pdo->prepare("SELECT ua.user_id, ua.display_name, ua.login_email, ua.role, ua.status, ua.disabled_at,
             s.student_id, s.student_number,
-            CASE WHEN ua.role = 'faculty' THEN 'faculty' ELSE 'student' END AS kind
+            CASE WHEN ua.role IN ('faculty', 'admin') THEN 'faculty' ELSE 'student' END AS kind
         FROM user_accounts ua LEFT JOIN students s ON s.student_account_user_id = ua.user_id
-        WHERE ua.user_id = ? AND (ua.role = 'faculty' OR (ua.role IN ('student', 'secretary') AND s.student_id IS NOT NULL))"
+        WHERE ua.user_id = ? AND (ua.role IN ('faculty', 'admin') OR (ua.role IN ('student', 'secretary') AND s.student_id IS NOT NULL))"
         . ($lock ? ' FOR UPDATE OF ua' : ''));
     $stmt->execute([$userId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -228,6 +228,7 @@ function people_json(array $r, array $classes): array
         'lastName' => $parts['lastName'] ?? null, 'suffix' => $parts['suffix'] ?? null];
     if ($r['kind'] === 'faculty') {
         $json['classes'] = $classes;
+        $json['isDean'] = (bool) ($r['is_dean'] ?? false);
     } else {
         $json['studentId'] = (int) ($r['student_id'] ?? 0);
         $json['studentNo'] = $r['student_number'];
@@ -244,7 +245,7 @@ function people_base_sql(string $kind): array
     $latest = " LEFT JOIN LATERAL (SELECT issued_at, expires_at, used_at, revoked_at FROM security_tokens WHERE purpose = '"
         . ($kind === 'faculty' ? 'faculty_invitation' : 'student_activation') . "' AND user_id = ua.user_id ORDER BY issued_at DESC, token_id DESC LIMIT 1) inv ON TRUE";
     $from = $kind === 'faculty'
-        ? "FROM user_accounts ua{$latest} WHERE ua.role = 'faculty'"
+        ? "FROM user_accounts ua{$latest} WHERE ua.role IN ('faculty', 'admin')" // the Dean is listed as Faculty (DS9)
         : "FROM user_accounts ua JOIN students s ON s.student_account_user_id = ua.user_id{$latest} WHERE ua.role IN ('student', 'secretary')";
     return [$from, "(ua.status = 'Pending Activation' AND inv.issued_at IS NOT NULL AND inv.used_at IS NULL AND inv.revoked_at IS NULL)"];
 }
@@ -281,7 +282,8 @@ function people_list(PDO $pdo, string $kind, string $status, string $q, int $pag
     }
     if (($f['invitation'] ?? '') === 'expired') $where[] = "{$invited} AND inv.expires_at <= (NOW() AT TIME ZONE 'UTC')";
     if (isset($f['classes'])) {
-        $where[] = ($f['classes'] === 'none' ? 'NOT ' : '') . 'EXISTS (SELECT 1 FROM class_sections c WHERE c.instructor_user_id = ua.user_id AND c.school_year = ? AND c.archived_at IS NULL)';
+        // classes=none matches the Overview's "Faculty without classes": the Dean never counts there.
+        $where[] = ($f['classes'] === 'none' ? "ua.role <> 'admin' AND NOT " : '') . 'EXISTS (SELECT 1 FROM class_sections c WHERE c.instructor_user_id = ua.user_id AND c.school_year = ? AND c.archived_at IS NULL)';
         $params[] = $cur;
     }
     // Same rule as secretary_has_current_appointment(): an active section of the current school year names the Student's account.
@@ -316,7 +318,7 @@ function people_list(PDO $pdo, string $kind, string $status, string $q, int $pag
     };
     $total = $pdo->prepare("SELECT COUNT(*) {$from}{$whereSql}");
     $total->execute($params);
-    $stmt = $pdo->prepare("SELECT ua.user_id, ua.display_name, ua.login_email, ua.status, ua.disabled_at, '{$kind}' AS kind, inv.issued_at AS invited_at, inv.expires_at AS invitation_expires_at"
+    $stmt = $pdo->prepare("SELECT ua.user_id, ua.display_name, ua.login_email, ua.status, ua.disabled_at, '{$kind}' AS kind, (ua.role = 'admin') AS is_dean, inv.issued_at AS invited_at, inv.expires_at AS invitation_expires_at"
         . ($kind === 'student' ? ", s.student_id, s.student_number, {$faceSql} AS face_enrolled" : ', NULL AS student_id, NULL AS student_number') . ",
         EXISTS (SELECT 1 FROM security_tokens t WHERE t.user_id = ua.user_id AND t.purpose = 'mfa_credential' AND t.mfa_status = 'enabled') AS two_factor,
         (SELECT MAX(a.last_seen_at) FROM auth_sessions a WHERE a.user_id = ua.user_id) AS last_activity_at,
@@ -373,6 +375,7 @@ function people_deactivate(PDO $pdo, array $config, array $actor, array $data): 
     $userId = (int) ($data['userId'] ?? 0);
     $reason = course_reason($data);
     $person = people_fetch($pdo, $userId, true);
+    if ($person['role'] === 'admin') throw new SuperadminConflict('dean_not_deactivatable', 'The Dean cannot be deactivated. Hand the Dean role to a Faculty member instead.', [], 422);
     if ($person['status'] === 'Disabled') return ['person' => people_one($pdo, $userId, $person['kind'])]; // no-op, no audit row (R3)
     if ($person['kind'] === 'faculty') {
         $stmt = $pdo->prepare('SELECT cs_id, cs_name FROM class_sections WHERE instructor_user_id = ? AND school_year = ? AND archived_at IS NULL ORDER BY cs_name');
@@ -419,7 +422,7 @@ function people_sign_out(PDO $pdo, array $config, array $actor, array $data): ar
     $userId = (int) ($data['userId'] ?? 0);
     $reason = course_reason($data);
     $person = people_fetch_active($pdo, $userId);
-    people_end_sessions($pdo, $userId, 'Signed out by the Dean');
+    people_end_sessions($pdo, $userId, 'Signed out by the Superadmin');
     audit_record_action($pdo, $config, $actor, 'people', 'sessions_ended_by_dean', 'user_account', (string) $userId,
         'Signed ' . $person['display_name'] . ' (' . ucfirst($person['kind']) . ') out everywhere.', ['reason' => $reason]);
     return ['person' => people_one($pdo, $userId, $person['kind'])];
@@ -434,12 +437,12 @@ function people_reset_2fa(PDO $pdo, array $config, array $actor, array $data): a
     $revoke = $pdo->prepare(
         "UPDATE security_tokens
          SET mfa_status = CASE WHEN purpose = 'mfa_credential' THEN 'revoked' ELSE mfa_status END,
-             revoked_at = ?, revocation_reason = 'Reset by the Dean'
+             revoked_at = ?, revocation_reason = 'Reset by the Superadmin'
          WHERE user_id = ? AND purpose IN ('mfa_credential', 'mfa_recovery') AND revoked_at IS NULL"
     );
     $revoke->execute([(new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u'), $userId]);
     if ($revoke->rowCount() === 0) throw new SuperadminConflict('two_factor_off', 'This person does not use 2FA.');
-    people_end_sessions($pdo, $userId, '2FA reset by the Dean');
+    people_end_sessions($pdo, $userId, '2FA reset by the Superadmin');
     audit_record_action($pdo, $config, $actor, 'people', 'mfa_reset_by_dean', 'user_account', (string) $userId,
         'Reset 2FA for ' . $person['display_name'] . ' (' . ucfirst($person['kind']) . ').', ['reason' => $reason]);
     return ['person' => people_one($pdo, $userId, $person['kind']), 'afterCommit' => static function () use ($config, $person): void {
@@ -510,7 +513,7 @@ function account_move_email(PDO $pdo, array $config, array $actor, array $accoun
     };
 }
 
-/** A Faculty or Student account that has signed up (active or deactivated), else 404 person_not_found or 422 move_not_allowed (Dean, invited). */
+/** A Faculty or Student account that has signed up (active or deactivated), else 404 person_not_found or 422 move_not_allowed (invited people, the Superadmin). */
 function people_fetch_for_move(PDO $pdo, int $userId): array
 {
     try {
@@ -519,7 +522,7 @@ function people_fetch_for_move(PDO $pdo, int $userId): array
         $exists = $pdo->prepare('SELECT 1 FROM user_accounts WHERE user_id = ?');
         $exists->execute([$userId]);
         if ($exists->fetchColumn() === false) throw $e;
-        throw new SuperadminConflict('move_not_allowed', 'Email moves are for Faculty and Student accounts that have signed up.', [], 422);
+        throw new SuperadminConflict('move_not_allowed', 'Email moves are for accounts that have signed up.', [], 422);
     }
 }
 
@@ -588,6 +591,94 @@ function people_edit_name(PDO $pdo, array $config, array $actor, array $data): a
     return ['person' => people_one($pdo, $userId, $person['kind'])];
 }
 
+/**
+ * D14/D15: why the Dean role cannot move to this Faculty member now, as a conflict to throw; null when it can.
+ * A term is in progress (term_in_progress), or the new Dean has a class whose term has not ended (new_dean_has_classes).
+ */
+function people_transfer_blocker(PDO $pdo, array $target): ?SuperadminConflict
+{
+    $today = (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d');
+    $terms = academic_terms_read($pdo);
+    foreach ($terms as $t) {
+        if ($t['start_date'] <= $today && $t['end_date'] >= $today) {
+            return new SuperadminConflict('term_in_progress', "A term is in progress ({$t['school_year']} {$t['semester']}, {$t['start_date']} to {$t['end_date']}). Hand over the Dean role between terms.");
+        }
+    }
+    $stmt = $pdo->prepare('SELECT cs_id, cs_name, school_year, semester, term_start_date, term_end_date FROM class_sections WHERE instructor_user_id = ? AND archived_at IS NULL ORDER BY cs_name');
+    $stmt->execute([(int) $target['user_id']]);
+    $current = academic_current_school_year($pdo);
+    $blocking = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $class) {
+        $end = academic_resolve_class_term_dates($class, $terms)['endDate'];
+        // shortcut: a class with no term dates counts as not ended while its school year is the current or a later one.
+        if ($end === null ? strcmp((string) $class['school_year'], $current) >= 0 : (string) $end >= $today) {
+            $blocking[] = ['csId' => (int) $class['cs_id'], 'label' => $class['cs_name']];
+        }
+    }
+    if ($blocking === []) return null;
+    $n = count($blocking);
+    return new SuperadminConflict('new_dean_has_classes',
+        $target['display_name'] . ' teaches ' . $n . ($n === 1 ? ' class' : ' classes') . ' whose term has not ended. Reassign or archive them first.', ['classes' => $blocking]);
+}
+
+/**
+ * D14/D15, contract 4.3: hands the Dean role to an active Faculty member. Runs inside the caller's transaction (the people handler's);
+ * returns the new Dean, the former Dean and the after-commit mail sender. Rules are the former transfer-dean script command's.
+ * $data: toUserId, oldDean ("faculty" | "deactivate", no default), reason (8 to 240 characters).
+ */
+function people_transfer_dean(PDO $pdo, array $config, array $actor, array $data): array
+{
+    $errors = [];
+    $choice = (string) ($data['oldDean'] ?? '');
+    if (!in_array($choice, ['faculty', 'deactivate'], true)) $errors[] = ['field' => 'oldDean', 'message' => 'Choose what happens to the current Dean.'];
+    $reason = '';
+    try {
+        $reason = validate_required_string($data, 'reason', 8, 240);
+    } catch (ValidationException $e) {
+        $errors[] = $e->getErrors()[0];
+    }
+    if ($errors !== []) throw new ValidationException($errors);
+
+    $stmt = $pdo->prepare("SELECT user_id, login_email, display_name FROM user_accounts WHERE user_id = ? AND role = 'faculty' AND status = 'Active' FOR UPDATE");
+    $stmt->execute([(int) ($data['toUserId'] ?? 0)]);
+    $target = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($target === false) throw new SuperadminConflict('not_active_faculty', 'Only an active Faculty member can become Dean.', [], 422);
+    $deans = $pdo->query("SELECT user_id, login_email, display_name FROM user_accounts WHERE role = 'admin' AND status = 'Active' FOR UPDATE")->fetchAll(PDO::FETCH_ASSOC);
+    if (count($deans) !== 1) throw new SuperadminConflict('dean_unavailable', 'Expected exactly one active Dean account.');
+    $dean = $deans[0];
+    $blocker = people_transfer_blocker($pdo, $target);
+    if ($blocker !== null) throw $blocker;
+
+    $pdo->prepare("UPDATE user_accounts SET role = 'admin', updated_at = CURRENT_TIMESTAMP(6) WHERE user_id = ?")->execute([$target['user_id']]);
+    $pdo->prepare("UPDATE user_accounts SET role = 'faculty', status = ?, disabled_at = " . ($choice === 'deactivate' ? 'CURRENT_TIMESTAMP(6)' : 'NULL') . ', updated_at = CURRENT_TIMESTAMP(6) WHERE user_id = ?')
+        ->execute([$choice === 'deactivate' ? 'Disabled' : 'Active', $dean['user_id']]);
+    foreach ([(int) $target['user_id'], (int) $dean['user_id']] as $id) people_end_sessions($pdo, $id, 'Dean role handed over');
+    audit_record_action($pdo, $config, $actor, 'people', 'dean_transferred', 'user_account', (string) $target['user_id'],
+        "Dean role handed over from {$dean['display_name']} to {$target['display_name']}; the outgoing Dean " . ($choice === 'faculty' ? 'is Faculty again.' : 'was deactivated.'),
+        ['before' => ['Dean' => $dean['display_name']], 'after' => ['Dean' => $target['display_name'], 'Outgoing Dean' => $choice === 'faculty' ? 'Faculty' : 'Deactivated'], 'reason' => $reason]);
+    // Both notices go through the email outbox with the Superadmin as sender (Email History), like the other People actions.
+    $subject = 'The DentiSYS Dean role changed';
+    $outbox = $pdo->prepare("INSERT INTO email_outbox (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid, action_uuid)
+        VALUES (?, ?, ?, ?, 'Account', ?, 'Pending', ?, ?) RETURNING email_id");
+    $mails = [];
+    foreach ([[$target, ["You are now the Dean of DentiSYS ({$reason})."]],
+        [$dean, ['You are no longer the Dean of DentiSYS' . ($choice === 'faculty' ? '; your account is a Faculty account again.' : ' and your account was deactivated.')]]] as [$person, $lines]) {
+        $body = email_dean_transferred_html((string) $person['display_name'], $lines);
+        $outbox->execute([$actor['user_id'] ?? null, (string) $person['login_email'], (string) $person['display_name'], $subject, $body, uuid_v4_string(), uuid_v4_string()]);
+        $mails[] = [(int) $outbox->fetchColumn(), (string) $person['login_email'], $body];
+    }
+    return ['dean' => people_one($pdo, (int) $target['user_id'], 'faculty'), 'formerDean' => people_one($pdo, (int) $dean['user_id'], 'faculty'),
+        'afterCommit' => static function () use ($pdo, $config, $mails, $subject): void {
+            foreach ($mails as [$emailId, $email, $body]) {
+                try {
+                    if (!student_invitation_outbox_send($pdo, $config, $emailId, $email, $subject, $body)) error_log('Dean handover: a notice email was not delivered.');
+                } catch (Throwable $e) {
+                    error_log('Dean handover mail error: ' . sanitize_for_log($e));
+                }
+            }
+        }];
+}
+
 /** The Pending Activation Faculty or Student account whose latest invitation is still live (unused, not revoked, maybe expired). */
 function people_pending_fetch(PDO $pdo, int $userId, bool $lock): array
 {
@@ -624,7 +715,7 @@ function people_student_resend(PDO $pdo, array $config, array $actor, int $userI
         || $c['archived_at'] !== null || $c['archive_reason'] !== null || !academic_school_year_is_current($pdo, (string) $c['school_year'])) {
         throw new SuperadminConflict('invitation_class_unavailable', 'The class for this invitation is no longer active. Ask the Faculty member to invite the Student again.');
     }
-    $issued = student_invitation_issue_token($pdo, $userId, (int) $person['student_id'], (int) $c['cs_id'], 'Replaced by a Dean resend');
+    $issued = student_invitation_issue_token($pdo, $userId, (int) $person['student_id'], (int) $c['cs_id'], 'Replaced by a Superadmin resend');
     $subject = 'DentiSYS Student Invitation';
     $body = student_auth_activation_email($c, app_url($config, '/activate-student', ['token' => $issued['rawToken']]), (string) $c['faculty_name']);
     $emailId = student_invitation_outbox_insert($pdo, (int) $actor['user_id'], (string) $person['login_email'], (string) $person['display_name'], $subject, $body, uuid_v4_string());
@@ -639,10 +730,10 @@ function people_student_revoke(PDO $pdo, array $config, array $actor, int $userI
 {
     $pdo->beginTransaction();
     $person = people_pending_fetch($pdo, $userId, true);
-    $pdo->prepare("UPDATE security_tokens SET revoked_at = CURRENT_TIMESTAMP(6), revocation_reason = 'Revoked by the Dean'
+    $pdo->prepare("UPDATE security_tokens SET revoked_at = CURRENT_TIMESTAMP(6), revocation_reason = 'Revoked by the Superadmin'
         WHERE purpose = 'student_activation' AND user_id = ? AND used_at IS NULL AND revoked_at IS NULL")->execute([$userId]);
     audit_record_action($pdo, $config, $actor, 'people', 'student_invitation_revoked_by_dean', 'user_account', (string) $userId,
-        'Revoked the pending Student invitation for ' . $person['display_name'] . '.', ['reason' => 'Revoked by the Dean']);
+        'Revoked the pending Student invitation for ' . $person['display_name'] . '.', ['reason' => 'Revoked by the Superadmin']);
     $pdo->commit();
     return ['person' => null];
 }
@@ -656,7 +747,7 @@ function people_invitation(PDO $pdo, array $config, array $actor, array $data, s
     $context = ['request_id' => request_id(), 'ip_address' => request_ip(), 'user_agent' => request_user_agent(), 'http_method' => request_method(), 'endpoint' => request_path()];
     try {
         if ($action === 'revoke') {
-            if (!faculty_invitation_revoke_core($pdo, $config, $actor, $context, $userId, 'Revoked by the Dean')) {
+            if (!faculty_invitation_revoke_core($pdo, $config, $actor, $context, $userId, 'Revoked by the Superadmin')) {
                 throw new SuperadminConflict('no_pending_invitation', 'This person has no pending invitation.');
             }
             return ['person' => null];
@@ -686,8 +777,8 @@ function people_filter_options(PDO $pdo): array
     return ['courses' => array_values($courses), 'classes' => $classes, 'yearLevels' => array_map('intval', $levels)];
 }
 
-/** Part D: one request for the Superadmin Overview (Dean only, not audited). Flat shape documented in docs/contracts/superadmin.md section 12. */
-function overview_data(PDO $pdo, array $config): array
+/** Part D: one request for the Superadmin Overview (Superadmin only, not audited). Flat shape documented in docs/contracts/superadmin.md section 12. */
+function overview_data(PDO $pdo, array $config, int $superadminId): array
 {
     $cur = academic_current_school_year($pdo);
     $manila = new DateTimeZone('Asia/Manila');
@@ -699,7 +790,7 @@ function overview_data(PDO $pdo, array $config): array
     $twoFactor = [];
     foreach (['faculty' => 'faculty', 'student' => 'students'] as $kind => $key) {
         [$from, $invited] = people_base_sql($kind);
-        $teaches = $kind === 'faculty' ? 'EXISTS (SELECT 1 FROM class_sections c WHERE c.instructor_user_id = ua.user_id AND c.school_year = ' . $pdo->quote($cur) . ' AND c.archived_at IS NULL)' : 'TRUE';
+        $teaches = $kind === 'faculty' ? "ua.role = 'admin' OR EXISTS (SELECT 1 FROM class_sections c WHERE c.instructor_user_id = ua.user_id AND c.school_year = " . $pdo->quote($cur) . ' AND c.archived_at IS NULL)' : 'TRUE'; // the Dean never counts as "Faculty without classes"
         $row = $pdo->query("SELECT COUNT(*) FILTER (WHERE st = 'active') AS active, COUNT(*) FILTER (WHERE st = 'invited') AS invited,
                 COUNT(*) FILTER (WHERE st = 'deactivated') AS deactivated, COUNT(*) FILTER (WHERE expired) AS expired,
                 COUNT(*) FILTER (WHERE st = 'active' AND two_factor) AS mfa_on,
@@ -755,7 +846,12 @@ function overview_data(PDO $pdo, array $config): array
     $counts = $pdo->query("SELECT (SELECT COUNT(*) FROM courses WHERE status = 'active') AS ca, (SELECT COUNT(*) FROM courses WHERE status = 'retired') AS cr,
         (SELECT COUNT(*) FROM rooms WHERE status = 'active') AS ra, (SELECT COUNT(*) FROM rooms WHERE status = 'retired') AS rr")->fetch(PDO::FETCH_ASSOC);
 
-    return ['faceFlagsOpen' => face_flags_open_count($pdo), 'attention' => $attention, 'accounts' => $accounts, 'signIns' => array_values($weeks),
+    // DS6 (look check 2026-11-18): the latest 10 rows of the Superadmin's audit view, the entry shape the Dean Dashboard had.
+    $recent = audit_read_params([], 'superadmin');
+    $recent['pageSize'] = 10;
+
+    return ['faceFlagsOpen' => face_flags_open_count($pdo), 'recentAuditEvents' => audit_read_entries($pdo, ['user_id' => $superadminId, 'role' => 'superadmin'], $recent)['entries'],
+        'attention' => $attention, 'accounts' => $accounts, 'signIns' => array_values($weeks),
         'security' => ['twoFactor' => $twoFactor, 'failedSignIns' => array_values($days)],
         'yearLevels' => array_map(static fn(array $r): array => ['yearLevel' => (int) $r['year_level'], 'students' => (int) $r['n']], $yearLevels),
         'sectionsByCourse' => array_map(static fn(array $r): array => ['courseCode' => $r['course_code'], 'sections' => (int) $r['n']], $sections->fetchAll(PDO::FETCH_ASSOC)),
@@ -768,8 +864,8 @@ function handle_admin_overview(): void
     try {
         $config = app_config();
         $pdo = create_pdo($config);
-        admin_verify_auth($pdo, $config);
-        json_response(['status' => 'ok'] + overview_data($pdo, $config));
+        $superadminId = (int) superadmin_verify_auth($pdo, $config)['user_id'];
+        json_response(['status' => 'ok'] + overview_data($pdo, $config, $superadminId));
     } catch (Throwable $e) {
         error_log('Admin overview error: ' . sanitize_for_log($e));
         safe_error_response('Unable to load the overview.', 500);
@@ -782,7 +878,7 @@ function handle_admin_people(): void
     try {
         $config = app_config();
         $pdo = create_pdo($config);
-        $actor = admin_verify_auth($pdo, $config);
+        $actor = superadmin_verify_auth($pdo, $config);
         if (request_method() === 'GET' && basename(request_path()) === 'filters') {
             json_response(['status' => 'ok'] + people_filter_options($pdo));
             return;
@@ -856,6 +952,7 @@ function handle_admin_people(): void
             'reset-2fa' => people_reset_2fa($pdo, $config, $actor, $body['data']),
             'move-email' => people_move_email($pdo, $config, $actor, $body['data']),
             'name' => people_edit_name($pdo, $config, $actor, $body['data']),
+            'transfer-dean' => people_transfer_dean($pdo, $config, $actor, $body['data']),
             default => null,
         };
         if ($result === null) { $pdo->rollBack(); safe_error_response('Not found.', 404); return; }
@@ -884,7 +981,7 @@ function handle_admin_face_flags(): void
     try {
         $config = app_config();
         $pdo = create_pdo($config);
-        $actor = admin_verify_auth($pdo, $config);
+        $actor = superadmin_verify_auth($pdo, $config);
         if (request_method() === 'GET') {
             $status = (string) ($_GET['status'] ?? 'open');
             $page = (string) ($_GET['page'] ?? '1');

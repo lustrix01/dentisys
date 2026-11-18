@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'faculty' | 'secretary' | 'student';
+export type UserRole = 'superadmin' | 'admin' | 'faculty' | 'secretary' | 'student';
 
 export type AuthPhase =
   | 'bootstrapping'
@@ -24,10 +24,11 @@ export interface SafeUser {
 }
 
 export interface LoginResponse {
-  type: 'direct_login' | 'two_factor_required' | 'account_link_required' | 'google_linked';
+  type: 'direct_login' | 'two_factor_required' | 'two_factor_setup_required' | 'account_link_required' | 'google_linked';
   two_factor_required: boolean;
   two_factor_enrolled: boolean;
   two_factor_challenge_token?: string;
+  two_factor_setup_token?: string;
   expires_in?: number;
   access_token?: string;
   account_link_required?: boolean;
@@ -45,6 +46,7 @@ export interface EnrollStartResponse {
 export interface EnrollConfirmResponse {
   status: string;
   recovery_codes: string[];
+  access_token?: string;
 }
 
 export interface MfaSuccessResponse {

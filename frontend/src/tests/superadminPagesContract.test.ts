@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditQueryString } from '../services/auditService.ts';
 
-// ADM-001 Parts A-C: the three Superadmin pages use the real routes and keep the contract's behaviour.
+// ADM-001 Parts A-C, now owned by the Superadmin (13.9): the pages use the real routes and keep the contract's behaviour.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (rel: string): string => fs.readFileSync(path.join(here, rel), 'utf8');
 const api = read('../services/apiClient.ts');
@@ -46,7 +46,42 @@ test('Part C: People & Accounts deactivates and reactivates through the API and 
   assert.doesNotMatch(people, /Preview data|PREVIEW_ACCOUNTS|Deans/);
   assert.match(people, /faculty_has_current_classes/);
   assert.match(people, /Reassign or archive them first\./);
-  assert.match(people, /Link to="\/admin\/classes"/); // the blocked case lists the classes as links
+  assert.match(people, /Link to="\/(admin|superadmin)\/classes"/); // the blocked case lists the classes as links, now a Superadmin page
   assert.match(people, /Reason \(optional\)/);
   assert.match(people, /Class Secretary, the Secretary sign-in is blocked too/);
+});
+
+test('DS22 My Activity: the Dean Audit Trail has the Faculty settings, no list switch, no role filter, no attention cards', () => {
+  const dean = read('../pages/admin/AuditTrail.tsx');
+  assert.match(dean, /title="My Activity"/);
+  assert.doesNotMatch(dean.match(/DeanAuditTrail[\s\S]{0,400}/)?.[0] ?? 'superadmin', /superadmin/);
+});
+
+test('DS21 People & Accounts: the Dean row has a Dean badge, the action rules of 4.3 and the Hand Over Dean Role dialog', () => {
+  assert.match(people, /isDean/);
+  assert.match(people, /Hand over Dean role/);
+  assert.match(people, /Hand Over Dean Role/);
+  assert.match(people, /Choose what happens to the current Dean\./);
+  assert.match(people, /type="radio"/);
+  assert.match(people, /'Deactivated'/);
+  assert.match(people, /transferDeanApi\(/);
+  assert.ok(api.includes('/admin/people/transfer-dean'));
+});
+
+test('Section 8: user-visible wording names the Superadmin where the Superadmin now acts', () => {
+  assert.doesNotMatch(api, /Contact the Dean/);
+  assert.match(read('../components/RoomSelector.tsx'), /was retired\. Pick another room\./);
+  assert.doesNotMatch(read('../components/RoomSelector.tsx') + read('../components/AutoSessionsPanel.tsx'), /by the Dean|Ask the Dean/);
+  assert.match(read('../components/AutoSessionsPanel.tsx'), /Ask the Superadmin to set it in Rooms\./);
+  assert.match(read('../pages/faculty/ClassesAndRosters.tsx'), /Ask the Superadmin to add the term/);
+});
+
+test('DS5-DS6 the Dean Dashboard drops the audit widget; the Overview shows Latest Audit Events (10 rows, link to the Superadmin Audit Trail)', () => {
+  const dash = read('../pages/admin/Dashboard.tsx');
+  assert.doesNotMatch(dash, /Latest Audit Events|recentAuditEvents|academicTermReminder/);
+  const overview = read('../pages/admin/SuperadminOverview.tsx');
+  assert.match(overview, /Latest Audit Events/);
+  assert.match(overview, /\/superadmin\/audit-trail/);
+  assert.match(overview, /\/superadmin\/terms/);
+  assert.doesNotMatch(overview, /to: '\/admin\/(terms|rooms|course-catalog)'/);
 });

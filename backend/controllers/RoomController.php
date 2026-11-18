@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-/** ROOM-001: Dean-managed rooms. Classes, meetings and sessions keep the room name as text. */
+/** ROOM-001: Superadmin-managed rooms. Classes, meetings and sessions keep the room name as text. */
 
 /** Same rule as rooms.name_key / room_categories.name_key (migration 057): ignores case, spaces, dashes, dots. */
 const ROOM_KEY_SQL = "lower(regexp_replace(%s, '[\\s.\\-]+', '', 'g'))";
@@ -298,7 +298,7 @@ function room_set_status(PDO $pdo, array $config, array $actor, int $id, string 
     $row = room_fetch($pdo, $id);
     if ($to === 'retired') {
         room_notify($pdo, room_affected($pdo, $row['name_key'], 'use'), $row, 'room_retired', 'Room retired', static fn(string $what): string =>
-            $row['name'] . ' was retired by the Dean. Change the room for ' . $what . '.');
+            $row['name'] . ' was retired. Change the room for ' . $what . '.');
     }
     $code = $to === 'retired' ? 'room_retired' : 'room_restored';
     audit_record_action($pdo, $config, $actor, 'settings', $code, 'room', (string) $id,
@@ -405,7 +405,7 @@ function handle_admin_rooms(): void
     try {
         $config = app_config();
         $pdo = create_pdo($config);
-        $actor = admin_verify_auth($pdo, $config);
+        $actor = superadmin_verify_auth($pdo, $config);
         if (request_method() === 'GET') {
             $categories = array_map('category_json', $pdo->query(CATEGORY_SELECT . ' ORDER BY c.name')->fetchAll(PDO::FETCH_ASSOC));
             json_response(['status' => 'ok', 'rooms' => room_list($pdo), 'categories' => $categories,

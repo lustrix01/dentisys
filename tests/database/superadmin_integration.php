@@ -2,13 +2,14 @@
 
 declare(strict_types=1);
 
-// ADM-001 Superadmin mode (docs/contracts/superadmin.md): Course Catalog, People & Accounts, class-work audit.
+// ADM-001 Superadmin (docs/contracts/superadmin.md, role split in docs/contracts/dean-superadmin-split.md): Course Catalog, People & Accounts, class-work audit.
 // Included by the full disposable PostgreSQL suite right after audit_read_integration.php, so it reuses that
 // scenario's $readWrite writer, $readTag, $readFaculty and $readOwnClass. Every row it makes carries $saTag.
 $saTag = 'sa' . strtolower(bin2hex(random_bytes(3)));
 $saPass = 'SuperAdm1n!Pass';
-$saGet = static fn(string $path, ?string $token = null): array => integration_http_get_json($path, $token ?? $adminAccessToken);
-$saPost = static fn(string $path, array $body, ?string $token = null): array => integration_http_json($path, $token ?? $adminAccessToken, $body);
+// 13.9: these routes belong to the Superadmin ($superAccessToken from postgres_integration_test.php); the Dean's token is passed where a Dean route is meant.
+$saGet = static fn(string $path, ?string $token = null): array => integration_http_get_json($path, $token ?? $superAccessToken);
+$saPost = static fn(string $path, array $body, ?string $token = null): array => integration_http_json($path, $token ?? $superAccessToken, $body);
 $saAuditRows = static function (string $code, string $targetId) use ($pdo): array {
     $stmt = $pdo->prepare('SELECT reason, before_state_json, after_state_json FROM audit_events WHERE action_code = ? AND target_id = ? ORDER BY event_id');
     $stmt->execute([$code, $targetId]);
@@ -28,10 +29,10 @@ $saAccount = static function (string $email, string $role, string $name, ?string
     return $id;
 };
 
-// Every new route is Dean-only (SA5): Faculty and Secretary 403, anonymous 401.
+// Every route here is Superadmin-only (4.1): the Dean, Faculty and Secretary get 403, anonymous 401.
 foreach ([['GET', '/api/admin/courses'], ['GET', '/api/admin/people'], ['POST', '/api/admin/courses/retire'], ['POST', '/api/admin/people/deactivate'], ['GET', '/api/admin/people/filters'],
     ['POST', '/api/admin/people/sign-out'], ['POST', '/api/admin/people/reset-2fa'], ['POST', '/api/admin/people/invitation/resend'], ['POST', '/api/admin/people/invitation/revoke']] as [$saMethod, $saPath]) {
-    foreach ([['Faculty', $seedFacultyAccessToken, 403], ['Secretary', $secretaryAccessToken, 403], ['anonymous', '', 401]] as [$saWho, $saToken, $saWant]) {
+    foreach ([['Dean', $adminAccessToken, 403], ['Faculty', $seedFacultyAccessToken, 403], ['Secretary', $secretaryAccessToken, 403], ['anonymous', '', 401]] as [$saWho, $saToken, $saWant]) {
         [$saStatus] = $saMethod === 'GET' ? integration_http_get_json($saPath, $saToken) : integration_http_json($saPath, $saToken, ['id' => 1, 'userId' => 1]);
         expect_same($saWant, $saStatus, "{$saWho} gets {$saWant} on {$saMethod} {$saPath}");
     }
@@ -51,7 +52,7 @@ try {
     expect_same('23514', $saPairError->getCode(), 'The retired_at pairing check refuses a retired course without a date');
 }
 [$saListStatus, $saList] = $saGet('/api/admin/courses?status=active&q=' . rawurlencode($saTag));
-expect_true($saListStatus === 200 && count($saList['courses'] ?? []) === 2 && ($saList['courses'][0]['classCount'] ?? null) === 0, 'The Dean lists active courses with usage counts');
+expect_true($saListStatus === 200 && count($saList['courses'] ?? []) === 2 && ($saList['courses'][0]['classCount'] ?? null) === 0, 'The Superadmin lists active courses with usage counts');
 $saClass = $pdo->prepare("INSERT INTO class_sections (cs_name, course_id, instructor_user_id, semester, school_year, status) VALUES (?, ?, ?, '1ST', ?, 'Active') RETURNING cs_id");
 $saClass->execute(["SA-CLASS-{$saTag}", $saCourseId, (int) $readFaculty['user_id'], academic_current_school_year($pdo)]);
 $saClassId = (int) $saClass->fetchColumn();
@@ -84,7 +85,7 @@ expect_true(!in_array("SA-{$saTag}", array_column($saPickerAfter['courses'] ?? [
 expect_same("SA-{$saTag}", $pdo->query("SELECT c.course_code FROM class_sections cs JOIN courses c ON c.course_id = cs.course_id WHERE cs.cs_id = {$saClassId}")->fetchColumn(), 'An existing class keeps its retired course');
 $saTermId = (int) ($pdo->query("SELECT id FROM academic_terms WHERE school_year = " . $pdo->quote(academic_current_school_year($pdo)) . ' ORDER BY end_date DESC LIMIT 1')->fetchColumn() ?: $pdo->query('SELECT MIN(id) FROM academic_terms')->fetchColumn());
 [$saTypedStatus, $saTyped] = integration_http_json('/api/faculty/classes', $seedFacultyAccessToken, ['csName' => "SA-TYPED-{$saTag}", 'courseCode' => strtolower("sa-{$saTag}"), 'lectureUnits' => 1, 'academicTermId' => $saTermId]);
-expect_true($saTypedStatus === 409 && ($saTyped['code'] ?? '') === 'course_retired' && ($saTyped['message'] ?? '') === 'This course was retired by the Dean. Ask the Dean to restore it.', 'A retired code typed by Faculty is refused with the Dean message (SA16)');
+expect_true($saTypedStatus === 409 && ($saTyped['code'] ?? '') === 'course_retired' && ($saTyped['message'] ?? '') === 'This course was retired. Ask the Superadmin to restore it.', 'A retired code typed by Faculty is refused with the Superadmin message (SA16, section 8)');
 expect_same(0, (int) $pdo->query("SELECT COUNT(*) FROM class_sections WHERE cs_name = 'SA-TYPED-{$saTag}'")->fetchColumn(), 'The refused class was not created');
 [$saRestoreStatus, $saRestore] = $saPost('/api/admin/courses/restore', ['id' => $saCourseId]);
 expect_true($saRestoreStatus === 200 && ($saRestore['course']['status'] ?? '') === 'active' && array_key_exists('retiredAt', $saRestore['course'] ?? []) && $saRestore['course']['retiredAt'] === null, 'Restore puts the course back');
@@ -106,9 +107,12 @@ $saClass->execute(["SA-OLD-{$saTag}", $saCourseId, $saPast, '2001-2002']);
 
 [$saPeopleStatus, $saPeople] = $saGet('/api/admin/people?kind=faculty&q=' . rawurlencode($saTag));
 $saFacultyRows = array_column($saPeople['people'] ?? [], null, 'userId');
-expect_true($saPeopleStatus === 200 && count($saFacultyRows) === 3 && ($saFacultyRows[$saBusy]['classes'][0]['current'] ?? false) === true && ($saFacultyRows[$saFaculty]['classes'] ?? null) === [], 'The Dean lists Faculty with each member\'s classes');
+expect_true($saPeopleStatus === 200 && count($saFacultyRows) === 3 && ($saFacultyRows[$saBusy]['classes'][0]['current'] ?? false) === true && ($saFacultyRows[$saFaculty]['classes'] ?? null) === [], 'The Superadmin lists Faculty with each member\'s classes');
 [, $saPeopleDeans] = $saGet('/api/admin/people?kind=faculty&q=admin%40bicol');
-expect_same([], $saPeopleDeans['people'] ?? null, 'Deans are not listed');
+expect_true(count($saPeopleDeans['people'] ?? []) === 1 && ($saPeopleDeans['people'][0]['userId'] ?? 0) === (int) $readDean['user_id'] && ($saPeopleDeans['people'][0]['kind'] ?? '') === 'faculty' && ($saPeopleDeans['people'][0]['isDean'] ?? null) === true, 'DS9: the Dean is listed under Faculty with isDean true');
+[, $saPeopleSuper] = $saGet('/api/admin/people?status=all&q=' . rawurlencode($superEmail));
+expect_same([], $saPeopleSuper['people'] ?? null, 'DS9: the Superadmin is never listed');
+expect_same(404, $saPost('/api/admin/people/deactivate', ['userId' => $superUserId])[0], 'The Superadmin cannot be deactivated from People (not listed: 404)');
 [$saLoginStatus, $saLogin] = integration_http_json('/api/auth/login', '', ['email' => "sa-free-{$saTag}@bicol-u.edu.ph", 'password' => $saPass]);
 expect_same(200, $saLoginStatus, 'The Faculty fixture signs in before deactivation');
 $saVersion = (int) $pdo->query("SELECT token_version FROM user_accounts WHERE user_id = {$saFaculty}")->fetchColumn();
@@ -129,7 +133,7 @@ expect_same('Account deactivated', $pdo->query("SELECT revocation_reason FROM au
 [$saOldTokenStatus] = integration_http_get_json('/api/faculty/classes', (string) ($saLogin['access_token'] ?? ''));
 expect_same(401, $saOldTokenStatus, 'The old access token stops working at once');
 [$saDeniedStatus, $saDenied] = integration_http_json('/api/auth/login', '', ['email' => "sa-free-{$saTag}@bicol-u.edu.ph", 'password' => $saPass]);
-expect_true($saDeniedStatus === 403 && str_ends_with((string) ($saDenied['message'] ?? ''), 'Contact the Dean.'), 'Sign-in with the right password is refused with "Contact the Dean."');
+expect_true($saDeniedStatus === 403 && str_ends_with((string) ($saDenied['message'] ?? ''), 'Contact the Superadmin.'), 'Sign-in with the right password is refused with "Contact the Superadmin."');
 $saOffRows = $saAuditRows('account_deactivated', (string) $saFaculty);
 expect_true(count($saOffRows) === 1 && $saOffRows[0]['reason'] === 'Left the school' && str_contains((string) $saOffRows[0]['after_state_json'], 'Disabled'), 'Deactivation writes one audit row with the reason');
 $saPost('/api/admin/people/deactivate', ['userId' => $saFaculty]);
@@ -142,7 +146,8 @@ expect_true($saOnReStatus === 200 && ($saOnRe['person']['status'] ?? '') === 'ac
 expect_same(200, $saBackStatus, 'After reactivation the person signs in with the same password');
 expect_same(1, count($saAuditRows('account_reactivated', (string) $saFaculty)), 'Reactivation writes one audit row');
 [$saDeanStatus, $saDean] = $saPost('/api/admin/people/deactivate', ['userId' => (int) $readDean['user_id']]);
-expect_true($saDeanStatus === 404 && ($saDean['code'] ?? '') === 'person_not_found', 'A Dean can never be deactivated, not even their own account (SA23)');
+expect_true($saDeanStatus === 422 && ($saDean['code'] ?? '') === 'dean_not_deactivatable' && ($saDean['message'] ?? '') === 'The Dean cannot be deactivated. Hand the Dean role to a Faculty member instead.', 'The Dean is never deactivated (4.3): 422 dean_not_deactivatable');
+expect_same('Active', $pdo->query("SELECT status FROM user_accounts WHERE user_id = " . (int) $readDean['user_id'])->fetchColumn(), 'A refused Dean deactivation changes nothing');
 [$saGhostStatus] = $saPost('/api/admin/people/deactivate', ['userId' => 999999]);
 [$saKindStatus] = $saGet('/api/admin/people?kind=dean');
 expect_same([404, 422], [$saGhostStatus, $saKindStatus], 'An unknown account is 404 and an unknown kind is 422');
@@ -167,7 +172,7 @@ foreach ([$saStudent, $saSecretary] as $saStudentUser) {
     expect_same(200, $saStuOffStatus, 'A Student account has no class block (SA22)');
     $saEmail = (string) $pdo->query("SELECT login_email FROM user_accounts WHERE user_id = {$saStudentUser}")->fetchColumn();
     [$saStuDeniedStatus, $saStuDenied] = integration_http_json('/api/auth/login', '', ['email' => $saEmail, 'password' => $saPass]);
-    expect_true($saStuDeniedStatus === 403 && str_ends_with((string) ($saStuDenied['message'] ?? ''), 'Contact the Dean.'), "Sign-in is refused for {$saEmail}");
+    expect_true($saStuDeniedStatus === 403 && str_ends_with((string) ($saStuDenied['message'] ?? ''), 'Contact the Superadmin.'), "Sign-in is refused for {$saEmail}");
     [$saStuOnStatus] = $saPost('/api/admin/people/reactivate', ['userId' => $saStudentUser]);
     expect_same(['active', 200], [$pdo->query("SELECT status FROM user_accounts WHERE user_id = {$saStudentUser}")->fetchColumn() === 'Active' ? 'active' : 'off', $saStuOnStatus], "Reactivation restores {$saEmail}");
 }
@@ -186,10 +191,10 @@ expect_same(401, $saStuOldStatus, 'The old access token stops working after Sign
 $saOutRows = $saAuditRows('sessions_ended_by_dean', (string) $saStudent);
 expect_true(count($saOutRows) === 1 && $saOutRows[0]['reason'] === 'Shared laptop', 'Sign out writes one audit row with the reason');
 [$saOutLong] = $saPost('/api/admin/people/sign-out', ['userId' => $saStudent, 'reason' => str_repeat('x', 501)]);
-[$saOutDean, $saOutDeanBody] = $saPost('/api/admin/people/sign-out', ['userId' => (int) $readDean['user_id']]);
-expect_true($saOutLong === 422 && $saOutDean === 404 && ($saOutDeanBody['code'] ?? '') === 'person_not_found', 'Sign out validates the reason and refuses a Dean');
+[$saOutSuper, $saOutSuperBody] = $saPost('/api/admin/people/sign-out', ['userId' => $superUserId]);
+expect_true($saOutLong === 422 && $saOutSuper === 404 && ($saOutSuperBody['code'] ?? '') === 'person_not_found', 'Sign out validates the reason and never touches the Superadmin account (the Dean row is tested in superadmin_split_integration.php)');
 
-// Reset 2FA: authenticator and recovery codes go, sessions end, the Dean row counts as 2FA turned off.
+// Reset 2FA: authenticator and recovery codes go, sessions end, the Superadmin row counts as 2FA turned off.
 [$saNoMfaStatus, $saNoMfa] = $saPost('/api/admin/people/reset-2fa', ['userId' => $saStudent]);
 expect_true($saNoMfaStatus === 409 && ($saNoMfa['code'] ?? '') === 'two_factor_off' && ($saNoMfa['message'] ?? '') === 'This person does not use 2FA.', 'Reset 2FA without 2FA is two_factor_off');
 expect_same(0, count($saAuditRows('mfa_reset_by_dean', (string) $saStudent)), 'A refused reset writes no audit row');
@@ -204,7 +209,7 @@ $saStuVersion = (int) $pdo->query("SELECT token_version FROM user_accounts WHERE
 [$saResetStatus, $saReset] = $saPost('/api/admin/people/reset-2fa', ['userId' => $saStudent, 'reason' => 'Lost phone']);
 expect_true($saResetStatus === 200 && ($saReset['person']['twoFactor'] ?? null) === false, 'Reset 2FA returns the person with 2FA off');
 expect_same(0, (int) $pdo->query("SELECT COUNT(*) FROM security_tokens WHERE user_id = {$saStudent} AND purpose IN ('mfa_credential', 'mfa_recovery') AND revoked_at IS NULL")->fetchColumn(), 'Reset 2FA revokes the authenticator and the recovery codes');
-expect_same('Reset by the Dean', $pdo->query("SELECT revocation_reason FROM security_tokens WHERE user_id = {$saStudent} AND purpose = 'mfa_credential' ORDER BY token_id DESC LIMIT 1")->fetchColumn(), 'The revoked authenticator carries the Dean reason');
+expect_same('Reset by the Superadmin', $pdo->query("SELECT revocation_reason FROM security_tokens WHERE user_id = {$saStudent} AND purpose = 'mfa_credential' ORDER BY token_id DESC LIMIT 1")->fetchColumn(), 'The revoked authenticator carries the Superadmin reason (section 8)');
 expect_same($saStuVersion + 1, (int) $pdo->query("SELECT token_version FROM user_accounts WHERE user_id = {$saStudent}")->fetchColumn(), 'Reset 2FA bumps token_version');
 expect_same(0, (int) $pdo->query("SELECT COUNT(*) FROM auth_sessions WHERE user_id = {$saStudent} AND revoked_at IS NULL")->fetchColumn(), 'Reset 2FA ends every session');
 $saResetRows = $saAuditRows('mfa_reset_by_dean', (string) $saStudent);
@@ -250,7 +255,8 @@ expect_true($saOptionsStatus === 200 && in_array($saCourseId, array_column($saOp
 
 // Invited Faculty: created through the Faculty Invitations route, then handled from People through the same code.
 $saInvEmail = "sa-inv-{$saTag}@bicol-u.edu.ph";
-[$saInvStatus, $saInv] = $saPost('/api/admin/faculty-invitations', ['firstName' => 'Invited', 'lastName' => 'Fac' . strtr($saTag, '0123456789', 'abcdefghij'), 'email' => $saInvEmail]);
+[$saInvStatus, $saInv] = $saPost('/api/admin/faculty-invitations', ['firstName' => 'Invited', 'lastName' => 'Fac' . strtr($saTag, '0123456789', 'abcdefghij'), 'email' => $saInvEmail], $adminAccessToken);
+expect_same(403, $saPost('/api/admin/faculty-invitations', ['firstName' => 'Invited', 'lastName' => 'Nope', 'email' => "sa-no-{$saTag}@bicol-u.edu.ph"])[0], 'D7: Faculty Invitations stay with the Dean; the Superadmin gets 403');
 $saInvId = (int) ($saInv['invitation']['id'] ?? 0);
 expect_true($saInvStatus === 201 && $saInvId > 0, 'The Faculty invitation fixture is issued');
 [, $saInvList] = $saGet('/api/admin/people?kind=faculty&status=invited&q=' . rawurlencode($saTag));
@@ -267,18 +273,18 @@ $saBeforeResend = $saFacultyInvites();
 [$saResendStatus, $saResend] = $saPost('/api/admin/people/invitation/resend', ['userId' => $saInvId]);
 expect_true($saResendStatus === 200 && ($saResend['person']['status'] ?? '') === 'invited' && $saFacultyInvites() === $saBeforeResend + 1, 'Resending a Faculty invitation from People reuses the Faculty reissue and its audit code');
 expect_same(1, (int) $pdo->query("SELECT COUNT(*) FROM security_tokens WHERE purpose = 'faculty_invitation' AND user_id = {$saInvId} AND revoked_at IS NULL AND used_at IS NULL")->fetchColumn(), 'Resend leaves exactly one live token');
-[$saReissueStatus] = $saPost('/api/admin/faculty-invitations/reissue', ['id' => (string) $saInvId]);
+[$saReissueStatus] = $saPost('/api/admin/faculty-invitations/reissue', ['id' => (string) $saInvId], $adminAccessToken);
 expect_same(201, $saReissueStatus, 'The Faculty Invitations reissue route still works');
 [$saRevokeStatus, $saRevoke] = $saPost('/api/admin/people/invitation/revoke', ['userId' => $saInvId]);
 expect_true($saRevokeStatus === 200 && array_key_exists('person', $saRevoke) && $saRevoke['person'] === null, 'Revoking a Faculty invitation from People succeeds');
 expect_same(1, count($saAuditRows('faculty_invitation_revoked', (string) $saInvId)), 'Revoke from People writes the Faculty invitation_revoked audit row');
-expect_same('Revoked by the Dean', $pdo->query("SELECT revocation_reason FROM security_tokens WHERE purpose = 'faculty_invitation' AND user_id = {$saInvId} ORDER BY token_id DESC LIMIT 1")->fetchColumn(), 'The revoked token carries the Dean reason');
+expect_same('Revoked by the Superadmin', $pdo->query("SELECT revocation_reason FROM security_tokens WHERE purpose = 'faculty_invitation' AND user_id = {$saInvId} ORDER BY token_id DESC LIMIT 1")->fetchColumn(), 'The revoked token carries the Superadmin reason (section 8)');
 [, $saInvGone] = $saGet('/api/admin/people?kind=faculty&status=invited&q=' . rawurlencode($saTag));
 [$saAgainRevokeStatus, $saAgainRevoke] = $saPost('/api/admin/people/invitation/revoke', ['userId' => $saInvId]);
 [$saAgainResendStatus, $saAgainResend] = $saPost('/api/admin/people/invitation/resend', ['userId' => $saInvId]);
 expect_true($saIds($saInvGone) === [] && $saAgainRevokeStatus === 409 && ($saAgainRevoke['code'] ?? '') === 'no_pending_invitation' && $saAgainResendStatus === 409 && ($saAgainResend['code'] ?? '') === 'no_pending_invitation', 'A revoked invitation leaves the list and cannot be resent or revoked again');
-[$saReissue2] = $saPost('/api/admin/faculty-invitations/reissue', ['id' => (string) $saInvId]);
-[$saOldRevoke] = $saPost('/api/admin/faculty-invitations/revoke', ['id' => (string) $saInvId]);
+[$saReissue2] = $saPost('/api/admin/faculty-invitations/reissue', ['id' => (string) $saInvId], $adminAccessToken);
+[$saOldRevoke] = $saPost('/api/admin/faculty-invitations/revoke', ['id' => (string) $saInvId], $adminAccessToken);
 expect_same([201, 200], [$saReissue2, $saOldRevoke], 'The Faculty Invitations reissue and revoke routes still work after People used them');
 [$saActiveResendStatus, $saActiveResend] = $saPost('/api/admin/people/invitation/resend', ['userId' => $saFaculty]);
 expect_true($saActiveResendStatus === 409 && ($saActiveResend['code'] ?? '') === 'no_pending_invitation', 'An active account has no pending invitation');
@@ -319,13 +325,13 @@ expect_same(1, (int) $pdo->query("SELECT COUNT(*) FROM security_tokens WHERE pur
 [$saPendResendStatus, $saPendResend] = $saPost('/api/admin/people/invitation/resend', ['userId' => $saPendA['userId']]);
 expect_true($saPendResendStatus === 200 && ($saPendResend['person']['status'] ?? '') === 'invited' && ($saPendResend['person']['invitation']['expired'] ?? null) === false, 'Resending an expired Student invitation makes it live again');
 $saTokens = $pdo->query("SELECT related_student_id, related_cs_id, revoked_at, revocation_reason, (expires_at - issued_at) = INTERVAL '7 days' AS seven FROM security_tokens WHERE purpose = 'student_activation' AND user_id = {$saPendA['userId']} ORDER BY token_id")->fetchAll(PDO::FETCH_ASSOC);
-expect_true(count($saTokens) === 2 && $saTokens[0]['revocation_reason'] === 'Replaced by a Dean resend' && $saTokens[1]['revoked_at'] === null && (int) $saTokens[1]['related_cs_id'] === $saBusyClass
+expect_true(count($saTokens) === 2 && $saTokens[0]['revocation_reason'] === 'Replaced by a Superadmin resend' && $saTokens[1]['revoked_at'] === null && (int) $saTokens[1]['related_cs_id'] === $saBusyClass
     && (int) $saTokens[1]['related_student_id'] === $saPendA['studentId'] && in_array($saTokens[1]['seven'], [true, 't', '1', 1], true), 'The resend replaces the old token and keeps the Student, class and 7 days');
 $saTokenRow = $pdo->query("SELECT token_id FROM security_tokens WHERE purpose = 'student_activation' AND user_id = {$saPendA['userId']} ORDER BY token_id DESC LIMIT 1")->fetchColumn();
 expect_same(1, count($saAuditRows('student_invitation_resent_by_dean', (string) $saTokenRow)), 'The resend writes one audit row');
 [$saPendRevokeStatus, $saPendRevoke] = $saPost('/api/admin/people/invitation/revoke', ['userId' => $saPendB['userId']]);
 expect_true($saPendRevokeStatus === 200 && array_key_exists('person', $saPendRevoke) && $saPendRevoke['person'] === null, 'Revoking a Student invitation succeeds');
-expect_same('Revoked by the Dean', $pdo->query("SELECT revocation_reason FROM security_tokens WHERE purpose = 'student_activation' AND user_id = {$saPendB['userId']}")->fetchColumn(), 'The Student token carries the Dean reason');
+expect_same('Revoked by the Superadmin', $pdo->query("SELECT revocation_reason FROM security_tokens WHERE purpose = 'student_activation' AND user_id = {$saPendB['userId']}")->fetchColumn(), 'The Student token carries the Superadmin reason (section 8)');
 expect_same(1, count($saAuditRows('student_invitation_revoked_by_dean', (string) $saPendB['userId'])), 'The revoke writes one audit row');
 [$saPendAgainStatus, $saPendAgain] = $saPost('/api/admin/people/invitation/revoke', ['userId' => $saPendB['userId']]);
 expect_true($saPendAgainStatus === 409 && ($saPendAgain['code'] ?? '') === 'no_pending_invitation' && ($saPendAgain['message'] ?? '') === 'This person has no pending invitation.', 'Revoking twice is no_pending_invitation');
@@ -376,12 +382,15 @@ $saBadSort = [$saGet('/api/admin/people?kind=student&sort=email')[1], $saGet('/a
 expect_same([['sort'], ['dir'], ['sort']], array_map(static fn(array $b): array => array_column($b['errors'] ?? [], 'field'), $saBadSort), 'An unknown sort, direction or studentNo for Faculty is a 422 on that field');
 expect_same(422, $saGet('/api/admin/people?kind=faculty&sort=studentNo')[0], 'studentNo sorting is for Students only');
 
-// Overview: Dean only, one flat answer; its counts equal the People lists' totals.
-foreach ([['Faculty', $seedFacultyAccessToken, 403], ['Secretary', $secretaryAccessToken, 403], ['anonymous', '', 401]] as [$saWho, $saToken, $saWant]) {
+// Overview: Superadmin only, one flat answer; its counts equal the People lists' totals.
+foreach ([['Dean', $adminAccessToken, 403], ['Faculty', $seedFacultyAccessToken, 403], ['Secretary', $secretaryAccessToken, 403], ['anonymous', '', 401]] as [$saWho, $saToken, $saWant]) {
     expect_same($saWant, integration_http_get_json('/api/admin/overview', $saToken)[0], "{$saWho} gets {$saWant} on GET /api/admin/overview");
 }
 [$saOvStatus, $saOv] = $saGet('/api/admin/overview');
-expect_true($saOvStatus === 200 && ($saOv['status'] ?? '') === 'ok' && array_keys($saOv) === ['status', 'faceFlagsOpen', 'attention', 'accounts', 'signIns', 'security', 'yearLevels', 'sectionsByCourse', 'setup'], 'The overview answers one flat object with every section');
+$saOvKeys = array_keys($saOv);
+sort($saOvKeys);
+expect_true($saOvStatus === 200 && ($saOv['status'] ?? '') === 'ok' && $saOvKeys === ['accounts', 'attention', 'faceFlagsOpen', 'recentAuditEvents', 'sectionsByCourse', 'security', 'setup', 'signIns', 'status', 'yearLevels'], 'The overview answers one flat object with every section plus recentAuditEvents (DS6); no separate academicTermReminder field');
+expect_true(is_array($saOv['recentAuditEvents'] ?? null) && count($saOv['recentAuditEvents']) <= 10, 'DS6: recentAuditEvents holds at most 10 entries');
 $saTotal = static fn(string $query): int => (int) ($saGet('/api/admin/people?' . $query)[1]['total'] ?? -1);
 foreach (['faculty' => 'faculty', 'student' => 'students'] as $saKind => $saKey) {
     expect_same([$saTotal("kind={$saKind}&status=active"), $saTotal("kind={$saKind}&status=invited"), $saTotal("kind={$saKind}&status=deactivated")],
@@ -468,10 +477,12 @@ expect_true($mvStatus === 409 && ($mvBody['code'] ?? '') === 'email_taken', 'An 
 $pdo->prepare("INSERT INTO students (student_number, first_name, last_name, bu_email, status) VALUES (?, 'Sa', 'Rec', ?, 'active')")->execute(["MV-{$saTag}-R", "sa-rec-{$saTag}@bicol-u.edu.ph"]);
 [$mvStatus, $mvBody] = $mvPost(['userId' => $mvFac, 'newEmail' => "sa-rec-{$saTag}@bicol-u.edu.ph"]);
 expect_true($mvStatus === 409 && ($mvBody['code'] ?? '') === 'email_taken', 'An address used by a Student record is email_taken');
-foreach ([['the Dean', (int) $readDean['user_id']], ['an invited person', $mvInvited]] as [$mvWho, $mvId]) {
+foreach ([['the Superadmin', $superUserId], ['an invited person', $mvInvited]] as [$mvWho, $mvId]) {
     [$mvStatus, $mvBody] = $mvPost(['userId' => $mvId, 'newEmail' => $mvNew('x')]);
-    expect_true($mvStatus === 422 && ($mvBody['code'] ?? '') === 'move_not_allowed', "Moving {$mvWho} is move_not_allowed");
+    expect_true(in_array($mvStatus, [404, 422], true) && in_array($mvBody['code'] ?? '', ['move_not_allowed', 'person_not_found'], true), "Moving {$mvWho} is refused (4.3: move_not_allowed covers invited people and the Superadmin)");
 }
+[$mvStatus, $mvBody] = $mvPost(['userId' => $mvInvited, 'newEmail' => $mvNew('x')]);
+expect_true($mvStatus === 422 && ($mvBody['code'] ?? '') === 'move_not_allowed' && ($mvBody['message'] ?? '') === 'Email moves are for accounts that have signed up.', '4.3: an invited person gets the move_not_allowed message');
 [$mvStatus, $mvBody] = $mvPost(['userId' => 999999999, 'newEmail' => $mvNew('x')]);
 expect_true($mvStatus === 404 && ($mvBody['code'] ?? '') === 'person_not_found', 'An unknown account is person_not_found');
 expect_same(0, (int) $pdo->query("SELECT COUNT(*) FROM retired_emails WHERE user_id IN ({$mvFac}, {$mvStu}, {$mvSec})")->fetchColumn(), 'Refused moves retire nothing');
@@ -496,7 +507,7 @@ expect_same(0, (int) $pdo->query("SELECT COUNT(*) FROM security_tokens WHERE use
 expect_same(1, $mvOpenTokens($mvStu), 'The earlier reset link is cancelled and exactly one new password-reset link is issued');
 expect_same(401, integration_http_get_json('/api/student/dashboard', (string) ($mvLogin['access_token'] ?? ''))[0], 'The old access token stops working');
 $mvMail = $pdo->query("SELECT recipient_email, subject, sender_user_id FROM email_outbox ORDER BY email_id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
-expect_same([$mvOutboxBefore + 1, $mvNew('stu'), 'Set your DentiSYS password', (int) $readDean['user_id']], [(int) $pdo->query('SELECT COUNT(*) FROM email_outbox')->fetchColumn(), $mvMail['recipient_email'], $mvMail['subject'], (int) $mvMail['sender_user_id']], 'One "Set your DentiSYS password" email goes to the new address only, with the Dean as sender');
+expect_same([$mvOutboxBefore + 1, $mvNew('stu'), 'Set your DentiSYS password', $superUserId], [(int) $pdo->query('SELECT COUNT(*) FROM email_outbox')->fetchColumn(), $mvMail['recipient_email'], $mvMail['subject'], (int) $mvMail['sender_user_id']], 'One "Set your DentiSYS password" email goes to the new address only, with the acting Superadmin as sender');
 expect_same(0, (int) $pdo->query("SELECT COUNT(*) FROM email_outbox WHERE recipient_email = '{$mvOldEmail}' AND created_at > NOW() - INTERVAL '1 minute'")->fetchColumn(), 'Nothing is sent to the old address');
 $mvRows = $saAuditRows('account_email_moved', (string) $mvStu);
 expect_true(count($mvRows) === 1 && $mvRows[0]['reason'] === 'Old mailbox compromised' && str_contains((string) $mvRows[0]['before_state_json'], $mvOldEmail) && str_contains((string) $mvRows[0]['after_state_json'], $mvNew('stu')), 'One account_email_moved audit row holds old, new and the reason');
@@ -533,24 +544,16 @@ expect_true(count($mvRows) === 1 && $mvRows[0]['reason'] === 'Misspelled at regi
 expect_true($mvStatus === 422 && ($mvBody['code'] ?? '') === 'name_unchanged' && count($saAuditRows('account_name_changed_by_dean', (string) $mvFac)) === 1, 'The same name is name_unchanged with no audit row');
 [$mvStatus, $mvBody] = $saPost('/api/admin/people/name', $mvNameBody(['name' => ['firstName' => 'L', 'lastName' => 'Santos'], 'reason' => 'x']));
 expect_true($mvStatus === 422 && $mvField($mvBody, 'firstName') && $mvField($mvBody, 'reason'), 'Edit name validates the name parts and the reason');
-[$mvStatus, $mvBody] = $saPost('/api/admin/people/name', $mvNameBody(['userId' => (int) $readDean['user_id']]));
-expect_same(404, $mvStatus, 'The Dean\'s own name is not edited here');
+[$mvStatus, $mvBody] = $saPost('/api/admin/people/name', $mvNameBody(['userId' => $superUserId]));
+expect_same(404, $mvStatus, 'The Superadmin\'s name is not edited here (the Superadmin changes its own in Profile)');
 [$mvStatus, $mvBody] = $saPost('/api/admin/people/name', $mvNameBody(['userId' => $mvSec, 'name' => ['firstName' => 'Sec', 'lastName' => "Renamed{$mvLetters}"]]));
 expect_true($mvStatus === 200 && ($mvBody['person']['name'] ?? '') === "Sec Renamed{$mvLetters}" && $pdo->query("SELECT last_name FROM students WHERE student_account_user_id = {$mvSec}")->fetchColumn() === "Renamed{$mvLetters}", 'Editing a Student name also updates the Student record');
 [, $mvList] = $saGet('/api/admin/people?kind=faculty&q=' . rawurlencode("Santos{$mvLetters}"));
 expect_same(['Dr.', 'Lea', 'M', "Santos{$mvLetters}", 'DMD'], array_values($mvList['people'][0]['nameParts'] ?? []), 'The people list carries nameParts');
 
 // bin/account-admin.php (section 7).
-[$mvCode, $mvOut] = $mvRun(['transfer-dean', '--to', "sa-mvf-{$saTag}@bicol-u.edu.ph", '--reason', 'New Dean appointed'], "YES\n");
-expect_true($mvCode === 1 && str_contains($mvOut, '--old-dean'), 'transfer-dean refuses without --old-dean');
-[$mvCode, $mvOut] = $mvRun(['transfer-dean', '--to', $mvNew('stu'), '--old-dean', 'faculty', '--reason', 'New Dean appointed'], "YES\n");
-expect_true($mvCode === 1 && str_contains($mvOut, 'not an active Faculty'), 'transfer-dean refuses a target that is not active Faculty');
-$pdo->exec("INSERT INTO academic_terms (school_year, semester, start_date, end_date) VALUES ('2098-2099', '1ST', CURRENT_DATE - 30, CURRENT_DATE + 30)");
 [$mvCode, $mvOut] = $mvRun(['transfer-dean', '--to', "sa-mvf-{$saTag}@bicol-u.edu.ph", '--old-dean', 'faculty', '--reason', 'New Dean appointed'], "YES\n");
-$pdo->exec("DELETE FROM academic_terms WHERE school_year = '2098-2099'");
-expect_true($mvCode === 1 && str_contains($mvOut, 'term is in progress') && $pdo->query("SELECT role FROM user_accounts WHERE user_id = {$mvFac}")->fetchColumn() === 'faculty', 'transfer-dean refuses while a term is in progress and changes nothing');
-[$mvCode] = $mvRun(['transfer-dean', '--to', "sa-mvf-{$saTag}@bicol-u.edu.ph", '--old-dean', 'faculty', '--reason', 'New Dean appointed'], "no\n");
-expect_true($mvCode === 1 && $pdo->query("SELECT role FROM user_accounts WHERE user_id = {$mvFac}")->fetchColumn() === 'faculty', 'Anything but YES cancels');
+expect_true($mvCode !== 0 && $pdo->query("SELECT role FROM user_accounts WHERE user_id = {$mvFac}")->fetchColumn() === 'faculty', 'transfer-dean is gone from the script (D14): it exits non-zero and changes nothing');
 [$mvCode, $mvOut] = $mvRun(['unretire-email', "sa-nobody-{$saTag}@bicol-u.edu.ph", '--reason', 'College gave it back'], "YES\n");
 expect_true($mvCode === 1 && str_contains($mvOut, 'not a retired address'), 'unretire-email refuses an address that is not retired');
 [$mvCode, $mvOut] = $mvRun(['unretire-email', $mvOldEmail, '--reason', 'College gave it back'], "YES\n");

@@ -24,7 +24,8 @@ export const MfaSettingsCard: React.FC<{
   userEmail?: string;
   roleName?: string;
   onAuthenticatorStatusChange?: (enabled: boolean) => void;
-}> = ({ onAuthenticatorStatusChange }) => {
+  required?: boolean; // 13.9 D6: the Superadmin's 2FA cannot be turned off
+}> = ({ onAuthenticatorStatusChange, required = false }) => {
   const [authenticatorEnabled, setAuthenticatorEnabled] = useState(false);
   const [recoveryCount, setRecoveryCount] = useState(0);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
@@ -151,9 +152,10 @@ export const MfaSettingsCard: React.FC<{
             <div className="flex flex-wrap items-end gap-2">
               <label className="text-xs font-bold">Current Code<input value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="mt-1 block rounded-xl border px-3 py-2 font-mono tracking-widest dark:bg-slate-950" placeholder="000000" /></label>
               <button type="button" onClick={() => void regenerate()} disabled={working || code.length !== 6} className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><RefreshCw className="h-4 w-4" />New recovery codes</button>
-              <button type="button" onClick={() => void disableAuthenticator()} disabled={working || code.length !== 6} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Disable</button>
+              {!required && <button type="button" onClick={() => void disableAuthenticator()} disabled={working || code.length !== 6} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Disable</button>}
             </div>
           )}
+          {required && <p className="text-xs text-slate-500 dark:text-slate-400">2FA is required for the Superadmin and cannot be turned off.</p>}
         </div>
 
         {recoveryCodes.length > 0 && <div className="rounded-xl bg-amber-50 p-4"><p className="text-xs font-bold text-amber-800">Save these recovery codes now.</p><div className="mt-2 grid gap-2 font-mono text-xs sm:grid-cols-2">{recoveryCodes.map(item => <span key={item}>{item}</span>)}</div></div>}

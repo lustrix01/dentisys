@@ -16,7 +16,7 @@ import { PrintStyle, PrintHeader, PrintCaption, formatPrintedAt } from './PrintS
 
 type Role = 'admin' | 'faculty' | 'secretary';
 // superadmin: the Dean in Superadmin mode (ADM-001) gets the Activity / Class work list switch.
-type Props = { role: Role; title: string; subtitle: string; allLogs?: boolean; superadmin?: boolean; accent: 'accent' | 'clinical' | 'blue' };
+type Props = { role: Role; title: string; subtitle: string; allLogs?: boolean; superadmin?: boolean; own?: boolean; accent: 'accent' | 'clinical' | 'blue' };
 type Term = { startDate: string | null; endDate: string | null };
 
 const themes = {
@@ -34,7 +34,7 @@ const CHANGES_PREVIEW = 10;
 // Old look at xl (>= 1280 px); taller touch targets below it.
 const control = 'min-h-[44px] xl:min-h-0 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500';
 const pagerButton = 'min-h-[44px] xl:min-h-0 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 font-bold disabled:opacity-40';
-const ROLE_OPTIONS: Array<[string, string]> = [['', 'All roles'], ['admin', 'Dean'], ['faculty', 'Faculty'], ['secretary', 'Secretary'], ['student', 'Student'], ['system', 'System']];
+const ROLE_OPTIONS: Array<[string, string]> = [['', 'All roles'], ['superadmin', 'Superadmin'], ['admin', 'Dean'], ['faculty', 'Faculty'], ['secretary', 'Secretary'], ['student', 'Student'], ['system', 'System']];
 
 const StatusBadge: React.FC<{ status: AuditStatus }> = ({ status }) => (
   <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase ${statusClass[status]}`}>{status}</span>
@@ -122,7 +122,7 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, 
   </div>
 );
 
-export const AuditTrailPage: React.FC<Props> = ({ role, title, accent, superadmin = false }) => {
+export const AuditTrailPage: React.FC<Props> = ({ role, title, accent, superadmin = false, own = false }) => {
   const theme = themes[accent];
   const { user } = useAuth();
   const [printRows, setPrintRows] = useState<string[][] | null>(null);
@@ -438,7 +438,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent, superadmi
                 <option value="">All statuses</option>
                 {['Success', 'Warning', 'Failed'].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
-              {role === 'admin' && !classWork && (
+              {role === 'admin' && !classWork && !own && (
                 <select aria-label="Role" value={roleFilter} onChange={e => change(() => setRoleFilter(e.target.value))} className={`${control} w-full sm:w-auto`}>
                   {ROLE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
@@ -461,7 +461,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent, superadmi
         </CardContent>
       </Card>
 
-      {role === 'admin' && (
+      {role === 'admin' && !own && (
         <p className="text-xs text-slate-500 dark:text-slate-400 no-print">
           {classWork ? 'Class work (grades, attendance, retention) as recorded. This list is read-only.' : 'Class work (grades, attendance, retention) is in '+(superadmin ? 'the Class work view.' : 'Superadmin → Audit Trail.')}
         </p>

@@ -78,9 +78,9 @@ function faculty_invitation_token_row(PDO $pdo, string $token): ?array
 
 function faculty_invitation_row_is_live(array $row): bool
 {
-    // Faculty invitations, plus the first Dean invitation (REG-010), which
-    // uses the same token purpose and acceptance flow.
-    return in_array($row['role'], ['faculty', 'admin'], true)
+    // Faculty invitations, plus the first Dean invitation (REG-010) and the
+    // Superadmin's (D19), which use the same token purpose and acceptance flow.
+    return in_array($row['role'], ['faculty', 'admin', 'superadmin'], true)
         && $row['status'] === 'Pending Activation'
         && $row['used_at'] === null
         && $row['revoked_at'] === null
@@ -311,6 +311,93 @@ function first_dean_invitation_issue(PDO $pdo, array $config, array $settings, a
     );
     return ['action' => 'invited', 'message' => "First Dean invitation issued for {$email}.", 'userId' => $userId,
             'email' => $email, 'name' => $name, 'token' => $token, 'tokenId' => $tokenId];
+}
+
+/**
+ * D3/D19: create the one Superadmin as Pending Activation with a faculty_invitation token (7 days), or reissue the link while
+ * it is still pending. Called by bin/account-admin.php create-superadmin inside its transaction; the script sends the link
+ * after commit. Refused (DomainException) when an Active Superadmin exists, or the email is used, retired or not institutional.
+ *
+ * @param array{email: string, prefix?: ?string, firstName?: ?string, middleName?: ?string, lastName?: ?string, suffix?: ?string} $input
+ */
+function superadmin_invitation_issue(PDO $pdo, array $config, array $input, string $reason, array $actor, array $context): array
+{
+    $pdo->query("SELECT pg_advisory_xact_lock(hashtext('dentisys_superadmin'))");
+    $existing = $pdo->query("SELECT user_id, login_email, status FROM user_accounts WHERE role = 'superadmin' FOR UPDATE")->fetch(PDO::FETCH_ASSOC);
+    if ($existing !== false && $existing['status'] !== 'Pending Activation') {
+        throw new DomainException('A Superadmin account already exists. Use move-email to give the job to another person.');
+    }
+    $nameParts = faculty_invitation_name_parts_from_payload(array_filter([
+        'prefix' => $input['prefix'] ?? null,
+        'firstName' => $input['firstName'] ?? null,
+        'middleName' => $input['middleName'] ?? null,
+        'lastName' => $input['lastName'] ?? null,
+        'suffix' => $input['suffix'] ?? null,
+    ], static fn(?string $value): bool => $value !== null && trim($value) !== ''));
+    $name = $nameParts['displayName'];
+    $email = validate_institutional_email((string) $input['email']);
+    $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+    $nowSql = $now->format('Y-m-d H:i:s.u');
+
+    $sameEmail = $existing !== false && strcasecmp(trim((string) $existing['login_email']), $email) === 0;
+    if (!$sameEmail) {
+        if (email_is_retired($pdo, $email)) {
+            throw new DomainException("{$email} was retired and cannot be used again.");
+        }
+        $accountStmt = $pdo->prepare('SELECT 1 FROM user_accounts WHERE lower(login_email) = lower(?)');
+        $accountStmt->execute([$email]);
+        $studentStmt = $pdo->prepare('SELECT 1 FROM students WHERE lower(bu_email) = lower(?)');
+        $studentStmt->execute([$email]);
+        if ($accountStmt->fetchColumn() !== false || $studentStmt->fetchColumn() !== false) {
+            throw new DomainException("{$email} already belongs to another DentiSYS identity and cannot be the Superadmin.");
+        }
+    }
+    if ($existing !== false) {
+        // Still pending: a rerun sends a new link, and a corrected email replaces a mistyped one (the old link is revoked below).
+        $userId = (int) $existing['user_id'];
+        if (!$sameEmail) {
+            $pdo->prepare('UPDATE user_accounts SET login_email = ?, updated_at = ? WHERE user_id = ?')->execute([$email, $nowSql, $userId]);
+        }
+    } else {
+        $insert = $pdo->prepare(
+            "INSERT INTO user_accounts
+                (login_email, password_hash, role, display_name, name_prefix, first_name, middle_name, last_name, name_suffix,
+                 title, status, created_at, updated_at, approved_at, rejected_at, google_subject)
+             VALUES (?, ?, 'superadmin', ?, ?, ?, ?, ?, ?, 'Superadmin', 'Pending Activation', ?, ?, ?, NULL, NULL)
+             RETURNING user_id"
+        );
+        $insert->execute([
+            $email, password_hash(faculty_invitation_token(), PASSWORD_DEFAULT), $name,
+            $nameParts['prefix'], $nameParts['firstName'], $nameParts['middleName'],
+            $nameParts['lastName'], $nameParts['suffix'], $nowSql, $nowSql, $nowSql,
+        ]);
+        $userId = (int) $insert->fetchColumn();
+    }
+
+    $pdo->prepare(
+        "UPDATE security_tokens
+            SET revoked_at = ?, revocation_reason = 'Replaced by a new Superadmin invitation'
+          WHERE purpose = 'faculty_invitation' AND user_id = ?
+            AND used_at IS NULL AND revoked_at IS NULL"
+    )->execute([$nowSql, $userId]);
+    $token = faculty_invitation_token();
+    $insertToken = $pdo->prepare(
+        "INSERT INTO security_tokens (purpose, user_id, token_digest, issued_at, expires_at)
+         VALUES ('faculty_invitation', ?, ?, ?, ?) RETURNING token_id"
+    );
+    $insertToken->bindValue(1, $userId, PDO::PARAM_INT);
+    pdo_bind_binary($insertToken, 2, hash('sha256', $token, true));
+    $insertToken->bindValue(3, $nowSql, PDO::PARAM_STR);
+    $insertToken->bindValue(4, $now->add(new DateInterval('P7D'))->format('Y-m-d H:i:s.u'), PDO::PARAM_STR);
+    $insertToken->execute();
+    $tokenId = (int) $insertToken->fetchColumn();
+
+    audit_record_action(
+        $pdo, $config, $actor, 'people', 'superadmin_invited', 'security_token', (string) $tokenId,
+        ($existing !== false ? 'Reissued the Superadmin invitation for ' : 'Superadmin invitation issued for ') . "{$name} ({$email}).",
+        ['reason' => $reason, 'context' => $context]
+    );
+    return ['userId' => $userId, 'email' => $email, 'name' => $name, 'token' => $token, 'tokenId' => $tokenId];
 }
 
 /** Revoke only the undelivered bootstrap token, inside the caller's transaction. */
@@ -1030,7 +1117,7 @@ function handle_auth_faculty_invitation_accept(): void
             $lockedToken = $tokenStmt->fetch(PDO::FETCH_ASSOC);
             $valid = $account !== false && $lockedToken !== false
                 && (int) $lockedToken['user_id'] === (int) $account['user_id']
-                && in_array($account['role'], ['faculty', 'admin'], true)
+                && in_array($account['role'], ['faculty', 'admin', 'superadmin'], true)
                 && $account['role'] === $row['role']
                 && $account['status'] === 'Pending Activation'
                 && strtolower(trim((string) $account['login_email'])) === strtolower(trim((string) $row['login_email']))
@@ -1059,7 +1146,7 @@ function handle_auth_faculty_invitation_accept(): void
                 'actor_user_id' => (int) $account['user_id'], 'actor_username' => $account['login_email'],
                 'actor_role' => $account['role'], 'actor_display_name' => $account['display_name'], 'session_id' => null,
                 'target_type' => 'user_account', 'target_id' => (string) $account['user_id'],
-                'description' => ($account['role'] === 'admin' ? 'Dean' : 'Faculty') . ' invitation accepted and account activated.', 'reason' => null,
+                'description' => (['admin' => 'Dean', 'superadmin' => 'Superadmin'][$account['role']] ?? 'Faculty') . ' invitation accepted and account activated.', 'reason' => null,
                 'http_method' => $context['http_method'], 'endpoint' => $context['endpoint'],
                 'request_id' => $context['request_id'], 'ip_address' => $context['ip_address'], 'user_agent' => $context['user_agent'],
             ], $macKey);

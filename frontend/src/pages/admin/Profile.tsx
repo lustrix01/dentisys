@@ -11,6 +11,7 @@ import { getAdminProfileApi, updateAdminProfileApi } from '../../services/apiCli
 export const Profile: React.FC = () => {
   const [nameParts, setNameParts] = useState(emptyNameParts);
   const { user, setUser } = useAuth();
+  const sa = user?.role === 'superadmin'; // 13.9 D5: the Superadmin's Profile is this page
   const [name, setName] = useState(user?.display_name || 'Academic Dean');
   const [email, setEmail] = useState(user?.login_email || '');
   const [authenticatorEnabled, setAuthenticatorEnabled] = useState(false);
@@ -45,7 +46,7 @@ export const Profile: React.FC = () => {
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
       <div className="flex justify-end pb-2">
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-accent-700 dark:text-accent-400 bg-accent-50 dark:bg-accent-950/30 px-3 py-2 rounded-xl">
-          <CheckCircle2 className="w-3.5 h-3.5" />Dean access
+          <CheckCircle2 className="w-3.5 h-3.5" />{sa ? 'Superadmin access' : 'Dean access'}
         </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
@@ -58,7 +59,7 @@ export const Profile: React.FC = () => {
               </div>
               <h2 className="mt-3 text-base font-bold text-slate-800 dark:text-slate-100">{name}</h2>
               <ChangeNameDialog currentParts={nameParts} authenticatorEnabled={authenticatorEnabled} onSave={saveName} onSuccess={applyName} />
-              <p className="text-xs text-accent-600 dark:text-accent-400 font-semibold mt-0.5">{'Academic Dean'}</p>
+              <p className="text-xs text-accent-600 dark:text-accent-400 font-semibold mt-0.5">{sa ? 'Superadmin' : 'Academic Dean'}</p>
             </CardContent>
           </Card>
           <Card>
@@ -66,21 +67,20 @@ export const Profile: React.FC = () => {
               <CardTitle className="flex items-center gap-2 text-sm"><ShieldCheck className="w-4.5 h-4.5 text-accent-500" />Role Capabilities</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-xs text-slate-500 dark:text-slate-400">
-              <p>Academic policy configuration</p>
-              <p>System data administration</p>
+              {sa ? <><p>Accounts, classes, courses, terms and rooms</p><p>Audit trail with class work</p></> : <><p>Analytics and reports</p><p>Faculty invitations</p></>}
             </CardContent>
           </Card>
         </div>
         <div className="lg:col-span-8 space-y-5">
           <Card className="p-0 overflow-hidden">
             <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">
-              <CardTitle className="flex items-center gap-2 text-sm"><UserRound className="w-4.5 h-4.5 text-accent-500" />Executive Contact Information</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-sm"><UserRound className="w-4.5 h-4.5 text-accent-500" />{sa ? 'Contact Information' : 'Executive Contact Information'}</CardTitle>
             </CardHeader>
             <CardContent className="p-5">
-              <ReadOnlyEmail value={email} />
+              <ReadOnlyEmail value={email} note={sa ? 'Your login email changes only on the server. Contact the server administrator if it is wrong.' : undefined} />
             </CardContent>
           </Card>
-          <MfaSettingsCard userEmail={email || 'dean@bicol-u.edu.ph'} roleName="Dean" onAuthenticatorStatusChange={setAuthenticatorEnabled} />
+          <MfaSettingsCard userEmail={email || 'dean@bicol-u.edu.ph'} roleName={sa ? 'Superadmin' : 'Dean'} required={sa} onAuthenticatorStatusChange={setAuthenticatorEnabled} />
           <GoogleLinkCard />
           <PasswordChangeCard />
         </div>
@@ -89,13 +89,13 @@ export const Profile: React.FC = () => {
   );
 };
 /** The login email is permanent after activation (REG-009), so it is shown, not edited. */
-const ReadOnlyEmail = ({ value }: { value: string }) => (
+const ReadOnlyEmail = ({ value, note }: { value: string; note?: string }) => (
   <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
     Email Address
     <span className="relative block">
       <span className="absolute left-3.5 top-4 z-10 text-slate-500 dark:text-slate-400"><Mail className="w-4 h-4" /></span>
       <input type="text" value={value} readOnly aria-readonly="true" className="mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 pl-10 px-3.5 py-2.5 text-sm text-slate-600 dark:text-slate-300 outline-none cursor-not-allowed" />
     </span>
-    <span className="mt-1 block normal-case tracking-normal font-medium">Your login email cannot be changed.</span>
+    <span className="mt-1 block normal-case tracking-normal font-medium">{note ?? 'Your login email cannot be changed.'}</span>
   </div>
 );

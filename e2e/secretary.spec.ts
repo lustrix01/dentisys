@@ -394,7 +394,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(room).toHaveValue('Dental Clinic Lab 2');
     await expect(room.locator('option:checked')).toHaveText('Dental Clinic Lab 2 (retired)');
     await expect(room.locator('option', { hasText: 'Dental Clinic Lab 1' })).toHaveCount(1);
-    await expect(form.getByTestId('retired-room-warning')).toHaveText('Dental Clinic Lab 2 was retired by the Dean. Pick another room.');
+    await expect(form.getByTestId('retired-room-warning')).toHaveText('Dental Clinic Lab 2 was retired. Pick another room.');
     await room.selectOption('Room 101');
     await expect(form.getByTestId('retired-room-warning')).toHaveCount(0);
     await expect(room.locator('option', { hasText: '(retired)' })).toHaveCount(0);

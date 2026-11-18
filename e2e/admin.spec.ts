@@ -1,4 +1,4 @@
-import { test, expect, openAccountMenu } from './fixtures';
+import { test, expect, openAccountMenu, signInAs } from './fixtures';
 import type { Download, Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { strFromU8, unzipSync } from '../frontend/node_modules/fflate';
@@ -96,117 +96,6 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(page).toHaveURL('/');
   });
 
-
-  test('Academic terms groups missing dates, validates fields, confirms expiry, copies and deletes', async ({ page }) => {
-    let terms = [
-      { id: null as number | null, schoolYear: '2026-2027', semester: '1ST', startDate: null as string | null, endDate: null as string | null, classCount: 3 },
-      { id: 2, schoolYear: '2025-2026', semester: 'Summer', startDate: '2026-04-01', endDate: '2026-06-01', classCount: 0 },
-    ];
-    let invalid = true;
-    let saves = 0;
-    const posted: Array<Record<string, unknown>> = [];
-    await page.route('**/api/admin/academic-terms**', async route => {
-      const pathname = new URL(route.request().url()).pathname;
-      const data = route.request().method() === 'GET' ? {} : route.request().postDataJSON();
-      posted.push({ path: pathname, ...data });
-      let body: unknown = { status: 'ok' }; let status = 200;
-      if (route.request().method() === 'GET') body = { status: 'ok', currentSchoolYear: '2026-2027', today: '2026-10-10', terms };
-      else if (pathname.endsWith('/preview') && invalid) { status = 422; body = { status: 'error', code: 'VALIDATION_ERROR', message: 'Validation failed.', errors: [{ field: 'endDate', message: 'End date must be after start date.' }] }; invalid = false; }
-      else if (pathname.endsWith('/preview')) body = { status: 'ok', confirmationRequired: !!data.id && data.endDate < '2026-10-10', expiringEnrollments: !!data.id && data.endDate < '2026-10-10' ? 3 : 0 };
-      else if (pathname.endsWith('/copy')) { body = { status: 'ok', schoolYear: '2027-2028', created: 1 }; terms = [...terms, { id: 3, schoolYear: '2027-2028', semester: '1ST', startDate: '2027-08-01', endDate: '2027-12-31', classCount: 0 }]; }
-      else if (pathname.endsWith('/delete')) terms = terms.filter(term => term.id !== data.id);
-      else { saves++; terms = terms.map(term => term.schoolYear === data.schoolYear && term.semester === data.semester ? { ...term, id: 1, startDate: data.startDate, endDate: data.endDate } : term); body = { status: 'ok', confirmationRequired: false, id: 1 }; }
-      await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-    });
-    await page.click('a[href="/admin/terms"]');
-    const section = page.locator('#academic-terms');
-    const row = section.getByTestId('2026-2027-1ST');
-    await expect(row).toContainText('Dates not set');
-    await expect(row).toContainText('Not set');
-    await expect(row).toContainText('3 classes');
-    await row.getByRole('button', { name: 'Add dates' }).click();
-    let dialog = page.getByRole('dialog');
-    await dialog.getByLabel('Start date').fill('2026-08-01');
-    await dialog.getByLabel('End date').fill('2026-07-01');
-    await dialog.getByRole('button', { name: 'Save term' }).click();
-    await expect(dialog.getByLabel('End date')).toHaveAttribute('aria-invalid', 'true');
-    expect(saves).toBe(0);
-    await dialog.getByLabel('End date').fill('2026-12-31');
-    await dialog.getByRole('button', { name: 'Save term' }).click();
-    await expect(row).toContainText('Aug 1 – Dec 31, 2026');
-    await expect(row).toContainText('Current');
-    await expect(row.getByRole('button', { name: /^Delete / })).toBeDisabled();
-    await row.getByRole('button', { name: /^Edit / }).click();
-    dialog = page.getByRole('dialog');
-    await expect(dialog.getByLabel('School Year')).toHaveAttribute('readonly', '');
-    await expect(dialog.getByLabel('Semester')).toBeDisabled();
-    await dialog.getByLabel('End date').fill('2026-10-10');
-    await dialog.getByRole('button', { name: 'Save term' }).click();
-    await expect(dialog).not.toBeVisible();
-    await expect(row).toContainText('Oct 10, 2026');
-    expect(saves).toBe(2);
-    expect(posted.some(data => data.confirmedExpiringEnrollments !== undefined)).toBe(false);
-    await row.getByRole('button', { name: /^Edit / }).click();
-    dialog = page.getByRole('dialog');
-    await dialog.getByLabel('End date').fill('2026-10-09');
-    await dialog.getByRole('button', { name: 'Save term' }).click();
-    await expect(dialog).toContainText('3 unexpired biometric enrollments will expire');
-    expect(saves).toBe(2);
-    await dialog.getByRole('button', { name: 'Confirm and save' }).click();
-    await expect(row).toContainText('Oct 9, 2026');
-    expect(posted.some(data => data.confirmedExpiringEnrollments === 3)).toBe(true);
-    await section.getByRole('button', { name: 'Add next school year' }).click();
-    await expect(page.getByRole('dialog', { name: 'Add Next School Year' })).toBeVisible();
-    await page.getByRole('dialog').getByRole('button', { name: 'Copy terms', exact: true }).click();
-    await expect(section).toContainText('Review and adjust their dates.');
-    const copied = section.getByTestId('2027-2028-1ST');
-    await expect(copied).toBeVisible();
-    await copied.getByRole('button', { name: /^Delete / }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Delete term', exact: true }).click();
-    await expect(copied).toHaveCount(0);
-  });
-
-  test('Academic terms: ended year is collapsed, empty semester offers Add dates, term used by a class cannot be deleted', async ({ page }) => {
-    const terms = [
-      { id: null as number | null, schoolYear: '2024-2025', semester: '1ST', startDate: null as string | null, endDate: null as string | null, classCount: 1 },
-      { id: 1, schoolYear: '2025-2026', semester: '1ST', startDate: '2025-08-01', endDate: '2025-12-15', classCount: 0 },
-      { id: 2, schoolYear: '2025-2026', semester: '2ND', startDate: '2026-01-05', endDate: '2026-05-15', classCount: 0 },
-      { id: 3, schoolYear: '2026-2027', semester: '1ST', startDate: '2026-08-01', endDate: '2026-12-31', classCount: 2 },
-      { id: 4, schoolYear: '2026-2027', semester: '2ND', startDate: '2027-01-05', endDate: '2027-05-15', classCount: 0 },
-    ];
-    await page.route('**/api/admin/academic-terms**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', today: '2026-10-10', terms }) }));
-    await page.click('a[href="/admin/terms"]');
-    const section = page.locator('#academic-terms');
-    const pastYear = section.getByTestId('year-2025-2026');
-    await expect(section.getByTestId('year-2024-2025')).toContainText('No dates set');
-    await expect(section.getByTestId('year-2024-2025')).toHaveAttribute('aria-expanded', 'false');
-    await expect(pastYear).toContainText('2 terms · ended');
-    await expect(pastYear).toHaveAttribute('aria-expanded', 'false');
-    await expect(section.getByTestId('2025-2026-1ST')).toHaveCount(0);
-    await pastYear.click();
-    await expect(section.getByTestId('2025-2026-1ST')).toContainText('Ended');
-    await expect(section.getByTestId('2025-2026-Summer')).toContainText('Dates not set');
-
-    const used = section.getByTestId('2026-2027-1ST');
-    await expect(used.getByRole('button', { name: /^Delete / })).toBeDisabled();
-    await expect(used.getByRole('button', { name: /^Delete / })).toHaveAttribute('title', 'A term used by a class cannot be deleted.');
-    await expect(section.getByTestId('2026-2027-2ND').getByRole('button', { name: /^Delete / })).toBeEnabled();
-
-    await section.getByTestId('2026-2027-Summer').getByRole('button', { name: 'Add dates' }).click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByLabel('School Year')).toHaveValue('2026-2027');
-    await expect(dialog.getByLabel('Semester')).toHaveValue('Summer');
-  });
-
-  test('Academic-term dashboard reminder links to the Academic Terms page', async ({ page }) => {
-    await page.route('**/api/admin/dashboard/kpis**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', kpis: {}, academicTermReminder: { semester: '2ND', schoolYear: '2026-2027', endDate: '2026-10-20' } }) }));
-    await page.reload();
-    await expect(page.getByRole('status')).toContainText('Add dates for 2ND 2026-2027');
-    await page.getByRole('button', { name: 'Open academic terms' }).click();
-    await expect(page).toHaveURL('/admin/terms');
-    await expect(page.getByRole('heading', { level: 1, name: 'Academic Terms' })).toBeVisible();
-    await expect(page.locator('#academic-terms')).toBeVisible();
-  });
 
   test('admin dashboard renders user info and role panel', async ({ page }) => {
     await expect(page.locator('body')).toContainText(/Dean|Office of the Dean|Dashboard/i);
@@ -378,27 +267,11 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     expect(xlsx).not.toContain('2023-0102');
   });
 
-  test('admin can navigate to Audit Trail page', async ({ page }) => {
-    await page.locator('[aria-label="Account view"] button').nth(1).click(); await page.click('a[href="/superadmin/audit-trail"]');
-    await expect(page).toHaveURL('/superadmin/audit-trail');
-    await expect(page.locator('body')).toContainText(/Audit Trail|Activity Log/i);
+  test('admin can navigate to My Activity (the Dean Audit Trail)', async ({ page }) => {
+    await page.click('a[href="/admin/audit-trail"]');
+    await expect(page).toHaveURL('/admin/audit-trail');
+    await expect(page.getByRole('heading', { level: 1, name: 'My Activity' })).toBeVisible();
     await expect(page.getByText('No activity recorded yet.').first()).toBeVisible(); // the list loaded and rendered
-  });
-
-  test('Dean view has the 8 setup/watch pages; Superadmin has 4; old paths redirect', async ({ page }) => {
-    for (const p of ['/', '/admin/reports', '/admin/classes', '/admin/faculty-invite', '/admin/course-catalog', '/admin/terms', '/admin/rooms', '/admin/audit-trail']) {
-      await expect(page.locator(`a[href="${p}"]`).first()).toBeAttached();
-    }
-    for (const [from, to] of [['/superadmin/terms', '/admin/terms'], ['/superadmin/rooms', '/admin/rooms'], ['/superadmin/faculty-invite', '/admin/faculty-invite'],
-      ['/superadmin/course-catalog', '/admin/course-catalog'], ['/admin/academic-terms', '/admin/terms'], ['/admin/faculty-approval', '/admin/faculty-invite'], ['/admin/audit', '/admin/audit-trail']]) {
-      await page.goto(from);
-      await expect(page).toHaveURL(to);
-    }
-    await expect(page.getByRole('tablist', { name: 'Audit views' })).toHaveCount(0); // Dean Audit Trail: Activity only
-    await page.goto('/superadmin/overview');
-    for (const p of ['/superadmin/overview', '/superadmin/people', '/superadmin/face-flags', '/superadmin/audit-trail']) await expect(page.locator(`a[href="${p}"]`).first()).toBeAttached();
-    await page.goto('/superadmin/audit-trail');
-    await expect(page.getByRole('tablist', { name: 'Audit views' })).toBeVisible();
   });
 
   test('admin can view Profile page', async ({ page }) => {
@@ -414,7 +287,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(page).toHaveURL('/admin/settings');
     await expect(page.locator('body')).toContainText(/Settings/i);
   });
-  test('Dean Dashboard shows server charts and the latest audit events', async ({ page }) => {
+  test('Dean Dashboard shows server charts and no audit events widget', async ({ page }) => {
     await page.route('**/api/admin/dashboard/kpis**', async route => {
       await route.fulfill({
         status: 200,
@@ -425,9 +298,6 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
           gwaBuckets: [{ range: '1.0–1.5', count: 2, color: '#000' }, { range: 'Above 3.0', count: 1, color: '#000' }],
           statusCounts: { active: 9, remedial: 1 },
           classAttendance: [{ name: 'CLINIC-4A', rate: 92 }],
-          recentAuditEvents: [
-            { id: 'e:1', occurredAt: '2026-09-30T09:00:00+08:00', who: { name: 'Dr. Roberto Santos', email: 'faculty@bicol-u.edu.ph', role: 'faculty', roleLabel: 'Faculty' }, whoText: null, what: 'Recomputed grades', area: 'Grading', record: 'CLIN401 · CLINIC-4A', change: '30 computed', status: 'Success', isSignIn: false, batch: null, details: { fromWhere: { ip: null, device: null }, reason: null, changes: [] } },
-          ],
         }),
       });
     });
@@ -435,12 +305,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(page.getByRole('region', { name: 'Grade Distribution' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Standing Breakdown' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Attendance by Class' })).toBeVisible();
-    const events = page.getByRole('region', { name: 'Latest Audit Events' });
-    await expect(events).toContainText('Dr. Roberto Santos');
-    await expect(events).toContainText('Faculty');
-    await expect(events).toContainText('Recomputed grades');
-    await expect(events).toContainText('CLIN401 · CLINIC-4A');
-    await expect(events).toContainText('30 computed');
+    await expect(page.getByRole('region', { name: 'Latest Audit Events' })).toHaveCount(0);
   });
 
   test('Dean report print sheet lists every filtered row and uses student numbers and class names', async ({ page }) => {
@@ -513,6 +378,115 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(page.locator('h1', { hasText: 'System Audit Trail' })).toBeHidden();
   });
 
+});
+
+// 13.9: Academic Terms and Rooms moved from the Dean to the Superadmin (D9).
+test.describe('Superadmin setup pages', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAs(page, 'superadmin');
+  });
+
+  test('Academic terms groups missing dates, validates fields, confirms expiry, copies and deletes', async ({ page }) => {
+    let terms = [
+      { id: null as number | null, schoolYear: '2026-2027', semester: '1ST', startDate: null as string | null, endDate: null as string | null, classCount: 3 },
+      { id: 2, schoolYear: '2025-2026', semester: 'Summer', startDate: '2026-04-01', endDate: '2026-06-01', classCount: 0 },
+    ];
+    let invalid = true;
+    let saves = 0;
+    const posted: Array<Record<string, unknown>> = [];
+    await page.route('**/api/admin/academic-terms**', async route => {
+      const pathname = new URL(route.request().url()).pathname;
+      const data = route.request().method() === 'GET' ? {} : route.request().postDataJSON();
+      posted.push({ path: pathname, ...data });
+      let body: unknown = { status: 'ok' }; let status = 200;
+      if (route.request().method() === 'GET') body = { status: 'ok', currentSchoolYear: '2026-2027', today: '2026-10-10', terms };
+      else if (pathname.endsWith('/preview') && invalid) { status = 422; body = { status: 'error', code: 'VALIDATION_ERROR', message: 'Validation failed.', errors: [{ field: 'endDate', message: 'End date must be after start date.' }] }; invalid = false; }
+      else if (pathname.endsWith('/preview')) body = { status: 'ok', confirmationRequired: !!data.id && data.endDate < '2026-10-10', expiringEnrollments: !!data.id && data.endDate < '2026-10-10' ? 3 : 0 };
+      else if (pathname.endsWith('/copy')) { body = { status: 'ok', schoolYear: '2027-2028', created: 1 }; terms = [...terms, { id: 3, schoolYear: '2027-2028', semester: '1ST', startDate: '2027-08-01', endDate: '2027-12-31', classCount: 0 }]; }
+      else if (pathname.endsWith('/delete')) terms = terms.filter(term => term.id !== data.id);
+      else { saves++; terms = terms.map(term => term.schoolYear === data.schoolYear && term.semester === data.semester ? { ...term, id: 1, startDate: data.startDate, endDate: data.endDate } : term); body = { status: 'ok', confirmationRequired: false, id: 1 }; }
+      await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    });
+    await page.click('a[href="/superadmin/terms"]');
+    const section = page.locator('#academic-terms');
+    const row = section.getByTestId('2026-2027-1ST');
+    await expect(row).toContainText('Dates not set');
+    await expect(row).toContainText('Not set');
+    await expect(row).toContainText('3 classes');
+    await row.getByRole('button', { name: 'Add dates' }).click();
+    let dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Start date').fill('2026-08-01');
+    await dialog.getByLabel('End date').fill('2026-07-01');
+    await dialog.getByRole('button', { name: 'Save term' }).click();
+    await expect(dialog.getByLabel('End date')).toHaveAttribute('aria-invalid', 'true');
+    expect(saves).toBe(0);
+    await dialog.getByLabel('End date').fill('2026-12-31');
+    await dialog.getByRole('button', { name: 'Save term' }).click();
+    await expect(row).toContainText('Aug 1 – Dec 31, 2026');
+    await expect(row).toContainText('Current');
+    await expect(row.getByRole('button', { name: /^Delete / })).toBeDisabled();
+    await row.getByRole('button', { name: /^Edit / }).click();
+    dialog = page.getByRole('dialog');
+    await expect(dialog.getByLabel('School Year')).toHaveAttribute('readonly', '');
+    await expect(dialog.getByLabel('Semester')).toBeDisabled();
+    await dialog.getByLabel('End date').fill('2026-10-10');
+    await dialog.getByRole('button', { name: 'Save term' }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(row).toContainText('Oct 10, 2026');
+    expect(saves).toBe(2);
+    expect(posted.some(data => data.confirmedExpiringEnrollments !== undefined)).toBe(false);
+    await row.getByRole('button', { name: /^Edit / }).click();
+    dialog = page.getByRole('dialog');
+    await dialog.getByLabel('End date').fill('2026-10-09');
+    await dialog.getByRole('button', { name: 'Save term' }).click();
+    await expect(dialog).toContainText('3 unexpired biometric enrollments will expire');
+    expect(saves).toBe(2);
+    await dialog.getByRole('button', { name: 'Confirm and save' }).click();
+    await expect(row).toContainText('Oct 9, 2026');
+    expect(posted.some(data => data.confirmedExpiringEnrollments === 3)).toBe(true);
+    await section.getByRole('button', { name: 'Add next school year' }).click();
+    await expect(page.getByRole('dialog', { name: 'Add Next School Year' })).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Copy terms', exact: true }).click();
+    await expect(section).toContainText('Review and adjust their dates.');
+    const copied = section.getByTestId('2027-2028-1ST');
+    await expect(copied).toBeVisible();
+    await copied.getByRole('button', { name: /^Delete / }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete term', exact: true }).click();
+    await expect(copied).toHaveCount(0);
+  });
+
+  test('Academic terms: ended year is collapsed, empty semester offers Add dates, term used by a class cannot be deleted', async ({ page }) => {
+    const terms = [
+      { id: null as number | null, schoolYear: '2024-2025', semester: '1ST', startDate: null as string | null, endDate: null as string | null, classCount: 1 },
+      { id: 1, schoolYear: '2025-2026', semester: '1ST', startDate: '2025-08-01', endDate: '2025-12-15', classCount: 0 },
+      { id: 2, schoolYear: '2025-2026', semester: '2ND', startDate: '2026-01-05', endDate: '2026-05-15', classCount: 0 },
+      { id: 3, schoolYear: '2026-2027', semester: '1ST', startDate: '2026-08-01', endDate: '2026-12-31', classCount: 2 },
+      { id: 4, schoolYear: '2026-2027', semester: '2ND', startDate: '2027-01-05', endDate: '2027-05-15', classCount: 0 },
+    ];
+    await page.route('**/api/admin/academic-terms**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', today: '2026-10-10', terms }) }));
+    await page.click('a[href="/superadmin/terms"]');
+    const section = page.locator('#academic-terms');
+    const pastYear = section.getByTestId('year-2025-2026');
+    await expect(section.getByTestId('year-2024-2025')).toContainText('No dates set');
+    await expect(section.getByTestId('year-2024-2025')).toHaveAttribute('aria-expanded', 'false');
+    await expect(pastYear).toContainText('2 terms · ended');
+    await expect(pastYear).toHaveAttribute('aria-expanded', 'false');
+    await expect(section.getByTestId('2025-2026-1ST')).toHaveCount(0);
+    await pastYear.click();
+    await expect(section.getByTestId('2025-2026-1ST')).toContainText('Ended');
+    await expect(section.getByTestId('2025-2026-Summer')).toContainText('Dates not set');
+
+    const used = section.getByTestId('2026-2027-1ST');
+    await expect(used.getByRole('button', { name: /^Delete / })).toBeDisabled();
+    await expect(used.getByRole('button', { name: /^Delete / })).toHaveAttribute('title', 'A term used by a class cannot be deleted.');
+    await expect(section.getByTestId('2026-2027-2ND').getByRole('button', { name: /^Delete / })).toBeEnabled();
+
+    await section.getByTestId('2026-2027-Summer').getByRole('button', { name: 'Add dates' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByLabel('School Year')).toHaveValue('2026-2027');
+    await expect(dialog.getByLabel('Semester')).toHaveValue('Summer');
+  });
+
   const usage0 = { classes: 0, meetings: 0, scheduledSessions: 0 };
   const mockRooms = async (page: Page) => {
     const base = { latitude: null, longitude: null, radiusMeters: null };
@@ -573,7 +547,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
 
   test('Rooms page: Retire and Delete ask first; Cancel sends nothing', async ({ page }) => {
     const posted = await mockRooms(page);
-    await page.click('a[href="/admin/rooms"]');
+    await page.click('a[href="/superadmin/rooms"]');
     const used = page.getByTestId('room-Room 302');
     await expect(used).toContainText('Active');
     await expect(used).toContainText('Used by 3 classes · 1 session');
@@ -595,7 +569,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
 
   test('Rooms page: categories, Retired tab, Delete only for retired unused rooms, Restore returns to Rooms', async ({ page }) => {
     const posted = await mockRooms(page);
-    await page.goto('/admin/rooms');
+    await page.goto('/superadmin/rooms');
     // Rooms tab: active categories only; a category with only retired rooms says so.
     await expect(page.getByTestId('group-Standard Classrooms')).toContainText('4 rooms');
     await expect(page.getByTestId('group-Laboratories')).toContainText('2 in Retired');
@@ -630,7 +604,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
 
   test('Rooms page: add, rename and retire a category', async ({ page }) => {
     const posted = await mockRooms(page);
-    await page.goto('/admin/rooms');
+    await page.goto('/superadmin/rooms');
     await page.getByRole('button', { name: 'Add category' }).click();
     await page.getByLabel('Category Name').fill('Clinics');
     await page.getByRole('button', { name: 'Save category' }).click();
@@ -646,7 +620,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
 
   test('Rooms page: renaming a used room asks first, then resends with confirmRename', async ({ page }) => {
     const posted = await mockRooms(page);
-    await page.goto('/admin/rooms');
+    await page.goto('/superadmin/rooms');
     await page.getByTestId('room-Room 302').getByRole('button', { name: 'Edit' }).click();
     await page.getByLabel('Room Name').fill('Room 302A');
     await page.getByRole('button', { name: 'Save room' }).click();
@@ -661,7 +635,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
 
   test('Rooms page: a meetings-only room names its class meetings; a rename that changes nothing goes through without asking', async ({ page }) => {
     const posted = await mockRooms(page);
-    await page.goto('/admin/rooms');
+    await page.goto('/superadmin/rooms');
     await page.getByTestId('room-Annex').getByRole('button', { name: 'Edit' }).click();
     await page.getByLabel('Room Name').fill('Annex B');
     await page.getByRole('button', { name: 'Save room' }).click();
@@ -682,7 +656,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
 
   test('Rooms page: adds a room into a new category', async ({ page }) => {
     const posted = await mockRooms(page);
-    await page.goto('/admin/rooms');
+    await page.goto('/superadmin/rooms');
     await page.getByRole('button', { name: 'Add room' }).click();
     await page.getByLabel('Room Name').fill('Skills Lab');
     await page.getByRole('dialog').locator('select').selectOption('New category…');

@@ -1,6 +1,6 @@
 # Superadmin mode contract
 
-Status: **Current** (built; the Owner answered the open questions on 2026-11-14, section 10). The `spec.md` section ADM-001 (section 9) is proposed and waits for Owner approval. Decisions 14-18 of `docs/archive/owner-decisions-2026-11-14-second.md`; backlog items 4.5, 4.6, 4.7. Rules are numbered SA1..SA25 so code and tests can cite them.
+Status: **Current for Parts A-D and the routes; the "mode" is replaced.** Since backlog 13.9 (2026-11-18) the Superadmin is its own role and account, not a mode of the Dean account: SA1-SA5 (the switch, the route-based mode, the Dean's pages) are superseded by [dean-superadmin-split.md](dean-superadmin-split.md), and every "Dean" below that acts in Superadmin mode is now the Superadmin. Built; the Owner answered the open questions on 2026-11-14, section 10. The `spec.md` section ADM-001 (section 9) is proposed and waits for Owner approval. Decisions 14-18 of `docs/archive/owner-decisions-2026-11-14-second.md`; backlog items 4.5, 4.6, 4.7. Rules are numbered SA1..SA25 so code and tests can cite them.
 
 ## 1. Purpose and scope
 

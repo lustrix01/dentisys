@@ -6,23 +6,23 @@ require_once __DIR__ . '/../../backend/app/request.php';
 expect_true((bool) $pdo->query("SELECT has_table_privilege(current_user, 'academic_terms', 'SELECT,INSERT,UPDATE,DELETE')")->fetchColumn(), 'Migration grants academic_terms to the application role');
 expect_true((bool) $pdo->query("SELECT has_sequence_privilege(current_user, pg_get_serial_sequence('academic_terms', 'id'), 'USAGE')")->fetchColumn(), 'Migration grants the academic-term identity sequence');
 [$termForbidden] = integration_http_get_json('/api/admin/academic-terms', $seedFacultyAccessToken);
-expect_same(403, $termForbidden, 'Faculty cannot manage Dean terms');
+expect_same(403, $termForbidden, 'Faculty cannot manage terms');
 [$termAnonymous] = integration_http_get_json('/api/admin/academic-terms', '');
 expect_same(401, $termAnonymous, 'Academic terms require authentication');
-[$termListStatus, $termList] = integration_http_get_json('/api/admin/academic-terms', $adminAccessToken);
-expect_same(200, $termListStatus, 'Dean term list returns authoritative current year and class counts');
+[$termListStatus, $termList] = integration_http_get_json('/api/admin/academic-terms', $superAccessToken);
+expect_same(200, $termListStatus, 'Superadmin term list returns authoritative current year and class counts');
 expect_true(count($termList['terms'] ?? []) > 0, 'Term list includes seeded classes and defined terms');
 $termFixtureYear = '2087-2088';
 $termPayload = ['schoolYear' => $termFixtureYear, 'semester' => '1ST', 'startDate' => '2087-08-01', 'endDate' => '2087-12-31'];
-[$termCreateStatus, $termCreate] = integration_http_json('/api/admin/academic-terms', $adminAccessToken, $termPayload);
+[$termCreateStatus, $termCreate] = integration_http_json('/api/admin/academic-terms', $superAccessToken, $termPayload);
 expect_same(200, $termCreateStatus, 'Dean can create an unused term');
 $termId = (int) ($termCreate['id'] ?? 0);
 expect_true($termId > 0, 'Created term has a database identity');
-[$termDuplicateStatus] = integration_http_json('/api/admin/academic-terms', $adminAccessToken, $termPayload);
+[$termDuplicateStatus] = integration_http_json('/api/admin/academic-terms', $superAccessToken, $termPayload);
 expect_same(422, $termDuplicateStatus, 'Duplicate term identity has a field error');
-[$termOrderStatus] = integration_http_json('/api/admin/academic-terms', $adminAccessToken, array_merge($termPayload, ['semester' => '2ND', 'endDate' => '2087-08-01']));
+[$termOrderStatus] = integration_http_json('/api/admin/academic-terms', $superAccessToken, array_merge($termPayload, ['semester' => '2ND', 'endDate' => '2087-08-01']));
 expect_same(422, $termOrderStatus, 'Date order is validated server-side');
-[$termOverlapStatus] = integration_http_json('/api/admin/academic-terms', $adminAccessToken, array_merge($termPayload, ['semester' => '2ND', 'startDate' => '2087-12-31', 'endDate' => '2088-02-01']));
+[$termOverlapStatus] = integration_http_json('/api/admin/academic-terms', $superAccessToken, array_merge($termPayload, ['semester' => '2ND', 'startDate' => '2087-12-31', 'endDate' => '2088-02-01']));
 expect_same(422, $termOverlapStatus, 'Sharing an end calendar day counts as overlap');
 foreach ([['2087-08-01', '2087-08-01'], ['2087-09-01', '2087-12-31']] as $dates) {
     try {
@@ -49,7 +49,7 @@ $termEnrollment->execute([$termStudentId, $termSummerClassId]);
 expect_same('2088-07-31', student_biometric_reference_expiry($pdo, $termStudentId), 'Latest active fallback class supplies expiry when Summer has no Dean term');
 $pdo->prepare("UPDATE enrollments SET status = 'Archived' WHERE student_id = ? AND cs_id = ?")->execute([$termStudentId, $termSummerClassId]);
 expect_same('2087-12-31', student_biometric_reference_expiry($pdo, $termStudentId), 'Archived enrollments do not contribute to expiry');
-[$termDeleteUsedStatus] = integration_http_json('/api/admin/academic-terms/delete', $adminAccessToken, ['id' => $termId]);
+[$termDeleteUsedStatus] = integration_http_json('/api/admin/academic-terms/delete', $superAccessToken, ['id' => $termId]);
 expect_same(422, $termDeleteUsedStatus, 'A term with any class cannot be deleted');
 $pdo->prepare("INSERT INTO biometric_profiles(student_id, consent_status, enrollment_status, face_enrolled, protected_object_reference, reference_expires_on, reference_term_id, reference_cs_id, usable_sample_count, enrolled_at)
     VALUES (?, 'approved', 'active', 1, 'term-fixture-protected-object', '2087-12-31', ?, ?, 20, CURRENT_TIMESTAMP(6))")->execute([$termStudentId, $termId, $termClassId]);
@@ -57,11 +57,11 @@ $readTermProfile = static function () use ($pdo, $termStudentId): array {
     $stmt = $pdo->prepare('SELECT enrollment_status, protected_object_reference, reference_expires_on, reference_term_id, reference_cs_id FROM biometric_profiles WHERE student_id = ?');
     $stmt->execute([$termStudentId]); return $stmt->fetch(PDO::FETCH_ASSOC);
 };
-[$termExtendStatus] = integration_http_json('/api/admin/academic-terms', $adminAccessToken, array_merge($termPayload, ['id' => $termId, 'endDate' => '2088-01-31']));
+[$termExtendStatus] = integration_http_json('/api/admin/academic-terms', $superAccessToken, array_merge($termPayload, ['id' => $termId, 'endDate' => '2088-01-31']));
 expect_same(200, $termExtendStatus, 'Dean end-date change succeeds');
 expect_same('2088-01-31', $readTermProfile()['reference_expires_on'], 'Stored unexpired expiry propagates in the Dean save transaction');
 $pdo->prepare('UPDATE biometric_profiles SET reference_term_id = NULL, reference_cs_id = NULL WHERE student_id = ?')->execute([$termStudentId]);
-[$termLegacyStatus] = integration_http_json('/api/admin/academic-terms', $adminAccessToken, $termPayload + ['id' => $termId]);
+[$termLegacyStatus] = integration_http_json('/api/admin/academic-terms', $superAccessToken, $termPayload + ['id' => $termId]);
 expect_same(200, $termLegacyStatus, 'Legacy expiry provenance is inferred safely');
 expect_same('2087-12-31', $readTermProfile()['reference_expires_on'], 'Legacy unexpired enrollment follows the term change');
 expect_same((string) $termId, (string) $readTermProfile()['reference_term_id'], 'Legacy enrollment now records its source term');
@@ -76,27 +76,27 @@ $todayTerm = app_local_date(app_config(), attendance_session_now_utc());
 $pastTermEnd = (new DateTimeImmutable($todayTerm))->modify('-1 day')->format('Y-m-d');
 $pastTermStart = (new DateTimeImmutable($todayTerm))->modify('-90 days')->format('Y-m-d');
 $todayPayload = array_merge($termPayload, ['id' => $termId, 'startDate' => $pastTermStart, 'endDate' => $todayTerm]);
-[$termTodayPreviewStatus, $termTodayPreview] = integration_http_json('/api/admin/academic-terms/preview', $adminAccessToken, $todayPayload);
+[$termTodayPreviewStatus, $termTodayPreview] = integration_http_json('/api/admin/academic-terms/preview', $superAccessToken, $todayPayload);
 expect_same(200, $termTodayPreviewStatus, 'Dean can preview an end date of today');
 expect_same(false, $termTodayPreview['confirmationRequired'] ?? null, 'End date today requires no confirmation');
 expect_same(0, $termTodayPreview['expiringEnrollments'] ?? null, 'End date today counts zero expired enrollments');
-[$termTodaySaveStatus, $termTodaySave] = integration_http_json('/api/admin/academic-terms', $adminAccessToken, $todayPayload);
+[$termTodaySaveStatus, $termTodaySave] = integration_http_json('/api/admin/academic-terms', $superAccessToken, $todayPayload);
 expect_same(200, $termTodaySaveStatus, 'End date today saves without a confirmation count');
 expect_same(false, $termTodaySave['confirmationRequired'] ?? null, 'Same-day save proceeds immediately');
 expect_same($todayTerm, $readTermProfile()['reference_expires_on'], 'Same-day save propagates the calendar date');
 expect_true(!student_biometric_expiry_due($pdo, $termStudentId, $todayTerm, $todayTerm), 'Reference remains valid through today');
 expect_same('term-fixture-protected-object', $readTermProfile()['protected_object_reference'], 'Same-day save preserves biometric material');
-[$termTodayRestoreStatus] = integration_http_json('/api/admin/academic-terms', $adminAccessToken, $termPayload + ['id' => $termId]);
+[$termTodayRestoreStatus] = integration_http_json('/api/admin/academic-terms', $superAccessToken, $termPayload + ['id' => $termId]);
 expect_same(200, $termTodayRestoreStatus, 'Restore the unexpired fixture after the same-day boundary check');
 $shortenPayload = array_merge($termPayload, ['id' => $termId, 'startDate' => $pastTermStart, 'endDate' => $pastTermEnd]);
-[$termPreviewStatus, $termPreview] = integration_http_json('/api/admin/academic-terms/preview', $adminAccessToken, $shortenPayload);
+[$termPreviewStatus, $termPreview] = integration_http_json('/api/admin/academic-terms/preview', $superAccessToken, $shortenPayload);
 expect_same(200, $termPreviewStatus, 'Dean can preview an expired end-date change');
 expect_same(1, $termPreview['expiringEnrollments'] ?? null, 'Preview gives the exact number of unexpired enrollments affected');
 expect_same('2087-12-31', $readTermProfile()['reference_expires_on'], 'Preview never mutates an expiry');
-[$termUnconfirmedStatus, $termUnconfirmed] = integration_http_json('/api/admin/academic-terms', $adminAccessToken, $shortenPayload);
+[$termUnconfirmedStatus, $termUnconfirmed] = integration_http_json('/api/admin/academic-terms', $superAccessToken, $shortenPayload);
 expect_same(true, $termUnconfirmed['confirmationRequired'] ?? null, 'Server refuses to save an unconfirmed expired end');
 expect_same('2087-12-31', $readTermProfile()['reference_expires_on'], 'Unconfirmed save leaves the profile intact');
-[$termShortenedStatus] = integration_http_json('/api/admin/academic-terms', $adminAccessToken, $shortenPayload + ['confirmedExpiringEnrollments' => 1]);
+[$termShortenedStatus] = integration_http_json('/api/admin/academic-terms', $superAccessToken, $shortenPayload + ['confirmedExpiringEnrollments' => 1]);
 expect_same(200, $termShortenedStatus, 'Confirmed shortening saves');
 expect_same($pastTermEnd, $readTermProfile()['reference_expires_on'], 'Confirmed shortening propagates the past date');
 expect_same('active', $readTermProfile()['enrollment_status'], 'Dean request leaves enrollment status for the expiry run');
@@ -117,9 +117,9 @@ expect_same(0, $termSweepExit, 'Expiry sweep executes successfully: ' . implode(
 expect_same('expired', $readTermProfile()['enrollment_status'], 'Sweep expires a legacy enrollment using the Dean date');
 // Restore the isolated term, retire the synthetic reference, and verify Summer
 // canonical linkage without calling a disabled real biometric provider.
-integration_http_json('/api/admin/academic-terms', $adminAccessToken, $termPayload + ['id' => $termId]);
+integration_http_json('/api/admin/academic-terms', $superAccessToken, $termPayload + ['id' => $termId]);
 $pdo->prepare("UPDATE biometric_profiles SET enrollment_status = 'expired', face_enrolled = 0, protected_object_reference = NULL, reference_expires_on = NULL, usable_sample_count = NULL WHERE student_id = ?")->execute([$termStudentId]);
-[$termSummerStatus, $termSummer] = integration_http_json('/api/admin/academic-terms', $adminAccessToken, ['schoolYear' => $termFixtureYear, 'semester' => 'Summer', 'startDate' => '2088-05-01', 'endDate' => '2088-08-31']);
+[$termSummerStatus, $termSummer] = integration_http_json('/api/admin/academic-terms', $superAccessToken, ['schoolYear' => $termFixtureYear, 'semester' => 'Summer', 'startDate' => '2088-05-01', 'endDate' => '2088-08-31']);
 expect_same(200, $termSummerStatus, 'Canonical Dean Summer term is accepted');
 $summerResolved = academic_resolve_class_term_dates(['school_year' => $termFixtureYear, 'semester' => 'SUMMER'], academic_terms_read($pdo));
 expect_same('2088-08-31', $summerResolved['endDate'], 'Uppercase class Summer resolves to canonical Dean Summer');
@@ -139,7 +139,7 @@ expect_same('2088-09-30', $readTermProfile()['reference_expires_on'], 'Editing a
 $pdo->rollBack();
 expect_same('2087-12-31', $readTermProfile()['reference_expires_on'], 'Rollback restores the expiry from before the other-term edit');
 expect_same((string) $termId, (string) $readTermProfile()['reference_term_id'], 'Rollback restores the original source term');
-[$termOtherExtendStatus] = integration_http_json('/api/admin/academic-terms', $adminAccessToken, $summerEditPayload);
+[$termOtherExtendStatus] = integration_http_json('/api/admin/academic-terms', $superAccessToken, $summerEditPayload);
 expect_same(200, $termOtherExtendStatus, 'Dean can extend an active term that was not the enrollment source');
 expect_same('2088-09-30', $readTermProfile()['reference_expires_on'], 'Other-term extension replaces the earlier stored expiry');
 expect_same((string) $termSummer['id'], (string) $readTermProfile()['reference_term_id'], 'Other-term extension records Summer as the new source');
@@ -149,14 +149,14 @@ expect_same('active', $readTermProfile()['enrollment_status'], 'Other-term exten
 expect_same('term-fixture-protected-object', $readTermProfile()['protected_object_reference'], 'Other-term extension preserves biometric material');
 // Shorten Summer while another active term ends later: the latter supplies both
 // the expiry and its provenance, regardless of the earlier stored source.
-[$termLaterCreateStatus, $termLater] = integration_http_json('/api/admin/academic-terms', $adminAccessToken,
+[$termLaterCreateStatus, $termLater] = integration_http_json('/api/admin/academic-terms', $superAccessToken,
     ['schoolYear' => '2088-2089', 'semester' => '1ST', 'startDate' => '2088-10-01', 'endDate' => '2089-02-28']);
 expect_same(200, $termLaterCreateStatus, 'Later active-term fixture can be defined');
 $termClassInsert->execute(['TERM-LATER-FIRST', $termFacultyId, '1ST', '2088-2089', null, null]);
 $termLaterClassId = (int) $termClassInsert->fetchColumn();
 $termEnrollment->execute([$termStudentId, $termLaterClassId]);
 expect_same('2088-09-30', $readTermProfile()['reference_expires_on'], 'Joining the later class alone keeps the Summer expiry');
-[$termShortenLaterStatus] = integration_http_json('/api/admin/academic-terms', $adminAccessToken, array_merge($summerEditPayload, ['endDate' => '2088-08-31']));
+[$termShortenLaterStatus] = integration_http_json('/api/admin/academic-terms', $superAccessToken, array_merge($summerEditPayload, ['endDate' => '2088-08-31']));
 expect_same(200, $termShortenLaterStatus, 'Dean can shorten the source while a later active term exists');
 expect_same('2089-02-28', $readTermProfile()['reference_expires_on'], 'Shortening the source keeps the latest other active-class end');
 expect_same((string) $termLater['id'], (string) $readTermProfile()['reference_term_id'], 'Shortening moves provenance to the latest remaining term');
@@ -175,15 +175,15 @@ $chosenTermRow = $pdo->query('SELECT school_year, semester FROM class_sections W
 expect_same([academic_current_school_year($pdo), '1ST'], [$chosenTermRow['school_year'], $chosenTermRow['semester']], 'Chosen Dean identity is persisted');
 // Copy latest school year, including February 29. The source is isolated and
 // newer than the other fixture years, so existing academic data remains intact.
-[$termLeapStatus, $termLeap] = integration_http_json('/api/admin/academic-terms', $adminAccessToken, ['schoolYear' => '2091-2092', 'semester' => '1ST', 'startDate' => '2091-08-01', 'endDate' => '2092-02-29']);
+[$termLeapStatus, $termLeap] = integration_http_json('/api/admin/academic-terms', $superAccessToken, ['schoolYear' => '2091-2092', 'semester' => '1ST', 'startDate' => '2091-08-01', 'endDate' => '2092-02-29']);
 expect_same(200, $termLeapStatus, 'Leap-day source term can be created');
-[$termCopyStatus, $termCopy] = integration_http_json('/api/admin/academic-terms/copy', $adminAccessToken, []);
+[$termCopyStatus, $termCopy] = integration_http_json('/api/admin/academic-terms/copy', $superAccessToken, []);
 expect_same(200, $termCopyStatus, 'Copy-year operation succeeds');
 expect_same('2092-2093', $termCopy['schoolYear'] ?? null, 'Copy targets the next school year');
 $copiedTerm = $pdo->query("SELECT * FROM academic_terms WHERE school_year = '2092-2093' AND semester = '1ST'")->fetch(PDO::FETCH_ASSOC);
 expect_same('2093-02-28', $copiedTerm['end_date'], 'PostgreSQL copy persists the approved leap-day clamp');
 foreach ([(int) $copiedTerm['id'], (int) $termLeap['id']] as $unusedTermId) {
-    [$unusedTermDeleteStatus] = integration_http_json('/api/admin/academic-terms/delete', $adminAccessToken, ['id' => $unusedTermId]);
+    [$unusedTermDeleteStatus] = integration_http_json('/api/admin/academic-terms/delete', $superAccessToken, ['id' => $unusedTermId]);
     expect_same(200, $unusedTermDeleteStatus, 'Unused copied/source term can be deleted');
 }
 $termAuditActions = $pdo->query("SELECT DISTINCT action_code FROM audit_events WHERE module_code = 'settings' AND action_code LIKE 'academic_term%'")->fetchAll(PDO::FETCH_COLUMN);

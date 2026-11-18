@@ -39,13 +39,14 @@ It is not usage analytics, debugging output, or a click history. An event that s
 | Faculty | My Activity | Only rows their own account did. Sign-in rows behind a **Sign-ins** filter, off by default. |
 | Secretary | My Activity | Only rows their own account did. Same Sign-ins filter. |
 | Student | none (not now) | If added later: only rows their own account did. |
-| Dean | Audit Trail | **Overview**: people and accounts, roles, settings, terms, security events, biometric consent and deletion, plus everything the Dean's own account did. **Not** class work: scores, assessments, grade weights, recompute, attendance records and sessions, Excused requests, retention entries, other people's successful sign-ins. |
-| Dean in Superadmin mode | Audit Trail, Class work view (`scope=class_work`) | **Only** class-work rows (Grading, Attendance, Retention areas), read-only, with Faculty, class, Student and date filters ([superadmin.md](superadmin.md) Part A). Never in the overview or the Dashboard. |
-| Dean | Dashboard "Latest audit events" | Newest 20 rows of the same overview. |
+| Dean | My Activity | Only rows their own account did. Same Sign-ins filter. |
+| Superadmin | Audit Trail, Activity view | **Overview**: people and accounts, roles, settings, terms, security events, biometric consent and deletion, plus everything the Superadmin's own account did. **Not** other people's successful sign-ins. |
+| Superadmin | Audit Trail, Class work view (`scope=class_work`) | **Only** class-work rows (Grading, Attendance, Retention areas), read-only, with Faculty, class, Student and date filters ([superadmin.md](superadmin.md) Part A). Never in the overview or the Dashboard. |
+| Superadmin | Overview "Latest audit events" | Newest 10 rows of the same overview. |
 
 Rows are written whether or not any screen shows them. Hidden class-work rows stay sealed in the database as evidence.
 
-**O1 — Investigations.** In the normal Dean view the Dean has no access to class-work rows. In Superadmin mode the Dean reads them read-only on the Audit Trail ([superadmin.md](superadmin.md) Part A); opening them is not itself audited. Faculty still see only their own class-work history in My Activity.
+**O1 — Investigations.** The Dean has no access to other people's rows. The Superadmin reads class-work rows read-only on the Audit Trail ([superadmin.md](superadmin.md) Part A, [dean-superadmin-split.md](dean-superadmin-split.md)); opening them is not itself audited. Faculty still see only their own class-work history in My Activity.
 
 **O2 — Class Attendance Activity.** Stays as a class-records screen, not the personal audit trail: Faculty see attendance changes made by anyone (including Secretaries) in their own classes. It stays **unchanged** (Student, Section, Session, Change, Reason, By; Manila time); it reads attendance records, not audit rows.
 
@@ -67,15 +68,15 @@ Row wording for special cases: Who = **System** for automatic jobs; **Unknown ac
 
 **Filters and paging (every audit screen; decided 2026-10-17).** All filtering, sorting and paging happen on the server, 50 rows per page, over all rows the viewer may see (My Activity no longer stops at the newest 100).
 
-| Filter | Dean Audit Trail | My Activity | Notes |
+| Filter | Superadmin Audit Trail | My Activity | Notes |
 |---|---|---|---|
 | Search | yes | yes | Matches who, what, record, and the students/records inside grouped rows. |
 | Area | yes | yes | Readable options matching section 5: Sign-in & security, People & accounts, Settings & terms, Grading, Attendance, Retention, Biometrics. A code's Area is the section it is listed in. Each screen lists only areas it can contain. |
 | Date | yes | yes | Presets Today, Last 7 days, This term (hidden when no term is current), plus a custom from–to range; Asia/Manila calendar days. |
 | Status | yes | yes | Success, Warning, Failed. |
-| Role | yes | — | Dean, Faculty, Secretary, Student, System. |
+| Role | yes | — | Superadmin, Dean, Faculty, Secretary, Student, System. |
 | Class | — | Faculty | Faculty's own classes. |
-| Sign-ins | yes (Dean's own) | yes | Chip, off by default; shows the viewer's own sign-in, sign-out and 2FA rows. Other people's successful sign-ins never appear in the Dean view; failures always do. |
+| Sign-ins | yes (Superadmin's own) | yes | Chip, off by default; shows the viewer's own sign-in, sign-out and 2FA rows. Other people's successful sign-ins never appear in the Dean view; failures always do. |
 | Sort | yes | yes | Newest / oldest first. |
 | Clear filters | yes | yes | One button resets all. |
 
@@ -89,7 +90,7 @@ Row wording for special cases: Who = **System** for automatic jobs; **Unknown ac
 |---|---|---|---|
 | List table | Same columns, same order. The table scrolls sideways inside its own box; the When column stays pinned; text wraps inside cells. The page itself never scrolls sideways. | Same; usually no scrolling needed. | As designed. |
 | Filters | Search full width; the other controls two per row; Clear filters last. | Three per row. | One row. |
-| Attention cards (Dean) | Stacked, one per row. | Three in a row. | Three in a row. |
+| Attention cards (Superadmin) | Stacked, one per row. | Three in a row. | Three in a row. |
 | Details panel | Fills the screen and scrolls inside; the Changes table keeps Field / Before / After and scrolls sideways inside its own box. | Centred dialog. | Centred dialog. |
 | Export / Print | Last item in the filter card, full width. | Same. | In the filter row, after the log count. |
 | Paging | Below the list; wraps. | Same. | Below the list. |
@@ -102,7 +103,7 @@ Everywhere: tap targets at least 44 px; long names and emails wrap and are never
 
 ## 5. Event catalogue
 
-Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My Activity (Faculty/Secretary). Change: KEEP (as today), CHANGE, NEW, STOP.
+Legend: **Dean** = shown in the Superadmin overview (the column keeps its old name; the Dean sees only their own rows since 13.9). **Own** = shown in the actor's My Activity (Faculty, Secretary, Dean). Change: KEEP (as today), CHANGE, NEW, STOP.
 
 ### 5.1 Sign-in and account security (actor: anyone)
 
@@ -122,7 +123,7 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | Wrong 2FA or recovery code | mfa_verification_failed | which kind; never the code | yes | Sign-ins filter | **NEW** |
 | Recovery codes regenerated | mfa_recovery_codes_regenerated | never the codes | yes | yes | **NEW** |
 | 2FA turned off | mfa_revoked | reason | yes | yes | KEEP |
-| 2FA reset by the Dean | mfa_reset_by_dean | reason, never secrets; counts in the "2FA turned off" attention card | yes | — | **NEW** |
+| 2FA reset | mfa_reset_by_dean | reason, never secrets; counts in the "2FA turned off" attention card | yes | — | **NEW** |
 | Stolen sign-in token blocked | refresh_reuse_detected | session | yes | Sign-ins filter | KEEP |
 | Name changed | profile_updated | name before → after | yes | yes | CHANGE (add before) |
 | Token refreshed | refresh_rotation | — | — | — | **STOP** |
@@ -148,14 +149,16 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 | Join requested | class_join_requested | Student | student, class | no | — (Faculty see it for the class) | **NEW** (CLS-004) |
 | Join request approved / rejected | class_join_approved, class_join_rejected | Faculty, or system when auto-approve is on | student, class | no | yes | **NEW** (CLS-004) |
 | Class schedule saved over an overlap | class_schedule_overlap_confirmed | Faculty | who confirmed, other classes | yes | yes | KEEP |
-| Account deactivated / reactivated | account_deactivated, account_reactivated | Dean (Superadmin mode) | status Active ↔ Disabled, kind (Faculty or Student), reason on deactivation; a Student who is a Class Secretary is the same account, so one row | yes | — | **NEW** |
-| Moved to a new email | account_email_moved | Dean (Superadmin mode), or System (server script) | email old → new, reason, university ID checked in person | yes | — | **NEW** |
-| Name corrected by the Dean | account_name_changed_by_dean | Dean (Superadmin mode) | name parts before → after, reason | yes | — | **NEW** |
-| Dean role transferred / email unretired | dean_transferred, email_unretired | System (server script) | new Dean, outgoing Dean Faculty or deactivated, reason | yes | — | **NEW** |
-| Signed out everywhere | sessions_ended_by_dean | Dean (Superadmin mode) | reason | yes | — | **NEW** |
-| Student invitation resent / revoked by the Dean | student_invitation_resent_by_dean, student_invitation_revoked_by_dean | Dean (Superadmin mode) | the resend targets the new token, the revoke the account; reason on revoke | yes | — | **NEW** |
+| Account deactivated / reactivated | account_deactivated, account_reactivated | Superadmin | status Active ↔ Disabled, kind (Faculty or Student), reason on deactivation; a Student who is a Class Secretary is the same account, so one row | yes | — | **NEW** |
+| Moved to a new email | account_email_moved | Superadmin, or System (server script) | email old → new, reason, university ID checked in person | yes | — | **NEW** |
+| Name corrected | account_name_changed_by_dean | Superadmin | name parts before → after, reason | yes | — | **NEW** |
+| Dean role handed over | dean_transferred | Superadmin | new Dean, outgoing Dean Faculty or deactivated, reason | yes | — | **NEW** |
+| Email unretired | email_unretired | System (server script) | email, reason | yes | — | **NEW** |
+| Superadmin invited / Superadmin 2FA reset on the server | superadmin_invited, superadmin_2fa_reset | System (server script) | email, reason | yes | — | **NEW** (13.9) |
+| Signed out everywhere | sessions_ended_by_dean | Superadmin | reason | yes | — | **NEW** |
+| Student invitation resent / revoked | student_invitation_resent_by_dean, student_invitation_revoked_by_dean | Superadmin | the resend targets the new token, the revoke the account; reason on revoke | yes | — | **NEW** |
 
-### 5.3 Settings and terms (actor: Dean)
+### 5.3 Settings and terms (actor: Superadmin)
 
 | What | Code | Stores | Dean | Change |
 |---|---|---|---|---|
@@ -212,11 +215,11 @@ Legend: **Dean** = shown in the Dean overview. **Own** = shown in the actor's My
 |---|---|---|---|---|---|
 | Face-check consent given / withdrawn | biometric_consent_granted, biometric_consent_revoked | Student | consent before → after; **no row if unchanged** | yes | CHANGE |
 | Face enrollment started / succeeded / failed | biometric_enrollment_started, _succeeded, _failed | Student | status; failure code | no | KEEP |
-| Face enrollment deleted | biometric_enrollment_revoked, _revoked_by_dean, _revoked_inactive, _expired | Student, Dean, system | status before → after; never biometric data | yes | KEEP |
+| Face enrollment deleted | biometric_enrollment_revoked, _revoked_by_dean, _revoked_inactive, _expired | Student, Superadmin, system | status before → after; never biometric data | yes | KEEP |
 | Face check failed | biometric_verification_failed | Student | error code only, no score | no | KEEP |
-| Face enrolment flagged / flag dismissed | face_flag_raised, face_flag_dismissed | System, Dean | flag kind (F1, F2) and dates only; the Dean's note on dismissal; never a score | yes | **NEW** |
+| Face enrolment flagged / flag dismissed | face_flag_raised, face_flag_dismissed | System, Superadmin | flag kind (F1, F2) and dates only; the Superadmin's note on dismissal; never a score | yes | **NEW** |
 
-**O3 — Dean and biometrics.** The Dean sees consent changes and enrollment deletions (proof under the Data Privacy Act), not enrollment attempts or failed face checks.
+**O3 — Superadmin and biometrics.** The Superadmin sees consent changes and enrollment deletions (proof under the Data Privacy Act), not enrollment attempts or failed face checks.
 
 ### 5.8 Development only
 

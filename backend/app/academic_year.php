@@ -392,5 +392,5 @@ function academic_term_for_class_create(PDO $pdo, array $data): array
             return $term;
         }
     }
-    throw new ValidationException([['field' => 'academicTermId', 'message' => 'Choose a Dean-defined term for the current school year. Ask the Dean to set its dates.']]);
+    throw new ValidationException([['field' => 'academicTermId', 'message' => 'Choose a defined term for the current school year. Ask the Superadmin to set its dates.']]);
 }

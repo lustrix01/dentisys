@@ -20,10 +20,19 @@ HASH = {
     'faculty': '$2y$10$3OfHmV2FaxfK911l8ZZxV.paOsQVbJTTwTtEtzPkxY3TEv9xyDBlm',    # Faculty123!
     'secretary': '$2y$10$GZiQTRYcddOZ6iml/GBtI.4usZeczmzJWgiqCn1iYHfd2eUiOBLhq',  # Secretary123!
     'student': '$2y$10$C4JygFNbn/ISoVUs6J1HMeSItSvxMk.8ZMlzch4J284p9777BJoDq',    # Student123!
+    'superadmin': '$2y$10$uZbI3OxqhoD8TC4dipeipePgmY1pAm1ZVzby50yHFpu7oVFMdo26O',  # Superadmin123!
     # Invited Faculty cannot sign in before accepting: a hash of a discarded random value.
     'invited': '$2y$12$anHybX0zCxYNejHISsXT0eNwoWBI7u4BRxD.Hu7UEO9aX1uxhZULy',
 }
-PASSWORD = {'admin': 'Admin123!', 'faculty': 'Faculty123!', 'secretary': 'Secretary123!', 'student': 'Student123!'}
+PASSWORD = {'admin': 'Admin123!', 'faculty': 'Faculty123!', 'secretary': 'Secretary123!', 'student': 'Student123!',
+            'superadmin': 'Superadmin123!'}
+# The Superadmin's 2FA is required, so the dev seed gives it a fixed authenticator secret (base32, for live e2e tests
+# and local sign-in), stored AES-256-GCM encrypted under the documented development MFA_ENCRYPTION_KEY_B64 default
+# (ZGVudGlzeXMtZGV2LW1mYS1lbmNyeXB0LWtleS0zMmI=) with a fixed nonce. It decrypts only with that key.
+SUPERADMIN_TOTP_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'
+SUPERADMIN_TOTP_CIPHERTEXT = '1d7ccfa89f951fa1870bdf8d14d8ef708fffaf171424b18330c2e374091f9286'
+SUPERADMIN_TOTP_NONCE = '646576737570657261646d69'
+SUPERADMIN_TOTP_TAG = '8f4b4cf560eeed895522cef201815cb4'
 CURRENT_SY = '2026-2027'
 DOMAIN = 'bicol-u.edu.ph'
 MANILA_OFFSET = timedelta(hours=8)  # Asia/Manila, no DST
@@ -561,8 +570,12 @@ $guard$;
         title = 'Class Secretary' if role == 'secretary' else 'Student'
         rows.append((u, s['email'], HASH[role], role, disp, title, 'Active', created,
                      created if role == 'secretary' else None, None, s['first'], s['middle'], s['last'], None))
+    # The one Superadmin (backlog 13.9): Active, with a fixed development authenticator (see SUPERADMIN_TOTP_SECRET).
+    sa_created = datetime(2024, 1, 5, 1, 0)
+    rows.append((LAST_UID + 1, 'superadmin@' + DOMAIN, HASH['superadmin'], 'superadmin', 'Dev Superadmin', 'Superadmin', 'Active', sa_created,
+                 sa_created, None, 'Dev', None, 'Superadmin', None))
     rows.sort(key=lambda r: r[0])
-    w('-- 1. Accounts (admin, faculty, secretaries, students). Existing e-mails are left untouched.')
+    w('-- 1. Accounts (admin, superadmin, faculty, secretaries, students). Existing e-mails are left untouched.')
     w('INSERT INTO user_accounts (user_id, login_email, password_hash, role, display_name, title, status, created_at, approved_at,')
     w('                           name_prefix, first_name, middle_name, last_name, name_suffix)')
     w('SELECT v.user_id::integer, v.login_email, v.password_hash, v.role, v.display_name, v.title, v.status,')
@@ -574,6 +587,14 @@ $guard$;
     w('WHERE (SELECT go FROM seed_run)')
     w('  AND NOT EXISTS (SELECT 1 FROM user_accounts ua WHERE ua.login_email = v.login_email::citext)')
     w('  AND NOT EXISTS (SELECT 1 FROM user_accounts ua WHERE ua.user_id = v.user_id);')
+    w('')
+    w('-- 1b. The Superadmin authenticator (2FA is required for that role). Development secret: ' + SUPERADMIN_TOTP_SECRET + ' (base32, 6 digits, 30 s).')
+    w("INSERT INTO security_tokens (purpose, user_id, issued_at, ciphertext, nonce, auth_tag, enc_key_version, enc_algorithm,")
+    w("                             totp_algorithm, digit_count, period_seconds, mfa_status, mfa_verified_at)")
+    w(f"SELECT 'mfa_credential', ua.user_id, LOCALTIMESTAMP, decode('{SUPERADMIN_TOTP_CIPHERTEXT}', 'hex'), decode('{SUPERADMIN_TOTP_NONCE}', 'hex'),")
+    w(f"       decode('{SUPERADMIN_TOTP_TAG}', 'hex'), 1, 'AES-256-GCM', 'sha1', 6, 30, 'enabled', LOCALTIMESTAMP")
+    w("FROM user_accounts ua")
+    w("WHERE (SELECT go FROM seed_run) AND ua.role = 'superadmin';")
     w('')
     # user_accounts VALUES types: cast first row via explicit casts is needed for NULL columns
     # ---- courses
@@ -748,7 +769,7 @@ def build_md():
     w('')
     w('| Role | Password |')
     w('|---|---|')
-    for r in ('admin', 'faculty', 'secretary', 'student'):
+    for r in ('admin', 'superadmin', 'faculty', 'secretary', 'student'):
         w(f'| {r.capitalize()} | `{PASSWORD[r]}` |')
     w('')
     w('Every account of a role uses that role\'s password. Current school year in the seed: **' + CURRENT_SY + '**, 1st semester.')
@@ -758,6 +779,7 @@ def build_md():
     w('| Role | E-mail | Notes |')
     w('|---|---|---|')
     w(f'| Admin | `admin@{DOMAIN}` | Dean (admin pages only) |')
+    w(f'| Superadmin | `superadmin@{DOMAIN}` | Signs in with the password, then the 6-digit code from authenticator secret `{SUPERADMIN_TOTP_SECRET}` (dev only) |')
     w(f'| Faculty | `faculty@{DOMAIN}` | Teaches CLINIC-4A and CLINIC-4B this year, plus past sections |')
     w(f'| Secretary | `secretary@{DOMAIN}` | Bea Mercado Alonzo, class secretary of CLINIC-4B (4th year, block B) |')
     w(f'| Student | `student@{DOMAIN}` | Juan Miguel Reyes Dela Cruz, 1st year, DENT-1A |')

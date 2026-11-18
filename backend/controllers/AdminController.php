@@ -30,7 +30,8 @@ function handle_admin_email_logs(): void
     }
 }
 
-function admin_verify_auth(PDO $pdo, array $config): array
+/** $roles: the Dean only by default; /api/admin/profile and /settings pass ['admin', 'superadmin'] (each for their own account). */
+function admin_verify_auth(PDO $pdo, array $config, array $roles = ['admin']): array
 {
     $authHeader = request_header('Authorization') ?? '';
     if ($authHeader === '') {
@@ -47,7 +48,7 @@ function admin_verify_auth(PDO $pdo, array $config): array
         exit;
     }
 
-    if ($authCtx['role'] !== 'admin') {
+    if (!in_array($authCtx['role'], $roles, true)) {
         safe_error_response('Access denied. Dean privileges required.', 403);
         exit;
     }
@@ -60,12 +61,35 @@ function admin_verify_auth(PDO $pdo, array $config): array
     return $authCtx;
 }
 
-/** Newest Dean-overview entries for the Dashboard (same Entry shape as the Audit Trail). */
-function admin_recent_audit_events(PDO $pdo, int $deanId, int $limit = 20): array
+/** Backlog 13.9: the same check for the Superadmin account (contract 4.1). */
+function superadmin_verify_auth(PDO $pdo, array $config): array
 {
-    $params = audit_read_params([], 'admin');
-    $params['pageSize'] = max(1, min(20, $limit));
-    return audit_read_entries($pdo, ['user_id' => $deanId, 'role' => 'admin'], $params)['entries'];
+    $authHeader = request_header('Authorization') ?? '';
+    if ($authHeader === '') {
+        auth_error_response('Authorization header required.', 401);
+        exit;
+    }
+
+    try {
+        $token = auth_extract_bearer_token($authHeader);
+        $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
+        $authCtx = auth_verify_access_token($pdo, $config, $token, $jwtKey);
+    } catch (AuthException | \RuntimeException $e) {
+        auth_error_response($e->getMessage(), 401);
+        exit;
+    }
+
+    if ($authCtx['role'] !== 'superadmin') {
+        safe_error_response('Access denied. Superadmin privileges required.', 403);
+        exit;
+    }
+
+    if (account_identity_fetch($pdo, (int) $authCtx['user_id']) === null) {
+        safe_error_response('Superadmin identity is unavailable.', 409);
+        exit;
+    }
+
+    return $authCtx;
 }
 
 function handle_admin_dashboard_kpis(): void
@@ -276,8 +300,6 @@ function handle_admin_dashboard_kpis(): void
                 'irregular_reenrollment' => $irregularReenrollmentCount,
             ],
             'classAttendance' => $classAttendance,
-            'recentAuditEvents' => admin_recent_audit_events($pdo, (int) $authCtx['user_id']),
-            'academicTermReminder' => academic_next_term_reminder(academic_terms_read($pdo), app_local_date($config, attendance_session_now_utc())),
         ], 200);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
@@ -389,19 +411,21 @@ function handle_admin_audit_logs(): void
             return;
         }
 
-        if (($authCtx['role'] ?? '') !== 'admin') {
+        // DS7/DS8: the Superadmin reads the overview and class work; the Dean reads only own rows (My Activity, like Faculty).
+        $viewerRole = (string) ($authCtx['role'] ?? '');
+        if (!in_array($viewerRole, ['admin', 'superadmin'], true)) {
             safe_error_response('Access denied. Dean privileges required.', 403);
             return;
         }
 
-        if (($_GET['lookup'] ?? '') === 'students') { // Superadmin class-work Student filter (search by name or number)
+        if ($viewerRole === 'superadmin' && ($_GET['lookup'] ?? '') === 'students') { // Superadmin class-work Student filter (search by name or number)
             json_response(['status' => 'ok', 'students' => audit_student_lookup($pdo, trim((string) ($_GET['q'] ?? '')))], 200);
             return;
         }
         $result = audit_read_entries(
             $pdo,
-            ['user_id' => (int) $authCtx['user_id'], 'role' => 'admin'],
-            audit_read_params($_GET, 'admin')
+            ['user_id' => (int) $authCtx['user_id'], 'role' => $viewerRole],
+            audit_read_params($_GET, $viewerRole)
         );
         json_response(['status' => 'ok'] + $result, 200);
     } catch (ValidationException $e) {
@@ -417,7 +441,7 @@ function handle_admin_profile_get(): void
     try {
         $config = app_config();
         $pdo = create_pdo($config);
-        $authCtx = admin_verify_auth($pdo, $config);
+        $authCtx = admin_verify_auth($pdo, $config, ['admin', 'superadmin']);
 
         $user = account_identity_fetch($pdo, (int) $authCtx['user_id']);
 
@@ -433,7 +457,7 @@ function handle_admin_profile_get(): void
                 'id' => (string) $user['user_id'],
                 'name' => account_identity_display_name($user),
                 'email' => $user['login_email'],
-                'title' => $user['title'] ?? 'Academic Dean',
+                'title' => $user['title'] ?? ($authCtx['role'] === 'superadmin' ? 'Superadmin' : 'Academic Dean'),
                 'theme' => $user['theme'] ?? 'light',
             ],
         ], 200);
@@ -448,7 +472,7 @@ function handle_admin_profile_update(): void
     try {
         $config = app_config();
         $pdo = create_pdo($config);
-        $authCtx = admin_verify_auth($pdo, $config);
+        $authCtx = admin_verify_auth($pdo, $config, ['admin', 'superadmin']);
 
         $body = request_body();
         if (!$body['has_body']) {
@@ -472,7 +496,7 @@ function handle_admin_profile_update(): void
         if ($sqlState === '23505') {
             safe_error_response('That email address is already used by another account.', 409);
         } elseif ($sqlState === '23514' || $sqlState === 'P0001') {
-            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the Dean.', 409);
+            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the Superadmin.', 409);
         } else {
             safe_error_response('Internal server error.', 500);
         }
@@ -496,7 +520,7 @@ function handle_admin_settings_get(): void
     try {
         $config = app_config();
         $pdo = create_pdo($config);
-        $authCtx = admin_verify_auth($pdo, $config);
+        $authCtx = admin_verify_auth($pdo, $config, ['admin', 'superadmin']);
 
         $themeStmt = $pdo->prepare("SELECT theme FROM user_accounts WHERE user_id = ?");
         $themeStmt->execute([$authCtx['user_id']]);
@@ -520,7 +544,7 @@ function handle_admin_settings_update(): void
     try {
         $config = app_config();
         $pdo = create_pdo($config);
-        $authCtx = admin_verify_auth($pdo, $config);
+        $authCtx = admin_verify_auth($pdo, $config, ['admin', 'superadmin']);
 
         $body = request_body();
         if (!$body['has_body']) {
@@ -569,8 +593,8 @@ function handle_admin_settings_update(): void
 }
 
 /**
- * BIO-002: the Dean may revoke a Student's biometric enrollment; the Student
- * must then re-enroll. The Dean cannot enroll on the Student's behalf.
+ * BIO-002: the Superadmin may revoke a Student's biometric enrollment; the Student
+ * must then re-enroll. The Superadmin cannot enroll on the Student's behalf.
  */
 function handle_admin_biometric_revoke(): void
 {
@@ -584,7 +608,7 @@ function handle_admin_biometric_revoke(): void
     try {
         $config = app_config();
         $pdo = create_pdo($config);
-        $authCtx = admin_verify_auth($pdo, $config);
+        $authCtx = superadmin_verify_auth($pdo, $config);
         $body = request_body();
         $data = $body['has_body'] && is_array($body['data']) ? $body['data'] : [];
         $studentId = filter_var($data['studentId'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
@@ -598,7 +622,7 @@ function handle_admin_biometric_revoke(): void
             $revoked = student_biometric_invalidate(
                 $pdo, $config, $authCtx, $context, (int) $studentId, 'revoked',
                 'biometric_enrollment_revoked_by_dean',
-                'The Dean revoked the Student\'s biometric enrollment; re-enrollment is required.',
+                'The Superadmin revoked the Student\'s biometric enrollment; re-enrollment is required.',
                 $reason
             );
             if (!$revoked) {
@@ -616,7 +640,7 @@ function handle_admin_biometric_revoke(): void
                     $recipientUserId,
                     'biometric_enrollment',
                     'Face check-in enrollment revoked',
-                    "The Dean revoked your face check-in enrollment. Re-enroll from Face Registration to use face check-in again; manual attendance remains available. Reason: {$reason}",
+                    "The Superadmin revoked your face check-in enrollment. Re-enroll from Face Registration to use face check-in again; manual attendance remains available. Reason: {$reason}",
                     'student',
                     (string) $studentId,
                     'biometric-dean-revoke:' . $studentId . ':' . attendance_session_now_utc()->format('YmdHisu')
@@ -869,7 +893,7 @@ function handle_admin_academic_terms(): void
     try {
         $config = app_config();
         $pdo = create_pdo($config);
-        $actor = admin_verify_auth($pdo, $config);
+        $actor = superadmin_verify_auth($pdo, $config);
         if (request_method() === 'GET') {
             json_response(['status' => 'ok', 'currentSchoolYear' => academic_current_school_year($pdo),
                 'today' => app_local_date($config, attendance_session_now_utc()), 'terms' => academic_terms_list($pdo)]);

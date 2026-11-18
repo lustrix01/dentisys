@@ -11,7 +11,7 @@ require_once __DIR__ . '/attendance_sessions.php';
 const AUTO_SESSIONS_DAYS = 7;
 const AUTO_SESSIONS_OPEN_EARLY_MINUTES = 15; // an auto-session opens this long before the meeting starts (never before 00:00)
 const AUTO_SESSIONS_ACTOR_NAME = 'DentiSYS (weekly schedule)';
-const AUTO_SESSIONS_ROOM_MESSAGE = 'Geofence needs a saved location for every meeting room. Ask the Dean to set it in Rooms.';
+const AUTO_SESSIONS_ROOM_MESSAGE = 'Geofence needs a saved location for every meeting room. Ask the Superadmin to set it in Rooms.';
 
 /** Class row columns every function below needs. */
 const AUTO_SESSIONS_CLASS_COLUMNS = 'cs.cs_id, cs.cs_name, cs.instructor_user_id, cs.secretary_user_id, cs.semester, cs.school_year, cs.term_start_date,
