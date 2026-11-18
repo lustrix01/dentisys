@@ -14,7 +14,6 @@ import {
   Edit,
   Trash2,
   Archive,
-  Upload,
   Printer,
   Check,
   FileText,
@@ -34,7 +33,7 @@ import {
   Info
 } from 'lucide-react';
 import { flushSync } from 'react-dom';
-import { PrintStyle, PrintHeader, PrintLegend, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
+import { PrintStyle, PrintHeader, PrintCaption, PrintLegend, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { SortableHeader, ariaSort, type SortState } from '../../components/SortableHeader';
@@ -52,7 +51,6 @@ import { recordAudit } from '../../services/auditService';
 import {
   computeFacultyGradesApi,
   getFacultyAssessmentScoresApi,
-  importGradeSheet,
   deleteFacultyAssessmentApi,
   getFacultyClassesApi,
   saveFacultyAssessmentScoresApi,
@@ -89,10 +87,8 @@ import {
   isPeriodComputeResult
 } from '../../utils/periodGradingHelper';
 import { formatGrade, percentageToGWAExact, matchesActivityFilters, saveStatusBadge, defaultTransmutationEnabled } from '../../utils/gradeHelper';
-import { exportGradeWorkbook } from '../../utils/gradeSheetExportFlow';
-import { sheetName } from '../../utils/officialGradeSheetExport';
-import { GradeSheetImportPanel } from '../../components/GradeSheetImportPanel';
-import type { GradeSheetImportPlan } from '../../utils/gradeSheetImport';
+import { exportGradeWorkbook, prepareGradeWorkbook } from '../../utils/gradeSheetExportFlow';
+import { buildGradeSheetPdfPeriods, sheetName } from '../../utils/officialGradeSheetExport';
 import type {
   PeriodDraftState,
   PeriodCategoryDraftRow,
@@ -101,6 +97,7 @@ import type {
 import GradeValue from '../../components/GradeValue';
 import { isViewOnlyClass, isArchivedCurrentYear, orderCurrentYearClasses } from '../../utils/classArchiving';
 import { invalidScoresMessage, focusInvalidScore, type InvalidScoreEntry } from './gradeScoreErrors';
+import type { XlsxSheet } from '../../utils/xlsxDownload';
 
 export interface EditorCategoryRow {
   tempId: string;
@@ -117,6 +114,131 @@ interface CategoryWeightSummary {
   isExact100: boolean;
   displayPercent: string;
 }
+
+type GradeSheetPrintSnapshot = {
+  sheets: XlsxSheet[];
+  courseLabel: string;
+  term: string;
+  faculty: string;
+  generated: string;
+};
+
+type PrintableGradeCell = {
+  key: string;
+  text: string;
+  columnSpan: number;
+  rowSpan: number;
+  align?: string;
+  bold?: boolean;
+  textColor?: string;
+  backgroundColor?: string;
+};
+
+const printableGradeCell = (raw: unknown, key: string): PrintableGradeCell => {
+  const cell = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const value = raw && typeof raw === 'object' && 'value' in cell ? cell.value : raw;
+  const format = typeof cell.format === 'string' ? cell.format : '';
+  let text = '';
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const decimalFormat = format.match(/^0\.(0+)(#*)$/);
+    if (decimalFormat) {
+      const minimum = decimalFormat[1].length;
+      const maximum = minimum + decimalFormat[2].length;
+      text = value.toFixed(maximum).replace(/0+$/, '').replace(/\.$/, '');
+      if (maximum > minimum) {
+        const decimals = text.split('.')[1]?.length ?? 0;
+        if (decimals < minimum) text = value.toFixed(minimum);
+      }
+    } else if (format === '0') text = String(Math.round(value));
+    else text = String(value);
+  } else if (value !== null && value !== undefined) text = String(value);
+  return {
+    key,
+    text,
+    columnSpan: typeof cell.columnSpan === 'number' ? Math.max(1, cell.columnSpan) : 1,
+    rowSpan: typeof cell.rowSpan === 'number' ? Math.max(1, cell.rowSpan) : 1,
+    align: typeof cell.align === 'string' ? cell.align : undefined,
+    bold: cell.fontWeight === 'bold',
+    textColor: typeof cell.textColor === 'string' ? cell.textColor : undefined,
+    backgroundColor: typeof cell.backgroundColor === 'string' ? cell.backgroundColor : undefined,
+  };
+};
+
+const printableGradeRows = (sheet: XlsxSheet): PrintableGradeCell[][] => {
+  const rows = (sheet.data ?? []) as unknown[][];
+  const columnCount = Math.max(sheet.columns?.length ?? 0, ...rows.map(row => row.length));
+  const coveredUntil = Array.from({ length: columnCount }, () => -1);
+  return rows.map((row, rowIndex) => {
+    const result: PrintableGradeCell[] = [];
+    for (let columnIndex = 0; columnIndex < columnCount;) {
+      if (coveredUntil[columnIndex] >= rowIndex) {
+        columnIndex++;
+        continue;
+      }
+      const cell = printableGradeCell(row[columnIndex], `${rowIndex}-${columnIndex}`);
+      cell.columnSpan = Math.min(cell.columnSpan, columnCount - columnIndex);
+      for (let spanIndex = 0; spanIndex < cell.columnSpan; spanIndex++) {
+        coveredUntil[columnIndex + spanIndex] = Math.max(coveredUntil[columnIndex + spanIndex], rowIndex + cell.rowSpan - 1);
+      }
+      result.push(cell);
+      columnIndex += cell.columnSpan;
+    }
+    return result;
+  });
+};
+
+const gradePrintSheetTitle = (sheet: string | undefined) => ({
+  'Grade Sheet': 'Comprehensive Grade Sheet',
+  'Midterm Grade Sheet': 'Midterm Grading Matrix',
+  'Finals Grade Sheet': 'Finals Grading Matrix',
+}[sheet ?? ''] ?? sheet ?? 'Grade Summary');
+
+const ComprehensiveGradeSheetPrint: React.FC<{ snapshot: GradeSheetPrintSnapshot }> = ({ snapshot }) => (
+  <div className="print-only hidden bg-white text-slate-900 font-sans ps grade-sheet-print">
+    <PrintStyle title="Comprehensive Grade Sheet" running={`Comprehensive Grade Sheet · ${snapshot.courseLabel}`} generated={snapshot.generated} />
+    <style>{`@media print { .grade-sheet-page + .grade-sheet-page { break-before: page; } .grade-sheet-print .grade-sheet-table { width: 100%; table-layout: fixed; font-size: 9px; } .grade-sheet-print .grade-sheet-table th, .grade-sheet-print .grade-sheet-table td { padding: 5px 6px; font-size: 9px; line-height: 1.25; } .grade-sheet-print .grade-title-row th { border: 0; background: #fff; color: #1E2939; text-transform: none; font-size: 9px; } .grade-sheet-print .grade-main-title th { color: #0E436C; font-weight: 800; } .grade-sheet-print .grade-section-row th { background: #fff; color: #1E2939; text-align: left; border-color: #fff; text-transform: none; } }`}</style>
+    <PrintHeader
+      title="Comprehensive Grade Sheet"
+      sub={snapshot.courseLabel}
+      rows={[
+        ['Term', snapshot.term],
+        ['Faculty', snapshot.faculty],
+        ['Sheets', snapshot.sheets.map(sheet => sheet.sheet).join(', ')],
+        ['Generated', snapshot.generated],
+      ]}
+    />
+    {snapshot.sheets.map(sheet => {
+      const rows = printableGradeRows(sheet);
+      const headerCount = sheet.sheet === 'Midterm Grade Sheet' || sheet.sheet === 'Finals Grade Sheet' ? 5 : sheet.sheet === 'Grade Sheet' ? 10 : sheet.sheet === 'LEC' || sheet.sheet === 'LAB' ? 9 : sheet.sheet === 'Grade Summary' ? 9 : 1;
+      const widths = sheet.columns?.map(column => column.width ?? 1) ?? [];
+      const widthTotal = widths.reduce((sum, width) => sum + width, 0) || widths.length || 1;
+      return (
+        <section key={sheet.sheet} className="grade-sheet-page">
+          <PrintCaption>{gradePrintSheetTitle(sheet.sheet)}</PrintCaption>
+          <p className="mb-1 text-[8px] text-slate-600">Score = points earned (maximum shown in the assessment heading); Average % = category average; Weighted = category contribution.</p>
+          <table className="grade-sheet-table">
+            {widths.length > 0 && <colgroup>{widths.map((width, index) => <col key={index} style={{ width: `${width / widthTotal * 100}%` }} />)}</colgroup>}
+            <thead>
+              {rows.slice(0, headerCount).map((row, rowIndex) => {
+                const componentTitle = (sheet.sheet === 'LEC' || sheet.sheet === 'LAB') && rowIndex < 5;
+                const sectionLine = (sheet.sheet === 'LEC' || sheet.sheet === 'LAB') && rowIndex === 5;
+                const gradeSummaryTitle = sheet.sheet === 'Grade Summary' && rowIndex < 7;
+                return <tr key={rowIndex} className={componentTitle || gradeSummaryTitle ? 'grade-title-row' : sectionLine ? 'grade-section-row' : ''}>
+                  {row.map(cell => <th key={cell.key} colSpan={cell.columnSpan} rowSpan={cell.rowSpan} className={cell.align === 'left' ? 'l' : ''} style={{ fontWeight: cell.bold ? 800 : undefined, color: cell.textColor, backgroundColor: cell.backgroundColor }}>{cell.text}</th>)}
+                </tr>;
+              })}
+            </thead>
+            <tbody>
+              {rows.slice(headerCount).map((row, rowIndex) => <tr key={rowIndex}>
+                {row.map(cell => <td key={cell.key} colSpan={cell.columnSpan} rowSpan={cell.rowSpan} className={cell.align === 'left' ? 'l' : ''} style={{ fontWeight: cell.bold ? 700 : undefined, color: cell.textColor, backgroundColor: cell.backgroundColor }}>{cell.text}</td>)}
+              </tr>)}
+            </tbody>
+          </table>
+        </section>
+      );
+    })}
+  </div>
+);
 
 const categoryOptionKey = (category: {
   id?: number | string | null;
@@ -344,7 +466,7 @@ export const GradeComputation: React.FC = () => {
     if (tab === 'summary' || tab === 'summaries') {
       return 'summaries';
     }
-    if (tab === 'assessments' || tab === 'scores' || tab === 'components' || tab === 'import') {
+    if (tab === 'assessments' || tab === 'scores' || tab === 'components') {
       return tab;
     }
     return 'scores';
@@ -478,7 +600,7 @@ export const GradeComputation: React.FC = () => {
 
   // When switching to assessments tab, sync offering with selectedClassId if valid
   useEffect(() => {
-    if ((activeSubTab === 'assessments' || activeSubTab === 'import') && facultyOfferings.length > 0) {
+    if (activeSubTab === 'assessments' && facultyOfferings.length > 0) {
       const matchByClass = facultyOfferings.find(o => o.sections.some(s => s.id === selectedClassId));
       if (matchByClass && matchByClass.key !== selectedAssessmentOfferingKey) {
         setSelectedAssessmentOfferingKey(matchByClass.key);
@@ -519,7 +641,7 @@ export const GradeComputation: React.FC = () => {
 
   // Re-fetch config when assessment tab is active or selected offering changes
   useEffect(() => {
-    if ((activeSubTab === 'assessments' || activeSubTab === 'import') && currentAssessmentOffering) {
+    if (activeSubTab === 'assessments' && currentAssessmentOffering) {
       loadAssessmentOfferingConfig(currentAssessmentOffering);
     }
   }, [activeSubTab, currentAssessmentOffering?.key]);
@@ -3115,6 +3237,8 @@ export const GradeComputation: React.FC = () => {
 
   // Official grade sheet workbook (contract official-exports.md); classes without the official Grade Weights get the plain summary.
   const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [isPreparingGradePdf, setIsPreparingGradePdf] = useState(false);
+  const [gradeSheetPrint, setGradeSheetPrint] = useState<GradeSheetPrintSnapshot | null>(null);
   const handleExportExcel = async () => {
     const cls = facultyClasses.find(c => c.id === selectedClassId);
     if (!cls) {
@@ -3138,40 +3262,37 @@ export const GradeComputation: React.FC = () => {
   };
 
   const [printedAt, setPrintedAt] = useState<Date | null>(null);
-  const handleExportPDF = () => {
-    recordAudit({
-      action: 'Exported grade PDF',
-      module: 'Grade Computation',
-      description: `Exported printable PDF grade ledger for ${selectedSubjectCode}.`,
-      status: 'Success',
-    });
-    flushSync(() => setPrintedAt(new Date()));
-    window.print();
-  };
-
-  // ----------------------------------------------------
-  // 5. IMPORT GRADE SHEETS TAB (official .xlsx; see components/GradeSheetImportPanel)
-  // ----------------------------------------------------
-  const importClass = useMemo(() => facultyClasses.find(c => c.id === selectedClassId), [facultyClasses, selectedClassId]);
-  const importAssessments = useMemo(
-    () => assessments.filter(a => a.subjectCode === selectedSubjectCode && a.classId === selectedClassId && a.status !== 'Archived'),
-    [assessments, selectedSubjectCode, selectedClassId],
-  );
-  const handleGradeSheetImport = async (plan: GradeSheetImportPlan) => {
+  const handleExportPDF = async () => {
+    const cls = facultyClasses.find(c => c.id === selectedClassId);
+    if (!cls) {
+      showFeedback('Your classes are still loading. Try Export PDF again in a moment.', 'info');
+      return;
+    }
+    setIsPreparingGradePdf(true);
     try {
-      const result = await importGradeSheet(plan);
-      // Created or removed assessments change the list; reload it and this class's scores.
-      const fresh = await refreshAssessments();
-      await Promise.all(fresh.filter(a => a.classId === plan.classId).map(async a => {
-        const response = await getFacultyAssessmentScoresApi(a.id);
-        saveAssessmentScores(a.id, response.scores.map(score => ({ studentId: score.studentId, score: Number(score.score), remarks: score.remarks })));
+      const prepared = await prepareGradeWorkbook({ cls, students: activeStudents, assessments, scores: assessmentScores, attendanceRecords, by: user?.display_name ?? '' });
+      const generatedAt = new Date();
+      const restorePrint = () => setGradeSheetPrint(null);
+      window.addEventListener('afterprint', restorePrint, { once: true });
+      flushSync(() => setGradeSheetPrint({
+        sheets: buildGradeSheetPdfPeriods(prepared.sheets),
+        courseLabel: `${cls.courseCode} · ${cls.courseName} · ${cls.csName}`,
+        term: cls.semester && cls.schoolYear ? `${cls.semester}, S.Y. ${cls.schoolYear}` : `S.Y. ${cls.schoolYear || currentSchoolYear}`,
+        faculty: user?.display_name ?? '',
+        generated: formatPrintedAt(generatedAt),
       }));
-      showRecomputeNotice(result);
-      setMatrixRefreshKey(key => key + 1);
-      showFeedback(`Grade sheet imported: ${result.scoresSaved} score(s) saved.`, 'success');
-    } catch (requestError) {
-      showFeedback(requestError instanceof Error ? requestError.message : 'Could not import the grade sheet.', 'error');
-      throw requestError;
+      recordAudit({
+        action: 'Exported grade PDF',
+        module: 'Grade Computation',
+        description: `Exported comprehensive grade sheet PDF for ${selectedSubjectCode}.`,
+        status: 'Success',
+      });
+      window.print();
+    } catch (err) {
+      showFeedback(err instanceof Error ? err.message : 'Could not prepare the comprehensive grade sheet.', 'error');
+      setGradeSheetPrint(null);
+    } finally {
+      setIsPreparingGradePdf(false);
     }
   };
 
@@ -3319,27 +3440,29 @@ export const GradeComputation: React.FC = () => {
       )}
 
       {setupSteps && (
-        <div role="status" className="no-print flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border p-3 text-xs font-semibold border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-          <span className="font-bold text-slate-800 dark:text-slate-100">Set up this class:</span>
-          {setupSteps.map((step, index) => (
-            <React.Fragment key={step.label}>
-              {index > 0 && <span aria-hidden="true">&rarr;</span>}
-              {step.done ? (
-                <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400"><Check className="w-3.5 h-3.5" />{index + 1} {step.label}</span>
+        <div role="status" className="no-print rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50/80 via-white to-white p-4 shadow-sm dark:border-emerald-950 dark:from-emerald-950/30 dark:via-slate-900 dark:to-slate-900">
+          <div className="mb-3 text-sm font-bold text-slate-800 dark:text-slate-100">Set up this class</div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {setupSteps.map((step, index) => (
+              step.done ? (
+                <div key={step.label} className="flex min-h-11 items-center gap-2 rounded-xl border border-emerald-200 bg-white/90 px-3 py-2 text-xs font-semibold text-emerald-800 dark:border-emerald-900 dark:bg-slate-900/80 dark:text-emerald-300">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950"><Check className="h-3.5 w-3.5" aria-hidden="true" /></span>
+                  <span className="min-w-0">{index + 1}. {step.label}</span>
+                </div>
               ) : (
-                // Incomplete steps use the warning style so they never read as done; each opens its tab.
+                // Incomplete steps remain warning-colored and open their tab.
                 <button
+                  key={step.label}
                   type="button"
                   onClick={() => setActiveSubTab(step.tab)}
-                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40 ${step.next ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40' : 'border-dashed border-amber-200 dark:border-amber-900/60'}`}
+                  className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs font-semibold transition-colors hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40 ${step.next ? 'border-amber-300 bg-amber-50 text-amber-900 shadow-sm dark:border-amber-800 dark:bg-amber-950/40' : 'border-dashed border-amber-200 bg-white/70 text-amber-800 dark:border-amber-900/60 dark:bg-slate-900/60'}`}
                 >
-                  <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
-                  {index + 1} {step.label}
-                  <span className="font-normal">({step.tab === 'components' ? 'not set' : 'none yet'})</span>
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950"><AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" /></span>
+                  <span className="min-w-0">{index + 1}. {step.label}<span className="mt-0.5 block font-normal opacity-80">{step.tab === 'components' ? 'Not set' : 'None yet'}</span></span>
                 </button>
-              )}
-            </React.Fragment>
-          ))}
+              )
+            ))}
+          </div>
         </div>
       )}
 
@@ -3357,10 +3480,7 @@ export const GradeComputation: React.FC = () => {
             { id: 'assessments' as const, label: 'Assessments Manager', shortLabel: 'Assessments', icon: <FileText className="w-4 h-4" /> },
             { id: 'components' as const, label: 'Grade Weights Editor', shortLabel: 'Weights', icon: <Settings className="w-4 h-4" /> },
           ]),
-          { id: 'summaries' as const, label: 'Summaries & Export', shortLabel: 'Summaries', icon: <Printer className="w-4 h-4" /> },
-          ...(selectedClassIsHistorical ? [] : [
-            { id: 'import' as const, label: 'Import Grade Sheets', shortLabel: 'Import', icon: <Upload className="w-4 h-4" /> },
-          ]),
+          { id: 'summaries' as const, label: 'Grade Sheet', shortLabel: 'Grade Sheet', icon: <Printer className="w-4 h-4" /> },
         ]}
       />
 
@@ -5184,7 +5304,7 @@ export const GradeComputation: React.FC = () => {
           <div className="px-5 py-4 border-b dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-200">Academic Grade Summaries</h3>
+                <h3 className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-200">Comprehensive Grade Sheet</h3>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-clinical-50 text-clinical-700 dark:bg-clinical-950/60 dark:text-clinical-400 border border-clinical-200/50">
                   {selectedSubjectCode || 'Course'} · {selectedClassName}
                 </span>
@@ -5209,9 +5329,9 @@ export const GradeComputation: React.FC = () => {
                   type="button"
                   onClick={handleExportExcel}
                   disabled={isExportingExcel}
-                  aria-label="Export official grade sheet (Excel)"
+                  aria-label="Export comprehensive grading sheet (Excel)"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
-                  title="Export official grade sheet as an Excel workbook"
+                  title="Export the comprehensive grading workbook with lecture, laboratory, grade summary, and conversion reference sheets"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span>{isExportingExcel ? 'Exporting…' : 'Export Excel'}</span>
@@ -5220,11 +5340,13 @@ export const GradeComputation: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleExportPDF}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer"
-                  title="Export or print grade ledger as PDF document"
+                  disabled={isPreparingGradePdf}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+                  aria-label="Export comprehensive grading sheet (PDF)"
+                  title="Export the comprehensive grading sheet as a PDF"
                 >
                   <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-                  <span>Export PDF</span>
+                  <span>{isPreparingGradePdf ? 'Preparing…' : 'Export PDF'}</span>
                 </button>
               </div>
             </div>
@@ -5390,7 +5512,7 @@ export const GradeComputation: React.FC = () => {
                             )}
                           </td>
                           <td className="px-5 py-3">
-                            <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${isFailed
+                            <span className={`inline-flex whitespace-nowrap px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${isFailed
                               ? 'bg-rose-100 text-rose-700'
                               : isFailsRetention
                                 ? 'bg-amber-100 text-amber-700'
@@ -5430,7 +5552,7 @@ export const GradeComputation: React.FC = () => {
                           {hasGrade ? <GradeValue percentage={evalResult.overallPercentage} grade={subj.grade} lecture={lectureHoverFor(evalResult.midtermPercentage, evalResult.finalPercentage)}>{formatGrade(subj.grade)}</GradeValue> : '—'}
                         </td>
                         <td className="px-5 py-3">
-                          <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${!hasGrade
+                          <span className={`inline-flex whitespace-nowrap px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${!hasGrade
                             ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                             : isFailed
                               ? 'bg-rose-100 text-rose-700'
@@ -5452,29 +5574,9 @@ export const GradeComputation: React.FC = () => {
       )}
 
       {/* ----------------------------------------------------
-          TAB 5: IMPORT GRADE SHEETS
-      ---------------------------------------------------- */}
-      {activeSubTab === 'import' && (
-        <GradeSheetImportPanel
-          classId={selectedClassId}
-          classLabel={`${selectedSubjectCode || 'Course'} · ${importClass?.csName ?? (selectedClassId || 'Section')}`}
-          cls={{ courseName: importClass?.courseName ?? activeSubjectName, semester: importClass?.semester ?? '', schoolYear: importClass?.schoolYear ?? '' }}
-          config={assessmentConfig}
-          configStatus={assessmentConfigStatus}
-          configError={assessmentConfigError ?? undefined}
-          onRetryConfig={() => { if (currentAssessmentOffering) void loadAssessmentOfferingConfig(currentAssessmentOffering); }}
-          onOpenWeights={() => setActiveSubTab('components')}
-          assessments={importAssessments}
-          scores={assessmentScores}
-          students={activeStudents}
-          onImport={handleGradeSheetImport}
-        />
-      )}
-
-      {/* ----------------------------------------------------
           PRINT LAYOUT SCREEN (HIDDEN NORMALLY)
       ---------------------------------------------------- */}
-      {(() => {
+      {gradeSheetPrint ? <ComprehensiveGradeSheetPrint snapshot={gradeSheetPrint} /> : (() => {
         const printTitle = 'Class Grade Ledger Report';
         const printClass = availableClasses.find(c => c.id === selectedClassId);
         const section = printClass?.csName || selectedClassId || '—';

@@ -4612,7 +4612,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       }
     });
 
-    test('grouped grade summaries show four distinct component columns and export all four values', async ({ page }) => {
+    test('grouped grade summaries show four distinct component columns and export the combined matrix', async ({ page }) => {
       const groupedCategories = [
         { id: 101, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', component: 'Lecture', inUse: true },
         { id: 102, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', component: 'Laboratory', inUse: true },
@@ -4659,7 +4659,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=summaries');
-      await expect(page.getByRole('heading', { name: 'Academic Grade Summaries' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Comprehensive Grade Sheet' })).toBeVisible();
       const recompute = page.getByRole('button', { name: 'Recompute grades' });
       await expect(recompute).toBeEnabled();
       await recompute.click();
@@ -4676,14 +4676,14 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       }
 
       const downloadPromise = page.waitForEvent('download');
-      await page.getByRole('button', { name: 'Export official grade sheet (Excel)' }).click();
+      await page.getByRole('button', { name: 'Export comprehensive grading sheet (Excel)' }).click();
       const download = await downloadPromise;
       expect(download.suggestedFilename()).toMatch(/^CLIN401_.*_Grade_Sheet_2026-2027_1st\.xlsx$/);
       const xlsx = await readDownloadedXlsxText(download);
-      for (const sheet of ['LEC', 'LAB', 'TFG', 'DATA']) expect(xlsx).toContain(`name="${sheet}"`);
-      for (const header of ['MIDTERM LEC GRADE', 'MIDTERM LAB GRADE', 'FINAL LEC GRADE', 'FINAL LAB GRADE', 'MG (30%)', 'TFG (70%)', 'Alice Reyes']) expect(xlsx).toContain(header);
-      // Lecture x 60% and Laboratory x 40% for each period, the period totals, the course grade and its grade equivalent.
-      for (const value of ['48.6', '36.4', '87', '26', '55.8', '33.2', '89', '62', '88.4', '2.1']) expect(xlsx).toContain(`<v>${value}</v>`);
+      expect(xlsx).toContain('name="Grade Sheet"');
+      for (const header of ['Student No.', 'Full Name', 'Midterm', 'Finals', 'Lecture', 'Laboratory', 'Midterm %', 'Finals %', 'Final Grade %', 'Alice Reyes']) expect(xlsx).toContain(header);
+      // The combined matrix retains the period results, overall percentage, and grade equivalent inline.
+      for (const value of ['87', '89', '88.4', '2.1']) expect(xlsx).toContain(`<v>${value}</v>`);
     });
 
     test('legacy combined period grading requires explicit forward conversion and preserves category IDs', async ({ page }) => {

@@ -867,7 +867,7 @@ export const RetentionMonitoring: React.FC = () => {
           tabs={[
             { id: 'watchlist', label: 'Retention Status', shortLabel: 'Status', count: watchlistRecords.length },
             { id: 'remedials', label: 'Remedials', count: pendingExams > 0 ? pendingExams : undefined, countTone: 'amber' },
-            { id: 'midterm', label: 'Midterm Watchlist', shortLabel: 'Watchlist', count: atRiskMidtermCount > 0 ? atRiskMidtermCount : undefined, countTone: 'amber' },
+            { id: 'midterm', label: 'At-Risk Students', shortLabel: 'At-Risk', count: atRiskMidtermCount > 0 ? atRiskMidtermCount : undefined, countTone: 'amber' },
           ]}
         />
 
@@ -938,7 +938,7 @@ export const RetentionMonitoring: React.FC = () => {
         <p className="font-bold">Showing {visibleStudentCount} student{visibleStudentCount === 1 ? '' : 's'} across {filteredRecords.length} course enrollment{filteredRecords.length === 1 ? '' : 's'} · {selectedSchoolYear === 'all' ? 'All school years' : formatSchoolYear(selectedSchoolYear)}</p>
         <p className="mt-1">{currentAttentionStudents} student{currentAttentionStudents === 1 ? ' needs' : 's need'} attention in the current school year ({currentSchoolYear ? formatSchoolYear(currentSchoolYear) : 'unavailable'}). Course enrollments and pending exams are counted separately in the tabs.</p>
         {currentAttentionStudents > 0 && <button type="button" onClick={() => { setSelectedSchoolYear(currentSchoolYear); setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); setActiveTab('watchlist'); }} className="mt-2 font-bold text-emerald-700 dark:text-emerald-400">View current-year students needing attention</button>}
-        {activeTab === 'midterm' && <p className="mt-1">Current retention alerts appear in Retention Status. Midterm Watchlist shows students whose fully graded midterm is 2.5 or worse.</p>}
+        {activeTab === 'midterm' && <p className="mt-1">Current retention alerts appear in Retention Status. At-Risk Students are those whose fully graded midterm is 2.5 or worse.</p>}
         {(selectedClassId !== 'all' || selectedSubjectCode !== 'all' || searchQuery.trim() !== '') && <button type="button" onClick={() => { setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); }} className="mt-2 font-bold text-emerald-700 dark:text-emerald-400">Clear course, section and search filters</button>}
       </div>}
 
@@ -947,7 +947,7 @@ export const RetentionMonitoring: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-4">
             <div className="sm:flex-1 sm:basis-64">
               <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                Midterm Watchlist
+                At-Risk Students
               </h2>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                 Students whose midterm is fully graded and whose weighted midterm grade is 2.5 or worse (84% or below on the BUCDM table). Students with a final course grade move to Retention Status.
@@ -1036,7 +1036,7 @@ export const RetentionMonitoring: React.FC = () => {
               <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
               {showAtRiskOnly ? (
                 <>
-                  <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No students are currently on the Midterm Watchlist (no fully graded midterm of 2.5 or worse).</h3>
+                  <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No students are currently identified as at risk (no fully graded midterm of 2.5 or worse).</h3>
                   <button
                     type="button"
                     onClick={() => setShowAtRiskOnly(false)}
@@ -1096,15 +1096,16 @@ export const RetentionMonitoring: React.FC = () => {
             isLoading ? <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading remedial records…</div> : <div className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No remedial records match the selected filters.</h3></div>
           ) : (
           <div className="table-pin table-pin-first table-pin-blocks">
-            <table className="w-full text-left text-xs border-collapse max-md:block">
-              <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4" aria-sort={ariaSort(remSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={remSort} onSort={setRemSort} /></th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Original Grade</th><th className="py-3 px-4">Attempts</th><th className="py-3 px-4" aria-sort={ariaSort(remSort, 'stage')}><SortableHeader label="Current Stage" sortKey="stage" sort={remSort} onSort={setRemSort} /></th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
+            <table className="w-full min-w-[1080px] table-fixed text-left text-xs border-collapse max-md:min-w-0 max-md:table-auto max-md:block">
+              <colgroup className="max-md:hidden"><col style={{ width: '17%' }} /><col style={{ width: '13%' }} /><col style={{ width: '8%' }} /><col style={{ width: '23%' }} /><col style={{ width: '23%' }} /><col style={{ width: '16%' }} /></colgroup>
+              <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-3" aria-sort={ariaSort(remSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={remSort} onSort={setRemSort} /></th><th className="py-3 px-3">Subject / Class</th><th className="py-3 px-3">Original Grade</th><th className="py-3 px-3">Attempts</th><th className="py-3 px-3" aria-sort={ariaSort(remSort, 'stage')}><SortableHeader label="Current Stage" sortKey="stage" sort={remSort} onSort={setRemSort} /></th><th className="py-3 px-3">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
                 {sortedRemedials.map(row => (
                   <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm"><span className="sr-only md:hidden">Student: </span>{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-500 dark:text-slate-400 font-mono max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
-                    <td className="py-3.5 px-4 max-md:order-2 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Subject / Class: </span><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-500 dark:text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100 max-md:order-3 max-md:p-0"><span className="md:hidden font-normal text-slate-500 dark:text-slate-400">Original grade </span>{isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage} grade={row.record.gwa}>{formatGrade(row.record.gwa)}</GradeValue> : <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Grade unavailable</span>}</td>
-                    <td className="py-3.5 px-4 whitespace-nowrap max-md:order-4 max-md:w-full max-md:whitespace-normal max-md:p-0">
+                    <td className="py-3.5 px-3 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm"><span className="sr-only md:hidden">Student: </span>{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-500 dark:text-slate-400 font-mono max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
+                    <td className="py-3.5 px-3 max-md:order-2 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Subject / Class: </span><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-500 dark:text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
+                    <td className="py-3.5 px-3 font-bold text-slate-800 dark:text-slate-100 max-md:order-3 max-md:p-0"><span className="md:hidden font-normal text-slate-500 dark:text-slate-400">Original grade </span>{isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage} grade={row.record.gwa}>{formatGrade(row.record.gwa)}</GradeValue> : <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Grade unavailable</span>}</td>
+                    <td className="py-3.5 px-3 max-md:order-4 max-md:w-full max-md:p-0">
                       <span className="sr-only md:hidden">Attempts: </span>
                       {(() => {
                         const activeAttemptNumber = row.progression.attempts.length === 2
@@ -1139,9 +1140,9 @@ export const RetentionMonitoring: React.FC = () => {
                         );
                       })()}
                     </td>
-                    <td className="py-3.5 px-4 whitespace-nowrap max-md:order-5 max-md:w-full max-md:whitespace-normal max-md:p-0">
+                    <td className="py-3.5 px-3 max-md:order-5 max-md:w-full max-md:p-0">
                       <span className="sr-only md:hidden">Current Stage: </span>
-                      <div className="flex items-center gap-2 max-md:flex-wrap">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
                           row.progression.stage === 'passed' || row.progression.stage === 'cost_recovery_passed'
                             ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
@@ -1158,6 +1159,15 @@ export const RetentionMonitoring: React.FC = () => {
                             Cleared {formatShortDate(formatRecordDate(row.progression.clearedAt))}
                           </span>
                         )}
+                        {typeof row.progression.costRecoveryGrade === 'number' && (
+                          <span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            Cost recovery {formatGrade(row.progression.costRecoveryGrade)}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-3 max-md:order-6 max-md:w-full max-md:p-0">
+                      <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
                           onClick={() => openPolicyProgression(row.record)}
@@ -1166,10 +1176,6 @@ export const RetentionMonitoring: React.FC = () => {
                         >
                           Details <ChevronRight className="h-3 w-3" />
                         </button>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-right whitespace-nowrap max-md:order-6 max-md:w-full max-md:whitespace-normal max-md:p-0 max-md:text-left">
-                      <div className="flex items-center justify-end gap-2 max-md:flex-wrap max-md:justify-start">
                         {canScheduleRecord(row.record) && !isPastYearRecord(row.record) && (
                           <button
                             type="button"
@@ -1196,11 +1202,6 @@ export const RetentionMonitoring: React.FC = () => {
                           >
                             Record cost recovery
                           </button>
-                        )}
-                        {typeof row.progression.costRecoveryGrade === 'number' && (
-                          <span className="text-[10px] text-slate-500 font-mono">
-                            Cost Recovery: {formatGrade(row.progression.costRecoveryGrade)}
-                          </span>
                         )}
                         {row.progression.legacyUnclassified && (
                           <span className="text-[10px] text-amber-600" title="Legacy remedial data must be classified by the server before another write">

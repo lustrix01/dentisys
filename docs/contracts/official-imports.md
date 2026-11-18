@@ -1,10 +1,10 @@
-# Official class list and grade sheet imports — contract
+# Official class list import contract
 
-Status: **Current contract**, implemented. Scope: imports plus the official grade math; exports are in [official-exports.md](official-exports.md).
+Status: **Current roster-import contract**, implemented. Grade-sheet score import is retired from the Faculty interface; the former grade-sheet rules below are retained as historical reference only. Official exports are in [official-exports.md](official-exports.md).
 
 Owner rule: Faculty upload the school's files exactly as the school gives them. DentiSYS adapts to the layout; it never asks Faculty to change a file.
 
-Sample files (kept outside the repo, they hold real student data): four "Official List of Enrolled Students" PDFs (DMD-1A, 2A, 3A, 4A) and one grade sheet workbook (`SAMPLE.xlsx`, Operative Dentistry 1, 2nd Sem AY 2025-2026). Tests use made-up rows in the same layout.
+Sample files (kept outside the repo, they hold real student data): four "Official List of Enrolled Students" PDFs (DMD-1A, 2A, 3A, 4A). Tests use made-up rows in the same layout.
 
 ## 1. Official class list PDF (roster import)
 
@@ -33,7 +33,9 @@ Example warning (P5), using the files as named:
 
 > This file is for **DM 102 · DMD 2 · AY 2025-2026 1st Semester**. You picked **DM 100 · DMD-1A · AY 2026-2027 1st Semester**. Check you chose the right file.
 
-## 2. Official grade sheet workbook (score import)
+## 2. Retired: official grade sheet workbook score import
+
+The Grade Computation import tab and Faculty workflow have been removed. Faculty enter scores through Student Scores Entry or Full Matrix View. The former parsing and import rules below are historical reference only and are not a supported product workflow.
 
 Where: Grade Computation → Import Grade Sheets.
 

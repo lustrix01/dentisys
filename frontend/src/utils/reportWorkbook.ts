@@ -14,6 +14,8 @@ export interface ReportColumn {
   width: number;
   /** Excel number format for numbers, e.g. '0.00'. */
   format?: string;
+  /** Keep multiline display values together in one readable cell. */
+  wrap?: boolean;
 }
 
 const manilaParts = (now: Date) => Object.fromEntries(
@@ -33,11 +35,11 @@ export function dayToDate(day: string): Date | null {
   return m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : null;
 }
 
-const toCell = (value: ReportValue, format?: string): Cell => {
+const toCell = (value: ReportValue, format?: string, wrap?: boolean): Cell => {
   if (value === null || value === undefined || value === '') return null;
   if (value instanceof Date) return { value, type: Date, format: 'dd-mmm-yyyy', align: 'left' };
   if (typeof value === 'number') return { value, type: Number, ...(format ? { format } : {}), align: 'right' };
-  return { value, type: String, align: 'left' };
+  return { value, type: String, align: 'left', ...(wrap ? { wrap: true } : {}) };
 };
 
 const titleRows = (width: number, lines: string[]): Row[] =>
@@ -67,7 +69,7 @@ export function buildReportSheet(input: ReportInput): XlsxSheet {
     line(exportedLine(input.by, input.now), 6),
     [],
     input.columns.map(c => ibuHeader({ value: c.header, align: 'left' }) as Cell),
-    ...input.rows.map(r => input.columns.map((c, i) => toCell(r[i], c.format))),
+    ...input.rows.map(r => input.columns.map((c, i) => toCell(r[i], c.format, c.wrap))),
   ];
   return {
     data,

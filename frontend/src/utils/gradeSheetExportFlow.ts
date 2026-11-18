@@ -7,11 +7,11 @@ import {
 } from '../services/apiClient';
 import type { Assessment, AssessmentScore, AttendanceRecord, Student } from '../types';
 import {
-  buildGradeSummarySheet, downloadOfficialGradeSheet, isOfficialLayout, savedGradeResult, type OfficialGradeResult,
+  buildOfficialGradeSheet, buildGradeSummarySheet, isOfficialLayout, officialGradeSheetFileName, savedGradeResult, type OfficialGradeResult,
 } from './officialGradeSheetExport';
-import { downloadXlsx } from './xlsxDownload';
+import { downloadXlsx, type XlsxSheet } from './xlsxDownload';
 
-export async function exportGradeWorkbook(a: {
+export type GradeWorkbookExportInput = {
   cls: FacultyClassItem;
   /** Currently enrolled students of the class. */
   students: Student[];
@@ -20,7 +20,9 @@ export async function exportGradeWorkbook(a: {
   attendanceRecords: AttendanceRecord[];
   /** Exporting Faculty's name for the summary's "Exported ... by" line. */
   by: string;
-}): Promise<void> {
+};
+
+export async function prepareGradeWorkbook(a: GradeWorkbookExportInput): Promise<{ fileName: string; sheets: XlsxSheet[] }> {
   const { cls } = a;
   const classKey = String(cls.csId || cls.id);
   const course = { code: cls.courseCode, title: cls.courseName, section: cls.csName, semester: cls.semester, schoolYear: cls.schoolYear };
@@ -48,20 +50,26 @@ export async function exportGradeWorkbook(a: {
   if (configuration && isOfficialLayout(configuration)) {
     const results: Record<string, OfficialGradeResult | undefined> = {};
     for (const student of a.students) results[student.id] = live ? live[student.id] : savedGradeResult(subjectOf(student));
-    await downloadOfficialGradeSheet({
+    const sheets = buildOfficialGradeSheet({
       course, config: configuration, students: a.students,
       assessments: a.assessments.filter(x => String(x.classId) === classKey && x.subjectCode === cls.courseCode && x.status !== 'Archived'),
       scores: a.scores, results,
       attendanceStatus: (studentId, assessment) => a.attendanceRecords.find(record => String(record.classId) === classKey
         && record.studentId === studentId && record.date === assessment.attendanceSessionDate && record.sessionCode === assessment.attendanceSessionCode)?.status,
     });
-    return;
+    return { fileName: officialGradeSheetFileName(course), sheets };
   }
 
   const periodMode = configuration?.schemaMode === 'periods'
     || Object.values(live ?? {}).some(isPeriodComputeResult)
     || a.students.some(s => (subjectOf(s)?.components as { calculationMode?: string } | undefined)?.calculationMode === 'authoritative_periods');
-  await downloadXlsx(`${cls.courseCode.replace(/\s+/g, '')}_Grade_Summary.xlsx`, [buildGradeSummarySheet({
+  const sheets = [buildGradeSummarySheet({
     students: a.students, subjectCode: cls.courseCode, periodMode, results: live ?? {}, course, by: a.by,
-  })]);
+  })];
+  return { fileName: `${cls.courseCode.replace(/\s+/g, '')}_Grade_Summary.xlsx`, sheets };
+}
+
+export async function exportGradeWorkbook(a: GradeWorkbookExportInput): Promise<void> {
+  const { fileName, sheets } = await prepareGradeWorkbook(a);
+  await downloadXlsx(fileName, sheets);
 }

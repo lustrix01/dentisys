@@ -434,10 +434,10 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
   return (
     <div className="space-y-3">
       {/* Interactive Filters Bar */}
-      <div className="px-5 py-3 bg-white dark:bg-slate-900 border-b dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="space-y-2.5 px-5 py-3 bg-white dark:bg-slate-900 border-b dark:border-slate-800 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Student Search */}
-          <div className="relative min-w-[210px]">
+          <div className="relative w-full sm:w-[280px] sm:shrink-0">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
               type="text"
@@ -459,6 +459,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
             )}
           </div>
 
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-2 dark:border-slate-800 dark:bg-slate-950/50">
           <div className="flex items-center gap-1.5 max-sm:hidden">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Keep visible while scrolling:</span>
             <div role="group" aria-label="Keep visible while scrolling" className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-700">
@@ -565,9 +566,10 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
               )}
             </>
           )}
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-2 dark:border-slate-800">
           <button
             type="button"
             role="switch"
@@ -580,9 +582,9 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
             </span>
             Show computation
           </button>
-        <div className="whitespace-nowrap text-[11px] text-slate-500 dark:text-slate-400">
-          Showing <span className="font-bold text-slate-700 dark:text-slate-200">{filteredStudents.length}</span> of {students.length} students
-        </div>
+          <div className="whitespace-nowrap rounded-lg bg-slate-50 px-2.5 py-1 text-[11px] text-slate-500 dark:bg-slate-800/70 dark:text-slate-400">
+            Showing <span className="font-bold text-slate-700 dark:text-slate-200">{filteredStudents.length}</span> of {students.length} students
+          </div>
         </div>
       </div>
 

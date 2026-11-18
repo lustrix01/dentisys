@@ -4,7 +4,6 @@ import {
   Clock3,
   History,
   Send,
-  Users,
   Briefcase,
   Copy,
   AlertCircle,
@@ -36,7 +35,7 @@ import { createStudentInvitation, removeSecretaryAppointmentApi, getFacultyReten
 import { Student } from '../../types';
 import { SortableHeader, ariaSort, compareValues, type SortState } from '../../components/SortableHeader';
 import { formatSchoolYear } from '../../utils/schoolYear';
-import { courseOptions, sectionOptions, studentOptions } from '../../utils/emailRecipientFilter';
+import { courseOptions, sectionOptions } from '../../utils/emailRecipientFilter';
 import { getFacultyStudentsApi, getFacultyClassesApi, getFacultyEmailLogsApi } from '../../services/apiClient';
 
 type Tab = 'student_invites' | 'secretary' | 'midterm_advisory' | 'remedial' | 'history';
@@ -144,15 +143,10 @@ export const EmailManagement: React.FC = () => {
   // Email History has its own type filter; it is not the class selector.
   const [historyTypeFilter, setHistoryTypeFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
-  // 5.7: Course -> Class Section -> Student. A choice that falls outside the one above it resets to "all".
+  // Course and class section narrow the eligible recipient rows; individual recipients are selected from the rows.
   const [selectedCourse, setSelectedCourse] = useState<string>('all');
-  const [selectedStudentId, setSelectedStudentId] = useState<string>('all');
   const courses = useMemo(() => courseOptions(assignedClasses), [assignedClasses]);
   const sectionChoices = useMemo(() => sectionOptions(assignedClasses, selectedCourse), [assignedClasses, selectedCourse]);
-  const studentChoices = useMemo(
-    () => studentOptions(dbStudents, assignedClasses, selectedCourse, selectedClassId),
-    [dbStudents, assignedClasses, selectedCourse, selectedClassId],
-  );
 
   useEffect(() => {
     if (selectedCourse !== 'all' && !courses.some(course => course.code === selectedCourse)) setSelectedCourse('all');
@@ -162,10 +156,6 @@ export const EmailManagement: React.FC = () => {
       setSelectedClassId('all');
     }
   }, [sectionChoices, selectedClassId]);
-  useEffect(() => {
-    if (selectedStudentId !== 'all' && !studentChoices.some(student => student.id === selectedStudentId)) setSelectedStudentId('all');
-  }, [studentChoices, selectedStudentId]);
-
   const [preview, setPreview] = useState(false);
   const [previewType, setPreviewType] = useState<EmailPreviewType>('consent');
   const [previewStudentId, setPreviewStudentId] = useState('');
@@ -255,9 +245,9 @@ export const EmailManagement: React.FC = () => {
                             (s.studentId || '').toLowerCase().includes(search.toLowerCase()) ||
                             (s.email || '').toLowerCase().includes(search.toLowerCase());
       const matchesCourse = selectedCourse === 'all' || s.classSections?.some(cs => sectionChoices.some(c => String(cs.classId) === classIdOf(c) || cs.className === c.csName || cs.className === c.block));
-      return matchesSchoolYear && matchesCourse && matchesClass && (selectedStudentId === 'all' || s.id === selectedStudentId) && matchesSearch;
+      return matchesSchoolYear && matchesCourse && matchesClass && matchesSearch;
     });
-  }, [safeStudents, selectedCourse, sectionChoices, selectedStudentId, selectedClassId, selectedClass, selectedSchoolYear, search, classSchoolYearMap]);
+  }, [safeStudents, selectedCourse, sectionChoices, selectedClassId, selectedClass, selectedSchoolYear, search, classSchoolYearMap]);
   const invitationEligibleStudents = useMemo(
     () => filteredStudents.filter(student => isOfficialBicolEmail(student.email)),
     [filteredStudents],
@@ -277,7 +267,6 @@ export const EmailManagement: React.FC = () => {
     const classId = String(record.classId);
     const matchesClass = selectedClassId === 'all' || classId === selectedClassId;
     const matchesCourse = selectedCourse === 'all' || sectionChoices.some(c => classIdOf(c) === classId);
-    const matchesStudent = selectedStudentId === 'all' || String(student?.id) === selectedStudentId;
     const matchesYear = selectedSchoolYear === 'all' || record.schoolYear === selectedSchoolYear;
     const query = search.trim().toLowerCase();
     const matchesSearch = !query || `${record.studentName ?? ''} ${record.studentNumber ?? ''} ${student?.email ?? ''} ${record.subjectCode ?? ''} ${record.className ?? ''}`.toLowerCase().includes(query);
@@ -287,9 +276,9 @@ export const EmailManagement: React.FC = () => {
     // Keep persisted pending attempts visible, including ones that still need
     // a date, so Faculty can see what is preventing an email from being sent.
     const eligible = tab === 'midterm_advisory' ? record.midtermAtRisk === true : Boolean(pendingAttempt);
-    if (!eligible || !matchesClass || !matchesCourse || !matchesStudent || !matchesYear || !matchesSearch) return [];
+    if (!eligible || !matchesClass || !matchesCourse || !matchesYear || !matchesSearch) return [];
     return [{ ...record, email: record.email || student?.email || '', pendingAttempt }];
-  }), [retentionRecords, safeStudents, selectedClassId, selectedCourse, sectionChoices, selectedStudentId, selectedSchoolYear, search, tab]);
+  }), [retentionRecords, safeStudents, selectedClassId, selectedCourse, sectionChoices, selectedSchoolYear, search, tab]);
 
   const selectableNoticeRows = noticeRows.filter(row =>
     isOfficialBicolEmail(row.email) && (tab !== 'remedial' || Boolean(row.pendingAttempt?.scheduledDate))
@@ -599,12 +588,12 @@ export const EmailManagement: React.FC = () => {
 
         {/* Filters & Search Bar Positioned Below */}
         <Card className="order-1 no-print p-4 flex flex-col xl:flex-row xl:flex-wrap gap-4 xl:items-center">
-          {/* Course -> Class Section -> Student (5.7) */}
+          {/* Course and Class Section filters */}
           <div className="w-full xl:w-48 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
             <BookMarked className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
             <select
               value={selectedCourse}
-              onChange={(e) => { setSelectedCourse(e.target.value); setSelectedClassId('all'); setSelectedStudentId('all'); }}
+              onChange={(e) => { setSelectedCourse(e.target.value); setSelectedClassId('all'); }}
               aria-label="Course"
               className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
@@ -617,7 +606,7 @@ export const EmailManagement: React.FC = () => {
             <Filter className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
             <select
               value={selectedClassId}
-              onChange={(e) => { setSelectedClassId(e.target.value); setSelectedStudentId('all'); }}
+              onChange={(e) => setSelectedClassId(e.target.value)}
               aria-label="Class: course code, section, and course title"
               className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
@@ -631,19 +620,6 @@ export const EmailManagement: React.FC = () => {
               })}
             </select>
           </div>
-
-          {tab !== 'history' && <div className="w-full xl:w-52 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
-            <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
-            <select
-              value={selectedStudentId}
-              onChange={(e) => setSelectedStudentId(e.target.value)}
-              aria-label="Student"
-              className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
-            >
-              <option value="all">All students</option>
-              {studentChoices.map(student => <option key={student.id} value={student.id}>{student.name} ({student.studentId})</option>)}
-            </select>
-          </div>}
 
           {/* School Year Selector Filter Dropdown */}
           <div className="w-full xl:w-60 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">

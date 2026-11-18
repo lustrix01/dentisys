@@ -86,7 +86,7 @@ Full text and Owner decisions of these items: [backlog items closed before 2026-
 - **5.4** Faculty Remedial Record dialog: Student Number, both attempts with Faculty notes and a completion date (set once when the result is recorded, migration 058; older records show Last updated), and the cost-recovery grade, result and date.
 - **5.5** Future worksheet dates: sessions can be scheduled or viewed, not recorded.
 - **5.6** Attendance roll call lists (Faculty and Secretary) keep a solid sticky header inside their bounded scroll box.
-- **5.7** Email Management filters by Course, then Class Section, then Student; ticked recipients stay ticked when filters change; on desktop the search box sits on its own row.
+- **5.7** Email Management filters by Course and Class Section; recipients are chosen from the rows, with no individual-student dropdown. Ticked recipients stay ticked when filters change; on desktop the search box sits on its own row.
 - **5.8** Email History built from the outbox, one row per send action.
 - **5.9** Class archiving gaps: Cancelled and Created-by-mistake classes are excluded from Email Management, school-year lists and offering-wide grading; archived-class messages match the server.
 - **5.11** Client requests: cost-recovery remedials implemented; the remove-student error was not reproduced.
