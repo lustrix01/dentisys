@@ -32,6 +32,7 @@ function tokenize(segment) {
 }
 
 const COMMIT_ARG_FLAGS = 'mFcCt'; // short commit options that take a value
+const COMMIT_OPTIONAL_ARG_FLAGS = 'u'; // -u takes an optional value attached to it (-uno)
 const NO_VERIFY_SUBCOMMANDS = new Set(['commit', 'push', 'merge', 'rebase', 'cherry-pick', 'revert', 'am']);
 
 function check(tokens) {
@@ -66,6 +67,7 @@ function check(tokens) {
       for (const ch of t.slice(1)) {
         if (ch === 'n') return 'git commit -n (--no-verify)';
         if (COMMIT_ARG_FLAGS.includes(ch)) { if (t.length === 2) j += 1; break; }
+        if (COMMIT_OPTIONAL_ARG_FLAGS.includes(ch)) break;
       }
     }
   }

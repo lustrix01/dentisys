@@ -34,7 +34,8 @@ A `commit-msg` hook in `.githooks/` (rules in `check-commit-msg.mjs`) refuses:
 
 Merge, revert, fixup and squash commits skip all but the trailer rule. A commit that
 stages `spec.md` without a `Spec-approved: <date>` line gets a reminder, not a refusal.
-The hooks run only in a clone with `git config core.hooksPath .githooks`. In Claude
+A message-only amend (nothing staged) skips the `fix:` test check. `npm ci` turns the
+hooks on in a clone (`node .githooks/install.mjs` does the same alone). In Claude
 sessions, a `PreToolUse` hook (`.claude/hooks/guard-no-verify.mjs`) refuses
 `--no-verify`, `git commit -n`, `git -c core.hooksPath=…` and changes to
 `core.hooksPath`; only the Owner bypasses a hook, from their own terminal.

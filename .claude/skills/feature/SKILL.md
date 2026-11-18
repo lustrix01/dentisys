@@ -24,7 +24,7 @@ The Owner decides what DentiSys does; Claude makes it real without surprises. Ev
 - Who writes what: `CLAUDE.local.md` "Working with subagents". Subagents get disjoint file lists, the contract verbatim, and for UI the exact classes to copy.
 - Tests at the layer that holds the logic: unit tests for frontend logic, `tests/backend` for server rules, `tests/database` for queries and migrations, the mocked `e2e/*.spec.ts` for screens, `e2e/live/` for flows that need the real backend. Tests that assert old behaviour are updated to the agreed behaviour, never weakened.
 - Update the current-reference docs the change affects (`AGENTS.md` "Documentation") in the same commit, and `spec.md` only with the Owner's approval.
-- Review every diff against the contract; look for shared callers and the second copy of student pages (`RealStudentSurfaces.tsx`).
+- Review every diff against the contract; look for shared callers and the second copy of student pages (`frontend/src/pages/student/RealStudentSurfaces.tsx`).
 
 ## 4. Real-app review
 

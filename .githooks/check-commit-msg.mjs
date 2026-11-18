@@ -3,7 +3,7 @@
  * check-commit-msg.mjs - commit message rules (CLAUDE.md "Kinds of work" and "Git").
  *  - No AI trailers (Co-Authored-By: Claude, Claude-Session:, "Generated with Claude Code"); every commit.
  *  - Merge, revert, fixup and squash commits skip the rules below.
- *  - fix: stages a test file, or carries "Test: none - <reason>".
+ *  - fix: stages a test file, or carries "Test: none - <reason>" (a message-only amend, with nothing staged, is skipped).
  *  - feat: names its backlog id in the subject, e.g. "(13.3)", "(backlog 12.3, 12.4)" or a spec id "(GRA-03)", or carries "Contract: <link or id>".
  *  - Staged frontend/src .tsx/.css files (outside frontend/src/tests/) need a "Demo:" line.
  *  - Staged spec.md without a "Spec-approved: <date>" line prints a reminder (does not block).
@@ -21,7 +21,7 @@ const first = (lines.find((l) => l.trim() !== '') ?? '');
 const has = (re) => lines.some((l) => re.test(l));
 const errors = [];
 
-if (has(/^co-authored-by:.*claude/i) || has(/^claude-session:/i) || has(/generated with \[?claude code/i)) {
+if (has(/^co-authored-by:.*claude/i) || has(/^claude-session:/i) || has(/^\W*generated with \[?claude code/i)) {
   errors.push('It carries an AI trailer (Co-Authored-By: Claude, Claude-Session: or "Generated with Claude Code"). ' +
     'Commits are authored as the Owner and carry none: remove the line.');
 }
@@ -32,7 +32,8 @@ const exempt = merging || /^(Merge |merge:|Revert "|fixup!|squash!)/.test(first)
 if (!exempt) {
   const staged = git('diff', '--cached', '--name-only', '--diff-filter=ACMR').split(/\r?\n/).filter(Boolean);
 
-  if (/^fix(\([^)]*\))?!?:/.test(first)) {
+  // Nothing staged = a message-only amend or reword: the commit's files, test included, are already in HEAD.
+  if (/^fix(\([^)]*\))?!?:/.test(first) && staged.length > 0) {
     const tests = staged.filter((p) => /(^|\/)(tests?|e2e)\//.test(p) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(p));
     if (tests.length === 0 && !has(/^Test: none - \S/)) {
       errors.push('It is a fix: but stages no test file. A bug is fixed when a test proves it (CLAUDE.md "Fixing bugs"): ' +

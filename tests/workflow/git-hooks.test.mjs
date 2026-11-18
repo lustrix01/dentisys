@@ -18,6 +18,8 @@ test('commit-msg rules', () => {
   const git = (...args) => execFileSync('git', args, { cwd: repo, stdio: 'pipe' });
   try {
     git('init', '-q');
+    // a first commit, so `git reset` clears the stage between cases
+    git('-c', 'user.name=test', '-c', 'user.email=test@example.invalid', '-c', 'core.hooksPath=', 'commit', '-q', '--allow-empty', '-m', 'init');
     for (const d of ['backend', 'tests/backend', 'frontend/src/pages', 'frontend/src/tests', 'e2e']) mkdirSync(join(repo, d), { recursive: true });
     const cases = [
       // [expected exit, staged files, message]
@@ -45,9 +47,12 @@ test('commit-msg rules', () => {
       [0, ['backend/a.php'], 'About page help line links to Contact'],
       [0, ['backend/a.php'], 'chore(workflow): x'],
       [0, ['spec.md'], 'docs(spec): x'],
+      [0, ['README'], 'docs: explain the rule\n\nWe refuse lines like Generated with Claude Code in messages.'],
+      [1, ['README'], 'docs: x\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)'],
+      [0, [], 'fix(api): better wording'], // message-only amend: nothing staged
     ];
     for (const [expected, files, message] of cases) {
-      try { git('reset', '-q'); } catch { /* no commits yet */ }
+      git('reset', '-q');
       for (const f of files) { appendFileSync(join(repo, f), `${Math.random()}\n`); git('add', f); }
       writeFileSync(join(repo, 'msg.txt'), message);
       const run = spawnSync(process.execPath, [commitMsg, 'msg.txt'], { cwd: repo, encoding: 'utf8' });
@@ -99,6 +104,8 @@ test('guard-no-verify', () => {
     [0, 'git commit -mnote'],
     [0, 'git commit -q -F - <<EOF\nfix: x\n\nTest: none - git commit -n in prose\nEOF'],
     [0, "git commit -m @'\nfix: x; git commit -n in prose\n'@"],
+    [0, 'git commit -uno -m x'],
+    [2, 'git commit -nuno -m x'],
     [0, 'git push -n origin main'],
     [0, 'git config core.hooksPath'],
     [0, 'git config --get core.hooksPath'],
