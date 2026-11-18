@@ -65,7 +65,7 @@ Describe the problem and its impact, then name the standard or ruling it breaks 
 
 ## Output
 
-Write `<shotsDir>/review.md`:
+Write `<shotsDir>/review.md` with the Write tool before you reply; a review that is only in your reply does not count, and `build-demo.py` refuses to build without the file. Your reply starts with the path you wrote.
 
 ```
 # Design review: <what changed>, <stage>
