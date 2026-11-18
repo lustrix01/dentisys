@@ -16,7 +16,7 @@ The Owner decides what DentiSys does; Claude makes it real without surprises. Ev
 ## 2. Proposal demo (only when something is visible)
 
 - How it looks: `ui-fix-demo` Stage 1 options.
-- How it behaves: a behaviour demo (below). The Owner approves it before building.
+- How it behaves: a behaviour demo made from real-app screenshots (below). The Owner approves it before building.
 - Several backlog items batched for one approval: one demo for all of them.
 
 ## 3. Build and test
@@ -39,13 +39,13 @@ The proposal demo approved the idea; the Owner now approves the real built scree
 
 ## Behaviour demo
 
-A private Artifact page that copies the real screen's look and logic with example data:
-- a **Before / After** switch;
-- scenario cards with short "Try it" steps and "what you will see";
-- a "Saved on the server" panel and a "What happened" log where saving is involved;
+A private Artifact page made only from real screenshots of the running local stack, never a hand-written imitation of DentiSys screens (Owner ruling 2026-11-18: a hand-made page does not prove how screens look). Build the change first in the working tree or as a throwaway patch, then shoot and build the page with the `ui-fix-demo` path (`shots.mjs`, `build-demo.py`):
+- **Before / After** from real shots of the same screen;
+- scenario cards: short "Try it" steps and "what you will see", each step captioning a real screenshot of that moment (dialog open, value typed, saved, error shown);
+- where saving is involved, a shot of the saved result after a reload;
 - a table of what is changing, each item marked agreed / needs your OK / recommendation.
 
-Start from a read of a 2026-10-12 demo, never a blank page: [Score Entry Demo](https://claude.ai/artifact/Jo4dByVrFJ6pLcMfpAr1H1) or [Full Matrix Save Demo](https://claude.ai/artifact/VR71yoVAmvXi1jL35HLAwP). Keep `<meta name="dentisys-demo" content="behaviour">` in its head (`.claude/hooks/guard-demo-page.mjs` refuses a page without it). One demo per screen, republished at the same link as the proposal changes.
+Keep `<meta name="dentisys-demo" content="behaviour">` in its head (`.claude/hooks/guard-demo-page.mjs` refuses a page without it). One demo per screen, republished at the same link as the proposal changes.
 
 ## Shape of the conversation
 
