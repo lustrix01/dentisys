@@ -1,6 +1,6 @@
 ---
 name: design-review
-description: Reviews a DentiSys UI change on real screenshots before the Owner sees it, against the project's page patterns and the Owner's standing rulings. Use after the shots for a ui-fix-demo Stage 1 options page or Stage 2 final demo are captured and verified, and before build-demo.py. Writes <shotsDir>/review.md; build-demo.py refuses to build without a passing one.
+description: Reviews a DentiSys UI change on real screenshots before the Owner sees it, against the project's page patterns and the Owner's standing rulings. Use after the shots for a ui-fix-demo Stage 1 options page, Stage 2 final demo or Route C small change are captured and verified, and before build-demo.py. Writes <shotsDir>/review.md; build-demo.py refuses to build without a passing one.
 tools: Read, Grep, Glob, Bash, Write
 model: sonnet
 ---

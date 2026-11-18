@@ -38,8 +38,8 @@ row). The checks are defined in `AGENTS.md` "Validation".
 |---|---|---|
 | Trivial edit: typo, one file, ≲20 lines, no new logic | Edit and commit. | `npx tsc -b` in `frontend/`, or `git diff --check` for text |
 | Bug fix | "Fixing bugs" below. | the reproducing test, then `./scripts/check.ps1` |
-| How a screen looks: wording, colour, spacing, layout, a new control | `ui-fix-demo` skill. | the skill's demo and design review, then `./scripts/check.ps1` |
-| Feature or behaviour change | Agree the contract (fields, errors, examples) with the Owner first; the Owner runs `/grill-me` on it when it touches `spec.md`, the data model, roles or an API contract. Build, write focused tests, then show a behaviour demo when anything is visible: a mock demo approves the proposal, and the real built screens are shown before commit. | focused tests, then `./scripts/check.ps1` |
+| How a screen looks: wording, colour, spacing, layout, a new control | `ui-fix-demo` skill; its Route C is the short path for small text, colour or spacing changes. | the skill's demo and design review, then `./scripts/check.ps1` |
+| Feature or behaviour change | `feature` skill: contract first (the Owner runs `/grill-me` on it when it touches `spec.md`, the data model, roles or an API contract), a demo when anything is visible, build, tests, then the real built screens before commit. | focused tests, then `./scripts/check.ps1` |
 | Spec decision | `AGENTS.md` "Product specification": propose the exact line; edit `spec.md` only after the Owner's OK, in the same commit as the change. | as for the change |
 | Database migration | Additive, ordered migration. It must keep working with the previous images, because a rollback ships images only. | `./scripts/check-postgres.ps1`; release step 4 runs it on the demo |
 | Dependency, Dockerfile or Compose change | | `docker compose config --quiet`, build the service, `./scripts/check-postgres.ps1` |

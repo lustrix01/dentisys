@@ -15,8 +15,18 @@ Read `references/dentisys.md` first: routes, gates, deploy steps and the Owner's
 |---|---|
 | **Taste**: colour, spacing, wording, icon, a new look. Everyone sees it on every device. | A: options first |
 | **Responsive**: something breaks at some widths, and you don't know which. | B: measure first |
+| **Small**: only text, colour or spacing on elements that already exist; no new element; no class string the element's "Page patterns" standard doesn't already use; at most 3 screens; no shared component (`Modal`, `Card`, `Tabs`, `ListToolbar`...); wording keeps its business meaning (a change of meaning is the Owner's call first). | C: one review |
 
-Both routes end in Stage 2 (below). Never capture the full device list before the Owner has picked.
+Routes A and B end in Stage 2 (below). Never capture the full device list before the Owner has picked. When a Route C change turns out to need more than its limit, switch to Route A.
+
+## Route C: small change, one review
+
+1. Check the files are clean (Route A step 1). Write `targets.json` for each changed spot, `"device": "quick"`, plus a `"theme": "dark"` copy on `"Desktop 1920"` when colour changes.
+2. Capture `before`, make the edit, capture `after`.
+3. Run the core-tier device audit on the touched routes (numbers only, Route B step 1). Any new overflow means it is not small: go to Route A.
+4. `verify.py`, then the design review (step 5b) with stage "Route C". Fix every Blocker and High.
+5. Build the final demo (no `versions`; Stage 2 step 7) from these shots, publish it, and ask one question: approve?
+6. On approval: the full gate and one commit with the `Demo:` link.
 
 ## Route A, Stage 1: options at the Owner's screen
 
@@ -72,7 +82,7 @@ When a subagent writes each option as file copies (the working tree holds work u
 ## Files, print views and flows
 
 - Print/PDF views: a target with `"print": true` (window.print is stubbed, print media, full page); add `"printTop": 700` so the close-up is the top of a long print (header, counts, first rows). `build-demo.py` keeps only the top 1400 px of any taller shot. When the PDF is a menu item, open it with `steps` (trigger, then `{"role": "menuitem", "name": "..."}`), not `click`, which only opens the menu. Export files: open the downloaded `.xlsx` and show its rows on the demo or attach the file; say which seed data it came from.
-- Flows and dialogs (how it behaves, not how it looks) copy the 2026-10-12 Artifact demos named in `CLAUDE.local.md`. A hand-written demo page is never allowed: if a page needs something the template lacks, change the template once.
+- Flows and dialogs (how it behaves, not how it looks) use the behaviour demo in the `feature` skill. A hand-written demo page is never allowed: if a page needs something the template lacks, change the template once.
 
 ## Shot details that bite
 

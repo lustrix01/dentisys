@@ -33,7 +33,7 @@ if (marker.test(html)) process.exit(0);
 console.error(
   'Refused: this page has no dentisys-demo marker. Look demos (any visible change) are built only by ' +
   '.claude/skills/ui-fix-demo/scripts/build-demo.py, after the design-review agent passes the shots. ' +
-  'Behaviour demos (flows, dialogs, saving) copy the 2026-10-12 Artifacts named in CLAUDE.local.md and carry ' +
+  'Behaviour demos (flows, dialogs, saving) follow "Behaviour demo" in .claude/skills/feature/SKILL.md and carry ' +
   '<meta name="dentisys-demo" content="behaviour">. A page that is not a UI demo at all carries ' +
   'content="not-a-ui-demo".'
 );
