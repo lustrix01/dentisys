@@ -16,7 +16,7 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { recordAudit } from '../../services/auditService';
 import { formatGrade } from '../../utils/gradeHelper';
-import { exportGradeOf } from './exportGrade';
+import { exportCountLine, exportEnrollmentRows } from './exportGrade';
 import { downloadXlsx } from '../../utils/xlsxDownload';
 import { buildReportSheet, clinicHoursText, dayToDate } from '../../utils/reportWorkbook';
 import { sheetName } from '../../utils/officialGradeSheetExport';
@@ -292,32 +292,38 @@ export const DeanReports: React.FC = () => {
 
   const totalAttendancePages = Math.ceil(filteredAttendanceRows.length / pageSize) || 1;
 
+  const exportClassName = selectedClassId
+    ? (currentSelectedClass?.name ?? null)
+    : (classFilter !== 'all' ? (students.find(s => s.classId === classFilter)?.className ?? null) : null);
+  const exportRows = useMemo(() => exportEnrollmentRows(byLastName(filtered), exportClassName), [filtered, exportClassName]);
+
   // ── Excel export ─────────────────────────────────────────
   const handleExportExcel = async () => {
     recordAudit({ action: 'Exported report', module: 'Reports & Analytics', description: `Exported ${activeTab} report data as Excel.`, status: 'Success' });
     const ts = new Date().toISOString().replace('T', ' ').substring(0, 19).replace(/[: ]/g, '-');
     const term = schoolYear === 'all' ? 'All school years' : `AY ${schoolYear === 'current' ? (currentSchoolYear ?? '') : schoolYear}`;
     const filter = currentSelectedClass?.name ? `Class: ${currentSelectedClass.name}` : 'All classes';
-    const gradeOf = (s: any) => exportGradeOf(s, currentSelectedClass?.subjectCode);
     const base = { filter, term, by: user?.display_name ?? '' };
+    const withCount = { ...base, filter: `${filter} · ${exportCountLine(exportRows)}` };
+    const gradeText = (g: number | null) => (g === null ? 'N/A' : formatGrade(g));
     let fileName: string;
     let sheet;
 
     if (activeTab === 'students') {
       fileName = `Student_Summary_${ts}.xlsx`;
       sheet = buildReportSheet({
-        ...base, sheet: 'Students', title: 'STUDENT SUMMARY',
-        columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 }, { header: 'Year Level', width: 11 },
+        ...withCount, sheet: 'Students', title: 'STUDENT SUMMARY',
+        columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 }, { header: 'Course Code', width: 14 }, { header: 'Year Level', width: 11 },
           { header: 'Grade', width: 9 }, { header: 'Status', width: 12 }, { header: 'Face Enrolled', width: 14 }],
-        rows: byLastName(filtered).map(s => [s.studentId, sheetName(s), s.className || '—', s.yearLevel, gradeOf(s), STANDING_LABELS[s.status] ?? s.status, s.faceEnrolled ? 'Yes' : 'No']),
+        rows: exportRows.map(({ student: s, className, courseCode, grade }) => [s.studentId, sheetName(s), className, courseCode, s.yearLevel, gradeText(grade), STANDING_LABELS[s.status] ?? s.status, s.faceEnrolled ? 'Yes' : 'No']),
       });
     } else if (activeTab === 'retention') {
       fileName = `Retention_Report_${ts}.xlsx`;
       sheet = buildReportSheet({
-        ...base, sheet: 'Retention', title: 'RETENTION REPORT',
-        columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 },
+        ...withCount, sheet: 'Retention', title: 'RETENTION REPORT',
+        columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 }, { header: 'Course Code', width: 14 },
           { header: 'Grade', width: 9 }, { header: 'Status', width: 12 }, { header: 'Pending Remedials', width: 18 }],
-        rows: byLastName(filtered).map((s: any) => [s.studentId, sheetName(s), s.className || '—', gradeOf(s), STANDING_LABELS[s.status] ?? s.status,
+        rows: exportRows.map(({ student: s, className, courseCode, grade }) => [s.studentId, sheetName(s), className, courseCode, gradeText(grade), STANDING_LABELS[s.status] ?? s.status,
           Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0]),
       });
     } else {
@@ -1555,10 +1561,10 @@ export const DeanReports: React.FC = () => {
         const gwa = (s: any) => (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : '—');
         const pending = (s: any) => (Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0);
         const standingBad = (s: any) => String(s.status || '').toLowerCase() === 'remedial';
-        const rowCount = activeTab === 'attendance' ? historyRows.length : filtered.length;
+        const rowCount = activeTab === 'attendance' ? String(historyRows.length) : exportCountLine(exportRows);
         const widths: Record<ReportTab, number[]> = {
-          students: [12, 22, 17, 8, 10, 13, 10, 8],
-          retention: [11, 22, 14, 8, 11, 9, 13, 12],
+          students: [11, 21, 13, 9, 7, 8, 11, 12, 8],
+          retention: [10, 21, 12, 9, 7, 11, 9, 11, 10],
           attendance: [12, 13, 28, 22, 15, 10],
         };
         const cols = (w: number[]) => <colgroup>{w.map((x, i) => <col key={i} style={{ width: `${x}%` }} />)}</colgroup>;
@@ -1572,7 +1578,7 @@ export const DeanReports: React.FC = () => {
                 ['Office', "Dean's Office"],
                 ['School Year', sy],
                 ['Filters', `${classLabel} · ${statusLabel}${search ? ` · Search: "${search}"` : ''}`],
-                ['Records', String(rowCount)],
+                ['Records', rowCount],
                 ['Date', generated],
               ]}
             />
@@ -1595,25 +1601,25 @@ export const DeanReports: React.FC = () => {
               {cols(widths[activeTab])}
               <thead>
                 {activeTab === 'students' && (
-                  <tr><th className="l">Student No.</th><th className="l">Student Name</th><th className="l">Class</th><th>Year</th><th>Grade</th><th>Status</th><th>Face check-in</th><th>Remedials</th></tr>
+                  <tr><th className="l">Student No.</th><th className="l">Student Name</th><th className="l">Class</th><th className="l">Course Code</th><th>Year</th><th>Grade</th><th>Status</th><th>Face check-in</th><th>Remedials</th></tr>
                 )}
                 {activeTab === 'retention' && (
-                  <tr><th className="l">Student No.</th><th className="l">Student Name</th><th className="l">Class</th><th>Grade</th><th>Standing</th><th>Clinic Hrs</th><th>Pending Remedials</th><th>Flagged Subjects</th></tr>
+                  <tr><th className="l">Student No.</th><th className="l">Student Name</th><th className="l">Class</th><th className="l">Course Code</th><th>Grade</th><th>Standing</th><th>Clinic Hrs</th><th>Pending Remedials</th><th>Flagged Subjects</th></tr>
                 )}
                 {activeTab === 'attendance' && (
                   <tr><th className="l">Date</th><th className="l">Student No.</th><th className="l">Student Name</th><th className="l">Class</th><th className="l">Course Code</th><th>Status</th></tr>
                 )}
               </thead>
               <tbody>
-                {activeTab === 'students' && byLastName(filtered).map((s: any) => {
-                  const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
-                  const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
-                  const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? formatGrade(Number(gradeVal)) : '—';
+                {activeTab === 'students' && exportRows.map((row, i) => {
+                  const s = row.student;
+                  const gradeStr = row.grade === null ? '—' : formatGrade(row.grade);
                   return (
-                    <tr key={s.id}>
+                    <tr key={`${s.id}-${row.courseCode}-${i}`}>
                       <td className="id">{s.studentId}</td>
                       <td className="nm">{sheetName(s)}</td>
-                      <td className={`l ${printCellClass(s.className || '—')}`}>{s.className || '—'}</td>
+                      <td className={`l ${printCellClass(row.className)}`}>{row.className}</td>
+                      <td className="id">{row.courseCode}</td>
                       <td>Year {s.yearLevel}</td>
                       <td className={`grade ${printCellClass(gradeStr)}`}>{gradeStr}</td>
                       <td className={`${STANDING_LABELS[s.status] ? '' : 'cap'} ${standingBad(s) ? 'bad' : ''}`}>{STANDING_LABELS[s.status] ?? s.status}</td>
@@ -1622,17 +1628,17 @@ export const DeanReports: React.FC = () => {
                     </tr>
                   );
                 })}
-                {activeTab === 'retention' && byLastName(filtered).map((s: any) => {
-                  const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
-                  const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
-                  const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? formatGrade(Number(gradeVal)) : '—';
+                {activeTab === 'retention' && exportRows.map((row, i) => {
+                  const s = row.student;
+                  const gradeStr = row.grade === null ? '—' : formatGrade(row.grade);
                   const flagged = (s.enrolledSubjects || []).filter(failsRetention).length;
                   const pend = pending(s);
                   return (
-                    <tr key={s.id}>
+                    <tr key={`${s.id}-${row.courseCode}-${i}`}>
                       <td className="id">{s.studentId}</td>
                       <td className="nm">{sheetName(s)}</td>
-                      <td className={`l ${printCellClass(s.className || '—')}`}>{s.className || '—'}</td>
+                      <td className={`l ${printCellClass(row.className)}`}>{row.className}</td>
+                      <td className="id">{row.courseCode}</td>
                       <td className={`grade ${standingBad(s) ? 'bad' : printCellClass(gradeStr)}`}>{gradeStr}</td>
                       <td className={`${STANDING_LABELS[s.status] ? '' : 'cap'} ${standingBad(s) ? 'bad' : ''}`}>{STANDING_LABELS[s.status] ?? s.status}</td>
                       <td>{clinicHoursText(s.clinicHoursCompleted)}</td>

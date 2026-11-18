@@ -1,24 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { exportGradeOf } from '../pages/admin/exportGrade.ts';
+import { exportCountLine, exportEnrollmentRows } from '../pages/admin/exportGrade.ts';
 
 const student = {
+  id: 's1',
+  className: 'DMD 1-A',
   overallGWA: 2.25,
   enrolledSubjects: [
-    { code: 'DENT 101', grade: 1.5 },
-    { code: 'DENT 202', grade: 3.0 },
+    { code: 'DENT 202', className: 'DMD 1-B', grade: 3.0 },
+    { code: 'DENT 101', className: 'DMD 1-A', grade: 1.5 },
   ],
 };
 
-test('control: with a class selected the export shows that class course grade', () => {
-  assert.equal(exportGradeOf(student, 'DENT 202'), '3.0');
+test('13.3 bug 2: no class filter gives one row per course enrollment', () => {
+  const rows = exportEnrollmentRows([student]);
+  assert.deepEqual(rows.map(r => [r.courseCode, r.className, r.grade]), [
+    ['DENT 101', 'DMD 1-A', 1.5],
+    ['DENT 202', 'DMD 1-B', 3.0],
+  ]);
 });
 
-// 13.3 bug 2: awaiting Owner decision on the fix. With no class filter the export
-// has one "Grade" per student and shows only the first course (1.5); the 3.0
-// course is silently dropped. Expected: every enrollment row carries its own
-// course grade, so the student's second course must not be omitted.
-test.skip('13.3 bug 2: no class filter must not collapse two courses into one grade', () => {
-  const shown = exportGradeOf(student, undefined);
-  assert.ok(shown.includes('1.5') && shown.includes('3.0'),`Grade column shows ${shown}, which omits a course`);
+test('a class name keeps only that class enrollments', () => {
+  const rows = exportEnrollmentRows([student], 'DMD 1-B');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].courseCode, 'DENT 202');
+  assert.equal(rows[0].grade, 3.0);
+});
+
+test('a student with no enrollments still gets one row with no grade', () => {
+  const rows = exportEnrollmentRows([{ id: 's2', className: 'DMD 1-A', overallGWA: 2.0, enrolledSubjects: [] }]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].courseCode, '—');
+  assert.equal(rows[0].grade, null);
+});
+
+test('count line counts distinct students and enrollments', () => {
+  assert.equal(exportCountLine(exportEnrollmentRows([student])), '1 student · 2 course enrollments');
 });
