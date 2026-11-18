@@ -65,6 +65,15 @@ row). The checks are defined in `AGENTS.md` "Validation".
 | Release to demo, then production (a production hotfix too) | [docs/release-guide.md](docs/release-guide.md). | the scripts refuse a commit that has not passed the checks |
 | Workflow: skills, hooks, scripts and these instruction files | When a project skill or script falls short, fix it in the same task instead of working around it, test it once on a real case, and commit it as `chore(workflow)`. | `git diff --check`; `node .githooks/check-staged-encoding.mjs` after `git add` |
 
+## Running tests
+
+Owner ruling (2026-11-18): never fix failures one run at a time.
+- Run new or changed tests yourself before handing them to a gate, and make a worker
+  that writes tests run them too.
+- When a suite stops at its first failure (`tests/database/postgres_integration_test.php`
+  under `check-postgres.ps1`: `$env:INTEGRATION_CONTINUE_ON_FAIL = '1'`), switch it to record every failure for that run, read
+  the whole list, fix everything in one pass, then run the normal gate once to confirm.
+
 ## Fixing bugs
 
 A bug is fixed only when a test proves it, not when the code looks right.

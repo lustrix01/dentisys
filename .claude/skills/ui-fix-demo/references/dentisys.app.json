@@ -3,6 +3,7 @@
   "baseURL": "http://localhost:5173",
   "login": { "path": "/login", "email": "input[inputmode=\"email\"]", "password": "input[type=\"password\"]", "submit": "button[type=\"submit\"]", "notAfter": "^/(login|2fa|mfa)" },
   "accounts": {
+    "superadmin": ["superadmin@bicol-u.edu.ph", "Superadmin123!", "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"],
     "admin": ["admin@bicol-u.edu.ph", "Admin123!"],
     "faculty": ["faculty@bicol-u.edu.ph", "Faculty123!"],
     "secretary": ["secretary@bicol-u.edu.ph", "Secretary123!"],

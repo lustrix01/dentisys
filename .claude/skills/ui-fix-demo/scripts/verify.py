@@ -61,7 +61,7 @@ for n in names:
             fails.append(f'{n}: missing in {"before" if not b else mode}')
             continue
         for side, m in (('before', b), (mode, a)):
-            route = m['route'].split('?')[0]
+            route = (m.get('endsOn') or m['route']).split('?')[0]  # endsOn: a flow that is meant to end on another page
             if m.get('url') and not m['url'].startswith(route):
                 fails.append(f'{n} [{side}]: ended on {m["url"]}, not {m["route"]} (signed out or redirected?)')
             if m.get('matchCount') == 0:

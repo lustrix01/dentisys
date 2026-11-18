@@ -3,11 +3,14 @@
 // usage (from the project root, app running):
 //   node <skill>/scripts/shots.mjs <app.json> <targets.json> <outDir> <before|after|A|B|C>
 // writes <outDir>/<mode>/{vp,crop,meta}/<id>-<Device>-<theme>.{png,json}
+// app.json accounts: role => [email, password, optional dev TOTP secret; with it the 2FA code step is filled in].
+// endsOn: the page a flow is meant to end on when it is not the route (verify.py checks it instead of route).
 // target fields: id, device (a name from audit/devices.json, a tier "quick"|"core"|"full" = every device in it,
 //   a Playwright profile or "Desktop 1440 900"), role, route, mock?, tab?, fill?, upload?, click?, steps?, sel?, text? (regex),
 //   closest? (CSS selector to frame), up? (parent hops), theme? ("light"|"dark"), full?, expect? ("same"),
 //   noScroll? (no scrolling, viewport shot: open menus/popovers that close on scroll), print? (print view: window.print stubbed, print media, full page)
 import { createRequire } from 'node:module';
+import { createHmac } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -32,6 +35,18 @@ const dev = name => spec(name) ? (s => s.profile ? dev(s.profile)
   ? { viewport: { width: +name.split(' ')[1], height: +(name.split(' ')[2] ?? 900) } }
   : (({ defaultBrowserType, ...o }) => o)(devices[name] ?? (() => { throw new Error('unknown device ' + name); })());
 
+let totpLastStep = Math.floor(Date.now() / 30000);
+/** RFC 6238 code (SHA-1, 6 digits, 30 s) for a base32 secret; dev accounts only (app.json accounts[role][2]). */
+function totp(secret) {
+  const bits = secret.replace(/=+$/, '').toUpperCase().split('').map(c => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(c).toString(2).padStart(5, '0')).join('');
+  const key = Buffer.from(bits.match(/.{8}/g).map(b => parseInt(b, 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+  const h = createHmac('sha1', key).update(counter).digest();
+  const o = h[h.length - 1] & 15;
+  return String((h.readUInt32BE(o) & 0x7fffffff) % 1000000).padStart(6, '0');
+}
+
 const browser = await chromium.launch();
 const groups = new Map();
 for (const t of T) { const k = t.device + '|' + t.role; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }
@@ -45,11 +60,19 @@ for (const [k, list] of groups) {
   let pageErrors = [];
   page.on('pageerror', e => pageErrors.push(e.message)); // a crashed page screenshots as blank: fail the target instead
   if (role !== 'public') {
-    const [email, password] = APP.accounts[role];
+    const [email, password, totpSecret] = APP.accounts[role];
     await page.goto(APP.login.path);
     await page.fill(APP.login.email, email);
     await page.fill(APP.login.password, password);
     await page.click(APP.login.submit);
+    if (totpSecret) { // seeded dev account with authenticator 2FA (the Superadmin): type a code from a fresh step
+      await page.waitForURL(u => /^\/2fa\/verify/.test(u.pathname), { timeout: 20000 });
+      // The server accepts each 30-second step once; wait for a step no earlier sign-in (this run or another) used.
+      while (Math.floor(Date.now() / 30000) <= totpLastStep) await page.waitForTimeout(1000);
+      totpLastStep = Math.floor(Date.now() / 30000);
+      await page.fill('input[inputmode="numeric"]', totp(totpSecret));
+      await page.click('button[type="submit"]');
+    }
     await page.waitForURL(u => !new RegExp(APP.login.notAfter).test(u.pathname), { timeout: 20000 });
   }
   for (const t of list) {
@@ -77,6 +100,13 @@ for (const [k, list] of groups) {
       // select: [selector, option label]; skipped when the control exists on one side only (a new filter)
       if (t.select) { const s = page.locator(t.select[0]).filter({ visible: true, has: page.locator('option', { hasText: t.select[1] }) }); if (await s.count()) { await s.first().selectOption({ label: t.select[1] }); await page.waitForTimeout(1200); } else meta.selectSkipped = true; }
       if (t.click) { await page.locator('button', { hasText: new RegExp(t.click, 'i') }).filter({ visible: true }).first().click(); await page.waitForTimeout(800); }
+      // then: [[selector, value] (fill) | {click: regex} | {check: selector}, ...] after click, for flows that continue on the next page
+      for (const s of t.then ?? []) {
+        if (Array.isArray(s)) await page.locator(s[0]).filter({ visible: true }).first().fill(s[1]);
+        else if (s.check) await page.locator(s.check).filter({ visible: true }).first().check();
+        else await page.locator('button', { hasText: new RegExp(s.click, 'i') }).filter({ visible: true }).first().click();
+        await page.waitForTimeout(800);
+      }
       meta.url = new URL(page.url()).pathname + new URL(page.url()).search;
       if (pageErrors.length) throw new Error(`page error: ${pageErrors[0]} (a mock object missing fields? copy it whole)`);
       if (t.print) { await page.emulateMedia({ media: 'print' }); await page.waitForTimeout(500); }
