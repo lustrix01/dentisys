@@ -1,7 +1,7 @@
 import { test, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { ACCOUNTS, OUT, PARTS_DIR, wantedDevices, wantedRoles, type Role } from './common';
+import { ACCOUNTS, freshTotp, OUT, PARTS_DIR, wantedDevices, wantedRoles, type Role } from './common';
 
 // Read-only sweep: only navigates, scrolls, opens the modals listed below and presses Escape.
 // Never submits, saves, deletes or clicks Start/End/Revoke/Approve.
@@ -12,7 +12,11 @@ const ROUTES: Record<Role, string[]> = {
   public: ['/landing', '/login'],
   // Redirect aliases (/admin/faculty-approval, /retention-criteria, /users, /audit, /rules) are left out:
   // they only land on pages already listed here.
-  admin: ['/', '/admin/reports', '/admin/classes', '/admin/faculty-invite', '/admin/course-catalog', '/admin/terms', '/admin/rooms', '/admin/audit-trail', '/superadmin/overview', '/superadmin/people', '/superadmin/audit-trail', '/admin/profile', '/admin/settings'],
+  // Superadmin nav (Layout.tsx superadminView); the Dean's old /admin setup links only redirect here.
+  superadmin: ['/superadmin/overview', '/superadmin/people', '/superadmin/classes', '/superadmin/course-catalog',
+    '/superadmin/terms', '/superadmin/rooms', '/superadmin/face-flags', '/superadmin/audit-trail',
+    '/superadmin/profile', '/superadmin/settings'],
+  admin: ['/', '/admin/reports', '/admin/faculty-invite', '/admin/audit-trail', '/admin/profile', '/admin/settings'],
   faculty: ['/', '/classes', '/students', '/grades', '/retention', '/attendance', '/reports', '/email-management',
     '/faculty/audit-trail', '/attendance?tab=activity', '/attendance?tab=requests', '/faculty/profile', '/faculty/settings'],
   secretary: ['/', '/secretary/start-session', '/secretary/attendance', '/secretary/override', '/secretary/audit-trail',
@@ -341,11 +345,16 @@ for (const device of wantedDevices()) for (const role of wantedRoles()) {
     // Refresh tokens are single-use (reuse revokes the session), so a saved storageState cannot be
     // shared between contexts: sign in once per device x role through the real /login page.
     if (role !== 'public') {
-      const { email, password } = ACCOUNTS[role];
+      const { email, password, totp } = ACCOUNTS[role];
       await page.goto('/login');
       await page.fill('input[inputmode="email"]', email);
       await page.fill('input[type="password"]', password);
       await page.click('button[type="submit"]');
+      if (totp) {
+        await page.waitForURL(u => /^\/2fa\/verify/.test(u.pathname), { timeout: 20_000 });
+        await page.fill('input[inputmode="numeric"]', await freshTotp(totp));
+        await page.click('button[type="submit"]');
+      }
       await page.waitForURL(u => !/^\/(login|2fa|mfa)/.test(u.pathname), { timeout: 20_000 });
       await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
     }
@@ -396,7 +405,7 @@ for (const device of wantedDevices()) for (const role of wantedRoles()) {
       if (route === '/landing') {
         await tryModal('faq', async () => { await page.getByRole('button', { name: /browse faq/i }).click({ timeout: 3000 }); return true; });
       }
-      if (role !== 'public' && (route === '/' || route === '/student/dashboard')) {
+      if (role !== 'public' && (route === '/' || route === '/student/dashboard' || route === '/superadmin/overview')) {
         await tryModal('menu', async () => {
           const b = page.locator('header button:has(svg.lucide-menu)').first();
           if (!(await b.isVisible())) return false;

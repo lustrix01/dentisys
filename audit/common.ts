@@ -1,15 +1,18 @@
-import { readFileSync } from 'node:fs';
+import { createHmac } from 'node:crypto';
+import { mkdirSync, openSync, closeSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { devices } from '@playwright/test';
 
 export const OUT = 'audit-output';
 export const PARTS_DIR = `${OUT}/.parts`;
 
-export const ALL_ROLES = ['public', 'admin', 'faculty', 'secretary', 'student'] as const;
+export const ALL_ROLES = ['public', 'superadmin', 'admin', 'faculty', 'secretary', 'student'] as const;
 export type Role = (typeof ALL_ROLES)[number];
 
 // Local seeded dev accounts only (docs/demo-accounts.md, database/seeds/development-demo.sql).
-export const ACCOUNTS: Record<Exclude<Role, 'public'>, { email: string; password: string }> = {
+// totp: the seeded dev authenticator secret (development-demo.sql 1b); the Superadmin must pass 2FA.
+export const ACCOUNTS: Record<Exclude<Role, 'public'>, { email: string; password: string; totp?: string }> = {
+  superadmin: { email: 'superadmin@bicol-u.edu.ph', password: 'Superadmin123!', totp: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP' },
   admin: { email: 'admin@bicol-u.edu.ph', password: 'Admin123!' },
   faculty: { email: 'faculty@bicol-u.edu.ph', password: 'Faculty123!' },
   secretary: { email: 'secretary@bicol-u.edu.ph', password: 'Secretary123!' },
@@ -41,4 +44,28 @@ export function wantedDevices(): AuditDevice[] {
   const tier = TIERS.indexOf(process.env.AUDIT_TIER ?? 'full');
   if (tier < 0) throw new Error('AUDIT_TIER must be quick, core or full');
   return all.filter(d => (!f.length || f.includes(d.name)) && TIERS.indexOf(d.tier) <= tier);
+}
+
+// The server accepts each 30-second step once, and tests run in parallel workers: claim a step no other
+// sign-in of this run used (an exclusive file per step), waiting for the next step when it is taken.
+export async function freshTotp(secret: string): Promise<string> {
+  const dir = `${OUT}/.totp-steps`;
+  mkdirSync(dir, { recursive: true });
+  for (;;) {
+    const step = Math.floor(Date.now() / 30000);
+    try { closeSync(openSync(`${dir}/${step}`, 'wx')); return totp(secret, step); } catch { /* taken */ }
+    await new Promise(r => setTimeout(r, (step + 1) * 30000 - Date.now() + 200));
+  }
+}
+
+// RFC 6238 code (SHA-1, 6 digits) for a base32 secret; same as ui-fix-demo shots.mjs.
+function totp(secret: string, step: number): string {
+  const bits = secret.replace(/=+$/, '').toUpperCase().split('')
+    .map(ch => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(ch).toString(2).padStart(5, '0')).join('');
+  const key = Buffer.from(bits.match(/.{8}/g)!.map(b => parseInt(b, 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(step));
+  const h = createHmac('sha1', key).update(counter).digest();
+  const o = h[h.length - 1] & 15;
+  return String((h.readUInt32BE(o) & 0x7fffffff) % 1000000).padStart(6, '0');
 }

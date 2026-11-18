@@ -8,7 +8,7 @@ Repo `C:\Users\decha\Desktop\Github\dentisys`. Rules in `AGENTS.md` and `CLAUDE.
 - Device audit: `npm run audit:devices` from the repo root. The spec is `audit/device-audit.spec.ts`; the devices are in `audit/devices.json` (shared with `shots.mjs`). Output goes to `audit-output/`, which is gitignored; keep scratch scripts there too. Filter with env vars:
   - `AUDIT_TIER=quick|core|full` (2 / 11 / 17 devices; default full);
   - `AUDIT_DEVICES="iPhone 393,Desktop 1920"` (names from devices.json);
-  - `AUDIT_ROLES=faculty`;
+  - `AUDIT_ROLES=faculty` (public, superadmin, admin, faculty, secretary, student; the Superadmin signs in with a code from the seeded dev authenticator, one per 30 s, so its sign-ins are spaced out);
   - `AUDIT_ROUTES=/grades`;
   - `AUDIT_THEMES=light`;
   - `AUDIT_NO_TABS=1`.
