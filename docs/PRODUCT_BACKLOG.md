@@ -12,7 +12,7 @@ Item numbers are permanent; a finished item moves to [Done](#done) with its numb
 
 Owner, 2026-11-19: these come before every backlog item, in this order.
 
-- **P3** Merge `owhie-responsive` (the colleague's UI work and fixes) into `lighthal9-responsive`, then `lighthal9-superadmin` into `lighthal9-responsive`. How is decided with the Owner before starting.
+- None open (P1–P3 are in Done).
 
 ---
 
@@ -71,6 +71,7 @@ The full report text, what DentiSYS did at the time, the gaps, open questions an
 
 Full text and Owner decisions of these items: [backlog items closed before 2026-11-14](archive/backlog-done-2026-11.md).
 
+- **P3** Owhie's `owhie-responsive` (exports, confirmations, session scheduling) merged with `lighthal9-superadmin`, six Owner rulings applied; `lighthal9-responsive` moves to that merge. Record: [owhie-exports-sessions-merge-2026-11.md](archive/owhie-exports-sessions-merge-2026-11.md).
 - **P2** Superadmin pages checked on the device list (11 core devices, light and dark): no sideways scroll or cut-off text; phone card labels on People & Accounts, Face Enrolment Flags and Course Catalog use the readable small-text grey. Layout findings shared with the Dean are 9.22.
 - **P1** Superadmin Classes with live records: every Faculty member's real classes and rosters, read-only, with one action, Change Faculty (grade weights copied to the new Faculty member). Contract: [superadmin-classes.md](contracts/superadmin-classes.md).
 - **13.9** Dean and Superadmin as separate roles and accounts: the Dean keeps Dashboard, Reports & Analytics, Faculty Invitations and My Activity; the Superadmin (one account, created by the server script, 2FA required at the first sign-in) gets setup, accounts, the audit trail and the Dean handover. Contract: [dean-superadmin-split.md](contracts/dean-superadmin-split.md).
