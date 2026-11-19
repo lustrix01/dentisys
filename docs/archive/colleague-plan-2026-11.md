@@ -22,23 +22,29 @@ Work plan for the colleague's lane, written 2026-11-20. The colleague works whil
    git push origin owhie-responsive
    ```
 
-   Then run `npm ci` at the repository root (it installs packages and turns on the commit hooks). If the `--ff-only` merge refuses, your local `owhie-responsive` has commits that were never pushed: run `git merge origin/lighthal9-responsive` instead, keep both sides when resolving, and say so in your report.
+   Then run `npm ci` at the repository root (it installs packages and turns on the commit hooks). If the `--ff-only` merge refuses, your local `owhie-responsive` has commits that were never pushed: run `git merge origin/lighthal9-responsive` instead, keep both sides when resolving, and say so in your changelog.
 2. **Work only on `owhie-responsive`.** Never push to `lighthal9-responsive` or any other branch. Do the items in order, commit each item separately (one or more commits per item, never two items in one commit), and push `owhie-responsive` after each item so the work is saved.
-3. **Stay in your files.** Each item lists the files it touches. If an item needs a file outside its list, especially anything under `backend/`, `database/` or the sign-in pages, skip that part and write it in your report. The Owner is changing the sign-in code at the same time: `auth_runtime.php`, `mfa_runtime.php`, `GoogleAuthController.php`, `security.php`, `SsoLogin.tsx`, `MfaVerify.tsx`, `MfaSettingsCard.tsx`, `AuthContext.tsx`.
+3. **Stay in your files.** Each item lists the files it touches. If an item needs a file outside its list, especially anything under `backend/`, `database/` or the sign-in pages, skip that part and write it in your changelog. The Owner is changing the sign-in code at the same time: `auth_runtime.php`, `mfa_runtime.php`, `GoogleAuthController.php`, `security.php`, `SsoLogin.tsx`, `MfaVerify.tsx`, `MfaSettingsCard.tsx`, `AuthContext.tsx`.
 4. **Do not edit** `docs/PRODUCT_BACKLOG.md`, `docs/roadmap.md` or `spec.md`. The Owner updates them when merging.
-5. **Looks.** Build every part from the existing page parts named in `docs/frontend.md` "Page patterns"; no new look, colour or layout of your own. Where an item leaves a look choice open, do not choose: skip it and write it in your report. For each visible change, take before and after screenshots of the real app at phone (390 px) and desktop (1280 px) width, in light and dark (the app's own theme toggle). Keep them outside the repository and send them to the Owner with your report; the Owner reviews them at merge and may ask for changes.
-6. **Done means tested.** For every item:
+5. **Looks in the plan's items.** Build the items from the existing page parts named in `docs/frontend.md` "Page patterns". Where an item leaves a look choice open, you may choose; say what you chose in your changelog.
+6. **UI changes of your own (allowed, Owner 2026-11-20).** You may also change how screens look outside this plan when you judge it an improvement, on these conditions:
+   - presentation only (layout, spacing, colour, wording of labels, visual polish): no change to what the app does, saves or allows, no `backend/` or `database/` files, and none of the sign-in files listed in rule 3;
+   - in its own commit, separate from the plan's items, with a subject starting `style(ui):` and the same `Demo:` line;
+   - listed in your changelog with before and after screenshots.
+   The Owner reviews these at merge and keeps or reverts each one; a kept new look becomes the standard in "Page patterns" (the Owner updates it).
+7. **Screenshots.** For every visible change, take before and after screenshots of the real app at phone (390 px) and desktop (1280 px) width, in light and dark (the app's own theme toggle). Keep them outside the repository and send them with your changelog.
+8. **Done means tested.** For every item:
    - add or update the test named under the item and run it on its own first;
    - run `npx tsc -b` in `frontend/`;
-   - run `./scripts/check.ps1` (PowerShell 7) before pushing the item; it must pass. If it fails on something your item did not touch, write it in your report instead of fixing it.
-7. **Commit hooks.** After `npm ci` the hooks check every commit. Do not bypass them (`--no-verify`); when one refuses, read its message and fix the commit message or the file. They refuse:
+   - run `./scripts/check.ps1` (PowerShell 7) before pushing the item; it must pass. If it fails on something your item did not touch, write it in your changelog instead of fixing it.
+9. **Commit hooks.** After `npm ci` the hooks check every commit. Do not bypass them (`--no-verify`); when one refuses, read its message and fix the commit message or the file. They refuse:
    - AI trailers (`Co-Authored-By: …`, "Generated with …");
    - a `fix:` commit with no test file and no `Test: none - <reason>` line;
    - a `feat:` commit without the backlog id in the subject, for example `feat(retention): grades first and batch send (13.5)`;
    - a commit that changes `frontend/src` `.tsx`/`.css` files without a `Demo:` line: use `Demo: none - screenshots sent to Owner for review`;
    - files with a BOM, UTF-16 or broken characters.
-8. **Encoding.** Write files as UTF-8 without BOM. Do not use Windows PowerShell 5.1 (`powershell.exe`) to write files; use `pwsh` or your editor.
-9. **Report when done.** One message to the Owner: per item, what changed, the commit(s), the screenshots, and anything skipped or not working.
+10. **Encoding.** Write files as UTF-8 without BOM. Do not use Windows PowerShell 5.1 (`powershell.exe`) to write files; use `pwsh` or your editor.
+11. **Changelog when done.** One message to the Owner with: per plan item, what changed, its commit(s), screenshots, and anything skipped or not working; then each UI change of your own (rule 6) with its commit and screenshots.
 
 Useful commands:
 
@@ -85,7 +91,7 @@ node --experimental-strip-types --test frontend/src/tests/retentionMonitoringCon
 - **Goal:** fix five small layout problems: the collapsed sidebar cuts labels on iPad (820 px); the breadcrumb "Home" link is a small tap target; on wide screens the sticky page header and the Audit Trail table header overlap content while scrolling; at 320 px an Audit Trail card's Who line overlaps; at 320 px the Faculty Retention table's last column cannot be read.
 - **Files:** the shared layout and sidebar components, `frontend/src/pages/admin/SystemAudit.tsx`, `frontend/src/pages/faculty/RetentionMonitoring.tsx` (on top of item 2's changes).
 - **Test:** `e2e/tablet-sidebar.spec.ts` for the sidebar; a phone-width check in the spec of each changed page.
-- **Done when:** one set of before and after screenshots at 320, 390, 820 and 1280 px, light and dark, taken; tests and `check.ps1` pass. If a fix needs a new look (not just spacing or sizing), skip it and write it in your report.
+- **Done when:** one set of before and after screenshots at 320, 390, 820 and 1280 px, light and dark, taken; tests and `check.ps1` pass.
 - **Size:** half a day to a day.
 
 ### 5. Confirmation pop-ups (13.7)
@@ -102,5 +108,5 @@ node --experimental-strip-types --test frontend/src/tests/retentionMonitoringCon
 - **Goal:** `e2e/faculty.spec.ts` "Email Management records a successfully delivered Student invitation" passes in the full 8-worker run, not only alone.
 - **Change:** find the cause first: run it with `--repeat-each=40 --retries=0 --trace=retain-on-failure` and read the failing trace's page errors. Fix the real cause (app or test); do not add waits or retries to hide it.
 - **Files:** `e2e/faculty.spec.ts`, and the app file only if the trace shows an app bug.
-- **Done when:** 40 repeats pass and `check.ps1` reports it neither failed nor flaky. Write the cause in your report.
+- **Done when:** 40 repeats pass and `check.ps1` reports it neither failed nor flaky. Write the cause in your changelog.
 - **Size:** about 2 hours.
