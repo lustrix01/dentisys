@@ -95,8 +95,10 @@ A bug is fixed only when a test proves it, not when the code looks right.
 ## Git
 
 - Commit when the work is validated and, for anything visible, approved by the Owner.
-  Push only when the Owner says so. Never force-push, and never switch or merge
-  branches without asking.
+  Ask before every push. "Push" means push, publish to the demo, test it, then ask:
+  merge into the base branch or keep working ([docs/release-guide.md](docs/release-guide.md)
+  "Branches and batched promotion"); "push only" means push alone. Never force-push,
+  and never switch or merge branches without asking.
 - Commits carry no AI trailers (`Co-Authored-By: Claude…`, `Claude-Session: …`,
   "Generated with Claude Code"); in the Owner's sessions they are authored as Light505.
   The hook checks only new commits: a colleague's or cloud session's branch is checked

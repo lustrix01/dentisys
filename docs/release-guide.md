@@ -34,17 +34,28 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\<script>.ps1 <arguments>
 
 `pwsh` is PowerShell 7; `powershell` (Windows PowerShell 5.1) accepts the same switches. Claude Code's own PowerShell tool already adds this bypass, so Claude-run steps need no change — only a command you type in your own terminal does.
 
+## Branches and batched promotion
+
+Work happens on a branch made from the base `lighthal9-responsive` (backlog work: `lighthal9-backlog`). Several items can sit on it, each committed after its checks and the Owner's approval.
+
+1. **Ask before every push.** Claude never pushes on its own: the Owner may want to batch several items into one push, or land a fix in the same push.
+2. **"Push" means steps 2–7 below without stopping:** push the working branch, publish that sha to the demo, test it there, report. The report ends with one question: merge into `lighthal9-responsive`, or keep working? "Push only" means step 2 alone.
+3. **Merge** (Owner's OK): fast-forward `lighthal9-responsive` to the tested sha. Then the question is: promote to production (recommended), or keep working on the branch?
+4. **Promote** (Owner, step 9): Claude gives the exact command for the tested sha and the Owner runs it from a checkout of that sha. One promote carries every earlier unpromoted item and runs their migrations in order.
+
+Promote only a sha that is on `lighthal9-responsive` and running on the demo: merge first, never promote and merge afterwards. A promotion that has not happened yet never holds back the next item, a commit or a push on the working branch. `lighthal9-responsive` is also fast-forwarded, with the Owner's OK, before a colleague starts new work, so they branch from the latest tested state.
+
 ## The release, step by step
 
 | # | Step | Who | Command or action |
 |---|---|---|---|
 | 1 | Agree the change, build it, update the current-reference docs it affects, run the checks. **Docs updated?** Every changed behaviour, setup step, env var, script or screen is described as it is now in README, `docs/`, `spec.md` and `.env.example`. | Claude, Owner approves | `.\scripts\check.ps1` (its docs contract fails on an env var missing from `.env.example`, a broken docs link, or a dated file outside `docs/archive/`) |
-| 2 | Push the commit | Claude, when the Owner says "push" | `git push` |
+| 2 | Push the commit | Claude, after asking, when the Owner says "push" | `git push` |
 | 3 | Publish the demo images | Claude | `.\scripts\publish-images.ps1 -Tag demo`. It prints the 12-character sha. It refuses a commit whose files have not passed `check.ps1` (plus `check-postgres.ps1` when server-side files changed); Usual path: commit, then run the gates with nothing else uncommitted. It also refuses a dirty working tree: when the Owner has uncommitted work, publish from `git worktree add --detach <path> <sha>` instead of setting that work aside. `-Force` overrides the checks with a warning and is used only with the Owner's OK. |
 | 4 | Database migrations (only if the release adds them: `git diff <last release sha>..<sha> -- database` is not empty) | Claude | `.\scripts\demo-vps.ps1 migrate`. It backs up the database first. Watchtower alone is not enough. |
 | 5 | Wait until the demo runs the new version | Claude | `.\scripts\demo-vps.ps1 wait-deploy <sha>`. It waits up to 15 minutes for every container to run that sha and be healthy. |
 | 6 | Test the demo | Claude | `.\scripts\demo-test.ps1` signs in as each role through the tunnel on the `DEMO_LOCAL_PORT` port of `demo.env` (`http://localhost:<DEMO_LOCAL_PORT>`), plus any checks specific to the feature. |
-| 7 | Report | Claude → Owner | Pass/fail in chat, ending with the approved sha and the exact command: `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\promote-prod.ps1 -Sha <sha>`. The change doc is updated only when the Owner asks. |
+| 7 | Report | Claude → Owner | Pass/fail in chat with the tested sha, ending with the question: merge into `lighthal9-responsive`, or keep working? After a merge, the exact promote command: `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\promote-prod.ps1 -Sha <sha>`. The change doc is updated only when the Owner asks. |
 | 8 | Approve the demo | Owner, then Claude | Both say "approved". Open the demo yourself at its address. |
 | 9 | Promote to production | **Owner** | See below. |
 | 10 | Check production | **Owner** | `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\demo-test.ps1 -Prod`, about 2 minutes. See below. |
