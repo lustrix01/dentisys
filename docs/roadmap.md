@@ -10,9 +10,10 @@ Two people work at once, in two lanes that never edit the same screen or backend
 2. Remember this device (9.24).
 3. Remember me (9.26).
 4. Superadmin sign-in page (12.8).
-5. Grade submission and Dean approval (13.8). Starts after the colleague's 13.5 and 13.6 are merged, since it changes the same Retention and Attendance screens.
-6. Face enrolment and check-in speed (13.4), after the Owner's real-phone timing session.
-7. UI formality pass (12.6), after both lanes are done.
+5. Grade submission and Dean approval (13.8). Starts after the colleague's branch is merged, since it changes the same Retention and Attendance screens.
+6. Attendance review screen (13.6, review part): the Owner picks its look from a demo first, then the UI-005 spec change and the build.
+7. Face enrolment and check-in speed (13.4), after the Owner's real-phone timing session.
+8. UI formality pass (12.6), after both lanes are done.
 
 ## Colleague lane (screens only, no new system rules)
 
@@ -20,7 +21,7 @@ How to work, files, tests and "done when" per item: [colleague plan](archive/col
 
 1. Secretary change-request reason minimum (9.25).
 2. Retention Monitoring grades first and batch send (13.5).
-3. Attendance review and the Start session hint (13.6). The review part starts after the Owner picks its look from a demo the Owner prepares. If it needs more than one new read-only data request, it goes back to the Owner.
+3. Start session hint (13.6, hint part only).
 4. Layout batch (9.22 with 13.3's 320 px column), after 13.5 because both touch Retention Monitoring.
 5. Confirmation pop-ups (13.7).
 6. Flaky Email Management test (9.21).
@@ -28,9 +29,9 @@ How to work, files, tests and "done when" per item: [colleague plan](archive/col
 ## Rules between the lanes
 
 - Database migration numbers are reserved: `069` for 9.24, `070` for 9.26, `071` for 13.8.
-- The colleague works on their own branch from `lighthal9-responsive`; the Owner merges it after each item (`colleague-merge` skill), not at the end.
+- The colleague works on `owhie-responsive`, first brought up to `lighthal9-responsive`, one commit set per item, while the Owner is away; the Owner merges the branch in one go afterwards (`colleague-merge` skill) and reviews the screenshots then.
 - Small shared files (`App.tsx` routes, `apiClient.ts`, types, the sidebar list, `e2e/fixtures.ts`, `spec.md`) may be touched by both; each lane adds its own lines.
 - Only the Owner edits `docs/PRODUCT_BACKLOG.md` and this file; the colleague reports progress.
-- Every visible change goes through a demo the Owner approves, and every spec change needs the Owner's OK.
+- Every visible change is approved by the Owner (a demo in the Owner's lane, screenshots at merge for the colleague's), and every spec change needs the Owner's OK.
 
 Owner actions, any time: production `devops` password (9.19), real-phone check on production (9.20), paper wording (13.10).
