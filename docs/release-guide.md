@@ -60,7 +60,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\promote-prod.ps1 -Sha <a
 git checkout -   # back to the branch you were on
 ```
 
-- `promote-prod.ps1` needs HEAD to equal the sha you promote, so commit nothing after the tested commit before promoting. If a commit lands anyway, ask Claude to test the new head on the demo, or promote from a detached worktree at the tested sha.
+- `promote-prod.ps1` needs HEAD to equal the sha you promote; the `git checkout` above does that, so later commits on the working branch never block a promotion. Promotions are batched: one promote of a sha on `lighthal9-responsive` carries every earlier unpromoted item.
 - `-DryRun` changes nothing. It checks that the commit, a clean working tree and the three demo images exist, then prints the plan.
 - The real run asks for:
   - your GitHub token (`write:packages`);
@@ -102,7 +102,7 @@ To go back to the previous version, promote the previous approved sha the same w
 
 ### Notes for Claude's steps
 
-- After a tested demo deploy, commit nothing until the Owner has promoted that sha: `promote-prod.ps1` needs HEAD to equal it. If something must land first, publish and test the new head on the demo again.
+- After a tested demo deploy, keep working: a promotion that has not happened yet never holds back a commit or a push on the working branch. The Owner promotes from a checkout of the tested sha (step 9).
 - `demo-vps.ps1` sends its commands base64-encoded. Run it from the PowerShell tool when an argument holds a `/tmp` or other `/…` path: Git Bash rewrites those into Windows paths.
 - The demo firewall blocks SSH after 6 connections in 30 seconds (`ufw limit`). Batch remote commands into one call.
 - After `upload-vps.ps1 -Deploy` recreates Traefik on the demo, the test entrance answers 502 until it is restarted: `.\scripts\demo-vps.ps1 run "cd /opt/dentisys && sudo docker compose -p dentisys-tunnel --env-file /opt/dentisys/.env -f docker-compose.demo-tunnel.yml restart"`.

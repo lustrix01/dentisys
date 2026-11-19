@@ -54,7 +54,7 @@ Write the role's section as soon as the role is done: one-sentence verdict, the 
 
 - Commit only after the Owner approves the demo; one commit per batch with a message the Owner can read.
 - Push and deploy only when told. Follow the project's deploy runbook exactly (migrations before the code that needs them), then run the demo smoke tests, the audit-chain check and read-only live API checks of what the release changed (`scripts/demo-live-check.mjs` is the DentiSys template).
-- Production is the Owner's. After a tested deploy, **commit nothing** until they promote — promotion scripts usually require HEAD to equal the tested commit. If something must land, redeploy and retest the new head first.
+- Production is the Owner's. A pending promotion never blocks commits on the working branch: the Owner promotes from a checkout of the tested sha (release guide step 9).
 
 ## 5. Close the loop
 
