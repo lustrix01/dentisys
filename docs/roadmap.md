@@ -16,9 +16,11 @@ Two people work at once, in two lanes that never edit the same screen or backend
 
 ## Colleague lane (screens only, no new system rules)
 
+How to work, files, tests and "done when" per item: [colleague plan](archive/colleague-plan-2026-11.md).
+
 1. Secretary change-request reason minimum (9.25).
 2. Retention Monitoring grades first and batch send (13.5).
-3. Attendance review and the Start session hint (13.6). If it needs more than one new read-only data request, it goes back to the Owner.
+3. Attendance review and the Start session hint (13.6). The review part starts after the Owner picks its look from a demo the Owner prepares. If it needs more than one new read-only data request, it goes back to the Owner.
 4. Layout batch (9.22 with 13.3's 320 px column), after 13.5 because both touch Retention Monitoring.
 5. Confirmation pop-ups (13.7).
 6. Flaky Email Management test (9.21).
