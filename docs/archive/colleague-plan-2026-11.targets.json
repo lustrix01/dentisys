@@ -1,0 +1,23 @@
+[
+  {"id":"925-request-dialog","device":"quick","role":"secretary","route":"/secretary/attendance","click":"^\\s*(Override|Mark)\\s*$","text":"Send for approval","closest":"[role=dialog]","steps":[{"role":"button","name":"View attendance"}]},
+  {"id":"925-request-dialog","device":"Desktop 1920","theme":"dark","role":"secretary","route":"/secretary/attendance","click":"^\\s*(Override|Mark)\\s*$","text":"Send for approval","closest":"[role=dialog]","steps":[{"role":"button","name":"View attendance"}]},
+  {"id":"135-retention-status","device":"quick","role":"faculty","route":"/retention"},
+  {"id":"135-retention-status","device":"Desktop 1920","theme":"dark","role":"faculty","route":"/retention"},
+  {"id":"135-retention-remedials","device":"quick","role":"faculty","route":"/retention","tab":"Remedials"},
+  {"id":"135-retention-remedials","device":"Desktop 1920","theme":"dark","role":"faculty","route":"/retention","tab":"Remedials"},
+  {"id":"135-retention-atrisk","device":"quick","role":"faculty","route":"/retention","tab":"At-Risk"},
+  {"id":"135-retention-atrisk","device":"Desktop 1920","theme":"dark","role":"faculty","route":"/retention","tab":"At-Risk"},
+  {"id":"135-email-midterm","device":"quick","role":"faculty","route":"/email-management","tab":"Midterm Advisory"},
+  {"id":"135-email-remedial","device":"quick","role":"faculty","route":"/email-management","tab":"Remedial"},
+  {"id":"136-start-session","device":"quick","role":"faculty","route":"/attendance","click":"^\\s*Start session\\s*$","steps":[{"role":"button","name":"^Sessions$"}],"text":"Date","closest":"[role=dialog]"},
+  {"id":"136-start-session","device":"Desktop 1920","theme":"dark","role":"faculty","route":"/attendance","click":"^\\s*Start session\\s*$","steps":[{"role":"button","name":"^Sessions$"}],"text":"Date","closest":"[role=dialog]"},
+  {"id":"922-sidebar-ipad","device":"iPad 820","role":"faculty","route":"/dashboard"},
+  {"id":"922-sidebar-ipad-dean","device":"iPad 820","role":"admin","route":"/dashboard"},
+  {"id":"922-audit-wide","device":"Desktop 1920","role":"superadmin","route":"/admin/audit-trail"},
+  {"id":"922-audit-320","device":"Small Android 320","role":"superadmin","route":"/admin/audit-trail"},
+  {"id":"922-retention-320","device":"Small Android 320","role":"faculty","route":"/retention"},
+  {"id":"137-class-join","device":"quick","role":"faculty","route":"/faculty/classes"},
+  {"id":"137-grade-weights","device":"quick","role":"faculty","route":"/grades"},
+  {"id":"137-course-catalog","device":"quick","role":"superadmin","route":"/admin/course-catalog"},
+  {"id":"137-rooms","device":"quick","role":"superadmin","route":"/admin/rooms"}
+]

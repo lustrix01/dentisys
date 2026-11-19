@@ -32,7 +32,7 @@ Work plan for the colleague's lane, written 2026-11-20. The colleague works whil
    - in its own commit, separate from the plan's items, with a subject starting `style(ui):` and the same `Demo:` line;
    - listed in your changelog with before and after screenshots.
    The Owner reviews these at merge and keeps or reverts each one; a kept new look becomes the standard in "Page patterns" (the Owner updates it).
-7. **Screenshots.** For every visible change, take before and after screenshots of the real app at phone (390 px) and desktop (1280 px) width, in light and dark (the app's own theme toggle). Keep them outside the repository and send them with your changelog.
+7. **Screenshots are taken by a script, not by hand.** See "Screenshots" below: one command before you start (Before) and one when you finish (After). They go to a folder next to the repository, never inside it; send that folder (zipped) with your changelog.
 8. **Done means tested.** For every item:
    - add or update the test named under the item and run it on its own first;
    - run `npx tsc -b` in `frontend/`;
@@ -55,6 +55,34 @@ npm run test:e2e -- e2e/faculty.spec.ts -g "part of the test name"
 ```powershell
 node --experimental-strip-types --test frontend/src/tests/retentionMonitoringContract.test.ts
 ```
+
+## Screenshots
+
+The script `.claude/skills/ui-fix-demo/scripts/shots.mjs` signs in as each seeded development account, opens the screens listed in [colleague-plan-2026-11.targets.json](colleague-plan-2026-11.targets.json) (every screen the six items change, at phone 393 px and desktop 1920 px, plus 320 px and iPad 820 px for the layout batch, light and dark) and saves the pictures. It runs with Node; it does not need Claude.
+
+Once, after rule 1: start the app (`./scripts/start-dev.ps1`, it serves `http://localhost:5173` with the seeded accounts), and install the browser Playwright uses:
+
+```powershell
+npx playwright install chromium
+```
+
+**Before**, right after rule 1 and before changing anything:
+
+```powershell
+node .claude/skills/ui-fix-demo/scripts/shots.mjs .claude/skills/ui-fix-demo/references/dentisys.app.json docs/archive/colleague-plan-2026-11.targets.json ../dentisys-shots before
+```
+
+**After**, when all items are done (or again after any item, to check it):
+
+```powershell
+node .claude/skills/ui-fix-demo/scripts/shots.mjs .claude/skills/ui-fix-demo/references/dentisys.app.json docs/archive/colleague-plan-2026-11.targets.json ../dentisys-shots after
+```
+
+Each run prints `ok` or `FAIL` per picture; pictures are in `../dentisys-shots/before/vp` and `../dentisys-shots/after/vp` (whole screen) and `crop` (close-up), with the same file names on both sides. A `FAIL` on the After run usually means a screen no longer has the text the list looks for; write it in your changelog. Do not edit the targets file.
+
+**Your own UI changes (rule 6):** copy the targets file to `../dentisys-shots/own-targets.json`, add one line per screen you will change (copy an existing line and change `id`, `role` and `route`), and run the same two commands with that file and `../dentisys-shots/own` as the folder. Run its Before **before** you start that change, because Before always shows the code as it is at that moment.
+
+The two dialog shots (9.25 request dialog, Start session) only open the dialogs; they never send or save anything.
 
 ## The items
 
