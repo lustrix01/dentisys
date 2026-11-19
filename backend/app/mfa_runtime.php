@@ -443,7 +443,11 @@ function mfa_runtime_recover(PDO $pdo, array $config, array $tokenClaims, string
 
     challenge_state_attempt($rateStorage, $jti, 'mfa_challenge', 'complete_login');
 
-    $canonical = mfa_normalize_recovery_code($code);
+    try {
+        $canonical = mfa_normalize_recovery_code($code);
+    } catch (\InvalidArgumentException) {
+        $canonical = null; // A malformed code fails like a wrong one (9.23).
+    }
 
     $wrongKind = null;
     $pdo->beginTransaction();
@@ -475,7 +479,7 @@ function mfa_runtime_recover(PDO $pdo, array $config, array $tokenClaims, string
         $matchedRow = null;
 
         foreach ($recoveryRows as $row) {
-            if (password_verify($canonical, $row['secret_hash'])) {
+            if ($canonical !== null && password_verify($canonical, $row['secret_hash'])) {
                 $matchedRow = $row;
             }
         }

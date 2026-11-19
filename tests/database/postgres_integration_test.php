@@ -3041,6 +3041,23 @@ try {
     expect_same(null, $failedSubject->fetchColumn(), 'Expired MFA does not persist the pending Google subject');
 }
 
+// 9.23: a malformed recovery code is a wrong code (400 "Invalid recovery code."), not a server error.
+$malformedChallenge = auth_issue_two_factor_challenge($config, $failedUser, 'password');
+$malformedClaims = jwt_decode($malformedChallenge['two_factor_challenge_token'], config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY'), 'mfa_challenge');
+$malformedAuditStmt = $pdo->prepare("SELECT COUNT(*) FROM audit_events WHERE action_code = 'mfa_verification_failed' AND actor_user_id = ?");
+$malformedAuditStmt->execute([$failedMfaFixture['user_id']]);
+$malformedAuditBefore = (int) $malformedAuditStmt->fetchColumn();
+$malformedError = null;
+try {
+    mfa_runtime_recover($pdo, $config, $malformedClaims, 'zz-not-a-code!', $googleContext + ['endpoint' => '/api/auth/mfa/recover']);
+} catch (Throwable $e) {
+    $malformedError = $e;
+}
+expect_true($malformedError instanceof MfaException, 'Malformed recovery code raises MfaException (HTTP 400), not a server error');
+expect_same('Invalid recovery code.', $malformedError?->getMessage(), 'Malformed recovery code reads "Invalid recovery code."');
+$malformedAuditStmt->execute([$failedMfaFixture['user_id']]);
+expect_same($malformedAuditBefore + 1, (int) $malformedAuditStmt->fetchColumn(), 'Malformed recovery code is audited as a failed 2FA attempt');
+
 $studentContext = [
     'request_id' => 'p03-student-' . bin2hex(random_bytes(4)),
     'ip_address' => '127.0.0.1',
