@@ -33,7 +33,7 @@ Project rules (`AGENTS.md`, `CLAUDE.local.md`) win. Screenshots use the `ui-fix-
   - Git Bash mangles `/route` args, so use `MSYS_NO_PATHCONV=1` and `C:/` paths.
 - **Commands that work here** (PowerShell tool, background, never piped):
   - Mocked browser suite: `powershell -NoProfile -ExecutionPolicy Bypass -File <repo>/scripts/test-e2e.ps1 --reporter=line [specs] *> "<log>"`. Always run it as a child `-File` process: `& script … *> log` in the same process, or inside `-Command`, dies on Node's stderr warning.
-  - `scripts/check.ps1` and `scripts/check-postgres.ps1`: run them as they are. The check-postgres log is UTF-16.
+  - `scripts/check.ps1` and `scripts/check-postgres.ps1`: run them with PowerShell 7 (`pwsh -NoProfile -File <script> *> "<log>"`), never `powershell.exe`: Windows PowerShell 5.1 runs every check and then fails at the end writing the pass stamp (`-Encoding utf8NoBOM`), so publish-images never sees the pass. Read the logs as UTF-8.
 - **Sides:** `S/setup-side.ps1 -Name <base|theirs|ours|merged> -Ref <ref|main> -Port <5181-5183> -Root R`. It frees the port, makes or reuses a detached worktree with `node_modules` junctions (`main` = the main checkout), starts Vite (proxying to 8080), and writes `R/app-<Name>.json` for `shots.mjs`.
   - Review: base on 5181, theirs on 5182.
   - Three-way: ours on 5181, theirs on 5182, merged on 5183.
