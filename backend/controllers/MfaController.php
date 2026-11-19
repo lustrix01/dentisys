@@ -408,7 +408,7 @@ function handle_mfa_enroll_confirm(): void
                     'login_success',
                     'user_account',
                     (string) $locked['user_id'],
-                    ($setup['authentication_source'] ?? 'password') === 'google' ? 'Signed in with Google after setting up 2FA.' : 'Signed in with password after setting up 2FA.',
+                    (($setup['authentication_source'] ?? 'password') === 'google' ? 'Signed in with Google after setting up 2FA.' : 'Signed in with password after setting up 2FA.') . auth_remember_audit_suffix($cred['remembered']),
                     ['context' => $context]
                 );
                 $pdo->commit();

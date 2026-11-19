@@ -30,6 +30,11 @@ function handle_login(): void
             return;
         }
 
+        if (array_key_exists('remember', $body['data']) && !is_bool($body['data']['remember'])) {
+            auth_controller_emit(auth_build_no_store_message_response('remember must be true or false.', 400));
+            return;
+        }
+
         $result = auth_runtime_login($pdo, $config, $body['data'], $context);
 
         if ($result['type'] === 'direct_login') {

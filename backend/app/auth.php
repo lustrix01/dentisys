@@ -12,8 +12,12 @@ const AUTH_IDLE_TIMEOUT_SECONDS = 1800;
  * True when an auth session has been idle for the full idle limit.
  * A session that has never been touched falls back to its creation time.
  */
-function auth_session_idle_expired(?string $lastSeenAt, string $createdAt, int $now): bool
+function auth_session_idle_expired(?string $lastSeenAt, string $createdAt, int $now, bool $remembered = false): bool
 {
+    if ($remembered) {
+        return false;
+    }
+
     $lastSeen = new DateTimeImmutable($lastSeenAt ?? $createdAt, new DateTimeZone('UTC'));
 
     return $lastSeen->getTimestamp() + AUTH_IDLE_TIMEOUT_SECONDS <= $now;
@@ -49,7 +53,8 @@ function auth_create_session(
     ?string $deviceId,
     DateTimeImmutable $absoluteExpiry,
     ?callable $clock = null,
-    string $authenticationSource = 'password'
+    string $authenticationSource = 'password',
+    bool $remembered = false
 ): array {
     if (!$pdo->inTransaction()) {
         throw new AuthException('auth_create_session requires an active transaction.');
@@ -94,8 +99,8 @@ function auth_create_session(
 
     $stmt = $pdo->prepare(
         "INSERT INTO auth_sessions
-         (session_uuid, user_id, issued_token_version, ip_address, user_agent, device_id, last_seen_at, created_at, expires_at, authentication_source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (session_uuid, user_id, issued_token_version, ip_address, user_agent, device_id, last_seen_at, created_at, expires_at, authentication_source, remembered)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          RETURNING session_id"
     );
     $stmt->execute([
@@ -109,6 +114,7 @@ function auth_create_session(
         $nowSql,
         $expiresSql,
         $authenticationSource,
+        $remembered ? 'true' : 'false',
     ]);
 
     $sessionId = (int) $stmt->fetchColumn();
@@ -120,6 +126,7 @@ function auth_create_session(
         'issued_token_version' => $lockedUser['token_version'],
         'created_at' => $nowSql,
         'expires_at' => $expiresSql,
+        'remembered' => $remembered,
     ];
 }
 
@@ -257,7 +264,7 @@ function auth_verify_access_token(
     }
 
     $stmt = $pdo->prepare(
-        "SELECT session_id, session_uuid, user_id, issued_token_version, revoked_at, expires_at, created_at, last_seen_at, authentication_source
+        "SELECT session_id, session_uuid, user_id, issued_token_version, revoked_at, expires_at, created_at, last_seen_at, authentication_source, remembered
          FROM auth_sessions WHERE session_uuid = ?"
     );
     $stmt->execute([$claims['sid']]);
@@ -293,7 +300,8 @@ function auth_verify_access_token(
     if ($sessionExpiresAt->getTimestamp() <= $clock()) {
         throw new AuthException('Session has expired.');
     }
-    if (auth_session_idle_expired($session['last_seen_at'] ?? null, (string) $session['created_at'], $clock())) {
+    $sessionRemembered = filter_var($session['remembered'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    if (auth_session_idle_expired($session['last_seen_at'] ?? null, (string) $session['created_at'], $clock(), $sessionRemembered)) {
         throw new AuthException('Session expired after inactivity.');
     }
 
@@ -323,7 +331,7 @@ function auth_verify_access_token(
               WHERE session_id = ?
                 AND revoked_at IS NULL
                 AND expires_at > ?
-                AND COALESCE(last_seen_at, created_at) > ?"
+                AND (remembered OR COALESCE(last_seen_at, created_at) > ?)"
         );
         $seenAtSql = $seenAt->format('Y-m-d H:i:s.u');
         $touch->execute([
@@ -348,6 +356,7 @@ function auth_verify_access_token(
         'exp' => $claims['exp'],
         'token_version' => (int) $user['token_version'],
         'authentication_source' => $authenticationSource,
+        'remembered' => $sessionRemembered,
         'student' => $student,
     ];
 }

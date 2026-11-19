@@ -15,6 +15,8 @@ const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
 const ACTIVITY_KEY = 'dentisys_auth_last_activity_at';
 const LOGOUT_MARKER_KEY = 'dentisys_auth_logged_out_at';
+// Set while the signed-in session is remembered (9.26), so a page load skips the idle check before refresh.
+const REMEMBERED_KEY = 'dentisys_auth_remembered';
 
 function readStoredTime(key: string): number | null {
   try {
@@ -79,6 +81,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const lastHeartbeatRef = useRef(Date.now());
   const idleLogoutStartedRef = useRef(false);
   const logoutInFlightRef = useRef(false);
+  const rememberedRef = useRef(false);
+
+  const rememberSession = (remembered: boolean) => {
+    rememberedRef.current = remembered;
+    if (remembered) storeTime(REMEMBERED_KEY, 1); else removeStoredTime(REMEMBERED_KEY);
+  };
 
   useEffect(() => {
     const prev = prevPathnameRef.current;
@@ -105,7 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         lastActivityRef.current = storedActivity ?? now;
         lastStoredActivityRef.current = storedActivity ?? now;
         lastHeartbeatRef.current = lastActivityRef.current;
-        if (readStoredTime(LOGOUT_MARKER_KEY) !== null || now - lastActivityRef.current >= IDLE_TIMEOUT_MS) {
+        const idle = readStoredTime(REMEMBERED_KEY) === null && now - lastActivityRef.current >= IDLE_TIMEOUT_MS;
+        if (readStoredTime(LOGOUT_MARKER_KEY) !== null || idle) {
           storeTime(LOGOUT_MARKER_KEY, now);
           await apiClient.logoutSession().catch(() => undefined);
           if (!active || authOperationRef.current !== operation) return;
@@ -122,6 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         apiClient.setAccessToken(refreshed.access_token);
         const user = await apiClient.getMe();
         if (!active || authOperationRef.current !== operation) return;
+        rememberSession(user.remembered === true);
         auditService.setAuditIdentity(user.display_name, user.role);
         setState(prev => ({
           ...prev,
@@ -165,6 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setUser = useCallback((user: SafeUser) => {
+    rememberSession(user.remembered === true);
     auditService.setAuditIdentity(user.display_name, user.role);
     setState(prev => ({ ...prev, user }));
   }, []);
@@ -205,6 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const clearAuth = useCallback(() => {
     authOperationRef.current += 1;
+    rememberSession(false);
     apiClient.clearAccessToken();
     auditService.clearAuditIdentity();
     clearCurrentSecretaryUser();
@@ -217,6 +229,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logoutInFlightRef.current = true;
     authOperationRef.current += 1;
     storeTime(LOGOUT_MARKER_KEY, Date.now());
+    rememberSession(false);
     const logoutRequest = apiClient.logoutSession();
     apiClient.clearAccessToken();
     auditService.clearAuditIdentity();
@@ -243,7 +256,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const persisted = readStoredTime(ACTIVITY_KEY);
       const lastActivity = Math.max(lastActivityRef.current, persisted ?? 0);
       lastActivityRef.current = lastActivity;
-      if (Date.now() - lastActivity < IDLE_TIMEOUT_MS) return false;
+      if (rememberedRef.current || Date.now() - lastActivity < IDLE_TIMEOUT_MS) return false;
       if (!idleLogoutStartedRef.current) {
         idleLogoutStartedRef.current = true;
         void forceLogout();

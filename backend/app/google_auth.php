@@ -136,7 +136,7 @@ function google_verify_id_token(array $config, string $credential, ?callable $ve
     ];
 }
 
-function google_issue_link_challenge(array $config, array $user, string $googleSubject): array
+function google_issue_link_challenge(array $config, array $user, string $googleSubject, bool $remember = false): array
 {
     $jti = jwt_generate_jti();
     $now = time();
@@ -148,6 +148,7 @@ function google_issue_link_challenge(array $config, array $user, string $googleS
         'token_version' => (int) $user['token_version'],
         'authentication_source' => 'google',
         'pending_google_subject' => $googleSubject,
+        'remember' => $remember,
         'iat' => $now,
         'exp' => $now + 300,
     ], $jwtKey);

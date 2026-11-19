@@ -18,6 +18,7 @@ require_once $root . '/backend/app/auth.php';
 require_once $root . '/backend/app/auth_runtime.php';
 require_once $root . '/backend/app/mfa.php';
 require_once $root . '/backend/app/mfa_runtime.php';
+require_once $root . '/backend/app/trusted_devices.php';
 require_once $root . '/backend/app/ratelimit.php';
 require_once $root . '/backend/app/validation.php';
 require_once $root . '/backend/app/academic_year.php';
@@ -323,6 +324,7 @@ $expectedMigrations = [
     '067_auto_sessions.sql',
     '068_superadmin_role.sql',
     '069_mfa_trusted_devices.sql',
+'070_auth_session_remember.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -7350,6 +7352,189 @@ $passwordChangeDirectLogin = auth_runtime_login($pdo, $config, [
 ]);
 expect_same('direct_login', $passwordChangeDirectLogin['type'], 'Password-change fixture issues a real refresh credential');
 $passwordChangeRefreshToken = (string) $passwordChangeDirectLogin['credentials']['refresh_token'];
+
+// 9.26 Remember me carries through the 2FA code step in the challenge token claim `remember`.
+$mfaRememberKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
+$mfaRememberContext = [
+    'request_id' => 'remember-mfa-' . bin2hex(random_bytes(4)),
+    'ip_address' => '127.0.0.1',
+    'user_agent' => 'Remember Me MFA Integration Test',
+    'http_method' => 'POST',
+    'endpoint' => '/api/auth/login',
+];
+$mfaRememberFlag = $pdo->prepare('SELECT remembered FROM auth_sessions WHERE session_id = ?');
+$mfaRememberAudit = $pdo->prepare('SELECT description FROM audit_events WHERE action_code = ? AND actor_user_id = ? ORDER BY sequence_number DESC LIMIT 1');
+$mfaRememberChallenge = static function (string $label, ?bool $remember) use ($pdo, $config, $createMfaFixture, $mfaRememberContext, $mfaRememberKey): array {
+    $fixture = $createMfaFixture($pdo, $config, "remember-mfa-{$label}-" . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph');
+    if ($remember === null) {
+        // A token issued before this feature has no `remember` claim at all.
+        $userStmt = $pdo->prepare('SELECT user_id, login_email, role, display_name, status, token_version FROM user_accounts WHERE user_id = ?');
+        $userStmt->execute([$fixture['user_id']]);
+        $token = auth_issue_two_factor_challenge($config, $userStmt->fetch(PDO::FETCH_ASSOC))['two_factor_challenge_token'];
+        $claims = jwt_decode($token, $mfaRememberKey, 'mfa_challenge');
+        unset($claims['remember']);
+    } else {
+        $body = ['email' => '', 'password' => 'GoogleMfaPass1!', 'remember' => $remember];
+        $emailStmt = $pdo->prepare('SELECT login_email FROM user_accounts WHERE user_id = ?');
+        $emailStmt->execute([$fixture['user_id']]);
+        $body['email'] = (string) $emailStmt->fetchColumn();
+        $login = auth_runtime_login($pdo, $config, $body, $mfaRememberContext);
+        expect_same('two_factor_required', $login['type'], "Remember me 2FA ({$label}): password step asks for the code");
+        $claims = jwt_decode($login['two_factor_challenge_token'], $mfaRememberKey, 'mfa_challenge');
+        expect_same($remember, $claims['remember'] ?? null, "Remember me 2FA ({$label}): challenge token carries remember={$label}");
+    }
+    return [$fixture, $claims];
+};
+$mfaRememberCode = static fn(array $fixture): string => mfa_compute_totp($fixture['secret'], intdiv(time(), 30))['code'];
+foreach ([['on', true], ['off', false], ['legacy', null]] as [$label, $remember]) {
+    [$fixture, $claims] = $mfaRememberChallenge("verify-{$label}", $remember);
+    $result = mfa_runtime_verify($pdo, $config, $claims, $mfaRememberCode($fixture), $mfaRememberContext + ['endpoint' => '/api/auth/mfa/verify']);
+    $expectOn = $remember === true;
+    $mfaRememberFlag->execute([(int) $result['credentials']['session']['session_id']]);
+    expect_true(filter_var($mfaRememberFlag->fetchColumn(), FILTER_VALIDATE_BOOLEAN) === $expectOn, "Remember me 2FA: TOTP verify ({$label}) stores remembered=" . ($expectOn ? 'true' : 'false'));
+    expect_true($expectOn ? is_int($result['credentials']['cookie_ttl']) : $result['credentials']['cookie_ttl'] === null, "Remember me 2FA: TOTP verify ({$label}) cookie TTL " . ($expectOn ? 'is an int' : 'is null'));
+    $mfaRememberAudit->execute(['mfa_verification_success', $fixture['user_id']]);
+    expect_true(str_ends_with((string) $mfaRememberAudit->fetchColumn(), $expectOn ? ' Remember me: on.' : ' Remember me: off.'), "Remember me 2FA: TOTP verify ({$label}) audit suffix");
+}
+foreach ([['on', true], ['off', false]] as [$label, $remember]) {
+    [$fixture, $claims] = $mfaRememberChallenge("recover-{$label}", $remember);
+    $result = mfa_runtime_recover($pdo, $config, $claims, $fixture['recovery_code'], $mfaRememberContext + ['endpoint' => '/api/auth/mfa/recover']);
+    $mfaRememberFlag->execute([(int) $result['credentials']['session']['session_id']]);
+    expect_true(filter_var($mfaRememberFlag->fetchColumn(), FILTER_VALIDATE_BOOLEAN) === $remember, "Remember me 2FA: recovery code ({$label}) stores remembered flag");
+    expect_true($remember ? is_int($result['credentials']['cookie_ttl']) : $result['credentials']['cookie_ttl'] === null, "Remember me 2FA: recovery code ({$label}) cookie TTL");
+    $mfaRememberAudit->execute(['mfa_recovery_success', $fixture['user_id']]);
+    expect_true(str_ends_with((string) $mfaRememberAudit->fetchColumn(), $remember ? ' Remember me: on.' : ' Remember me: off.'), "Remember me 2FA: recovery code ({$label}) audit suffix");
+}
+
+// 9.26 Remember me: a remembered session has no idle limit but keeps its fixed 7-day end and every revocation.
+$rememberContext = [
+    'request_id' => 'remember-me-' . bin2hex(random_bytes(4)),
+    'ip_address' => '127.0.0.1',
+    'user_agent' => 'Remember Me Integration Test',
+    'http_method' => 'POST',
+    'endpoint' => '/api/auth/login',
+];
+$rememberEmail = 'remember-me-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
+$rememberPassword = 'RememberPass1!';
+$rememberInsert = $pdo->prepare(
+    "INSERT INTO user_accounts (login_email, password_hash, role, display_name, status)
+     VALUES (?, ?, 'faculty', 'Remember Me Integration User', 'Active')
+     RETURNING user_id"
+);
+$rememberInsert->execute([$rememberEmail, password_hash($rememberPassword, PASSWORD_DEFAULT)]);
+$rememberUserId = (int) $rememberInsert->fetchColumn();
+$rememberFlag = $pdo->prepare('SELECT remembered FROM auth_sessions WHERE session_id = ?');
+$rememberAuditLast = $pdo->prepare(
+    "SELECT description FROM audit_events WHERE action_code = 'login_success' AND actor_user_id = ? ORDER BY sequence_number DESC LIMIT 1"
+);
+$rememberSigningKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
+$rememberAge = static fn(PDO $pdo, int $sessionId, string $interval) => $pdo
+    ->prepare("UPDATE auth_sessions SET last_seen_at = CURRENT_TIMESTAMP(6) - INTERVAL '{$interval}' WHERE session_id = ?")
+    ->execute([$sessionId]);
+
+$rememberOn = auth_runtime_login($pdo, $config, ['email' => $rememberEmail, 'password' => $rememberPassword, 'remember' => true], $rememberContext);
+$rememberOff = auth_runtime_login($pdo, $config, ['email' => $rememberEmail, 'password' => $rememberPassword], $rememberContext);
+expect_same('direct_login', $rememberOn['type'], 'Remember me: ticked password sign-in is direct');
+$rememberOnCreds = $rememberOn['credentials'];
+$rememberOffCreds = $rememberOff['credentials'];
+$rememberFlag->execute([(int) $rememberOnCreds['session']['session_id']]);
+expect_true(filter_var($rememberFlag->fetchColumn(), FILTER_VALIDATE_BOOLEAN) === true, 'Remember me: ticked sign-in stores remembered=true');
+$rememberFlag->execute([(int) $rememberOffCreds['session']['session_id']]);
+expect_true(filter_var($rememberFlag->fetchColumn(), FILTER_VALIDATE_BOOLEAN) === false, 'Remember me: unticked sign-in stores remembered=false');
+expect_true(is_int($rememberOnCreds['cookie_ttl']) && $rememberOnCreds['cookie_ttl'] > 604000 && $rememberOnCreds['cookie_ttl'] <= 604799, 'Remember me: ticked cookie keeps Max-Age until the fixed 7-day end');
+expect_same(null, $rememberOffCreds['cookie_ttl'], 'Remember me: unticked cookie has no Max-Age (browser-session cookie)');
+
+// Audit suffix on the password sign-in success event.
+$rememberAuditLast->execute([$rememberUserId]);
+expect_true(str_ends_with((string) $rememberAuditLast->fetchColumn(), ' Remember me: off.'), 'Remember me: unticked sign-in audit ends with "Remember me: off."');
+$rememberOnAudit = auth_runtime_login($pdo, $config, ['email' => $rememberEmail, 'password' => $rememberPassword, 'remember' => true], $rememberContext);
+$rememberAuditLast->execute([$rememberUserId]);
+expect_true(str_ends_with((string) $rememberAuditLast->fetchColumn(), ' Remember me: on.'), 'Remember me: ticked sign-in audit ends with "Remember me: on."');
+
+// Idle: 2 hours without activity.
+$rememberAge($pdo, (int) $rememberOnCreds['session']['session_id'], '2 hours');
+$rememberAge($pdo, (int) $rememberOffCreds['session']['session_id'], '2 hours');
+$rememberOffExpired = false;
+try {
+    auth_verify_access_token($pdo, $config, $rememberOffCreds['access_token'], $rememberSigningKey);
+} catch (AuthException) {
+    $rememberOffExpired = true;
+}
+expect_true($rememberOffExpired, 'Remember me: an idle unremembered session is rejected by access-token verification');
+// The activity touch (X-DentiSys-User-Activity) works on a remembered idle session and is refused for an unremembered one.
+$_SERVER['HTTP_X_DENTISYS_USER_ACTIVITY'] = '1';
+$rememberOnContext = auth_verify_access_token($pdo, $config, $rememberOnCreds['access_token'], $rememberSigningKey);
+$rememberTouch = $pdo->prepare("SELECT last_seen_at > CURRENT_TIMESTAMP(6) - INTERVAL '1 hour' FROM auth_sessions WHERE session_id = ?");
+$rememberTouch->execute([(int) $rememberOnCreds['session']['session_id']]);
+expect_true(filter_var($rememberTouch->fetchColumn(), FILTER_VALIDATE_BOOLEAN), 'Remember me: activity touch still updates last_seen_at on a remembered session');
+$rememberOffTouchRefused = false;
+try {
+    auth_verify_access_token($pdo, $config, $rememberOffCreds['access_token'], $rememberSigningKey);
+} catch (AuthException) {
+    $rememberOffTouchRefused = true;
+}
+expect_true($rememberOffTouchRefused, 'Remember me: activity touch is refused for an idle unremembered session');
+unset($_SERVER['HTTP_X_DENTISYS_USER_ACTIVITY']);
+expect_true($rememberOnContext['remembered'] === true, 'Remember me: an idle remembered session still verifies and reports remembered=true');
+$rememberMe = auth_runtime_me($pdo, $config, $rememberContext + ['auth_header' => 'Bearer ' . $rememberOnCreds['access_token']]);
+expect_same(true, $rememberMe['remembered'], 'Remember me: /api/auth/me returns remembered=true');
+
+$rememberAge($pdo, (int) $rememberOnCreds['session']['session_id'], '2 hours');
+$rememberAge($pdo, (int) $rememberOffCreds['session']['session_id'], '2 hours');
+$rememberOnRefresh = auth_runtime_refresh($pdo, $config, $rememberContext, $rememberOnCreds['refresh_token']);
+expect_same('rotated', $rememberOnRefresh['type'], 'Remember me: refresh of an idle remembered session succeeds');
+expect_true(is_int($rememberOnRefresh['cookie_ttl']) && $rememberOnRefresh['cookie_ttl'] <= 604799, 'Remember me: refresh keeps the cookie Max-Age at the fixed session end');
+$rememberOffRefresh = auth_runtime_refresh($pdo, $config, $rememberContext, $rememberOffCreds['refresh_token']);
+expect_same('expired', $rememberOffRefresh['type'], 'Remember me: refresh of an idle unremembered session expires');
+$rememberOffRevoked = $pdo->prepare('SELECT revoked_at FROM auth_sessions WHERE session_id = ?');
+$rememberOffRevoked->execute([(int) $rememberOffCreds['session']['session_id']]);
+expect_true($rememberOffRevoked->fetchColumn() !== null, 'Remember me: the idle unremembered session is revoked by the expired refresh');
+
+// Refreshing an unremembered session keeps a session cookie.
+$rememberFresh = auth_runtime_login($pdo, $config, ['email' => $rememberEmail, 'password' => $rememberPassword], $rememberContext)['credentials'];
+$rememberFreshRefresh = auth_runtime_refresh($pdo, $config, $rememberContext, $rememberFresh['refresh_token']);
+expect_same(null, $rememberFreshRefresh['cookie_ttl'], 'Remember me: refresh of an unremembered session still has no Max-Age');
+
+// Sign-out ends a remembered session.
+$rememberLogout = auth_runtime_logout($pdo, $config, $rememberContext, $rememberOnRefresh['child_raw_token']);
+expect_same('completed', $rememberLogout['type'], 'Remember me: sign-out completes for a remembered session');
+$rememberLoggedOut = false;
+try {
+    auth_verify_access_token($pdo, $config, $rememberOnCreds['access_token'], $rememberSigningKey);
+} catch (AuthException) {
+    $rememberLoggedOut = true;
+}
+expect_true($rememberLoggedOut, 'Remember me: sign-out ends the remembered session');
+
+// API: non-boolean remember is a 400; a ticked sign-in survives a revocation path only until it happens (password change).
+[$rememberBadStatus] = integration_http_json('/api/auth/login', '', ['email' => $rememberEmail, 'password' => $rememberPassword, 'remember' => 'yes']);
+expect_same(400, $rememberBadStatus, 'Remember me: non-boolean remember on login is rejected with 400');
+[$rememberHttpStatus, $rememberHttpBody] = integration_http_json('/api/auth/login', '', ['email' => $rememberEmail, 'password' => $rememberPassword, 'remember' => true]);
+expect_same(200, $rememberHttpStatus, 'Remember me: ticked HTTP sign-in succeeds');
+$rememberHttpToken = (string) ($rememberHttpBody['access_token'] ?? '');
+[$rememberHttpMeStatus, $rememberHttpMe] = integration_http_get_json('/api/auth/me', $rememberHttpToken);
+expect_same(true, $rememberHttpMe['remembered'] ?? null, 'Remember me: GET /api/auth/me over HTTP returns remembered=true');
+[$rememberPwStatus] = integration_http_json('/api/auth/password/change', $rememberHttpToken, [
+    'current_password' => $rememberPassword,
+    'new_password' => 'RememberNew2@',
+    'confirm_password' => 'RememberNew2@',
+]);
+expect_same(200, $rememberPwStatus, 'Remember me: password change succeeds on a remembered session');
+[$rememberPwMeStatus] = integration_http_get_json('/api/auth/me', $rememberHttpToken);
+expect_same(401, $rememberPwMeStatus, 'Remember me: password change ends the remembered session');
+
+// The Superadmin is never remembered.
+$pdo->beginTransaction();
+$rememberSuperLocked = auth_lock_user_for_session($pdo, $superUserId);
+$rememberSuperCreds = auth_issue_credentials($pdo, $rememberSuperLocked, $config, $rememberContext, 'password', null, true);
+$pdo->commit();
+$rememberFlag->execute([(int) $rememberSuperCreds['session']['session_id']]);
+expect_true(filter_var($rememberFlag->fetchColumn(), FILTER_VALIDATE_BOOLEAN) === false, 'Remember me: Superadmin remember=true stores remembered=false');
+expect_same(null, $rememberSuperCreds['cookie_ttl'], 'Remember me: Superadmin cookie has no Max-Age');
+$pdo->beginTransaction();
+auth_revoke_session($pdo, (int) $rememberSuperCreds['session']['session_id'], 'Remember me test cleanup', new DateTimeImmutable('now', new DateTimeZone('UTC')));
+$pdo->commit();
+
 
 [$passwordChangeLoginStatus, $passwordChangeLoginBody] = integration_http_json('/api/auth/login', '', [
     'email' => $passwordChangeEmail,

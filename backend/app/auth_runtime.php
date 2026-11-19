@@ -130,12 +130,13 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         return auth_issue_mfa_setup($config, $user, 'password'); // DS11: no session until 2FA is set up
     }
 
+    $remember = ($body['remember'] ?? false) === true;
     $trust = $authenticatorEnabled ? trusted_device_check($pdo, $config, $user) : ['skip' => false, 'headers' => []];
     if (!$authenticatorEnabled || $trust['skip']) {
         $wasInTx = $pdo->inTransaction();
         if (!$wasInTx) { $pdo->beginTransaction(); }
         try {
-            $credentials = auth_issue_credentials($pdo, $user, $config, $context);
+            $credentials = auth_issue_credentials($pdo, $user, $config, $context, 'password', null, $remember);
             // With authenticator 2FA the sign-in is audited at MFA verification.
             audit_record_action(
                 $pdo,
@@ -150,7 +151,7 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
                 'login_success',
                 'user_account',
                 (string) $user['user_id'],
-                $trust['skip'] ? 'Signed in with password; 2FA skipped on a remembered device.' : 'Signed in with password.',
+                ($trust['skip'] ? 'Signed in with password; 2FA skipped on a remembered device.' : 'Signed in with password.') . auth_remember_audit_suffix($credentials['remembered']),
                 ['context' => $context]
             );
             if (!$wasInTx) { $pdo->commit(); }
@@ -166,10 +167,16 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         }
     }
 
-    return auth_issue_two_factor_challenge($config, $user, 'password') + ['cookie_headers' => $trust['headers']];
+    return auth_issue_two_factor_challenge($config, $user, 'password', null, $remember) + ['cookie_headers' => $trust['headers']];
 }
 
-function auth_issue_two_factor_challenge(array $config, array $user, string $authenticationSource = 'password', ?string $pendingGoogleSubject = null): array
+/** Audit suffix for a sign-in success: the stored Remember me value of the new session. */
+function auth_remember_audit_suffix(bool $remembered): string
+{
+    return $remembered ? ' Remember me: on.' : ' Remember me: off.';
+}
+
+function auth_issue_two_factor_challenge(array $config, array $user, string $authenticationSource = 'password', ?string $pendingGoogleSubject = null, bool $remember = false): array
 {
     $jti = jwt_generate_jti();
     $now = time();
@@ -182,6 +189,7 @@ function auth_issue_two_factor_challenge(array $config, array $user, string $aut
         'method' => 'authenticator',
         'authentication_source' => $authenticationSource,
         'pending_google_subject' => $pendingGoogleSubject,
+        'remember' => $remember,
         'iat' => $now,
         'exp' => $now + 300,
     ], $jwtKey);
@@ -283,6 +291,7 @@ function auth_runtime_me(PDO $pdo, array $config, array $context): array
         'display_name' => $authContext['display_name'],
         'session_uuid' => $authContext['session_uuid'],
         'authentication_source' => $authContext['authentication_source'] ?? 'password',
+        'remembered' => (bool) ($authContext['remembered'] ?? false),
         'theme' => auth_runtime_theme($pdo, (int) $authContext['user_id']),
     ];
 
@@ -569,7 +578,8 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
             throw new ChallengeException('Authentication required.');
         }
 
-        if (auth_session_idle_expired($sessionRow['last_seen_at'] ?? null, (string) $sessionRow['created_at'], $nowUtc->getTimestamp())) {
+        $sessionRemembered = filter_var($sessionRow['remembered'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        if (auth_session_idle_expired($sessionRow['last_seen_at'] ?? null, (string) $sessionRow['created_at'], $nowUtc->getTimestamp(), $sessionRemembered)) {
             $auditCtx = audit_begin_operation($pdo);
             auth_revoke_session($pdo, (int) $sessionRow['session_id'], 'Idle timeout', $nowUtc);
             audit_finish_operation($pdo, $auditCtx, [
@@ -724,7 +734,7 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
             'type' => 'rotated',
             'access_token' => $accessResult['token'],
             'child_raw_token' => $childRawToken,
-            'cookie_ttl' => $cookieTtl,
+            'cookie_ttl' => $sessionRemembered ? $cookieTtl : null,
             'user_id' => (int) $lockedUser['user_id'],
         ];
     } catch (\Throwable $e) {
@@ -826,7 +836,7 @@ function auth_runtime_logout(PDO $pdo, array $config, array $context, string $re
     }
 }
 
-function auth_issue_credentials(PDO $pdo, array $lockedUser, array $config, array $context, string $authenticationSource = 'password', ?string $pendingGoogleSubject = null): array
+function auth_issue_credentials(PDO $pdo, array $lockedUser, array $config, array $context, string $authenticationSource = 'password', ?string $pendingGoogleSubject = null, bool $remember = false): array
 {
     if ($pendingGoogleSubject !== null) {
         if ($authenticationSource !== 'google' || $pendingGoogleSubject === '' || strlen($pendingGoogleSubject) > 255) {
@@ -840,6 +850,7 @@ function auth_issue_credentials(PDO $pdo, array $lockedUser, array $config, arra
             throw new AuthException('Google identity is already linked.');
         }
     }
+    $remembered = $remember && $lockedUser['role'] !== 'superadmin';
     $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
     $sessionExpiry = $now->add(new DateInterval('P7D'));
     $refreshExpiry = $sessionExpiry->modify('-1 second');
@@ -852,7 +863,8 @@ function auth_issue_credentials(PDO $pdo, array $lockedUser, array $config, arra
         null,
         $sessionExpiry,
         null,
-        $authenticationSource
+        $authenticationSource,
+        $remembered
     );
 
     $refreshResult = auth_issue_initial_refresh_token(
@@ -883,6 +895,7 @@ function auth_issue_credentials(PDO $pdo, array $lockedUser, array $config, arra
         'refresh_token' => $refreshResult['raw_token'],
         'access_token' => $accessResult['token'],
         'access_claims' => $accessResult['claims'],
-        'cookie_ttl' => $cookieTtl,
+        'cookie_ttl' => $remembered ? $cookieTtl : null,
+        'remembered' => $remembered,
     ];
 }

@@ -51,4 +51,18 @@ auth_idle_timeout_assert(
     'Older created_at with recent last_seen is not idle'
 );
 
+// 9.26 Remember me: a remembered session never idle-expires, however long it has been quiet.
+auth_idle_timeout_assert(
+    !auth_session_idle_expired('2026-11-11 10:00:00.000000', '2026-11-11 10:00:00.000000', $lastSeenAt + 86400, true),
+    'Remembered session is not idle after a day without activity'
+);
+auth_idle_timeout_assert(
+    !auth_session_idle_expired(null, '2026-11-11 10:00:00.000000', $createdAt + 1800, true),
+    'Remembered session with null last_seen is not idle at the limit'
+);
+auth_idle_timeout_assert(
+    auth_session_idle_expired('2026-11-11 10:00:00.000000', '2026-11-11 10:00:00.000000', $lastSeenAt + 1800, false),
+    'Explicitly unremembered session still idles at 1800s'
+);
+
 echo "PASS: auth_session_idle_expired idle-timeout checks\n";

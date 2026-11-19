@@ -226,6 +226,8 @@ The browser's session-refresh request MUST be allowed to complete when the page 
 
 Owner-approved amendment (2026-11-11): A session expires after 30 minutes without user activity, while the existing seven-day absolute session lifetime remains the maximum. The server checks the idle limit on authenticated requests and refresh, updates `auth_sessions.last_seen_at` while the session is active, and revokes the session and its refresh tokens when refresh finds it idle-expired. The frontend tracks user activity across open tabs, signs the user out at the idle limit, and clears authentication immediately when the server rejects an expired session. Access-token expiry alone refreshes the access token while the session is still active; it does not sign out an active user.
 
+Owner-approved amendment (2026-11-20): At sign-in, any user except the Superadmin may tick "Remember me for 7 days". A remembered session has no idle limit, and its refresh cookie lasts until the seven-day absolute lifetime ends. An unremembered session keeps the 30-minute idle limit, and its refresh cookie is a browser-session cookie, so closing the browser ends it. The Superadmin's sessions are never remembered. Every action that ends sessions also ends a remembered session.
+
 Google credentials MUST NOT replace the DentiSYS application-session model.
 
 ## AUTH-008 — Authentication provenance

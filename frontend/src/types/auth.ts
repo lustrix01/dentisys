@@ -14,6 +14,8 @@ export interface SafeUser {
   display_name: string;
   session_uuid: string;
   authentication_source: 'password' | 'google' | 'development_mock';
+  /** "Remember me" was ticked at sign-in (9.26): this session has no 30-minute idle sign-out. */
+  remembered?: boolean;
   /** Saved appearance preference for this account. */
   theme?: 'light' | 'dark';
   student?: {

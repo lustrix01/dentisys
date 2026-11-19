@@ -435,8 +435,8 @@ async function request<T>(
   return responseData as T;
 }
 
-export function login(email: string, password: string): Promise<LoginResponse> {
-  return request<LoginResponse>('POST', '/auth/login', { email, password });
+export function login(email: string, password: string, remember = false): Promise<LoginResponse> {
+  return request<LoginResponse>('POST', '/auth/login', { email, password, remember });
 }
 
 export interface GoogleLoginResponse extends LoginResponse {
@@ -447,8 +447,8 @@ export interface GoogleLoginResponse extends LoginResponse {
   linked?: boolean;
 }
 
-export function loginWithGoogle(credential: string): Promise<GoogleLoginResponse> {
-  return request<GoogleLoginResponse>('POST', '/auth/google', { credential });
+export function loginWithGoogle(credential: string, remember = false): Promise<GoogleLoginResponse> {
+  return request<GoogleLoginResponse>('POST', '/auth/google', { credential, remember });
 }
 
 export function linkGoogleAccount(linkChallengeToken: string, password: string): Promise<GoogleLoginResponse> {

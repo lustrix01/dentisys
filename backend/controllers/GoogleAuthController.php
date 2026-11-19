@@ -125,6 +125,15 @@ function handle_google_login(): void
             return;
         }
 
+        $remember = false;
+        if (array_key_exists('remember', $body['data'])) {
+            if (!is_bool($body['data']['remember'])) {
+                google_auth_error('INVALID_REQUEST', 'remember must be true or false.', 400);
+                return;
+            }
+            $remember = $body['data']['remember'];
+        }
+
         $claims = google_auth_verify_login_credential($config, $context, $body['data']['credential']);
 
         $user = google_auth_user_by_subject($pdo, $claims['sub']);
@@ -137,7 +146,7 @@ function handle_google_login(): void
                 $trust = $mfaEnabled ? trusted_device_check($pdo, $config, $locked) : ['skip' => false, 'headers' => []];
                 if ($mfaEnabled && !$trust['skip']) {
                     $pdo->commit();
-                    $challenge = auth_issue_two_factor_challenge($config, $locked, 'google');
+                    $challenge = auth_issue_two_factor_challenge($config, $locked, 'google', null, $remember);
                     $response = auth_build_no_store_json_response(google_auth_mfa_payload($challenge), 200);
                     $response['headers'] = array_merge($response['headers'], $trust['headers']);
                     auth_controller_emit($response);
@@ -148,8 +157,8 @@ function handle_google_login(): void
                     auth_controller_emit(auth_build_no_store_json_response(auth_mfa_setup_payload(auth_issue_mfa_setup($config, $locked, 'google')), 200));
                     return;
                 }
-                $credentials = auth_issue_credentials($pdo, $locked, $config, $context, 'google');
-                google_auth_audit($pdo, $config, $context, 'google_login_success', 'Success', (int) $locked['user_id'], $trust['skip'] ? 'Google Sign-In completed; 2FA skipped on a remembered device.' : 'Google Sign-In completed.');
+                $credentials = auth_issue_credentials($pdo, $locked, $config, $context, 'google', null, $remember);
+                google_auth_audit($pdo, $config, $context, 'google_login_success', 'Success', (int) $locked['user_id'], ($trust['skip'] ? 'Google Sign-In completed; 2FA skipped on a remembered device.' : 'Google Sign-In completed.') . auth_remember_audit_suffix($credentials['remembered']));
                 $pdo->commit();
             } catch (Throwable $e) {
                 if ($pdo->inTransaction()) { $pdo->rollBack(); }
@@ -180,7 +189,7 @@ function handle_google_login(): void
             return;
         }
 
-        $challenge = google_issue_link_challenge($config, $matching, $claims['sub']);
+        $challenge = google_issue_link_challenge($config, $matching, $claims['sub'], $remember);
         auth_controller_emit(auth_build_no_store_json_response([
             'type' => 'account_link_required',
             'account_link_required' => true,
@@ -254,7 +263,7 @@ function handle_google_link(): void
             $mfaEnabled = google_auth_mfa_enabled($pdo, (int) $user['user_id']);
             $trust = $mfaEnabled ? trusted_device_check($pdo, $config, $user) : ['skip' => false, 'headers' => []];
             if ($mfaEnabled && !$trust['skip']) {
-                $challenge = auth_issue_two_factor_challenge($config, $user, 'google', (string) $claims['pending_google_subject']);
+                $challenge = auth_issue_two_factor_challenge($config, $user, 'google', (string) $claims['pending_google_subject'], ($claims['remember'] ?? false) === true);
                 $pdo->commit();
                 $response = auth_build_no_store_json_response(google_auth_mfa_payload($challenge), 200);
                 $response['headers'] = array_merge($response['headers'], $trust['headers']);
@@ -268,8 +277,8 @@ function handle_google_link(): void
                 return;
             }
 
-            $credentials = auth_issue_credentials($pdo, $user, $config, $context, 'google', (string) $claims['pending_google_subject']);
-            google_auth_audit($pdo, $config, $context, 'google_link_success', 'Success', (int) $user['user_id'], $trust['skip'] ? 'Google identity linked after password confirmation; 2FA skipped on a remembered device.' : 'Google identity linked after password confirmation.');
+            $credentials = auth_issue_credentials($pdo, $user, $config, $context, 'google', (string) $claims['pending_google_subject'], ($claims['remember'] ?? false) === true);
+            google_auth_audit($pdo, $config, $context, 'google_link_success', 'Success', (int) $user['user_id'], ($trust['skip'] ? 'Google identity linked after password confirmation; 2FA skipped on a remembered device.' : 'Google identity linked after password confirmation.') . auth_remember_audit_suffix($credentials['remembered']));
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }

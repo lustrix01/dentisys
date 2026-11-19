@@ -131,16 +131,17 @@ function build_preflight_response(string $allowedOriginsStr, ?string $requestOri
     ];
 }
 
-function build_refresh_cookie_header(string $token, int $ttlSeconds, bool $secure): array
+function build_refresh_cookie_header(string $token, ?int $ttlSeconds, bool $secure): array
 {
     if (preg_match('/[\x00-\x1F\x7F]/', $token) || strpos($token, "\r") !== false || strpos($token, "\n") !== false) {
         throw new \InvalidArgumentException('Refresh token contains invalid characters.');
     }
 
     $securePart = $secure ? '; Secure' : '';
+    $maxAgePart = $ttlSeconds === null ? '' : "; Max-Age=$ttlSeconds";
 
     return [
-        "Set-Cookie: refresh_token=$token; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=$ttlSeconds" . $securePart,
+        "Set-Cookie: refresh_token=$token; HttpOnly; SameSite=Lax; Path=/api/auth" . $maxAgePart . $securePart,
     ];
 }
 

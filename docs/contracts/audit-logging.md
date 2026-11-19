@@ -109,12 +109,12 @@ Legend: **Dean** = shown in the Superadmin overview (the column keeps its old na
 
 | What (label) | Code | Stores | Dean | Own | Change |
 |---|---|---|---|---|---|
-| Signed in | login_success | method (password) | no | Sign-ins filter | KEEP |
+| Signed in | login_success | method (password), Remember me on or off | no | Sign-ins filter | KEEP |
 | Sign-in failed | login_failed | typed email, reason (no account / wrong password / inactive) | yes | — | KEEP |
 | Signed out | logout | session | no | Sign-ins filter | KEEP |
-| Signed in with Google | google_login_success | — | no | Sign-ins filter | KEEP |
+| Signed in with Google | google_login_success | Remember me on or off | no | Sign-ins filter | KEEP |
 | Google sign-in refused | google_login_denied | reason | yes | — | KEEP |
-| Google account linked | google_link_success | — | yes | yes | KEEP |
+| Google account linked | google_link_success | Remember me on or off | yes | yes | KEEP |
 | Google link refused | google_link_denied, google_profile_link_denied | reason | yes | yes | KEEP |
 | Password changed | password_changed | — | yes | yes | KEEP |
 | Password reset requested / completed | password_reset_requested, password_reset_completed | — | yes | yes | KEEP |

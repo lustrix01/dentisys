@@ -395,7 +395,8 @@ function mfa_runtime_verify(PDO $pdo, array $config, array $tokenClaims, string 
             $config,
             $context,
             (string) ($tokenClaims['authentication_source'] ?? 'password'),
-            isset($tokenClaims['pending_google_subject']) ? (string) $tokenClaims['pending_google_subject'] : null
+            isset($tokenClaims['pending_google_subject']) ? (string) $tokenClaims['pending_google_subject'] : null,
+            ($tokenClaims['remember'] ?? false) === true
         );
 
         audit_finish_operation($pdo, $auditCtx, [
@@ -409,7 +410,7 @@ function mfa_runtime_verify(PDO $pdo, array $config, array $tokenClaims, string 
             'session_id' => $credentials['session']['session_id'],
             'target_type' => 'security_token',
             'target_id' => (string) $cred['token_id'],
-            'description' => 'MFA TOTP verification successful.',
+            'description' => 'MFA TOTP verification successful.' . auth_remember_audit_suffix($credentials['remembered']),
             'reason' => null,
             'http_method' => 'POST',
             'endpoint' => '/api/auth/mfa/verify',
@@ -519,7 +520,8 @@ function mfa_runtime_recover(PDO $pdo, array $config, array $tokenClaims, string
             $config,
             $context,
             (string) ($tokenClaims['authentication_source'] ?? 'password'),
-            isset($tokenClaims['pending_google_subject']) ? (string) $tokenClaims['pending_google_subject'] : null
+            isset($tokenClaims['pending_google_subject']) ? (string) $tokenClaims['pending_google_subject'] : null,
+            ($tokenClaims['remember'] ?? false) === true
         );
 
         audit_finish_operation($pdo, $auditCtx, [
@@ -533,7 +535,7 @@ function mfa_runtime_recover(PDO $pdo, array $config, array $tokenClaims, string
             'session_id' => $credentials['session']['session_id'],
             'target_type' => 'security_token',
             'target_id' => (string) $matchedRow['token_id'],
-            'description' => 'MFA recovery verification successful.',
+            'description' => 'MFA recovery verification successful.' . auth_remember_audit_suffix($credentials['remembered']),
             'reason' => null,
             'http_method' => 'POST',
             'endpoint' => '/api/auth/mfa/recover',

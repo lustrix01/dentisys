@@ -54,6 +54,7 @@ export function SsoLogin() {
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [linkChallengeToken, setLinkChallengeToken] = useState<string | null>(null);
@@ -78,7 +79,7 @@ export function SsoLogin() {
     setIsLoading(true);
     setError('');
     try {
-      const result = await loginWithGoogle(credential);
+      const result = await loginWithGoogle(credential, rememberMe);
       if (result.type === 'direct_login' && result.access_token) {
         await completeServerAuthentication(result.access_token);
       } else if (result.type === 'two_factor_required' && result.two_factor_challenge_token) {
@@ -226,7 +227,7 @@ export function SsoLogin() {
     setError('');
 
     try {
-      const result = await apiLogin(loginEmail, password);
+      const result = await apiLogin(loginEmail, password, rememberMe);
 
       if (result.type === 'direct_login' && result.access_token) {
         await completeServerAuthentication(result.access_token);
@@ -251,7 +252,7 @@ export function SsoLogin() {
     <div className="h-screen h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-slate-100 flex items-center justify-center px-0 sm:px-4 font-sans text-slate-800">
       <div className="flex h-full w-full max-w-4xl max-h-full overflow-hidden rounded-none border-0 bg-white shadow-lg sm:rounded-2xl sm:border border-slate-200 md:h-[min(580px,calc(100dvh-3rem))]">
 
-      <main className="h-full w-full md:order-2 md:w-1/2 min-h-0 bg-white flex flex-col justify-between overflow-hidden p-4 sm:p-7 lg:p-8">
+      <main className="h-full w-full md:order-2 md:w-1/2 min-h-0 bg-white flex flex-col justify-between overflow-hidden max-md:overflow-y-auto p-4 sm:p-7 lg:p-8">
 
         <div className="flex justify-start">
           <button
@@ -421,6 +422,27 @@ export function SsoLogin() {
               </div>
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-x-4">
+              <label className="flex min-h-11 md:min-h-6 cursor-pointer items-center gap-2.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={e => setRememberMe(e.target.checked)}
+                  disabled={isLoading}
+                  className="h-4 w-4 shrink-0 accent-accent-600"
+                />
+                Remember me for 7 days
+              </label>
+              <span className="text-xs">
+                <Link
+                  to="/forgot-password"
+                  className="whitespace-nowrap text-xs font-semibold text-purple-600 hover:text-purple-700 hover:underline transition-colors"
+                >
+                  Forgot password?
+                </Link>
+              </span>
+            </div>
+
             {/* Login Button */}
             <button
               type="submit"
@@ -486,16 +508,6 @@ export function SsoLogin() {
               </div>
             </div>
           )}
-
-          {/* 3. NEXT: Forgot Password */}
-          <div className="text-center">
-            <Link
-              to="/forgot-password"
-              className="whitespace-nowrap text-xs font-semibold text-purple-600 hover:text-purple-700 hover:underline transition-colors"
-            >
-              Forgot password?
-            </Link>
-          </div>
 
         </div>
 

@@ -114,6 +114,17 @@ assert_contains('Path=/api/auth', $cookieStr, 'Cookie: Path');
 assert_contains('Max-Age=604800', $cookieStr, 'Cookie: Max-Age');
 assert_not_contains('Secure', $cookieStr, 'Cookie: no Secure when not HTTPS');
 
+// 9.26: a null TTL is a browser-session cookie with no Max-Age (unticked Remember me).
+$sessionCookieStr = implode("
+", build_refresh_cookie_header('testtoken123', null, false));
+assert_not_contains('Max-Age', $sessionCookieStr, 'Session cookie: no Max-Age when TTL is null');
+assert_contains('HttpOnly', $sessionCookieStr, 'Session cookie: HttpOnly');
+assert_contains('Path=/api/auth', $sessionCookieStr, 'Session cookie: Path');
+assert_same("Set-Cookie: refresh_token=testtoken123; HttpOnly; SameSite=Lax; Path=/api/auth", $sessionCookieStr, 'Session cookie: exact header without Max-Age');
+assert_same("Set-Cookie: refresh_token=testtoken123; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=604800", $cookieStr, 'Int TTL cookie header is unchanged');
+assert_contains('; Secure', implode("
+", build_refresh_cookie_header('testtoken123', null, true)), 'Session cookie: Secure when HTTPS');
+
 $secureCookie = build_refresh_cookie_header('testtoken123', 604800, true);
 $secureStr = implode("\n", $secureCookie);
 assert_contains('Secure', $secureStr, 'Cookie: Secure when HTTPS');
