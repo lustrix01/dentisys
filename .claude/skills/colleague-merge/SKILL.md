@@ -133,11 +133,11 @@ The three-way page is the approval page. It shows Before (ours), theirs and Afte
   - demo links.
 - Commit the merge with a message the Owner understands. No push.
 
-## 8. Push and demo deploy (only when told)
+## 8. Push and demo deploy (ask first; only on "push")
 
-Follow `docs/release-guide.md` steps 2–7. For a merge, step 4 applies when `git diff <old ours>..<merge> -- database` is not empty, and step 6 adds a temporary read-only `e2e/live/zz-<name>-check.spec.ts` asserting the changed screens per role: run it with `demo-test.ps1 <spec>`, then delete it.
+Follow `docs/release-guide.md` "Branches and batched promotion" and steps 2–8: push, demo publish and test, then ask merge-or-keep-working, and after a merge ask promote or keep working. For a merge, step 4 applies when `git diff <old ours>..<merge> -- database` is not empty, and step 6 adds a temporary read-only `e2e/live/zz-<name>-check.spec.ts` asserting the changed screens per role: run it with `demo-test.ps1 <spec>`, then delete it.
 
 ## Always
 
-- Finish with `S/cleanup.ps1`, then rewrite the `dentisys-current-state` memory note: commit, pushed or not, demo sha, promote command, rulings.
+- Finish with `S/cleanup.ps1`, then rewrite the `dentisys-current-state` memory note: commit, pushed or not, demo sha, merged or not, awaiting-promotion line, rulings.
 - Each message starts with the state (step, done, next). Each pause for the Owner ends with exactly one question.

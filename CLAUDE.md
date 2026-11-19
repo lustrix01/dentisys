@@ -86,11 +86,13 @@ A bug is fixed only when a test proves it, not when the code looks right.
    database bug with the mocked `e2e/*.spec.ts` suite: it fakes the server. If it
    cannot be reproduced, say so and ask; do not fix a guess.
 3. Fix it; the same test must now pass. Keep the test.
-4. Say "fixed" only after the reporter's exact steps pass on the demo site, and name
-   the sha that was checked. Before that, say "fixed in code". When the demo cannot
-   reproduce it (real user data, a real camera), say "verified on demo except <what>;
-   needs the Owner's check on production".
-5. After the Owner promotes that sha, remind the Owner to tell the reporter.
+4. Say "fixed on demo, not yet on production" only after the reporter's exact steps
+   pass on the demo site, and name the sha that was checked. Before that, say "fixed in
+   code". When the demo cannot reproduce it (real user data, a real camera), say
+   "verified on demo except <what>; needs the Owner's check on production". Add the fix
+   to the "awaiting promotion" line of the `dentisys-current-state` memory note.
+5. After the Owner promotes a sha, remind the Owner to tell the reporter of each fix on
+   that line, then clear those entries.
 
 ## Git
 
