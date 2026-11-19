@@ -36,6 +36,7 @@ Repo `C:\Users\decha\Desktop\Github\dentisys`. Rules in `AGENTS.md` and `CLAUDE.
 - A status in a table with a pinned first column may wrap on phones when one line cannot fit beside the pinned column even after swiping (2026-11-19, Faculty Retention "Remedial exam scheduled": one line from 480 px up, phones wrap). Readable beats one line; measure the room before forcing `nowrap`.
 - Time entry is the clock-style wheel (`components/TimePicker.tsx`), never a grid of tap buttons.
 - Demo shots keep the page's existing toolbar in frame, or the Owner reads the toolbar as removed.
+- A demo shows each device's whole screen (2026-11-20, iPad Pro 13 looked cut): only print and full-page shots are trimmed to their top; `build-demo.py` never crops a viewport shot.
 - Proposed controls stay as close to today's look as possible: no extra information folded into a control's text (a picker showing "CLINIC-4B · Section #22" was rejected as clutter); add a minimal affordance such as a ▾ instead.
 - When the Owner reviews only some pages, their verdict covers only those: show each other page instead of reverting or changing it on their behalf.
 - Justify each change honestly, and say when a page needs no change.

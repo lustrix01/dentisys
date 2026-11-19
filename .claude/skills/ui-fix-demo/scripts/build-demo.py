@@ -33,12 +33,12 @@ here = os.path.dirname(os.path.abspath(__file__))
 demo = json.load(open(demo_file, encoding='utf-8'))
 
 
-def enc(path, scale):
+def enc(path, scale, full_page=False):
     im = Image.open(path).convert('RGB')
     scale = min(scale, 1600 / im.size[0])  # wide desktops: 1600px is plenty on screen and keeps the page small
     if scale != 1.0:
         im = im.resize((round(im.size[0] * scale), round(im.size[1] * scale)), Image.LANCZOS)
-    if im.size[1] > 1400:  # full-page print shots: the top (header, counts, first rows) is what the Owner reads
+    if full_page and im.size[1] > 1400:  # full-page print shots: the top (header, counts, first rows) is what the Owner reads; a viewport shot (a tall iPad) stays whole
         im = im.crop((0, 0, im.size[0], 1400))
     buf = io.BytesIO()
     im.save(buf, 'JPEG', quality=82, optimize=True)  # JPEG at <= 1.5x keeps a 20-fix page well under 16MB
@@ -73,15 +73,16 @@ for fx in demo['fixes']:
             dpr = m.get('dpr', 1)
             down = 1.5 / dpr if dpr > 1.5 else 1.0
             p = lambda mode, d: os.path.join(root, mode, d, name + '.png')
+            fp = bool(m.get('print') or m.get('full'))
             theme = ' · dark' if m['theme'] == 'dark' else ''
             shot = dict(dev=(m['device'] if str(m['viewport']['width']) in m['device'] else f"{m['device']} {m['viewport']['width']}px") + theme, kind=kind(m), w=m['viewport']['width'],
                         cw=int(Image.open(p('before', 'crop')).size[0] / dpr))
             if 'versions' in demo:  # options page: one image per version key
-                shot['v'] = {v['key']: enc(p(v['key'], 'vp'), down) for v in demo['versions']}
-                shot['c'] = {v['key']: enc(p(v['key'], 'crop'), down) for v in demo['versions']}
+                shot['v'] = {v['key']: enc(p(v['key'], 'vp'), down, fp) for v in demo['versions']}
+                shot['c'] = {v['key']: enc(p(v['key'], 'crop'), down, fp) for v in demo['versions']}
             else:
-                shot.update(vb=enc(p('before', 'vp'), down), va=enc(p('after', 'vp'), down),
-                            cb=enc(p('before', 'crop'), down), ca=enc(p('after', 'crop'), down))
+                shot.update(vb=enc(p('before', 'vp'), down, fp), va=enc(p('after', 'vp'), down, fp),
+                            cb=enc(p('before', 'crop'), down, fp), ca=enc(p('after', 'crop'), down, fp))
             shots.append(shot)
     if not shots:
         sys.exit(f'fix {fx["id"]}: no shots for keys {fx["keys"]} - run shots.mjs and verify.py first')

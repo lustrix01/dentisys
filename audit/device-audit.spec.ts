@@ -121,7 +121,9 @@ function inPageCheck(scrolled: boolean): Finding[] {
   for (const e of interactive) {
     const r = e.getBoundingClientRect();
     // 3. small targets (inline text links are exempt)
-    if ((r.width < 24 || r.height < 24) && !(e.tagName === 'A' && css(e).display === 'inline')) add('small-target', 'medium', e, r);
+    // A checkbox or radio wrapped in its label is tapped through the label, so the label's box is the target.
+    const box = e.tagName === 'INPUT' && e.closest('label') ? e.closest('label')!.getBoundingClientRect() : r;
+    if ((box.width < 24 || box.height < 24) && !(e.tagName === 'A' && css(e).display === 'inline')) add('small-target', 'medium', e, r);
     // 4. covered controls
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     if (cx >= 0 && cy >= 0 && cx <= W && cy <= H) {
