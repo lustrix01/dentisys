@@ -33,6 +33,7 @@ Repo `C:\Users\decha\Desktop\Github\dentisys`. Rules in `AGENTS.md` and `CLAUDE.
 - Improve inside today's layout (2026-11-07). Restructuring pages for consistency's sake was rejected ("before was easier on the eyes").
 - One control per job on a toolbar (2026-11-17): Reports keep one Excel and one PDF control; a tab with several reports turns each into a ▾ menu instead of adding buttons.
 - Open menus and popovers never print: their panel carries `no-print` (2026-11-18).
+- A status in a table with a pinned first column may wrap on phones when one line cannot fit beside the pinned column even after swiping (2026-11-19, Faculty Retention "Remedial exam scheduled": one line from 480 px up, phones wrap). Readable beats one line; measure the room before forcing `nowrap`.
 - Time entry is the clock-style wheel (`components/TimePicker.tsx`), never a grid of tap buttons.
 - Demo shots keep the page's existing toolbar in frame, or the Owner reads the toolbar as removed.
 - Proposed controls stay as close to today's look as possible: no extra information folded into a control's text (a picker showing "CLINIC-4B · Section #22" was rejected as clutter); add a minimal affordance such as a ▾ instead.

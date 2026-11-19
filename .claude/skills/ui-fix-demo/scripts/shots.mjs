@@ -7,7 +7,7 @@
 // endsOn: the page a flow is meant to end on when it is not the route (verify.py checks it instead of route).
 // target fields: id, device (a name from audit/devices.json, a tier "quick"|"core"|"full" = every device in it,
 //   a Playwright profile or "Desktop 1440 900"), role, route, mock?, tab?, fill?, upload?, click?, steps?, sel?, text? (regex),
-//   closest? (CSS selector to frame), up? (parent hops), theme? ("light"|"dark"), full?, expect? ("same"),
+//   select? ([selector, option label]), stepsAfter? (steps run after select), closest? (CSS selector to frame), up? (parent hops), theme? ("light"|"dark"), full?, expect? ("same"),
 //   noScroll? (no scrolling, viewport shot: open menus/popovers that close on scroll), print? (print view: window.print stubbed, print media, full page)
 import { createRequire } from 'node:module';
 import { createHmac } from 'node:crypto';
@@ -99,6 +99,11 @@ for (const [k, list] of groups) {
       if (t.upload) { await page.setInputFiles(t.upload[0], t.upload[1]); await page.waitForTimeout(1500); }
       // select: [selector, option label]; skipped when the control exists on one side only (a new filter)
       if (t.select) { const s = page.locator(t.select[0]).filter({ visible: true, has: page.locator('option', { hasText: t.select[1] }) }); if (await s.count()) { await s.first().selectOption({ label: t.select[1] }); await page.waitForTimeout(1200); } else meta.selectSkipped = true; }
+      // stepsAfter: like steps, but after select (a filter that must be set before the click it leads to)
+      for (const s of t.stepsAfter ?? []) {
+        const l = s.role ? page.getByRole(s.role, { name: new RegExp(s.name, 'i') }) : page.locator(s.css, s.text ? { hasText: new RegExp(s.text) } : undefined);
+        await l.nth(s.nth ?? 0).click(); await page.waitForTimeout(s.wait ?? 900);
+      }
       if (t.click) { await page.locator('button', { hasText: new RegExp(t.click, 'i') }).filter({ visible: true }).first().click(); await page.waitForTimeout(800); }
       // then: [[selector, value] (fill) | {click: regex} | {check: selector}, ...] after click, for flows that continue on the next page
       for (const s of t.then ?? []) {

@@ -21,7 +21,7 @@ if (role !== 'public') {
 }
 for (const w of ws) {
   await p.setViewportSize({ width: +w, height: 900 }); await p.goto(route); await p.waitForTimeout(1200);
-  if (tab !== '-') { await p.getByRole('button', { name: new RegExp('^\\s*' + tab) }).first().click(); await p.waitForTimeout(700); }
+  if (tab !== '-') { const re = new RegExp('^\\s*' + tab), asTab = p.getByRole('tab', { name: re }); await ((await asTab.count()) ? asTab : p.getByRole('button', { name: re })).first().click(); await p.waitForTimeout(700); }
   console.log(w, JSON.stringify(await p.evaluate(fn)));
 }
 await b.close();
