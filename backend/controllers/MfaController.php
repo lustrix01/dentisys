@@ -118,6 +118,7 @@ function handle_mfa_settings_status(): void
                 'enabled' => (int) ($status['enabled_count'] ?? 0) === 1,
                 'authenticator_enabled' => (int) ($status['enabled_count'] ?? 0) === 1,
                 'recovery_code_count' => (int) ($status['recovery_count'] ?? 0),
+                'trusted_device_count' => trusted_device_active_count($pdo, (int) $authCtx['user_id']),
             ],
         ], 200));
     } catch (ChallengeException | AuthException $e) {
@@ -173,6 +174,7 @@ function handle_mfa_settings_recovery_codes(): void
                 $pdo, $config, $authCtx, 'mfa', 'mfa_recovery_codes_regenerated', 'user_account', (string) $authCtx['user_id'],
                 'Regenerated recovery codes.'
             );
+            trusted_device_revoke_all($pdo, $config, $authCtx, (int) $authCtx['user_id'], 'recovery_regenerated');
             $pdo->commit();
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {
@@ -194,6 +196,39 @@ function handle_mfa_settings_recovery_codes(): void
         auth_controller_emit(auth_build_no_store_message_response('Too many requests.', 429));
     } catch (\Throwable $e) {
         error_log('MFA recovery regeneration error: ' . sanitize_for_log($e));
+        auth_controller_emit(auth_build_no_store_message_response('Internal server error.', 500));
+    }
+}
+
+/** 9.24: signed-in user forgets every remembered device of their own account; no code needed. */
+function handle_mfa_trusted_devices_forget(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = mfa_authenticated_context($pdo, $config);
+        $userId = (int) $authCtx['user_id'];
+        $rateStorage = ['dir' => $config['rate_limit']['storage_dir']];
+        rate_limit_check($rateStorage, bin2hex(hash('sha256', 'user:' . $userId, true)), 'post_mfa_trusted_forget', 300, 10);
+
+        $pdo->beginTransaction();
+        try {
+            $forgotten = trusted_device_revoke_all($pdo, $config, $authCtx, $userId, 'forgotten');
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        auth_controller_emit(auth_build_no_store_json_response(['forgotten' => $forgotten], 200));
+    } catch (ChallengeException | AuthException $e) {
+        auth_controller_emit(auth_build_no_store_message_response('Authentication required.', 401));
+    } catch (RateLimitException $e) {
+        auth_controller_emit(auth_build_no_store_message_response('Too many requests.', 429));
+    } catch (\Throwable $e) {
+        error_log('MFA trusted devices forget error: ' . sanitize_for_log($e));
         auth_controller_emit(auth_build_no_store_message_response('Internal server error.', 500));
     }
 }
@@ -236,6 +271,7 @@ function handle_mfa_settings_revoke(): void
                 'Disabled authenticator 2FA and revoked unused recovery codes.',
                 ['reason' => 'Revoked by account owner']
             );
+            trusted_device_revoke_all($pdo, $config, $authCtx, (int) $authCtx['user_id'], 'two_factor_off');
             $pdo->commit();
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {
@@ -445,7 +481,16 @@ function handle_mfa_verify(): void
             throw new ChallengeException('Authenticator 2FA is required.');
         }
 
-        $result = mfa_runtime_verify($pdo, $config, $claims, $code, $context);
+        $rememberDevice = false;
+        if (array_key_exists('remember_device', $body['data'])) {
+            if (!is_bool($body['data']['remember_device'])) {
+                auth_controller_emit(auth_build_no_store_message_response('remember_device must be true or false.', 400));
+                return;
+            }
+            $rememberDevice = $body['data']['remember_device'];
+        }
+
+        $result = mfa_runtime_verify($pdo, $config, $claims, $code, $context, $rememberDevice);
 
         $cred = $result['credentials'];
         $response = auth_build_no_store_json_response([
@@ -462,6 +507,9 @@ function handle_mfa_verify(): void
             $isHttps
         );
         $response['headers'] = array_merge($response['headers'], $cookieHeaders);
+        if ($result['trusted_device_token'] !== null) {
+            $response['headers'] = array_merge($response['headers'], build_trusted_device_cookie_header($result['trusted_device_token'], $isHttps));
+        }
 
         auth_controller_emit($response);
     } catch (ChallengeException | AuthException | \RuntimeException $e) {

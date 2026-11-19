@@ -123,6 +123,8 @@ Legend: **Dean** = shown in the Superadmin overview (the column keeps its old na
 | Wrong 2FA or recovery code | mfa_verification_failed | which kind; never the code | yes | Sign-ins filter | **NEW** |
 | Recovery codes regenerated | mfa_recovery_codes_regenerated | never the codes | yes | yes | **NEW** |
 | 2FA turned off | mfa_revoked | reason | yes | yes | KEEP |
+| Device remembered | trusted_device_remembered | — | yes | yes | NEW (9.24) |
+| Trusted devices forgotten | trusted_devices_forgotten | count and reason (Forget button, 2FA off or on, recovery codes regenerated); not written when 0 | yes | yes | NEW (9.24) |
 | 2FA reset | mfa_reset_by_dean | reason, never secrets; counts in the "2FA turned off" attention card | yes | — | **NEW** |
 | Stolen sign-in token blocked | refresh_reuse_detected | session | yes | Sign-ins filter | KEEP |
 | Name changed | profile_updated | name before → after | yes | yes | CHANGE (add before) |

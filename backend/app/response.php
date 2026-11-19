@@ -62,7 +62,7 @@ function emit_response(array $response): void
     http_response_code($response['status_code']);
 
     foreach ($response['headers'] as $header) {
-        header($header);
+        header($header, stripos($header, 'Set-Cookie:') !== 0); // several cookies may share one response
     }
 
     echo $response['body'];

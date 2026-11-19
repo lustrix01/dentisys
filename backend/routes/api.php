@@ -188,6 +188,12 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'POST',
+        'path' => '/api/auth/mfa/trusted-devices/forget',
+        'handler' => 'handle_mfa_trusted_devices_forget',
+        'has_params' => false,
+    ],
+    [
         'method' => 'GET',
         'path' => '/api/auth/me',
         'handler' => 'handle_me',

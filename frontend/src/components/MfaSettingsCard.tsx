@@ -5,6 +5,7 @@ import { Modal } from './Modal';
 import {
   ApiError,
   confirmEnrollment,
+  forgetTrustedDevicesApi,
   getMfaSettingsApi,
   regenerateMfaRecoveryCodesApi,
   revokeMfaApi,
@@ -28,6 +29,8 @@ export const MfaSettingsCard: React.FC<{
 }> = ({ onAuthenticatorStatusChange, required = false }) => {
   const [authenticatorEnabled, setAuthenticatorEnabled] = useState(false);
   const [recoveryCount, setRecoveryCount] = useState(0);
+  const [trustedCount, setTrustedCount] = useState(0);
+  const [forgetOpen, setForgetOpen] = useState(false);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [code, setCode] = useState('');
@@ -54,12 +57,14 @@ export const MfaSettingsCard: React.FC<{
       setAuthenticatorEnabled(twoFactor.authenticator_enabled);
       onAuthenticatorStatusChange?.(twoFactor.authenticator_enabled);
       setRecoveryCount(twoFactor.recovery_code_count);
+      setTrustedCount(Number.isInteger(twoFactor.trusted_device_count) && twoFactor.trusted_device_count > 0 ? twoFactor.trusted_device_count : 0);
       setStatusAvailable(true);
     } catch (requestError) {
       setStatusAvailable(false);
       setAuthenticatorEnabled(false);
       onAuthenticatorStatusChange?.(false);
       setRecoveryCount(0);
+      setTrustedCount(0);
       setError(requestError instanceof Error ? requestError.message : 'Could not load 2FA settings. Reload the page.');
     } finally {
       setLoading(false);
@@ -95,6 +100,7 @@ export const MfaSettingsCard: React.FC<{
       onAuthenticatorStatusChange?.(true);
       setRecoveryCodes(response.recovery_codes);
       setRecoveryCount(response.recovery_codes.length);
+      setTrustedCount(0);
       setEnrollment(null); setCode('');
       setSuccess('Authenticator 2FA enabled.');
     } catch (requestError) {
@@ -112,7 +118,7 @@ export const MfaSettingsCard: React.FC<{
     setWorking(true); setError('');
     try {
       const response = await revokeMfaApi(code);
-      setAuthenticatorEnabled(false); setRecoveryCount(0); setRecoveryCodes([]); setCode('');
+      setAuthenticatorEnabled(false); setRecoveryCount(0); setTrustedCount(0); setRecoveryCodes([]); setCode('');
       onAuthenticatorStatusChange?.(false);
       setSuccess(response.message);
     } catch (requestError) {
@@ -127,9 +133,21 @@ export const MfaSettingsCard: React.FC<{
       const response = await regenerateMfaRecoveryCodesApi(code);
       setRecoveryCodes(response.recovery_codes);
       setRecoveryCount(response.recovery_codes.length);
+      setTrustedCount(0);
       setCode(''); setSuccess(response.message);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Could not regenerate recovery codes. Try again.');
+    } finally { setWorking(false); }
+  };
+
+  const forgetTrustedDevices = async () => {
+    setWorking(true); setError('');
+    try {
+      await forgetTrustedDevicesApi();
+      setForgetOpen(false); setTrustedCount(0); setSuccess('Remembered devices forgotten.');
+    } catch (requestError) {
+      setForgetOpen(false);
+      setError(requestError instanceof Error ? requestError.message : 'Could not forget remembered devices. Try again.');
     } finally { setWorking(false); }
   };
 
@@ -155,6 +173,12 @@ export const MfaSettingsCard: React.FC<{
               {!required && <button type="button" onClick={() => void disableAuthenticator()} disabled={working || code.length !== 6} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Disable</button>}
             </div>
           )}
+          {authenticatorEnabled && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Remembered devices: {trustedCount}</p>
+              <button type="button" onClick={() => setForgetOpen(true)} disabled={working || trustedCount === 0} className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Forget my trusted devices</button>
+            </div>
+          )}
           {required && <p className="text-xs text-slate-500 dark:text-slate-400">2FA is required for the Superadmin and cannot be turned off.</p>}
         </div>
 
@@ -171,6 +195,15 @@ export const MfaSettingsCard: React.FC<{
         </div>}
       </Modal>
 
+      <Modal isOpen={forgetOpen} onClose={() => setForgetOpen(false)} title="Forget Trusted Devices" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-300">Forget all remembered devices? You'll enter your code at the next sign-in on each one.</p>
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+            <button type="button" onClick={() => setForgetOpen(false)} className="min-h-11 rounded-xl px-4 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button>
+            <button type="button" onClick={() => void forgetTrustedDevices()} disabled={working} className="min-h-11 rounded-xl px-4 text-xs font-bold text-white disabled:opacity-50 bg-rose-600 hover:bg-rose-700">Forget devices</button>
+          </div>
+        </div>
+      </Modal>
     </Card>
   );
 };

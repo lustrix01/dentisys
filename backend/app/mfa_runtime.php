@@ -281,6 +281,9 @@ function mfa_runtime_enroll_confirm(PDO $pdo, array $config, array $tokenClaims,
             'user_agent' => $context['user_agent'],
         ], $macKey);
 
+        // Turning 2FA on forgets any device remembered under an earlier 2FA (9.24).
+        trusted_device_revoke_all($pdo, $config, $locked, $userId, 'two_factor_on', $context);
+
         $pdo->commit();
     } catch (\Throwable $e) {
         if ($pdo->inTransaction()) { $pdo->rollBack(); }
@@ -292,7 +295,7 @@ function mfa_runtime_enroll_confirm(PDO $pdo, array $config, array $tokenClaims,
     ];
 }
 
-function mfa_runtime_verify(PDO $pdo, array $config, array $tokenClaims, string $code, array $context): array
+function mfa_runtime_verify(PDO $pdo, array $config, array $tokenClaims, string $code, array $context, bool $rememberDevice = false): array
 {
     if (($tokenClaims['method'] ?? null) !== 'authenticator') {
         throw new ChallengeException('This challenge does not allow authenticator verification.');
@@ -415,6 +418,8 @@ function mfa_runtime_verify(PDO $pdo, array $config, array $tokenClaims, string 
             'user_agent' => $context['user_agent'],
         ], $macKey);
 
+        $deviceToken = $rememberDevice ? trusted_device_remember($pdo, $config, $locked, $context) : null;
+
         $pdo->commit();
     } catch (\Throwable $e) {
         if ($pdo->inTransaction()) { $pdo->rollBack(); }
@@ -424,7 +429,7 @@ function mfa_runtime_verify(PDO $pdo, array $config, array $tokenClaims, string 
         throw $e;
     }
 
-    return ['credentials' => $credentials];
+    return ['credentials' => $credentials, 'trusted_device_token' => $deviceToken];
 }
 
 function mfa_runtime_recover(PDO $pdo, array $config, array $tokenClaims, string $code, array $context): array

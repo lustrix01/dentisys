@@ -322,6 +322,7 @@ $expectedMigrations = [
     '066_class_join_codes.sql',
     '067_auto_sessions.sql',
     '068_superadmin_role.sql',
+    '069_mfa_trusted_devices.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -7928,5 +7929,6 @@ require __DIR__ . '/superadmin_split_integration.php';
 require __DIR__ . '/superadmin_classes_integration.php';
 require __DIR__ . '/face_flags_integration.php';
 require __DIR__ . '/audit_chain_integration.php';
+require __DIR__ . '/trusted_devices_integration.php';
 
 echo "ALL POSTGRESQL INTEGRATION TESTS PASSED.\n";

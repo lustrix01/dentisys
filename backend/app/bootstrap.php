@@ -31,6 +31,7 @@ require_once __DIR__ . '/student_auth.php';
 require_once __DIR__ . '/attendance_sessions.php';
 require_once __DIR__ . '/student_biometrics.php';
 require_once __DIR__ . '/face_flags.php';
+require_once __DIR__ . '/trusted_devices.php';
 require_once __DIR__ . '/auth_runtime.php';
 require_once __DIR__ . '/mfa_runtime.php';
 require_once __DIR__ . '/../controllers/AuthController.php';

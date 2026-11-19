@@ -130,7 +130,8 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         return auth_issue_mfa_setup($config, $user, 'password'); // DS11: no session until 2FA is set up
     }
 
-    if (!$authenticatorEnabled) {
+    $trust = $authenticatorEnabled ? trusted_device_check($pdo, $config, $user) : ['skip' => false, 'headers' => []];
+    if (!$authenticatorEnabled || $trust['skip']) {
         $wasInTx = $pdo->inTransaction();
         if (!$wasInTx) { $pdo->beginTransaction(); }
         try {
@@ -149,7 +150,7 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
                 'login_success',
                 'user_account',
                 (string) $user['user_id'],
-                'Signed in with password.',
+                $trust['skip'] ? 'Signed in with password; 2FA skipped on a remembered device.' : 'Signed in with password.',
                 ['context' => $context]
             );
             if (!$wasInTx) { $pdo->commit(); }
@@ -157,6 +158,7 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
                 'type' => 'direct_login',
                 'credentials' => $credentials,
                 'user' => $user,
+                'cookie_headers' => $trust['headers'],
             ];
         } catch (\Throwable $e) {
             if (!$wasInTx && $pdo->inTransaction()) { $pdo->rollBack(); }
@@ -164,7 +166,7 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         }
     }
 
-    return auth_issue_two_factor_challenge($config, $user, 'password');
+    return auth_issue_two_factor_challenge($config, $user, 'password') + ['cookie_headers' => $trust['headers']];
 }
 
 function auth_issue_two_factor_challenge(array $config, array $user, string $authenticationSource = 'password', ?string $pendingGoogleSubject = null): array

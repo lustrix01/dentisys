@@ -50,7 +50,7 @@ function handle_login(): void
                 $cred['cookie_ttl'],
                 $isHttps
             );
-            $response['headers'] = array_merge($response['headers'], $cookieHeaders);
+            $response['headers'] = array_merge($response['headers'], $cookieHeaders, $result['cookie_headers'] ?? []);
 
             auth_controller_emit($response);
             return;
@@ -66,7 +66,9 @@ function handle_login(): void
             ];
         }
 
-        auth_controller_emit(auth_build_no_store_json_response($payload, 200));
+        $response = auth_build_no_store_json_response($payload, 200);
+        $response['headers'] = array_merge($response['headers'], $result['cookie_headers'] ?? []);
+        auth_controller_emit($response);
     } catch (InvalidCredentialsException $e) {
         auth_controller_emit(auth_build_no_store_message_response('Invalid credentials.', 401));
     } catch (AuthException $e) {

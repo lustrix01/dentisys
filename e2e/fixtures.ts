@@ -37,7 +37,7 @@ const KNOWN_API_PATHS = new Set([
   '/api/rooms', '/api/admin/people', '/api/admin/courses', '/api/admin/rooms', '/api/admin/overview', '/api/admin/face-flags', '/api/admin/people/filters', '/api/admin/classes', '/api/admin/classes/filters', '/api/admin/classes/detail',
   '/api/admin/people/transfer-dean', '/api/admin/classes/change-faculty', '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/google', '/api/auth/google/link', '/api/auth/google/link/profile', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/faculty/activate', '/api/auth/mfa/enroll/start',
   '/api/auth/mfa/enroll/confirm', '/api/auth/mfa/verify', '/api/auth/mfa/recover', '/api/auth/mfa/settings',
-  '/api/auth/mfa/settings/recovery-codes', '/api/auth/mfa/settings/revoke', '/api/auth/me', '/api/auth/refresh', '/api/auth/theme',
+  '/api/auth/mfa/settings/recovery-codes', '/api/auth/mfa/settings/revoke', '/api/auth/mfa/trusted-devices/forget', '/api/auth/me', '/api/auth/refresh', '/api/auth/theme',
   '/api/auth/logout', '/api/auth/password/reset-request', '/api/auth/password/reset-confirm',
   '/api/auth/student/invitation', '/api/auth/student/activate', '/api/auth/development/mock-student-session',
   '/api/admin/faculty-invitations', '/api/admin/faculty-invitations/reissue', '/api/faculty/student-invitations', '/api/admin/dashboard/kpis', '/api/admin/retention/criteria',
@@ -262,7 +262,7 @@ function responseFor(pathname: string, method: string): unknown {
     };
   }
   if (pathname.endsWith('/retention/criteria') || pathname.endsWith('/retention')) return { status: 'ok', criteria: [], records: [], retention: [] };
-  if (pathname.endsWith('/mfa/settings')) return { status: 'ok', two_factor: { enabled: false, authenticator_enabled: false, recovery_code_count: 0 } };
+  if (pathname.endsWith('/mfa/settings')) return { status: 'ok', two_factor: { enabled: false, authenticator_enabled: false, recovery_code_count: 0, trusted_device_count: 0 } };
   if (method === 'GET') return [];
   return { status: 'ok', message: 'Deterministic mocked response.' };
 }

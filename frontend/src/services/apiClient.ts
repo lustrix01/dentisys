@@ -505,8 +505,8 @@ export function confirmEnrollment(confirmationToken: string, code: string, token
   return request<EnrollConfirmResponse>('POST', '/auth/mfa/enroll/confirm', { confirmation_token: confirmationToken, code }, token);
 }
 
-export function verifyMfa(mfaSessionToken: string, code: string): Promise<MfaSuccessResponse> {
-  return request<MfaSuccessResponse>('POST', '/auth/mfa/verify', { code }, mfaSessionToken);
+export function verifyMfa(mfaSessionToken: string, code: string, rememberDevice = false): Promise<MfaSuccessResponse> {
+  return request<MfaSuccessResponse>('POST', '/auth/mfa/verify', { code, remember_device: rememberDevice }, mfaSessionToken);
 }
 
 export function recoverMfa(mfaSessionToken: string, code: string): Promise<MfaSuccessResponse> {
@@ -519,9 +519,14 @@ export function getMfaSettingsApi(): Promise<{
     enabled: boolean;
     authenticator_enabled: boolean;
     recovery_code_count: number;
+    trusted_device_count: number;
   };
 }> {
   return request('GET', '/auth/mfa/settings');
+}
+
+export function forgetTrustedDevicesApi(): Promise<{ forgotten: number }> {
+  return request('POST', '/auth/mfa/trusted-devices/forget');
 }
 
 export function regenerateMfaRecoveryCodesApi(code: string): Promise<{

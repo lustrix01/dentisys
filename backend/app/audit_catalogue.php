@@ -60,6 +60,8 @@ function audit_catalogue(): array
         'mfa_verification_failed' => ['Wrong 2FA or recovery code', $S, true, true],
         'mfa_recovery_codes_regenerated' => ['Recovery codes regenerated', $S, true, false],
         'mfa_revoked' => ['2FA turned off', $S, true, false],
+        'trusted_device_remembered' => ['Device remembered', $S, true, false],
+        'trusted_devices_forgotten' => ['Trusted devices forgotten', $S, true, false],
         'mfa_reset_by_dean' => ['2FA reset', $S, true, false],
         'superadmin_2fa_reset' => ['Superadmin 2FA reset on the server', $S, true, false],
         'refresh_reuse_detected' => ['Stolen sign-in token blocked', $S, true, true],

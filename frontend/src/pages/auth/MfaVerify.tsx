@@ -18,6 +18,7 @@ export function MfaVerify() {
   } = useAuth();
   const [mode, setMode] = useState<Mode>('totp');
   const [code, setCode] = useState('');
+  const [rememberDevice, setRememberDevice] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -42,7 +43,7 @@ export function MfaVerify() {
 
     try {
       const result = mode === 'totp'
-        ? await verifyMfa(twoFactorToken, trimmed)
+        ? await verifyMfa(twoFactorToken, trimmed, rememberDevice)
         : await recoverMfa(twoFactorToken, trimmed);
       const accessTokenToUse = result.access_token;
 
@@ -110,6 +111,19 @@ export function MfaVerify() {
                 />
               </div>
 
+              {mode === 'totp' && (
+                <label className="flex min-h-11 cursor-pointer items-center gap-2.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={rememberDevice}
+                    onChange={e => setRememberDevice(e.target.checked)}
+                    disabled={loading}
+                    className="h-4 w-4 shrink-0 accent-accent-600"
+                  />
+                  Remember this device for 30 days
+                </label>
+              )}
+
               <button
                 type="submit"
                 disabled={loading || !code.trim()}
@@ -128,6 +142,7 @@ export function MfaVerify() {
                 onClick={() => {
                   setMode(mode === 'totp' ? 'recovery' : 'totp');
                   setCode('');
+                  setRememberDevice(false);
                   setError('');
                 }}
                 className="text-xs font-semibold text-accent-600 dark:text-accent-400 hover:underline transition-all cursor-pointer"

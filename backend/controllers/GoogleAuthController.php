@@ -133,19 +133,23 @@ function handle_google_login(): void
             try {
                 $locked = auth_lock_user_for_session($pdo, (int) $user['user_id']);
                 google_auth_validate_account($pdo, $config, $locked);
-                if (google_auth_mfa_enabled($pdo, (int) $locked['user_id'])) {
+                $mfaEnabled = google_auth_mfa_enabled($pdo, (int) $locked['user_id']);
+                $trust = $mfaEnabled ? trusted_device_check($pdo, $config, $locked) : ['skip' => false, 'headers' => []];
+                if ($mfaEnabled && !$trust['skip']) {
                     $pdo->commit();
                     $challenge = auth_issue_two_factor_challenge($config, $locked, 'google');
-                    auth_controller_emit(auth_build_no_store_json_response(google_auth_mfa_payload($challenge), 200));
+                    $response = auth_build_no_store_json_response(google_auth_mfa_payload($challenge), 200);
+                    $response['headers'] = array_merge($response['headers'], $trust['headers']);
+                    auth_controller_emit($response);
                     return;
                 }
-                if ($locked['role'] === 'superadmin') { // DS11: no session until 2FA is set up
+                if (!$mfaEnabled && $locked['role'] === 'superadmin') { // DS11: no session until 2FA is set up
                     $pdo->commit();
                     auth_controller_emit(auth_build_no_store_json_response(auth_mfa_setup_payload(auth_issue_mfa_setup($config, $locked, 'google')), 200));
                     return;
                 }
                 $credentials = auth_issue_credentials($pdo, $locked, $config, $context, 'google');
-                google_auth_audit($pdo, $config, $context, 'google_login_success', 'Success', (int) $locked['user_id'], 'Google Sign-In completed.');
+                google_auth_audit($pdo, $config, $context, 'google_login_success', 'Success', (int) $locked['user_id'], $trust['skip'] ? 'Google Sign-In completed; 2FA skipped on a remembered device.' : 'Google Sign-In completed.');
                 $pdo->commit();
             } catch (Throwable $e) {
                 if ($pdo->inTransaction()) { $pdo->rollBack(); }
@@ -247,13 +251,17 @@ function handle_google_link(): void
             }
 
             challenge_state_consume($rateStorage, (string) $claims['jti'], 'google_link_challenge', 'complete_link');
-            if (google_auth_mfa_enabled($pdo, (int) $user['user_id'])) {
+            $mfaEnabled = google_auth_mfa_enabled($pdo, (int) $user['user_id']);
+            $trust = $mfaEnabled ? trusted_device_check($pdo, $config, $user) : ['skip' => false, 'headers' => []];
+            if ($mfaEnabled && !$trust['skip']) {
                 $challenge = auth_issue_two_factor_challenge($config, $user, 'google', (string) $claims['pending_google_subject']);
                 $pdo->commit();
-                auth_controller_emit(auth_build_no_store_json_response(google_auth_mfa_payload($challenge), 200));
+                $response = auth_build_no_store_json_response(google_auth_mfa_payload($challenge), 200);
+                $response['headers'] = array_merge($response['headers'], $trust['headers']);
+                auth_controller_emit($response);
                 return;
             }
-            if ($user['role'] === 'superadmin') { // DS11: no session until 2FA is set up
+            if (!$mfaEnabled && $user['role'] === 'superadmin') { // DS11: no session until 2FA is set up
                 $setup = auth_issue_mfa_setup($config, $user, 'google', (string) $claims['pending_google_subject']);
                 $pdo->commit();
                 auth_controller_emit(auth_build_no_store_json_response(auth_mfa_setup_payload($setup), 200));
@@ -261,7 +269,7 @@ function handle_google_link(): void
             }
 
             $credentials = auth_issue_credentials($pdo, $user, $config, $context, 'google', (string) $claims['pending_google_subject']);
-            google_auth_audit($pdo, $config, $context, 'google_link_success', 'Success', (int) $user['user_id'], 'Google identity linked after password confirmation.');
+            google_auth_audit($pdo, $config, $context, 'google_link_success', 'Success', (int) $user['user_id'], $trust['skip'] ? 'Google identity linked after password confirmation; 2FA skipped on a remembered device.' : 'Google identity linked after password confirmation.');
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }

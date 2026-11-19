@@ -203,7 +203,7 @@ Google ───┘
 
 Google Sign-In MUST NOT bypass required DentiSYS MFA.
 
-The Superadmin may reset a Faculty, Student or Dean account's 2FA (ADM-001); the reset ends the account's sessions and emails the person. 2FA is required for the Superadmin: it is set up at the first sign-in before any page opens and cannot be turned off. Only the system administrator's server script resets it, when the Superadmin has lost both its authenticator and its recovery codes.
+The Superadmin may reset a Faculty, Student or Dean account's 2FA (ADM-001); the reset ends the account's sessions and emails the person. 2FA is required for the Superadmin: it is set up at the first sign-in before any page opens and cannot be turned off. Only the system administrator's server script resets it, when the Superadmin has lost both its authenticator and its recovery codes. A user with 2FA, the Superadmin included, may tick "Remember this device for 30 days" on the 2FA code step at sign-in (not when using a recovery code); that browser then skips the code at sign-in for 30 days from that moment, never the password or Google step, and one browser remembers one account at a time. A remembered device stops working on password change or reset, 2FA reset, turning 2FA off or on, recovery-code regeneration, sign-out everywhere, deactivation, an email move, a Dean handover or "Forget my trusted devices" in Profile.
 
 Email-code authentication/MFA is retired and MUST NOT be reintroduced unless explicitly approved.
 

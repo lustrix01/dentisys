@@ -29,7 +29,7 @@ export function totp(secret: string, step: number): string {
 // accepts each 30-second step once, so even the first sign-in waits for a fresh step (at most 30 s).
 let lastStep = Math.floor(Date.now() / 30_000);
 /** The server accepts each 30-second step once, so a second sign-in in the same step waits for the next one. */
-async function nextCode(): Promise<string> {
+export async function nextCode(): Promise<string> {
   let step = Math.floor(Date.now() / 30_000);
   while (step <= lastStep) {
     await new Promise(resolve => setTimeout(resolve, 1_000));
