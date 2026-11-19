@@ -43,7 +43,7 @@ for ($i = 0; $i -lt 60 -and -not $ready; $i++) {
 }
 if (-not $ready) { throw "Vite did not answer on $Port; see $log.err" }
 
-$app = Get-Content 'C:\Users\decha\.claude\skills\ui-fix-demo\references\dentisys.app.json' -Raw
+$app = Get-Content (Join-Path $Repo '.claude\skills\ui-fix-demo\references\dentisys.app.json') -Raw
 $appFile = Join-Path $Root "app-$Name.json"
 [IO.File]::WriteAllText($appFile, ($app -replace 'http://localhost:5173', "http://127.0.0.1:$Port"))
 
