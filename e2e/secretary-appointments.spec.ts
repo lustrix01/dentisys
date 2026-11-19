@@ -53,6 +53,8 @@ test('Secretary tab shows one row per section and appoints / removes by section'
 
     await rows.nth(1).locator('input[type="checkbox"]').check();
     await appPage.getByRole('button', { name: /Appoint Secretary \(1\)/i }).click();
+    await expect(appPage.getByText('Confirm Class Secretary Appointments', { exact: true })).toBeVisible();
+    await appPage.getByRole('button', { name: 'Appoint and send', exact: true }).click();
     await expect.poll(() => invites.length).toBe(1);
     expect(invites[0]).toMatchObject({ cs_id: 78 });
 

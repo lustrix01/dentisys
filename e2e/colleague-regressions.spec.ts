@@ -460,8 +460,8 @@ test('Faculty Midterm Watchlist uses the server flag and drops courses once a fi
       remedialProgression: { stage: 'attempt_1_pending', attempts: [], passedAttempt: null } },
   ] } }));
   await page.goto('/retention');
-  await page.getByRole('tab', { name: /Midterm Watchlist/ }).click();
-  await expect(page.getByRole('heading', { name: 'Midterm Watchlist', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: /At-Risk Students/ }).click();
+  await expect(page.getByRole('heading', { name: 'At-Risk Students', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /Show at-risk only/ })).toHaveAttribute('aria-pressed', 'true');
   const failing = page.getByRole('row').filter({ hasText: 'Failing Midterm' });
   await expect(failing).toBeVisible();

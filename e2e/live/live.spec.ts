@@ -405,7 +405,10 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   // Open the session in the past while keeping its same-day end time ahead.
   await setSessionTime(form, 'Class End Time', sessionWindow.classEndTime);
   await form.getByLabel('Room or Session Location').selectOption('CUSTOM');
-  await form.getByLabel('Custom room name').fill('Live Test Room');
+  // The custom place is typed in its own pop-up (2026-11-18).
+  await page.getByLabel('Room or place name').fill('Live Test Room');
+  await page.getByRole('button', { name: 'Save place', exact: true }).click();
+  await expect(form.getByText('Live Test Room')).toBeVisible();
   await form.getByRole('button', { name: 'Start session', exact: true }).click();
 
   const startResponse = await startPromise;
@@ -551,6 +554,9 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   await studentRow.getByRole('button', { name: 'Mark', exact: true }).click();
   await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
   await page.getByRole('button', { name: 'Save override', exact: true }).click();
+  // Faculty confirm a direct mark before it saves (ATT-006 confirmation, 2026-11-18).
+  await expect(page.getByRole('heading', { name: 'Confirm Attendance Change' })).toBeVisible();
+  await page.getByRole('button', { name: 'Record attendance', exact: true }).click();
 
   const initialOverrideRes = await initialOverridePromise;
   expect(initialOverrideRes.status()).toBe(200);
@@ -601,6 +607,8 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
     response => response.url().includes('/api/faculty/attendance/override') && response.request().method() === 'POST'
   );
   await page.getByRole('button', { name: 'Save override' }).click();
+  await expect(page.getByRole('heading', { name: 'Confirm Attendance Change' })).toBeVisible();
+  await page.getByRole('button', { name: 'Save correction', exact: true }).click();
 
   const correctionRes = await correctionPromise;
   expect(correctionRes.status()).toBe(200);

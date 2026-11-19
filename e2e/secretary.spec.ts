@@ -821,7 +821,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(form.getByText('CLINIC-4B').first()).toBeVisible();
     await picker.click();
     await form.getByRole('option', { name: 'CLINIC-4C' }).click();
-    await expect(form.getByLabel('Custom room name')).toHaveValue('Dental Clinic Lab 3');
+    await expect(form.getByText('Custom place: Dental Clinic Lab 3', { exact: true })).toBeVisible();
     await form.getByRole('button', { name: 'Start session', exact: true }).click();
     await expect.poll(() => startApiPayload).not.toBeNull();
     expect((startApiPayload as Record<string, unknown>).csId).toBe(9);
@@ -849,7 +849,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(chip).toHaveAttribute('aria-pressed', 'true');
     await expectSessionTime(form, 'Opening', '08:45');
     await expectSessionTime(form, 'Class End Time', '11:00');
-    await expect(form.getByLabel('Custom room name')).toHaveValue('CDM 1');
+    await expect(form.getByText('Custom place: CDM 1', { exact: true })).toBeVisible();
   });
 
   test('the old /secretary/start-session address opens the Start Session pop-up on Attendance Monitoring', async ({ page }) => {
