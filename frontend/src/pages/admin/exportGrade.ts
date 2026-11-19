@@ -1,16 +1,18 @@
 import { classStanding } from './deanStanding.ts';
 
-export interface ExportEnrollmentRow { student: any; className: string; courseCode: string; grade: number | null; standing: string }
+export interface ExportEnrollmentRow { student: any; className: string; courseCode: string; grade: number | null; standing: string; pendingRemedials: number }
 
 /** Dean Students/Retention exports: one row per course enrollment. With a class id, only that class's enrollments. */
 export function exportEnrollmentRows(students: any[], classId?: string | null): ExportEnrollmentRow[] {
   const rows: ExportEnrollmentRow[] = [];
   for (const s of students) {
+    // Pending remedial attempts of one course; all courses for a student with no enrollment.
+    const pending = (code: string | null) => (s.remedialExams || []).filter((r: any) => r.status === 'pending' && (code === null || r.subjectCode === code)).length;
     const items = (s.enrolledSubjects || [])
       .filter((item: any) => !classId || item.classId === classId)
       .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || '')));
     if (items.length === 0) {
-      rows.push({ student: s, className: s.className || '—', courseCode: '—', grade: null, standing: String(s.status) });
+      rows.push({ student: s, className: s.className || '—', courseCode: '—', grade: null, standing: String(s.status), pendingRemedials: pending(null) });
       continue;
     }
     for (const item of items) {
@@ -20,6 +22,7 @@ export function exportEnrollmentRows(students: any[], classId?: string | null): 
         courseCode: item.code || '—',
         grade: item.grade > 0 ? Number(item.grade) : null,
         standing: classStanding({ status: item.retentionState, classGraded: item.grade !== null && item.grade !== undefined }),
+        pendingRemedials: pending(item.code ?? ''),
       });
     }
   }

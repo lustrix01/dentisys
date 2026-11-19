@@ -133,8 +133,8 @@ test('Reports and dashboards show computed retention only, with At Risk and no l
   const adminDashboard = fs.readFileSync(path.join(currentDirectory, '../pages/admin/Dashboard.tsx'), 'utf8');
   assert.match(reports, /record !== null && record\.state === 'remedial'/);
   // UI-003: the Retention Watch Lists count remedial courses and have no Risk column (13.3).
-  assert.match(reports, /header: 'Standing Grade'[^\]]*header: 'Remedial Courses'[^\]]*header: 'Remedial Status'/);
-  assert.match(reports, />Remedial Courses<\/th>/);
+  assert.match(reports, /header: 'Standing Grade'[^\]]*header: 'Courses in Remedial'[^\]]*header: 'Remedial Status'/);
+  assert.match(reports, />Courses in Remedial<\/th>/);
   assert.doesNotMatch(reports, /Risk Level|At-Risk Courses/);
   assert.match(reports, /Proportion of students by computed retention status/);
   assert.match(reports, /No retention distribution data available\./);

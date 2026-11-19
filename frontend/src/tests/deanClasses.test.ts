@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { attendanceForClass, buildClassCards, standingInClass, studentInClass } from '../pages/admin/deanClasses.ts';
+import { attendanceForClass, buildClassCards, classRowValues, standingInClass, studentInClass } from '../pages/admin/deanClasses.ts';
 
 const item = (classId: string, className: string, retentionState: string, grade: number | null) => ({
   classId, className, code: `C-${classId}`, name: `Course ${classId}`, instructorName: `Prof ${classId}`, classFinished: false, retentionState, grade,
@@ -69,4 +69,15 @@ test('attendance for class 10 excludes the same student class-20 records', () =>
   ];
   assert.deepEqual(attendanceForClass(records, '10').map(r => r.id), ['r1', 'r3']);
   assert.deepEqual(attendanceForClass(records, '20').map(r => r.id), ['r2']);
+});
+
+test('class drill-down row shows only that class: grade, pending remedials, flagged subjects (13.3)', () => {
+  const s = {
+    id: 'e', overallGWA: 2.68,
+    enrolledSubjects: [item('10', 'CLASS-10', 'active', null), item('20', 'CLASS-20', 'remedial', 3.0)],
+    remedialExams: [{ subjectCode: 'C-20', status: 'pending' }, { subjectCode: 'C-20', status: 'failed' }],
+  };
+  const fails = (sub: any) => sub.grade !== null && Number(sub.grade) >= 2.5;
+  assert.deepEqual(classRowValues(s, '10', fails), { grade: null, pendingRemedials: 0, flagged: 0 });
+  assert.deepEqual(classRowValues(s, '20', fails), { grade: 3.0, pendingRemedials: 1, flagged: 1 });
 });

@@ -50,3 +50,9 @@ test('count line does not count the placeholder row of a student with no enrollm
   const other = { id: 's3', status: 'active', enrolledSubjects: [{ code: 'DENT 101', classId: '10', className: 'DMD 1-A', grade: 1.5, retentionState: 'active' }] };
   assert.equal(exportCountLine(exportEnrollmentRows([student, empty, other])), '3 students · 3 course enrollments');
 });
+
+test('13.3 follow-up: each course row counts only that course pending remedials', () => {
+  const withRemedial = { ...student, remedialExams: [{ subjectCode: 'DENT 202', status: 'pending' }, { subjectCode: 'DENT 202', status: 'passed' }] };
+  const rows = exportEnrollmentRows([withRemedial]);
+  assert.deepEqual(rows.map(r => [r.courseCode, r.pendingRemedials]), [['DENT 101', 0], ['DENT 202', 1]]);
+});

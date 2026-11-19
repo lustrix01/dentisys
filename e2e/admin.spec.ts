@@ -8,7 +8,7 @@ const deanReportStudents = [
     id: '101', studentId: '2023-0101', name: 'Alex Example', yearLevel: 4, status: 'remedial',
     overallGWA: 2.3, faceEnrolled: false, classId: '21', className: 'CLINIC, "4A"\nSpecial',
     clinicHoursCompleted: 18, enrolledSubjects: [{ classId: '21', className: 'CLINIC, "4A"\nSpecial', code: 'CLIN401', name: 'Oral Surgery', grade: 2.3, isClinical: true, retentionState: 'remedial' }],
-    remedialExams: [{ status: 'pending' }],
+    remedialExams: [{ subjectCode: 'CLIN401', status: 'pending' }],
   },
   {
     id: '102', studentId: '2023-0102', name: 'Missing Class Name', yearLevel: 3, status: 'active',

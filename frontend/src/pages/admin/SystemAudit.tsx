@@ -22,7 +22,7 @@ import { buildReportSheet, clinicHoursText, dayToDate } from '../../utils/report
 import { sheetName } from '../../utils/officialGradeSheetExport';
 
 import { STANDING_LABELS, classStanding, pageStanding } from './deanStanding';
-import { attendanceForClass, buildClassCards, standingInClass, studentInClass } from './deanClasses';
+import { attendanceForClass, buildClassCards, classRowValues, standingInClass, studentInClass } from './deanClasses';
 
 type ReportTab = 'students' | 'retention' | 'attendance';
 
@@ -277,8 +277,8 @@ export const DeanReports: React.FC = () => {
         ...withCount, sheet: 'Retention', title: 'RETENTION REPORT',
         columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Class', width: 24 }, { header: 'Course Code', width: 14 },
           { header: 'Grade', width: 9 }, { header: 'Status', width: 12 }, { header: 'Pending Remedials', width: 18 }],
-        rows: exportRows.map(({ student: s, className, courseCode, grade, standing }) => [s.studentId, sheetName(s), className, courseCode, gradeText(grade), STANDING_LABELS[standing] ?? standing,
-          Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0]),
+        rows: exportRows.map(({ student: s, className, courseCode, grade, standing, pendingRemedials }) => [s.studentId, sheetName(s), className, courseCode, gradeText(grade), STANDING_LABELS[standing] ?? standing,
+          pendingRemedials]),
       });
     } else {
       fileName = `Attendance_Report_${ts}.xlsx`;
@@ -552,6 +552,7 @@ export const DeanReports: React.FC = () => {
                   {students.filter((s: any) => s.status === 'remedial').length}
                 </p>
               </Card>
+              <p className="col-span-2 sm:col-span-4 text-[11px] text-slate-500 dark:text-slate-400">These totals count each student once. A class card counts a student in every class they take.</p>
             </div>
 
             {/* Class Cards Grid */}
@@ -747,8 +748,9 @@ export const DeanReports: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
                     {paginatedStudents.map((s: any) => {
-                      const sub = s.enrolledSubjects?.find((item: any) => item.classId === selectedClassId) || s.enrolledSubjects?.[0];
-                      const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
+                      const sub = s.enrolledSubjects?.find((item: any) => item.classId === selectedClassId);
+                      const row = classRowValues(s, String(selectedClassId), failsRetention);
+                      const gradeVal = row.grade;
                       return (
                         <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                           <td className="py-3 px-3 font-mono text-slate-500">{s.studentId}</td>
@@ -780,7 +782,7 @@ export const DeanReports: React.FC = () => {
                             )}
                           </td>
                           <td className="py-3 px-3 text-center">
-                            <span className="font-bold text-slate-700 dark:text-slate-300">{Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0}</span>
+                            <span className="font-bold text-slate-700 dark:text-slate-300">{row.pendingRemedials}</span>
                           </td>
                         </tr>
                       );
@@ -1085,10 +1087,8 @@ export const DeanReports: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
                     {paginatedStudents.map((s: any) => {
-                      const flagged = (s.enrolledSubjects || []).filter(failsRetention).length;
-                      const pendingRem = Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0;
-                      const sub = s.enrolledSubjects?.find((item: any) => item.classId === selectedClassId) || s.enrolledSubjects?.[0];
-                      const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
+                      const sub = s.enrolledSubjects?.find((item: any) => item.classId === selectedClassId);
+                      const { grade: gradeVal, pendingRemedials: pendingRem, flagged } = classRowValues(s, String(selectedClassId), failsRetention);
                       return (
                         <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                           <td className="py-3 px-3 font-bold text-slate-800 dark:text-slate-200">{s.name}</td>
@@ -1513,7 +1513,6 @@ export const DeanReports: React.FC = () => {
           : (classFilter === 'all' ? 'All classes' : (classCardsData.find(c => c.id === classFilter)?.name || classFilter));
         const statusLabel = statusFilter === 'all' ? 'All statuses' : (STANDING_LABELS[statusFilter] ?? statusFilter);
         const gwa = (s: any) => (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : '—');
-        const pending = (s: any) => (Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0);
         const standingBad = (standing: string) => String(standing || '').toLowerCase() === 'remedial';
         const rowCount = activeTab === 'attendance' ? String(historyRows.length) : exportCountLine(exportRows);
         const widths: Record<ReportTab, number[]> = {
@@ -1578,15 +1577,15 @@ export const DeanReports: React.FC = () => {
                       <td className={`grade ${printCellClass(gradeStr)}`}>{gradeStr}</td>
                       <td className={`${STANDING_LABELS[row.standing] ? '' : 'cap'} ${standingBad(row.standing) ? 'bad' : ''}`}>{STANDING_LABELS[row.standing] ?? row.standing}</td>
                       <td>{s.faceEnrolled ? 'Enrolled' : 'Not enrolled'}</td>
-                      <td>{pending(s)}</td>
+                      <td>{row.pendingRemedials}</td>
                     </tr>
                   );
                 })}
                 {activeTab === 'retention' && exportRows.map((row, i) => {
                   const s = row.student;
                   const gradeStr = row.grade === null ? '—' : formatGrade(row.grade);
-                  const flagged = (s.enrolledSubjects || []).filter(failsRetention).length;
-                  const pend = pending(s);
+                  const flagged = row.courseCode === '—' ? (s.enrolledSubjects || []).filter(failsRetention).length : (failsRetention({ grade: row.grade }) ? 1 : 0);
+                  const pend = row.pendingRemedials;
                   return (
                     <tr key={`${s.id}-${row.courseCode}-${i}`}>
                       <td className="id">{s.studentId}</td>

@@ -10,7 +10,7 @@ Owner request: "move from .csv to .xlsx and improve the format of the export fil
 |---|---|---|---|---|
 | E1 | Grade Computation → Export (Grade Summary) | Faculty | `DENT101_Grade_Summary.csv` | Student Number, Student Name, Midterm Lec %, Midterm Lab %, Midterm %, Finals Lec %, Finals Lab %, Finals %, Overall Grade, Status |
 | E2 | Reports → Academic → Export | Faculty | `DENT101_Academic_Report.csv` | Student Number, Name, Course Code, the same six %s, Grade, Remarks |
-| E3 | Reports → Retention → Export | Faculty | `Retention_Report.csv` | Student Number, Name, Standing Grade, Remedial Courses, Remedial Status |
+| E3 | Reports → Retention → Export | Faculty | `Retention_Report.csv` | Student Number, Name, Standing Grade, Courses in Remedial, Remedial Status |
 | E4 | Reports → Attendance → Export | Faculty | `Attendance_DENT101_2026-10-27.csv` | Date, Student Number, Name, Course Code, Status |
 | E5 | Dean Reports → Students / Retention / Attendance → Export | Dean | `Student_Summary_<time>.csv` etc. | per tab (Student Number, Name, Class, Grade, Status, …) |
 | E6 | Audit Trail → Export | every role with an Audit Trail | `dentisys-audit-trail-<date>.csv` | the audit rows |

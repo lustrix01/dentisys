@@ -71,3 +71,14 @@ export function standingInClass(student: any, classId: string): string {
 export function attendanceForClass(records: any[], classId: string): any[] {
   return records.filter(r => r.classId === classId);
 }
+
+/** Values on a class drill-down row (Student Summaries and Retention Reports). */
+export function classRowValues(student: any, classId: string, fails: (sub: any) => boolean): { grade: number | null; pendingRemedials: number; flagged: number } {
+  const sub = enrollmentIn(student, classId);
+  const pendingRemedials = (student.remedialExams ?? []).filter((r: any) => r.status === 'pending' && (!sub || r.subjectCode === sub.code)).length;
+  return {
+    grade: sub?.grade ?? null,
+    pendingRemedials,
+    flagged: (sub ? [sub] : enrollments(student)).filter(fails).length,
+  };
+}

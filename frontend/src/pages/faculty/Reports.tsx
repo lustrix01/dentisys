@@ -666,7 +666,7 @@ export const Reports: React.FC = () => {
       await downloadXlsx('Retention_Report.xlsx', [buildReportSheet({
         sheet: 'Retention', title: 'RETENTION REPORT', filter: 'All assigned classes', term: selectedSchoolYear === 'all' ? 'All school years' : `AY ${selectedSchoolYear}`, by,
         columns: [{ header: 'Student Number', width: 16 }, { header: 'Student Name', width: 32 }, { header: 'Standing Grade', width: 15, format: '0.00' },
-          { header: 'Remedial Courses', width: 17 }, { header: 'Remedial Status', width: 20 }],
+          { header: 'Courses in Remedial', width: 19 }, { header: 'Remedial Status', width: 20 }],
         rows,
       })]);
       return;
@@ -1122,7 +1122,7 @@ export const Reports: React.FC = () => {
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
                   <th className="px-5 py-3" aria-sort={ariaSort(retentionSort, 'name')}><SortableHeader label="Student Details" sortKey="name" sort={retentionSort} onSort={setRetentionSort} /></th>
                   <th className="px-5 py-3 text-center" aria-sort={ariaSort(retentionSort, 'grade')}><SortableHeader label="Standing Grade" sortKey="grade" sort={retentionSort} onSort={setRetentionSort} /></th>
-                  <th className="px-5 py-3 text-center">Remedial Courses</th>
+                  <th className="px-5 py-3 text-center">Courses in Remedial</th>
                   <th className="px-5 py-3">Remedial Program Status</th>
                 </tr>
               </thead>
@@ -1144,13 +1144,13 @@ export const Reports: React.FC = () => {
                       <td className="px-5 py-3.5 text-center font-bold text-slate-800 dark:text-slate-100">
                         {gwa !== null ? gwa.toFixed(2) : '—'}
                       </td>
-                      <td className="px-5 py-3.5 text-center font-semibold text-rose-500">{retentionUnavailable ? 'Unavailable' : warnings.length}</td>
+                      <td className={`px-5 py-3.5 text-center font-semibold ${!retentionUnavailable && warnings.length > 0 ? 'text-rose-500' : 'text-slate-500 dark:text-slate-400'}`}>{retentionUnavailable ? 'Unavailable' : warnings.length}</td>
                       <td className="px-5 py-3.5 dark:text-slate-400">
                         {remedialStatus === 'No remedial' || remedialStatus === 'Unavailable' ? (
                           <span className="font-medium text-slate-500 dark:text-slate-400">{remedialStatus}</span>
                         ) : (
-                          <span className="font-semibold flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" /> {remedialStatus}
+                          <span className="font-semibold flex items-center gap-1 min-[480px]:whitespace-nowrap">
+                            <Clock className="w-3.5 h-3.5 shrink-0" /> {remedialStatus}
                           </span>
                         )}
                       </td>
