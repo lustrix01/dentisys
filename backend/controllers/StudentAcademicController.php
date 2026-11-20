@@ -104,7 +104,7 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
                 COALESCE(egb.retention_state, e.retention_state) AS retention_state,
                 e.remedial_state_json, e.clinic_hours_completed,
                 cs.cs_name, cs.semester, cs.school_year, cs.year_level AS class_year_level,
-                cs.lec_room, cs.lab_room, cs.block, cs.meetings_recorded, cs.archive_reason,
+                cs.lec_room, cs.lab_room, cs.block, cs.meetings_recorded, cs.archive_reason, cs.grades_submitted_at,
                 u.display_name AS instructor_name,
                 c.course_id, c.course_code, COALESCE(cs.course_title, c.name) AS course_name, c.units, c.is_clinical,
                 gc.component_mode AS grading_component_mode
@@ -140,7 +140,8 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
     foreach ($dbRows as $row) {
         $enrollmentId = (int) $row['enrollment_id'];
         $meetings = class_meetings_read($pdo, $row);
-        $midterm = faculty_watchlist_midterm($pdo, $row);
+        $readCache = null;
+        $midterm = faculty_watchlist_midterm($pdo, $row, $readCache, true);
         $midtermEvaluation = [
             'complete' => (bool) $midterm['complete'],
             'percentage' => $midterm['percentage'] !== null ? round((float) $midterm['percentage'], 2) : null,
@@ -195,7 +196,7 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
             'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
             'clinicHoursCompleted' => (int) $row['clinic_hours_completed'],
             'isCurrent' => academic_school_year_is_current($pdo, (string) $row['school_year']),
-            'isPast' => academic_school_year_is_past($pdo, (string) $row['school_year']),
+            'isPast' => $row['grades_submitted_at'] !== null && academic_school_year_is_past($pdo, (string) $row['school_year']),
             'archiveReason' => $row['archive_reason'] === 'finished' ? 'finished' : null,
         ];
         if (in_array($row['grading_component_mode'] ?? 'combined', ['lecture_laboratory', 'lecture'], true)) {
@@ -339,7 +340,7 @@ function handle_student_dashboard_get(): void
         $attendance = $pdo->prepare(
             'SELECT COUNT(*) FILTER (WHERE r.status IN (\'present\', \'late\', \'excused\')) AS attended,
                     COUNT(*) AS total
-               FROM attendance_records r
+               FROM ' . grade_change_published_sql($pdo, 'attendance_records') . ' r
                JOIN enrollments e ON e.enrollment_id = r.enrollment_id
                JOIN class_sections cs ON cs.cs_id = e.cs_id
               WHERE e.student_id = ? AND LOWER(e.status) = \'active\'

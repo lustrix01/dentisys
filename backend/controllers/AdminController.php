@@ -159,7 +159,7 @@ function handle_admin_dashboard_kpis(): void
                 ar.record_id, 
                 ar.status, 
                 cs.cs_name
-            FROM attendance_records ar
+            FROM " . grade_change_published_sql($pdo, 'attendance_records') . " ar
             LEFT JOIN enrollments e ON ar.enrollment_id = e.enrollment_id
             LEFT JOIN class_sections cs ON e.cs_id = cs.cs_id
             WHERE NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = ar.attendance_session_id AND rs.status = 'revoked')
@@ -745,7 +745,7 @@ function handle_admin_reports_summary(): void
         $attStmt = $pdo->prepare(
             "SELECT r.record_id AS id, s.student_id AS \"studentId\", r.session_date AS date,
                     c.course_code AS \"subjectCode\", cs.cs_name AS \"className\", cs.cs_id AS \"classId\", r.status
-             FROM attendance_records r
+             FROM " . grade_change_published_sql($pdo, 'attendance_records') . " r
              JOIN enrollments e ON e.enrollment_id = r.enrollment_id
              JOIN students s ON s.student_id = e.student_id
              JOIN class_sections cs ON cs.cs_id = e.cs_id

@@ -174,7 +174,7 @@ function handle_student_invitation_create(): void
             if ($student === false || strtolower((string) $student['status']) !== 'active') {
                 throw new DomainException('Student must be active and enrolled in a class assigned to this Faculty member.');
             }
-            if (!academic_school_year_is_current($pdo, (string) ($student['school_year'] ?? '')) || academic_class_section_is_archived($pdo, (int) $classId)) {
+            if (academic_class_section_is_closed($pdo, (int) $classId)) {
                 throw new DomainException(academic_view_only_message($pdo, (int) $classId, 'Historical class sections are view-only and cannot issue Student invitations.'));
             }
             if ($student['user_id'] !== null) {

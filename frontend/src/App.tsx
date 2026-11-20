@@ -27,6 +27,7 @@ import { Rooms } from './pages/admin/Rooms';
 import { PeopleAndAccounts } from './pages/admin/PeopleAndAccounts';
 import { FaceEnrolmentFlags } from './pages/admin/FaceEnrolmentFlags';
 import { Classes } from './pages/admin/Classes';
+import { GradeSubmissions } from './pages/admin/GradeSubmissions';
 import { CourseCatalog } from './pages/admin/CourseCatalog';
 
 // Class Secretary Page Imports
@@ -280,6 +281,7 @@ function App() {
                   <Route path="/admin/faculty-approval" element={<Navigate to="/admin/faculty-invite" replace />} />
                   <Route path="/admin/retention-criteria" element={<Navigate to="/admin/reports" replace />} />
                   <Route path="/admin/reports" element={<DeanReports />} />
+                  <Route path="/admin/grade-submissions" element={<GradeSubmissions />} />
                   <Route path="/admin/users" element={<Navigate to="/" replace />} />
                   <Route path="/admin/audit" element={<Navigate to="/admin/audit-trail" replace />} />
                   <Route path="/admin/profile" element={<DeanProfile />} />
@@ -292,6 +294,7 @@ function App() {
                   <Route path="/superadmin/overview" element={<SuperadminOverview />} />
                   <Route path="/superadmin/people" element={<PeopleAndAccounts />} />
                   <Route path="/superadmin/classes" element={<Classes />} />
+                  <Route path="/superadmin/grade-submissions" element={<GradeSubmissions />} />
                   <Route path="/superadmin/course-catalog" element={<CourseCatalog />} />
                   <Route path="/superadmin/terms" element={<AcademicTerms />} />
                   <Route path="/superadmin/rooms" element={<Rooms />} />

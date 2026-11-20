@@ -37,7 +37,9 @@ test('Dean My Activity shows only rows the Dean account did', async ({ page }) =
   await signInSuperadmin(page);
   const superToken = await page.evaluate(async () => (await (await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })).json()).access_token as string);
   const superHeaders = { Authorization: `Bearer ${superToken}` };
-  const people = await (await page.request.get('/api/admin/people?kind=faculty&status=all&page=1', { headers: superHeaders })).json();
+  // Search by the Dean's email: the integration suite adds Faculty accounts that can push the Dean off page 1.
+  const deanEmail = process.env.E2E_ADMIN_EMAIL ?? 'admin@bicol-u.edu.ph';
+  const people = await (await page.request.get(`/api/admin/people?kind=faculty&status=all&page=1&q=${encodeURIComponent(deanEmail)}`, { headers: superHeaders })).json();
   const dean = (people.people as Array<{ userId: number; isDean?: boolean; twoFactor: boolean }>).find(p => p.isDean);
   expect(dean).toBeTruthy();
   if (dean!.twoFactor) {

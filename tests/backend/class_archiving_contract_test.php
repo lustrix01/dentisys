@@ -48,9 +48,9 @@ $check(str_contains($year, 'function academic_class_section_is_archived(') && st
 $list = $fn($faculty, 'handle_faculty_classes_get');
 $check(str_contains($list, "'archiveReason'") && str_contains($list, "'archivedAt'") && str_contains($list, "'isArchived'"), 'class list returns archive fields');
 foreach (['handle_faculty_class_update', 'handle_faculty_class_enroll_students', 'handle_faculty_class_unenroll_student', 'handle_faculty_student_create'] as $handler) {
-    $check(str_contains($fn($faculty, $handler), 'academic_class_section_is_archived('), "{$handler} refuses archived classes");
+    $check(str_contains($fn($faculty, $handler), 'academic_class_section_is_closed('), "{$handler} refuses archived classes");
 }
-$check(str_contains($read('backend/controllers/StudentAuthController.php'), 'academic_class_section_is_archived('), 'Student invitations refuse archived classes');
+$check(str_contains($read('backend/controllers/StudentAuthController.php'), 'academic_class_section_is_closed('), 'Student invitations refuse archived classes');
 
 $remedial = $fn($faculty, 'handle_faculty_retention_remedial_save') . $fn($faculty, 'handle_faculty_retention_cost_recovery_save');
 $check(substr_count($remedial, "['cancelled', 'mistake']") === 2, 'remedial and cost recovery are blocked only for cancelled or mistake classes');

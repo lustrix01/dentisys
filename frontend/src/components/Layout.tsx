@@ -32,12 +32,13 @@ import {
   Loader2,
   DoorOpen,
   ScanFace,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { useRuntimeConfig } from '../context/RuntimeConfigContext';
 import { isDevelopmentMockStudent, isStudentPrototypeAllowed, canAccessAuthoritativeStudentBiometrics } from '../pages/student/studentGates';
-import { getNotificationsApi, markNotificationReadApi, markAllNotificationsReadApi, getFacultyDashboardKpisApi } from '../services/apiClient';
+import { getNotificationsApi, markNotificationReadApi, markAllNotificationsReadApi, getFacultyDashboardKpisApi, getDeanGradeChangeRequestsApi } from '../services/apiClient';
 import type { NotificationItem } from '../types';
 import { useApplySavedTheme, useThemePreference } from '../hooks/useThemePreference';
 
@@ -262,6 +263,25 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       .catch(() => { /* keep the last known badge */ });
     return () => { cancelled = true; };
   }, [isFacultyUser, refreshRetentionBadge, location.pathname]);
+  // Dean sidebar badge: grade change requests waiting for a decision (13.8).
+  const [gradeChangeBadgeCount, setGradeChangeBadgeCount] = useState<number | undefined>(undefined);
+  const isDeanUser = user?.role === 'admin' && !superadminView;
+  const refreshGradeChangeBadge = location.pathname === '/' || location.pathname === '/admin/grade-submissions';
+  useEffect(() => {
+    if (!isDeanUser || !refreshGradeChangeBadge) return;
+    let cancelled = false;
+    const load = () => {
+      getDeanGradeChangeRequestsApi('pending')
+        .then(res => {
+          if (cancelled) return;
+          setGradeChangeBadgeCount(res.pendingCount > 0 ? res.pendingCount : undefined);
+        })
+        .catch(() => { /* keep the last known badge */ });
+    };
+    load();
+    window.addEventListener('dentisys:grade-changes-decided', load);
+    return () => { cancelled = true; window.removeEventListener('dentisys:grade-changes-decided', load); };
+  }, [isDeanUser, refreshGradeChangeBadge, location.pathname]);
   const navigate = useNavigate();
 
   const { changeTheme } = useThemePreference();
@@ -285,6 +305,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Overview', path: '/superadmin/overview', icon: LayoutDashboard, short: 'Overview' },
         { name: 'People & Accounts', path: '/superadmin/people', icon: Users, short: 'People' },
         { name: 'Classes', path: '/superadmin/classes', icon: BookOpen },
+        { name: 'Grade Submissions', path: '/superadmin/grade-submissions', icon: ClipboardCheck, short: 'Grades' },
         { name: 'Course Catalog', path: '/superadmin/course-catalog', icon: Library, short: 'Courses' },
         { name: 'Academic Terms', path: '/superadmin/terms', icon: CalendarDays, short: 'Terms' },
         { name: 'Rooms', path: '/superadmin/rooms', icon: DoorOpen },
@@ -297,6 +318,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
         { name: 'Reports & Analytics', path: '/admin/reports', icon: FileSpreadsheet, short: 'Reports' },
+        { name: 'Grade Submissions', path: '/admin/grade-submissions', icon: ClipboardCheck, badge: 'gradeChanges', short: 'Grades' },
         { name: 'Faculty Invitations', path: '/admin/faculty-invite', icon: UserPlus, short: 'Invites' },
         { name: 'My Activity', path: '/admin/audit-trail', icon: ListChecks, short: 'Activity' },
       ];
@@ -515,6 +537,9 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     if (type === 'retention') {
       return retentionBadgeCount;
     }
+    if (type === 'gradeChanges') {
+      return gradeChangeBadgeCount;
+    }
     return undefined;
   };
 
@@ -571,6 +596,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'My Profile', path: '/secretary/profile' });
     } else if (path === '/secretary/settings') {
       crumbs.push({ name: 'Settings', path: '/secretary/settings' });
+    } else if (path === '/admin/grade-submissions' || path === '/superadmin/grade-submissions') {
+      crumbs.push({ name: 'Grade Submissions', path });
     } else if (path === '/admin/reports') {
       crumbs.push({ name: 'Reports & Analytics', path: '/admin/reports' });
     } else if (path === '/secretary/attendance') {

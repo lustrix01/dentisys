@@ -206,7 +206,7 @@ function handle_faculty_dashboard_kpis(): void
         $studentStmt = $pdo->prepare("
             SELECT
                 s.student_id,
-                CASE MAX(CASE " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)', 'COALESCE(egb.final_gwa, e.final_gwa)') . "
+                CASE MAX(CASE " . retention_effective_state_sql('e', grade_change_draft_sql($pdo, 'e', 'retention', 'COALESCE(egb.retention_state, e.retention_state)'), grade_change_draft_sql($pdo, 'e', 'gwa', 'COALESCE(egb.final_gwa, e.final_gwa)')) . "
                         WHEN 'remedial' THEN 3 WHEN 'irregular_reenrollment' THEN 2 ELSE 1 END)
                     WHEN 3 THEN 'remedial' WHEN 2 THEN 'irregular_reenrollment' ELSE 'active' END AS retention_state
             FROM students s
@@ -254,7 +254,7 @@ function handle_faculty_dashboard_kpis(): void
 
         // Students with a Midterm At Risk course (current school year only).
         $midtermStmt = $pdo->prepare("
-            SELECT e.enrollment_id, e.student_id, e.cs_id, COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa, e.remedial_state_json
+            SELECT e.enrollment_id, e.student_id, e.cs_id, " . grade_change_draft_sql($pdo, 'e', 'gwa', 'COALESCE(egb.final_gwa, e.final_gwa)') . " AS final_gwa, e.remedial_state_json
             FROM enrollments e
             JOIN class_sections cs ON cs.cs_id = e.cs_id
             LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
@@ -466,9 +466,9 @@ function handle_faculty_students(): void
                 s.student_account_user_id, s.user_id AS linked_secretary_user_id,
                 ua.status AS account_status,
                 cs.cs_id, cs.cs_name, cs.secretary_user_id, e.enrollment_id,
-                COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
-                e.grade_components_json,
-                " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)', 'COALESCE(egb.final_gwa, e.final_gwa)') . " AS retention_state,
+                " . grade_change_draft_sql($pdo, 'e', 'gwa', 'COALESCE(egb.final_gwa, e.final_gwa)') . " AS final_gwa,
+                " . grade_change_draft_sql($pdo, 'e', 'components', 'e.grade_components_json') . " AS grade_components_json,
+                " . retention_effective_state_sql('e', grade_change_draft_sql($pdo, 'e', 'retention', 'COALESCE(egb.retention_state, e.retention_state)'), grade_change_draft_sql($pdo, 'e', 'gwa', 'COALESCE(egb.final_gwa, e.final_gwa)')) . " AS retention_state,
                 e.clinic_hours_completed, c.course_code,
                 c.name AS course_name, c.units, c.is_clinical
             FROM students s
@@ -626,7 +626,7 @@ function handle_faculty_student_create(): void
         $classYearStmt = $pdo->prepare('SELECT school_year FROM class_sections WHERE cs_id = ?');
         $classYearStmt->execute([$csId]);
         $classSchoolYear = $classYearStmt->fetchColumn();
-        if (!is_string($classSchoolYear) || !academic_school_year_is_current($pdo, $classSchoolYear) || academic_class_section_is_archived($pdo, $csId)) {
+        if (!is_string($classSchoolYear) || academic_class_section_is_closed($pdo, $csId)) {
             safe_error_response(academic_view_only_message($pdo, $csId, 'Historical class sections are view-only and cannot add Students.'), 409);
             return;
         }
@@ -2992,13 +2992,26 @@ function handle_faculty_grading_config_save(): void
             throw new FacultyGradingConfigurationException('Request body required.', 400, 'BAD_REQUEST');
         }
         // Checked here, not in the shared save path: the grade-weight bootstrap
-        // may still backfill weights for past offerings.
-        $requestedSchoolYear = faculty_grading_normalize_school_year($body['data']['schoolYear'] ?? null);
-        if (academic_school_year_is_past($pdo, $requestedSchoolYear)) {
+        // may still backfill weights for past offerings. GRD-004: weights lock while any section is submitted.
+        $submittedSection = $pdo->prepare(
+            "SELECT c.course_code, cs.cs_name
+               FROM class_sections cs JOIN courses c ON c.course_id = cs.course_id
+              WHERE cs.instructor_user_id = ? AND cs.course_id = ? AND UPPER(cs.semester) = ? AND UPPER(cs.school_year) = ?
+                AND cs.grades_submitted_at IS NOT NULL
+              ORDER BY cs.cs_id LIMIT 1"
+        );
+        $submittedSection->execute([
+            (int) $authCtx['user_id'],
+            faculty_grading_positive_id($body['data']['courseId'] ?? null, 'courseId'),
+            faculty_grading_normalize_semester($body['data']['semester'] ?? null),
+            faculty_grading_normalize_school_year($body['data']['schoolYear'] ?? null),
+        ]);
+        $submitted = $submittedSection->fetch(PDO::FETCH_ASSOC);
+        if ($submitted) {
             throw new FacultyGradingConfigurationException(
-                'Past school-year classes are view-only.',
+                "Grades for {$submitted['course_code']} ({$submitted['cs_name']}) are submitted; weights are locked.",
                 409,
-                'SCHOOL_YEAR_READ_ONLY'
+                'GRADES_SUBMITTED'
             );
         }
         $saved = faculty_grading_save_configuration($pdo, $config, $authCtx, $body['data'], $context, true);
@@ -3104,7 +3117,7 @@ function faculty_transmutation_defaults(PDO $pdo): array
  * without a record for the student; otherwise 'unresolved' (incomplete).
  * There is no exam-date matching.
  */
-function faculty_linked_attendance_sql(string $enrollmentIdExpression): string
+function faculty_linked_attendance_sql(string $enrollmentIdExpression, string $records = 'attendance_records'): string
 {
     $session = "SELECT 1 FROM attendance_sessions ls
                  WHERE ls.cs_id = a.cs_id
@@ -3114,7 +3127,7 @@ function faculty_linked_attendance_sql(string $enrollmentIdExpression): string
         WHEN a.attendance_session_date IS NULL OR a.attendance_session_code IS NULL THEN NULL
         WHEN EXISTS ({$session} AND ls.status = 'revoked') THEN NULL
         ELSE COALESCE(
-            (SELECT lr.status FROM attendance_records lr
+            (SELECT lr.status FROM {$records} lr
               WHERE lr.enrollment_id = {$enrollmentIdExpression}
                 AND lr.session_date = a.attendance_session_date
                 AND lr.session_code = a.attendance_session_code
@@ -3158,7 +3171,8 @@ function faculty_period_attendance_summary(
     int $enrollmentId,
     ?string $startDate,
     ?string $endDate,
-    ?array $preloadedRows = null
+    ?array $preloadedRows = null,
+    string $records = 'attendance_records'
 ): array {
     if ($startDate === null || $endDate === null) {
         return [
@@ -3178,7 +3192,7 @@ function faculty_period_attendance_summary(
             "SELECT COALESCE(r.attendance_session_id, 0) AS session_id,
                     r.session_date, r.session_code, r.status AS attendance_status,
                     COALESCE(s.status, 'recorded') AS session_status
-               FROM attendance_records r
+               FROM {$records} r
                JOIN enrollments e ON e.enrollment_id = r.enrollment_id
                LEFT JOIN attendance_sessions s
                  ON s.session_id = r.attendance_session_id
@@ -3202,7 +3216,7 @@ function faculty_period_attendance_summary(
                 AND s.status <> 'revoked'
                 AND NOT EXISTS (
                     SELECT 1
-                      FROM attendance_records r
+                      FROM {$records} r
                      WHERE r.enrollment_id = ?
                        AND (
                            r.attendance_session_id = s.session_id
@@ -4690,8 +4704,25 @@ function handle_faculty_grade_sheet_import(): void
  * Persist a computed course grade. Retention is always the computed state
  * (no manual override; any old override columns are cleared).
  */
-function faculty_save_computed_grade(PDO $pdo, float $percentage, float $gwa, string $retention, array $breakdown, int $enrollmentId, bool $release = false): void
+function faculty_save_computed_grade(PDO $pdo, float $percentage, float $gwa, string $retention, array $breakdown, int $enrollmentId, bool $release = false, bool $applyDraft = false): bool
 {
+    // GRD-004: while the class has an open grade change, the result is a draft; published grades do not move.
+    if (!$applyDraft) {
+        $draft = $pdo->prepare(
+            "UPDATE grade_change_batches b
+                SET draft_results = COALESCE(b.draft_results, '{}'::jsonb) || jsonb_build_object(CAST(CAST(:enrollment_id AS INTEGER) AS TEXT), CAST(:result AS JSONB))
+              FROM enrollments e
+             WHERE e.enrollment_id = :enrollment_id2 AND b.cs_id = e.cs_id AND b.status IN ('draft', 'pending')"
+        );
+        $draft->execute([
+            ':enrollment_id' => $enrollmentId,
+            ':enrollment_id2' => $enrollmentId,
+            ':result' => json_encode(['percentage' => $percentage, 'gwa' => $gwa, 'retention' => $retention, 'components' => $breakdown], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ]);
+        if ($draft->rowCount() > 0) {
+            return true;
+        }
+    }
     $beforeStmt = $pdo->prepare(
         "SELECT e.retention_state, c.course_code, cs.cs_name,
                 COALESCE(s.student_account_user_id, s.user_id) AS recipient_user_id
@@ -4722,9 +4753,11 @@ function faculty_save_computed_grade(PDO $pdo, float $percentage, float $gwa, st
     ]);
     $after = $stmt->fetchColumn();
     // $release (one-time release recalculation, official-imports 4c): keeps manual overrides, notifies nobody.
-    if (!$release && $before !== null && is_string($after)) {
+    // An approved grade change ($applyDraft) tells the Student nothing (GRD-004 Q7).
+    if (!$release && $before !== null && is_string($after) && !$applyDraft) {
         faculty_notify_grade_retention_change($pdo, $before, $after, $gwa, $enrollmentId);
     }
+    return false;
 }
 
 /**
@@ -5004,8 +5037,9 @@ function faculty_recompute_class_grades(PDO $pdo, int $facultyId, int $csId, str
     // The legacy JSON remains the response-compatible write surface;
     // migration 020's trigger refreshes the normalized scalar/category
     // projection atomically.
-    $saveComputedGrade = static function (float $percentage, float $gwa, string $retention, array $breakdown, int|string $enrollmentId) use ($pdo, $release): void {
-        faculty_save_computed_grade($pdo, $percentage, $gwa, $retention, $breakdown, (int) $enrollmentId, $release);
+    // Returns true when the result went to a grade-change draft; a draft writes no per-change grade audit rows.
+    $saveComputedGrade = static function (float $percentage, float $gwa, string $retention, array $breakdown, int|string $enrollmentId) use ($pdo, $release): bool {
+        return faculty_save_computed_grade($pdo, $percentage, $gwa, $retention, $breakdown, (int) $enrollmentId, $release);
     };
     foreach ($grouped as $group) {
         if ($group['configId'] !== null && $group['schemaMode'] === 'periods') {
@@ -5055,8 +5089,9 @@ function faculty_recompute_class_grades(PDO $pdo, int $facultyId, int $csId, str
             $periodBreakdown['percentage'] = $percentage;
             $periodBreakdown['gwa'] = $gwa;
             $periodBreakdown['retentionState'] = $retention;
-            $saveComputedGrade($percentage, $gwa, $retention, $periodBreakdown, $group['enrollmentId']);
-            array_push($gradeChanges, ...faculty_grade_moves($group, $midterm['percentage'], $final['percentage'], $percentage));
+            if (!$saveComputedGrade($percentage, $gwa, $retention, $periodBreakdown, $group['enrollmentId'])) {
+                array_push($gradeChanges, ...faculty_grade_moves($group, $midterm['percentage'], $final['percentage'], $percentage));
+            }
             $results[] = [
                 'status' => 'computed',
                 'enrollmentId' => $group['enrollmentId'],
@@ -5153,8 +5188,9 @@ function faculty_recompute_class_grades(PDO $pdo, int $facultyId, int $csId, str
                 'categories' => $categoryBreakdown,
                 'retentionThreshold' => $retentionThreshold,
             ];
-            $saveComputedGrade($percentage, $gwa, $retention, $breakdown, $group['enrollmentId']);
-            array_push($gradeChanges, ...faculty_grade_moves($group, null, null, $percentage));
+            if (!$saveComputedGrade($percentage, $gwa, $retention, $breakdown, $group['enrollmentId'])) {
+                array_push($gradeChanges, ...faculty_grade_moves($group, null, null, $percentage));
+            }
             $results[] = [
                 'status' => 'computed',
                 'enrollmentId' => $group['enrollmentId'],
@@ -5668,6 +5704,10 @@ function handle_faculty_attendance_session_create(): void
             safe_error_response(academic_view_only_message($pdo, $csId), 409);
             return;
         }
+        if (grade_change_open_batch($pdo, $csId) !== null) { // GRD-004 Q12
+            safe_error_response('Sessions cannot be started during a grade change.', 409);
+            return;
+        }
         [$openingTime, $presentCutoff, $lateCutoff] = attendance_session_timing_from_request($data);
         $classEndTime = attendance_session_class_end_time_from_request($data, $openingTime, $lateCutoff, $sessionDate, $config);
         $room = array_key_exists('room', $data) && trim((string) $data['room']) !== ''
@@ -6032,7 +6072,7 @@ function handle_faculty_excused_request_decide(): void
                     safe_error_response('This request has already been decided.', 409);
                     return;
                 }
-                if (academic_class_section_is_past($pdo, (int) $request['cs_id'])) {
+                if (academic_class_section_is_past($pdo, (int) $request['cs_id']) && !academic_class_section_in_grace($pdo, (int) $request['cs_id'])) { // GRD-004 rule 13: Faculty may decide during the grace
                     $pdo->rollBack();
                     safe_error_response(academic_view_only_message($pdo, (int) $request['cs_id']), 409);
                     return;
@@ -6691,8 +6731,10 @@ function faculty_retention_preload(PDO $pdo, array $enrollments, array &$readCac
     }
 }
 
-function faculty_watchlist_midterm(PDO $pdo, array $enrollment, ?array &$readCache = null): array
+function faculty_watchlist_midterm(PDO $pdo, array $enrollment, ?array &$readCache = null, bool $published = false): array
 {
+    // GRD-004: Students read the grade-change snapshot of a class with an open batch ($published); Faculty read the live draft.
+    $records = $published ? grade_change_published_sql($pdo, 'attendance_records') : 'attendance_records';
     // Recompute the existing period calculation read-only so a newly added or
     // cleared score cannot leave the watchlist open from a stale saved result.
     $readCache ??= [];
@@ -6706,9 +6748,9 @@ function faculty_watchlist_midterm(PDO $pdo, array $enrollment, ?array &$readCac
     } else {
         $assessments = $pdo->prepare(
             "SELECT a.*, sc.score_id, sc.score,
-                    " . faculty_linked_attendance_sql('CAST(:enrollment_id AS INTEGER)') . " AS linked_attendance_status
-               FROM assessments a
-               LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = :student_id
+                    " . faculty_linked_attendance_sql('CAST(:enrollment_id AS INTEGER)', $records) . " AS linked_attendance_status
+               FROM " . ($published ? grade_change_published_sql($pdo, 'assessments') : 'assessments') . " a
+               LEFT JOIN " . ($published ? grade_change_published_sql($pdo, 'assessment_scores') : 'assessment_scores') . " sc ON sc.assessment_id = a.assessment_id AND sc.student_id = :student_id
               WHERE a.cs_id = :cs_id AND a.grading_period = 'Midterm' AND a.status <> 'Archived'"
         );
         $assessments->execute([
@@ -6726,7 +6768,7 @@ function faculty_watchlist_midterm(PDO $pdo, array $enrollment, ?array &$readCac
         $attendance = $readCache['attendance'][$enrollmentId]['Midterm'] = faculty_period_attendance_summary(
             $pdo, (int) $enrollment['cs_id'], $enrollmentId,
             $grading['midterm_start_date'], $grading['midterm_end_date'],
-            $readCache['attendanceRows'][$enrollmentId] ?? null
+            $readCache['attendanceRows'][$enrollmentId] ?? null, $records
         );
     }
     $result = faculty_compute_period_result($pdo, [
@@ -6817,15 +6859,15 @@ function handle_faculty_retention_get(): void
 
         $stmt = $pdo->prepare(
             "SELECT e.enrollment_id, e.student_id, s.bu_email,
-                    COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
-                    COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
-                    COALESCE(egb.retention_state, e.retention_state) AS retention_state,
+                    " . grade_change_draft_sql($pdo, 'e', 'percentage', 'COALESCE(egb.final_percentage, e.final_percentage)') . " AS final_percentage,
+                    " . grade_change_draft_sql($pdo, 'e', 'gwa', 'COALESCE(egb.final_gwa, e.final_gwa)') . " AS final_gwa,
+                    " . grade_change_draft_sql($pdo, 'e', 'retention', 'COALESCE(egb.retention_state, e.retention_state)') . " AS retention_state,
                     e.remedial_state_json, s.student_number,
                     COALESCE(pi.first_name, s.first_name) AS first_name,
                     COALESCE(pi.middle_name, s.middle_name) AS middle_name,
                     COALESCE(pi.last_name, s.last_name) AS last_name,
                     cs.cs_id, cs.cs_name, c.course_code,
-                    wu.unlocked_at, cs.school_year, e.grade_components_json
+                    wu.unlocked_at, cs.school_year, " . grade_change_draft_sql($pdo, 'e', 'components', 'e.grade_components_json') . " AS grade_components_json
              FROM enrollments e
              JOIN students s ON s.student_id = e.student_id
              JOIN class_sections cs ON cs.cs_id = e.cs_id
@@ -6940,6 +6982,8 @@ function handle_faculty_retention_get(): void
                 ]),
                 'midtermAtRisk' => $isCurrentYear && faculty_midterm_at_risk($midterm, $gwa, $progressions[$enrollmentId] ?? []),
                 'remedialEligible' => $remedialEligible,
+                // GRD-004 rule 11: attempts are kept when an approved grade change means no remedial is needed any more.
+                'gradeChangedAfterRemedial' => ($progressions[$enrollmentId]['attempts'] ?? []) !== [] && $gwa !== null && !faculty_remedial_grade_is_eligible($gwa, $retentionThreshold),
             ];
             if (isset($midterm['components'])) {
                 $retentionRow['midtermComponents'] = $midterm['components'];
@@ -6994,7 +7038,7 @@ function faculty_retention_save_legacy_remedial(PDO $pdo, array $authCtx, array 
         ? [$enrollmentId, $authCtx['user_id']]
         : [$studentId, $classId, $authCtx['user_id']];
     $eligibilityStmt = $pdo->prepare(
-        "SELECT COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa
+        "SELECT " . grade_change_draft_sql($pdo, 'e', 'gwa', 'COALESCE(egb.final_gwa, e.final_gwa)') . " AS final_gwa
            FROM enrollments e
            JOIN class_sections cs ON cs.cs_id = e.cs_id
            LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
@@ -7290,7 +7334,7 @@ function handle_faculty_retention_remedial_save(): void
         $targetStmt = $pdo->prepare(
             "SELECT e.enrollment_id, e.student_id, e.cs_id, e.status AS enrollment_status,
                     e.remedial_state_json,
-                    COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
+                    " . grade_change_draft_sql($pdo, 'e', 'gwa', 'COALESCE(egb.final_gwa, e.final_gwa)') . " AS final_gwa,
                     cs.instructor_user_id, cs.status AS class_status, cs.school_year, cs.archive_reason,
                     s.status AS student_status, s.student_account_user_id, s.bu_email,
                     TRIM(CONCAT(COALESCE(pi.first_name, s.first_name), ' ', COALESCE(pi.middle_name, s.middle_name, ''), ' ', COALESCE(pi.last_name, s.last_name))) AS student_name,
@@ -7940,11 +7984,11 @@ function handle_faculty_reports_summary(): void
                     COALESCE(pi.middle_name, s.middle_name) AS middle_name,
                     COALESCE(pi.last_name, s.last_name) AS last_name,
                     s.bu_email, s.year_level, s.status, b.consent_status, b.face_enrolled,
-                    COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
-                    COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
-                    " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)', 'COALESCE(egb.final_gwa, e.final_gwa)') . " AS retention_state,
+                    " . grade_change_draft_sql($pdo, 'e', 'gwa', 'COALESCE(egb.final_gwa, e.final_gwa)') . " AS final_gwa,
+                    " . grade_change_draft_sql($pdo, 'e', 'percentage', 'COALESCE(egb.final_percentage, e.final_percentage)') . " AS final_percentage,
+                    " . retention_effective_state_sql('e', grade_change_draft_sql($pdo, 'e', 'retention', 'COALESCE(egb.retention_state, e.retention_state)'), grade_change_draft_sql($pdo, 'e', 'gwa', 'COALESCE(egb.final_gwa, e.final_gwa)')) . " AS retention_state,
                     e.remedial_state_json,
-                    e.grade_components_json, e.clinic_hours_completed, cs.cs_id, cs.cs_name,
+                    " . grade_change_draft_sql($pdo, 'e', 'components', 'e.grade_components_json') . " AS grade_components_json, e.clinic_hours_completed, cs.cs_id, cs.cs_name,
                     cs.school_year,
                     c.course_code, c.name AS course_name, c.units, c.is_clinical
              FROM students s
@@ -8082,6 +8126,9 @@ function handle_faculty_classes_get(): void
                 cs.created_at,
                 cs.archive_reason,
                 cs.archived_at,
+                cs.grades_submitted_at,
+                cs.term_end_date,
+                (SELECT b.status FROM grade_change_batches b WHERE b.cs_id = cs.cs_id AND b.status IN ('draft', 'pending') LIMIT 1) AS grade_change_status,
                 cs.meetings_recorded,
                 cs.present_grace_minutes,
                 cs.late_grace_minutes,
@@ -8126,7 +8173,9 @@ function handle_faculty_classes_get(): void
         $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $pdo->beginTransaction(); // the join code is created on first load (CLS-004), which needs a savepoint
-        $mapped = array_map(function ($cls) use ($currentSchoolYear, $authCtx, $pdo, $config) {
+        $terms = academic_terms_read($pdo);
+        $now = attendance_session_now_utc();
+        $mapped = array_map(function ($cls) use ($currentSchoolYear, $authCtx, $pdo, $config, $terms, $now) {
             $meetings = class_meetings_read($pdo, $cls);
             $join = class_join_settings($pdo, $config, $cls, false); // Faculty only: never in Secretary or Student payloads
             return [
@@ -8148,12 +8197,16 @@ function handle_faculty_classes_get(): void
                     || (int) ($cls['course_created_by'] ?? 0) === (int) $authCtx['user_id'],
                 'schoolYear' => $cls['school_year'],
                 'isCurrentSchoolYear' => strcasecmp((string) $cls['school_year'], $currentSchoolYear) === 0,
-                'isHistorical' => strcasecmp((string) $cls['school_year'], $currentSchoolYear) !== 0,
+                'isHistorical' => $cls['grades_submitted_at'] !== null && strcasecmp((string) $cls['school_year'], $currentSchoolYear) !== 0,
+                'gradesSubmitted' => $cls['grades_submitted_at'] !== null,
+                // GRD-004 class card chip: not_submitted | late | submitted | submitted_late, and the open grade change (draft | pending | null).
+                'gradeDeadlineStatus' => grade_submission_deadline_status(grade_submission_deadline(grade_submission_term($terms, $cls), $cls), $cls['grades_submitted_at'], $now),
+                'gradeChangeStatus' => $cls['grade_change_status'],
                 'archiveReason' => $cls['archive_reason'],
                 'archivedAt' => $cls['archived_at'],
-                'isArchived' => $cls['archive_reason'] !== null || strcasecmp((string) $cls['school_year'], $currentSchoolYear) !== 0,
-                'scheduledSessionCount' => $cls['archive_reason'] !== null || strcasecmp((string) $cls['school_year'], $currentSchoolYear) !== 0 ? 0 : (int) $cls['scheduled_session_count'],
-                'liveSession' => $cls['archive_reason'] === null && strcasecmp((string) $cls['school_year'], $currentSchoolYear) === 0 && filter_var($cls['live_session'], FILTER_VALIDATE_BOOLEAN),
+                'isArchived' => $cls['archive_reason'] !== null || ($cls['grades_submitted_at'] !== null && strcasecmp((string) $cls['school_year'], $currentSchoolYear) !== 0),
+                'scheduledSessionCount' => $cls['archive_reason'] !== null || $cls['grades_submitted_at'] !== null ? 0 : (int) $cls['scheduled_session_count'],
+                'liveSession' => $cls['archive_reason'] === null && filter_var($cls['live_session'], FILTER_VALIDATE_BOOLEAN),
                 'secretaryName' => $cls['secretary_name'],
                 'semester' => $cls['semester'],
                 'yearLevel' => (int) ($cls['year_level'] ?? 1),
@@ -8628,7 +8681,7 @@ function handle_faculty_class_update(): void
                 safe_error_response('Class section not found or not assigned to this faculty member.', 403);
                 return;
             }
-            if (!academic_school_year_is_current($pdo, (string) $before['school_year']) || academic_class_section_is_archived($pdo, $csId)) {
+            if (academic_class_section_is_closed($pdo, $csId)) {
                 $pdo->rollBack();
                 safe_error_response(academic_view_only_message($pdo, $csId, 'Historical class sections are view-only and cannot be edited.'), 409);
                 return;
@@ -8951,7 +9004,7 @@ function handle_faculty_class_enroll_students(): void
         $classYearStmt = $pdo->prepare('SELECT school_year FROM class_sections WHERE cs_id = ?');
         $classYearStmt->execute([$csId]);
         $classSchoolYear = $classYearStmt->fetchColumn();
-        if (!is_string($classSchoolYear) || !academic_school_year_is_current($pdo, $classSchoolYear) || academic_class_section_is_archived($pdo, $csId)) {
+        if (!is_string($classSchoolYear) || academic_class_section_is_closed($pdo, $csId)) {
             safe_error_response(academic_view_only_message($pdo, $csId, 'Historical class sections are view-only and cannot add Students.'), 409);
             return;
         }
@@ -9138,7 +9191,7 @@ function handle_faculty_class_unenroll_student(): void
         $classYearStmt = $pdo->prepare('SELECT school_year FROM class_sections WHERE cs_id = ?');
         $classYearStmt->execute([$csId]);
         $classSchoolYear = $classYearStmt->fetchColumn();
-        if (!is_string($classSchoolYear) || !academic_school_year_is_current($pdo, $classSchoolYear) || academic_class_section_is_archived($pdo, $csId)) {
+        if (!is_string($classSchoolYear) || academic_class_section_is_closed($pdo, $csId)) {
             safe_error_response(academic_view_only_message($pdo, $csId, 'Historical class sections are view-only and cannot remove Students.'), 409);
             return;
         }
@@ -9340,7 +9393,7 @@ function faculty_class_archive_change(string $action): void
         $pdo->beginTransaction();
         try {
             $classStmt = $pdo->prepare(
-                "SELECT cs.cs_name, cs.school_year, cs.archive_reason, c.course_code
+                "SELECT cs.cs_name, cs.school_year, cs.archive_reason, cs.grades_submitted_at, c.course_code
                    FROM class_sections cs LEFT JOIN courses c ON c.course_id = cs.course_id
                   WHERE cs.cs_id = ? FOR UPDATE OF cs"
             );
@@ -9371,6 +9424,18 @@ function faculty_class_archive_change(string $action): void
                 if ($reason !== 'finished' && faculty_class_has_pending_remedial($pdo, $csId)) {
                     $pdo->rollBack();
                     safe_error_response('A class with a pending remedial can only be archived as Finished.', 409);
+                    return;
+                }
+                $openBatch = $pdo->prepare("SELECT 1 FROM grade_change_batches WHERE cs_id = ? AND status IN ('draft', 'pending')");
+                $openBatch->execute([$csId]);
+                if ($openBatch->fetchColumn() !== false) { // GRD-004 rule 8
+                    $pdo->rollBack();
+                    safe_error_response('Send or discard the grade change first.', 409);
+                    return;
+                }
+                if ($reason === 'finished' && $class['grades_submitted_at'] === null) {
+                    $pdo->rollBack();
+                    safe_error_response('Submit the grades first.', 409);
                     return;
                 }
                 $pdo->prepare('UPDATE class_sections SET archive_reason = ?, archived_at = ? WHERE cs_id = ?')

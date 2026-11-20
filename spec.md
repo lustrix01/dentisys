@@ -560,6 +560,17 @@ Lecture-only courses. A course with Lecture units above 0 and Laboratory units o
 
 History: 2026-10-12 Attendance source selector removed; 2026-10-26 lecture-only courses; 2026-10-27 default split 50/50 (was 30/70); 2026-11-10 no Attendance category for lecture-only. Records: docs/archive/.
 
+---
+
+## GRD-004 - Grade submission and Dean approval
+**Status: APPROVED**
+
+Owner decision (2026-11-20): Faculty submit a class's grades once, at any time, after a confirmation that lists students with missing scores; submitting is refused while an attendance session is open. For 24 hours after each submission Faculty may withdraw it without approval. A submitted class is view-only like an archived class (CLS-003): sessions, attendance, assessments, scores and the roster are locked, no session opens or is created for it, and the grade weights of that Faculty member's course and term are locked for all of its sections; remedial and cost recovery results stay recordable. Each term has a submission deadline (ACA-002); a class not submitted by the end of that date is Late, and a submission after it is Submitted late; nothing locks automatically.
+
+After the 24 hours, Faculty change grades only through a grade change: the class opens as a draft that Students, Class Secretaries, reports and the Dean do not see; Faculty may change scores, assessments and attendance records of existing sessions, but not grade weights, sessions or the roster; then they send it for Dean approval with one reason. A class has at most one grade change at a time; until the Dean decides, Faculty may pull it back to draft or discard it. The Dean approves or rejects the whole grade change; rejecting needs a reason and discards it; approving applies it and locks the class again with no new withdraw period. The Dean is notified in-app when a grade change arrives; the Faculty member is notified in-app and by email of the decision and its reason. Submitting, withdrawing, sending, pulling back, discarding, approving, rejecting and changing a deadline are audited; the decided grade change keeps each changed student's old and new values.
+
+The Dean's Grade Submissions page lists the term's classes with their submission status (Cancelled and Created-by-mistake classes excluded), a count of Late classes from earlier terms, and the pending and decided grade changes. The Superadmin sees it read-only. Classes of past school years count as submitted from the release of 13.8. Details: `docs/contracts/grade-submission.md`.
+
 
 ---
 
@@ -947,6 +958,8 @@ Successful automated biometric attendance requires no Faculty approval. Faculty 
 
 Every Secretary manual attendance change, whether a first mark (Present, Late, Absent, Excused) or a change to an existing record, is a request that only the class's Faculty may approve or reject; this includes an Excused request when a Student contacts the Secretary about an excuse. Secretary MUST NOT finalize Excused through a generic manual override. Until approved, the record stays as it was, and a rejection leaves the current attendance status unchanged. When the session ends, a student whose request is still pending is resolved to Absent like any unrecorded student; a later approval changes that record. A Secretary cannot change an attendance record whose Excused status comes from a Faculty-approved Excused request; the Secretary attendance list shows "Approved by Faculty" instead of the change action, and only Faculty can change it.
 
+Once a class's grades are submitted (GRD-004), a Secretary attendance request for it is refused; requests pending from before may be decided by Faculty only during the 24-hour withdraw period.
+
 Before a Faculty manual attendance mark or correction is saved, DentiSYS asks for confirmation showing the Student, session date, current status when one exists, new status, and reason.
 
 Faculty review Secretary requests in a Secretary requests tab on the Attendance Monitoring page. The tab lists requests from all the Faculty's classes, grouped by session, with filters for student name or ID, class, status and requested change. Faculty can approve or reject all requests of a session, or select requests (including all requests the filters show) and approve them; approving more than one asks for confirmation first. The roll-call request chip and the Faculty Dashboard pending badge open the tab.
@@ -976,6 +989,8 @@ While it is on, DentiSYS keeps one scheduled session for each weekly meeting of 
 Turning it on checks the class's meetings in the next 7 days against other classes under ATT-001 (a)–(c). Any overlap shows the overlap pop-up with Go back and Turn on anyway; Turn on anyway notifies each overlapped class's Faculty in-app and is audited. An auto-session created later that overlaps another class is still created, and the Faculty of both classes get an in-app notice listing the overlap.
 
 Turning it off revokes the class's auto-sessions that have not opened; open and past sessions stay. Changing the weekly schedule while it is on first warns "This changes N upcoming sessions." with Go back and Save; on Save, unedited upcoming auto-sessions follow the new schedule, those of removed meetings are revoked, and added meetings get their sessions at once.
+
+No auto-session is created, and no scheduled session opens, for a class whose grades are submitted or that has an open grade change (GRD-004).
 
 ## DEL-001 — Image publishing and deployment
 
@@ -1022,6 +1037,8 @@ These technical items remain unresolved. Listing them does not select or approve
 **Status: APPROVED**
 
 Owner decision (2026-10-10): The Superadmin defines academic terms (Dean until 2026-11-18, ADM-001). A term is a school year plus a semester (`1ST`, `2ND` or `Summer`) with a start date and an end date. The end date MUST be after the start date; each school year and semester has at most one term; terms in the same school year MUST NOT overlap. Dates are calendar dates in the operational timezone (Asia/Manila), and a term ends at the end of its end date. The Superadmin may copy the previous school year's terms, shifted by one year, and then adjust them. A term used by any class MUST NOT be deleted. Every term change is audited.
+
+Each term has a grade submission deadline (GRD-004), by default the end date plus 14 days; the Superadmin may set it to any date on or after the end date. Changing it is audited.
 
 Faculty may create a class only in a defined term of the current school year (CLS-002); the class's semester and school year come from that term. Existing classes link to the term with the same semester and school year. A class's own stored term dates apply only when no matching defined term exists.
 
@@ -1156,13 +1173,13 @@ Adopt the source Attendance Monitoring interface, consolidating Start Attendance
 
 Use the source start-session presentation with PDF-directed improvements. Existing ATT rules still govern timing, geofence, ownership, correction, history, and Excused approval. A source delete/relaunch control does not authorize erasing attendance history or reusing verification.
 
-Attendance Monitoring shows an Assigned Classes grid and a Worksheet for the selected class (the roll call of student attendance), plus a "New attendance session" action placed apart from every session list. A session modal has three tabs: Current Session; Upcoming Sessions with countdowns, where upcoming sessions have Edit and Revoke; and Past Sessions, newest first, each with its Present, Late, Absent and Excused counts (Not recorded when above 0) and a From–To date filter. Revoked sessions appear there only behind a switch, and choosing a session opens its roll call. For a past-school-year class or one archived as Finished, the modal shows only Past Sessions and every roll call is view-only. The Secretary's session modal keeps two tabs. Session timing uses exact times only (quick choices are removed); timing validation is unchanged. The Secretary uses the same structure in the blue palette.
+Attendance Monitoring shows an Assigned Classes grid and a Worksheet for the selected class (the roll call of student attendance), plus a "New attendance session" action placed apart from every session list. A session modal has three tabs: Current Session; Upcoming Sessions with countdowns, where upcoming sessions have Edit and Revoke; and Past Sessions, newest first, each with its Present, Late, Absent and Excused counts (Not recorded when above 0) and a From–To date filter. Revoked sessions appear there only behind a switch, and choosing a session opens its roll call. For a class whose grades are submitted (GRD-004) or one archived as Finished, the modal shows only Past Sessions and every roll call is view-only. The Secretary's session modal keeps two tabs. Session timing uses exact times only (quick choices are removed); timing validation is unchanged. The Secretary uses the same structure in the blue palette.
 
 History: 2026-10-10 Sessions and Roll call views; 2026-10-12 Assigned Classes grid, Worksheet, two-tab session modal; 2026-11-20 Past Sessions tab (13.6). Records: docs/archive/.
 
 ## CLS-002 - Current-year creation and historical classes (PDF page 9)
 
-Faculty may create classes only for the current school year. Past-school-year classes are view-only: Faculty cannot edit them, add students, or perform other mutations through those historical class surfaces. This narrows CLS-001's editing permission to eligible current-year classes. Obtain the current year from authoritative configuration, not the browser clock. The Owner selected 2026-2027 as the current school year on 2026-09-24. Any historical correction exception requires a separately approved rule. Class creation additionally requires a defined term (ACA-002) that has not already ended (Asia/Manila).
+Faculty may create classes only for the current school year. Past-school-year classes whose grades are submitted (GRD-004) are view-only; a class whose grades are not submitted stays editable until they are: Faculty cannot edit them, add students, or perform other mutations through those historical class surfaces. This narrows CLS-001's editing permission to eligible current-year classes. Obtain the current year from authoritative configuration, not the browser clock. The Owner selected 2026-2027 as the current school year on 2026-09-24. Any historical correction exception requires a separately approved rule. Class creation additionally requires a defined term (ACA-002) that has not already ended (Asia/Manila).
 
 History: 2026-11-06 no class in a term that has already ended. Records: docs/archive/.
 
@@ -1170,13 +1187,13 @@ History: 2026-11-06 no class in a term that has already ended. Records: docs/arc
 
 Owner decision (2026-10-22): Faculty may archive a current-school-year class section they teach. No other role may archive or restore a class section for now.
 
-Archiving requires one reason: Finished, Cancelled, or Created by mistake. Past-school-year class sections are archived automatically as Completed when the school year ends; Faculty cannot archive, restore, or change the reason of a past-school-year class section. A class archived as Finished is also shown as Completed.
+Archiving requires one reason: Finished, Cancelled, or Created by mistake. Past-school-year class sections whose grades are submitted (GRD-004) are archived automatically as Completed when the school year ends; an unsubmitted class section stays active until its grades are submitted; Faculty cannot archive, restore, or change the reason of a past-school-year class section. A class archived as Finished is also shown as Completed.
 
 Completed class sections remain visible to their Students with grades, attendance, and remedial history, under past or archived classes. Cancelled and Created-by-mistake class sections are hidden from Students and Class Secretaries and are excluded from attendance, retention monitoring, and Dean reports.
 
 Every archived class section is view-only under the same rules as historical classes (CLS-002). Archiving never deletes or changes enrollments, scores, grades, attendance, remedial records, or audit history.
 
-Archiving is refused while an attendance session for the class section is open. A class section with a pending remedial may be archived only as Finished.
+Archiving is refused while an attendance session for the class section is open. A class section with a pending remedial may be archived only as Finished. Archiving as Finished requires the grades to be submitted (GRD-004), and archiving is refused while a grade change is open. Restoring a class section archived as Finished keeps its grades submitted.
 
 Faculty may restore a class section they archived during the current school year. Restoring returns it to an active, editable class section. Archiving and restoring are recorded in the audit log with the actor, the class section, and the reason.
 

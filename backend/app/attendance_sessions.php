@@ -952,7 +952,12 @@ function attendance_sessions_open_due(PDO $pdo, array $config, array $context, D
     foreach ($due->fetchAll(PDO::FETCH_ASSOC) as $candidate) {
         $pdo->beginTransaction();
         try {
-            $pdo->prepare('SELECT cs_id FROM class_sections WHERE cs_id = ? FOR UPDATE')->execute([$candidate['cs_id']]);
+            $lock = $pdo->prepare('SELECT grades_submitted_at FROM class_sections WHERE cs_id = ? FOR UPDATE');
+            $lock->execute([$candidate['cs_id']]);
+            if ($lock->fetchColumn() !== null) { // GRD-004: a submitted class does not open; the session stays scheduled
+                $pdo->commit();
+                continue;
+            }
             $openedAt = (new DateTimeImmutable($candidate['session_date'] . ' ' . $candidate['opening_time'], $nowLocal->getTimezone()))->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
             // An overdue predecessor may be skipped while biometric verification
             // holds its lock. Leave the next booking queued until it can end.
@@ -1004,8 +1009,10 @@ function attendance_record_correction_insert(
  * ATT-006 Excused requests with display details. $scopeSql restricts the rows
  * (for example to one Faculty member's or Secretary's classes).
  */
-function attendance_excused_requests_rows(PDO $pdo, string $scopeSql, array $params, int $limit = 200): array
+/** $published: the Class Secretary sees the submitted attendance while a grade change is open (GRD-004). */
+function attendance_excused_requests_rows(PDO $pdo, string $scopeSql, array $params, int $limit = 200, bool $published = false): array
 {
+    $records = $published ? grade_change_published_sql($pdo, 'attendance_records') : 'attendance_records';
     $stmt = $pdo->prepare(
         "SELECT xr.request_id, xr.status, xr.reason, xr.session_date, xr.session_code, xr.requested_at,
                 xr.decided_at, xr.decision_note, xr.attendance_session_id, xr.requested_status,
@@ -1018,13 +1025,13 @@ function attendance_excused_requests_rows(PDO $pdo, string $scopeSql, array $par
                 COALESCE(pi.last_name, s.last_name) AS last_name,
                 COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix,
                 cs.cs_id, cs.cs_name, c.course_code,
-                (SELECT r.status FROM attendance_records r
+                (SELECT r.status FROM {$records} r
                    LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
                   WHERE r.enrollment_id = xr.enrollment_id AND r.session_date = xr.session_date
                     AND (r.attendance_session_id = xr.attendance_session_id OR r.attendance_session_id IS NULL)
                     AND (rs.session_id IS NULL OR rs.status <> 'revoked')
                   ORDER BY r.record_id DESC LIMIT 1) AS current_status,
-                (SELECT r.verification_method FROM attendance_records r
+                (SELECT r.verification_method FROM {$records} r
                    LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
                   WHERE r.enrollment_id = xr.enrollment_id AND r.session_date = xr.session_date
                     AND (r.attendance_session_id = xr.attendance_session_id OR r.attendance_session_id IS NULL)
@@ -1270,7 +1277,8 @@ function attendance_session_save_class_grace(PDO $pdo, array $config, array $aut
  *
  * @return array{sessions: list<array>, students: list<array>, records: list<array>}
  */
-function attendance_sheet_data(PDO $pdo, int $csId): array
+/** $published: the Dean reads the submitted copy while a grade change is open (GRD-004); Faculty read the draft. */
+function attendance_sheet_data(PDO $pdo, int $csId, bool $published = false): array
 {
     $sessionStmt = $pdo->prepare(
         "SELECT session_id, session_date, opening_time
@@ -1308,7 +1316,7 @@ function attendance_sheet_data(PDO $pdo, int $csId): array
 
     $recordStmt = $pdo->prepare(
         "SELECT r.enrollment_id, r.attendance_session_id, r.session_date, r.status
-         FROM attendance_records r
+         FROM " . ($published ? grade_change_published_sql($pdo, 'attendance_records') : 'attendance_records') . " r
          JOIN enrollments e ON e.enrollment_id = r.enrollment_id
          WHERE e.cs_id = ? AND LOWER(e.status) = 'active'
          ORDER BY r.record_id"
@@ -1364,5 +1372,5 @@ function attendance_sheet_payload(PDO $pdo, int $csId, ?int $instructorUserId): 
             'schoolYear' => $class['school_year'],
             'semester' => $class['semester'],
         ],
-    ] + attendance_sheet_data($pdo, $csId);
+    ] + attendance_sheet_data($pdo, $csId, $instructorUserId === null);
 }

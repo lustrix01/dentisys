@@ -77,8 +77,8 @@ test.describe('Superadmin account', () => {
 test.describe('Dean account', () => {
   test.beforeEach(async ({ page }) => { await signInAs(page, 'admin'); });
 
-  test('DS17 the Dean sees Dashboard, Reports & Analytics, Faculty Invitations and My Activity only', async ({ page }) => {
-    for (const p of ['/', '/admin/reports', '/admin/faculty-invite', '/admin/audit-trail']) await expect(page.locator(`a[href="${p}"]`).first()).toBeAttached();
+  test('DS17 the Dean sees Dashboard, Reports & Analytics, Grade Submissions, Faculty Invitations and My Activity only', async ({ page }) => {
+    for (const p of ['/', '/admin/reports', '/admin/grade-submissions', '/admin/faculty-invite', '/admin/audit-trail']) await expect(page.locator(`a[href="${p}"]`).first()).toBeAttached();
     for (const p of [...SUPERADMIN_PAGES, '/admin/terms', '/admin/rooms', '/admin/course-catalog', '/admin/classes']) await expect(page.locator(`a[href="${p}"]`)).toHaveCount(0);
     await expect(page.locator('[aria-label="Account view"]')).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'My Activity' }).first()).toBeVisible();

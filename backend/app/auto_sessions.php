@@ -117,7 +117,7 @@ function auto_sessions_missing_rooms(PDO $pdo, array $meetings): array
 
 function auto_sessions_class_row(PDO $pdo, int $csId, bool $lock = false, bool $skipLocked = false): ?array
 {
-    $stmt = $pdo->prepare('SELECT ' . AUTO_SESSIONS_CLASS_COLUMNS . ', cs.archive_reason, cs.status FROM class_sections cs WHERE cs.cs_id = ?'
+    $stmt = $pdo->prepare('SELECT ' . AUTO_SESSIONS_CLASS_COLUMNS . ', cs.archive_reason, cs.status, cs.grades_submitted_at FROM class_sections cs WHERE cs.cs_id = ?'
         . ($lock ? ' FOR UPDATE OF cs' . ($skipLocked ? ' SKIP LOCKED' : '') : ''));
     $stmt->execute([$csId]);
     return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -191,7 +191,7 @@ function auto_sessions_top_up_class(PDO $pdo, array $config, array $context, int
         return 0;
     }
     $created = 0;
-    if (!academic_school_year_is_past($pdo, (string) $class['school_year'])) {
+    if ($class['grades_submitted_at'] === null) { // GRD-004: none for a submitted class or one with an open grade change
         $term = academic_resolve_class_term_dates($class, academic_terms_read($pdo));
         foreach (auto_sessions_occurrences(class_meetings_read($pdo, $class), $nowLocal, $term['startDate'], $term['endDate'],
             (int) $class['present_grace_minutes'], (int) $class['late_grace_minutes']) as $occurrence) {

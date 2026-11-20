@@ -92,6 +92,7 @@ function recompute_run(PDO $pdo, array $config, string $mode): int
     $classes = $pdo->prepare(
         'SELECT cs_id, cs_name, instructor_user_id FROM class_sections
           WHERE school_year >= ? AND archive_reason IS NULL AND instructor_user_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM grade_change_batches b WHERE b.cs_id = class_sections.cs_id AND b.status IN (\'draft\', \'pending\'))
           ORDER BY instructor_user_id, cs_id'
     );
     $classes->execute([$currentYear]);

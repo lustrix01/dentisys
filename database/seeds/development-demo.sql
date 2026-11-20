@@ -9809,4 +9809,21 @@ BEGIN
 END
 $seq$;
 
+-- GRD-004 (13.8): the seed loads after migration 071, so mark its classes the way 071 does.
+-- Past-school-year classes that are not archived count as submitted at their term end; Finished at archived_at.
+UPDATE class_sections cs
+   SET grades_submitted_at = COALESCE(
+           (SELECT (t.end_date + 1)::timestamp AT TIME ZONE 'Asia/Manila' - interval '1 second'
+              FROM academic_terms t
+             WHERE t.school_year = cs.school_year
+               AND t.semester = CASE WHEN upper(cs.semester) LIKE '%1ST%' OR upper(cs.semester) LIKE '%FIRST%' THEN '1ST'
+                                     WHEN upper(cs.semester) LIKE '%2ND%' OR upper(cs.semester) LIKE '%SECOND%' THEN '2ND'
+                                     WHEN upper(cs.semester) LIKE '%SUMMER%' THEN 'Summer' END),
+           (cs.term_end_date + 1)::timestamp AT TIME ZONE 'Asia/Manila' - interval '1 second',
+           now())
+ WHERE cs.archive_reason IS NULL AND cs.grades_submitted_at IS NULL
+   AND cs.school_year < (SELECT COALESCE(setting_value::jsonb ->> 'schoolYear', setting_value::jsonb ->> 'school_year', setting_value::jsonb #>> '{}')
+                           FROM system_settings WHERE setting_key = 'academic.current_school_year');
+UPDATE class_sections SET grades_submitted_at = archived_at WHERE archive_reason = 'finished' AND grades_submitted_at IS NULL;
+
 COMMIT;

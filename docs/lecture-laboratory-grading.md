@@ -75,7 +75,7 @@ with defaults or rescale saved weights. Conversion back to combined period lists
 is unavailable. Scores, history and recorded grades remain preserved until explicit
 recomputation.
 
-Past-school-year offerings remain view-only. Retention status is computed from
+Offerings whose grades are submitted are view-only (GRD-004). Retention status is computed from
 the saved grades and cannot be set by hand. Import workflows are described in
 [the official imports contract](contracts/official-imports.md).
 

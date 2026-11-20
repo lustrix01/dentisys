@@ -1840,6 +1840,11 @@ export interface FacultyClassItem extends Partial<ClassSessionDefaults> {
   labUnits?: number | null;
   /** Scores or grades exist: course and term can no longer change. */
   hasGrades?: boolean;
+  /** GRD-004: grades submitted (in grace or after). */
+  gradesSubmitted?: boolean;
+  gradeDeadlineStatus?: GradeDeadlineStatus;
+  /** The open grade change of the class, if any. */
+  gradeChangeStatus?: 'draft' | 'pending' | null;
   /** This Faculty member may change the shared course's lecture/lab units. */
   courseUnitsEditable?: boolean;
   schoolYear: string;
@@ -1945,6 +1950,56 @@ export function archiveClassApi(data: {
   reason: 'finished' | 'cancelled' | 'mistake';
 }): Promise<{ status: string; message: string; archiveReason: string; archivedAt: string }> {
   return request('POST', '/faculty/classes/archive', data);
+}
+
+// GRD-004 grade submission (docs/contracts/grade-submission.md "API").
+export type GradeDeadlineStatus = 'not_submitted' | 'late' | 'submitted' | 'submitted_late';
+export interface GradeSubmissionState {
+  status: 'not_submitted' | 'submitted';
+  deadlineStatus: GradeDeadlineStatus;
+  deadline: string | null;
+  submittedAt: string | null;
+  graceUntil: string | null;
+  missing: { name: string; studentNumber: string; missingCount: number }[];
+  batch: { batchId: number; status: 'draft' | 'pending' | 'rejected'; reason: string | null; sentAt: string | null; decisionReason: string | null } | null;
+}
+export function getGradeSubmissionApi(csId: number): Promise<GradeSubmissionState> {
+  return request('GET', `/faculty/classes/grade-submission?csId=${csId}`);
+}
+export type GradeSubmissionAction = 'submit' | 'withdraw' | 'open' | 'send' | 'pull-back' | 'discard';
+const GRADE_SUBMISSION_PATHS: Record<GradeSubmissionAction, string> = {
+  submit: '/faculty/classes/grade-submission',
+  withdraw: '/faculty/classes/grade-submission/withdraw',
+  open: '/faculty/classes/grade-change',
+  send: '/faculty/classes/grade-change/send',
+  'pull-back': '/faculty/classes/grade-change/pull-back',
+  discard: '/faculty/classes/grade-change/discard',
+};
+export function gradeSubmissionActionApi(action: GradeSubmissionAction, csId: number, reason?: string): Promise<GradeSubmissionState> {
+  return request('POST', GRADE_SUBMISSION_PATHS[action], reason === undefined ? { csId } : { csId, reason });
+}
+export interface DeanGradeSubmissionRow { csId: number; courseCode: string; section: string; faculty: string; deadline: string | null; deadlineStatus: GradeDeadlineStatus; submittedAt: string | null }
+export function getDeanGradeSubmissionsApi(params: { termId?: number; courseId?: number; status?: GradeDeadlineStatus } = {}): Promise<{ term: { id: number; schoolYear: string; semester: string } | null; classes: DeanGradeSubmissionRow[]; lateFromEarlierTerms: number }> {
+  const query = new URLSearchParams();
+  if (params.termId) query.set('termId', String(params.termId));
+  if (params.courseId) query.set('courseId', String(params.courseId));
+  if (params.status) query.set('status', params.status);
+  const qs = query.toString();
+  return request('GET', `/admin/grade-submissions${qs ? `?${qs}` : ''}`);
+}
+export interface DeanGradeChangeRequest { batchId: number; csId: number; courseCode: string; section: string; faculty: string; reason: string | null; sentAt: string | null; status: 'pending' | 'approved' | 'rejected'; studentCount: number; decidedAt?: string | null; decisionReason?: string | null }
+export function getDeanGradeChangeRequestsApi(state: 'pending' | 'decided'): Promise<{ requests: DeanGradeChangeRequest[]; pendingCount: number }> {
+  return request('GET', `/admin/grade-change-requests?state=${state}`);
+}
+export interface DeanGradeChangeDetail {
+  request: DeanGradeChangeRequest;
+  students: { studentId: number; name: string; studentNumber: string; oldGrade: number | string | null; newGrade: number | string | null; changes: { kind: 'score' | 'attendance' | 'assessment'; label: string; old: string | null; new: string | null }[] }[];
+}
+export function getDeanGradeChangeDetailApi(batchId: number): Promise<DeanGradeChangeDetail> {
+  return request('GET', `/admin/grade-change-requests/detail?batchId=${batchId}`);
+}
+export function decideDeanGradeChangeApi(decision: 'approve' | 'reject', batchId: number, reason?: string): Promise<{ status: string; message: string }> {
+  return request('POST', `/admin/grade-change-requests/${decision}`, decision === 'reject' ? { batchId, reason } : { batchId });
 }
 
 export function restoreClassApi(data: { csId: number }): Promise<{ status: string; message: string }> {
@@ -2579,6 +2634,8 @@ export type AcademicTerm = {
   semester: '1ST' | '2ND' | 'Summer';
   startDate: string | null;
   endDate: string | null;
+  /** GRD-004: null means the end date + 14 days. */
+  gradeDeadline?: string | null;
   classCount: number;
 };
 export type AcademicTermInput = {
@@ -2587,6 +2644,7 @@ export type AcademicTermInput = {
   semester: AcademicTerm['semester'];
   startDate: string;
   endDate: string;
+  gradeDeadline?: string | null;
   confirmedExpiringEnrollments?: number;
 };
 export type AcademicTermSaveResult = { status: string; confirmationRequired: boolean; expiringEnrollments?: number; id?: number };

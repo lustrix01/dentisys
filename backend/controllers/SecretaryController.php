@@ -1018,7 +1018,7 @@ function handle_secretary_dashboard_kpis(): void
 
         $attStmt = $pdo->prepare(
             "SELECT r.record_id, r.enrollment_id, r.session_date, r.status, r.override_reason, r.override_at
-             FROM attendance_records r
+             FROM " . grade_change_published_sql($pdo, 'attendance_records') . " r
              JOIN enrollments e ON e.enrollment_id = r.enrollment_id
              JOIN class_sections cs ON cs.cs_id = e.cs_id
              WHERE cs.secretary_user_id = ?
@@ -1436,6 +1436,11 @@ function handle_secretary_attendance_session_start(): void
             if (academic_class_section_is_past($pdo, $csId)) {
                 $pdo->rollBack();
                 safe_error_response(academic_view_only_message($pdo, $csId), 409);
+                return;
+            }
+            if (grade_change_open_batch($pdo, $csId) !== null) { // GRD-004 Q12
+                $pdo->rollBack();
+                safe_error_response('Sessions cannot be started during a grade change.', 409);
                 return;
             }
 
@@ -1941,7 +1946,7 @@ function handle_secretary_attendance_get(): void
                     cs.cs_id, cs.cs_name, c.course_code,
                     (LOWER(r.status) = 'excused' AND EXISTS (SELECT 1 FROM attendance_excused_requests xr
                         WHERE xr.record_id = r.record_id AND xr.status = 'approved')) AS excused_approved_by_faculty
-             FROM attendance_records r
+             FROM " . grade_change_published_sql($pdo, 'attendance_records') . " r
              JOIN enrollments e ON r.enrollment_id = e.enrollment_id
              JOIN students s ON e.student_id = s.student_id
              JOIN person_identities pi ON pi.person_id = s.person_id
@@ -2014,7 +2019,7 @@ function handle_secretary_attendance_get(): void
                    JOIN person_identities pi ON pi.person_id = s.person_id
                   WHERE a.session_id = ? AND cs.secretary_user_id = ? AND a.status <> 'revoked'
                     AND NOT EXISTS (
-                        SELECT 1 FROM attendance_records r
+                        SELECT 1 FROM " . grade_change_published_sql($pdo, 'attendance_records') . " r
                           LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
                          WHERE r.enrollment_id = e.enrollment_id
                            AND (r.attendance_session_id = a.session_id
@@ -2173,6 +2178,11 @@ function secretary_attendance_request_create(bool $excusedRoute): void
                 safe_error_response('The student or attendance record was not found in an assigned class.', 404);
                 return;
             }
+            if (!academic_class_section_is_archived($pdo, (int) $target['cs_id']) && academic_class_section_is_submitted($pdo, (int) $target['cs_id'])) {
+                $pdo->rollBack();
+                safe_error_response('Grades for this class are submitted. Ask your Faculty.', 409);
+                return;
+            }
             if (academic_class_section_is_past($pdo, (int) $target['cs_id'])) {
                 $pdo->rollBack();
                 safe_error_response(academic_view_only_message($pdo, (int) $target['cs_id']), 409);
@@ -2241,7 +2251,7 @@ function secretary_attendance_request_create(bool $excusedRoute): void
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
         }
-        $rows = attendance_excused_requests_rows($pdo, 'xr.request_id = ?', [$requestId], 1);
+        $rows = attendance_excused_requests_rows($pdo, 'xr.request_id = ?', [$requestId], 1, true);
         json_response([
             'status' => 'ok',
             'message' => 'Request sent to Faculty for approval.',
@@ -2297,7 +2307,7 @@ function handle_secretary_excused_request_cancel(array $params = []): void
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
         }
-        $rows = attendance_excused_requests_rows($pdo, 'xr.request_id = ?', [$requestId], 1);
+        $rows = attendance_excused_requests_rows($pdo, 'xr.request_id = ?', [$requestId], 1, true);
         json_response(['status' => 'ok', 'message' => 'Request cancelled.', 'request' => $rows[0] ?? null], 200);
     } catch (\Throwable $e) {
         error_log('Secretary request cancel error: ' . sanitize_for_log($e));
@@ -2313,7 +2323,7 @@ function handle_secretary_excused_requests_list(): void
         $authCtx = secretary_verify_auth($pdo, $config);
         json_response([
             'status' => 'ok',
-            'requests' => attendance_excused_requests_rows($pdo, 'cs.secretary_user_id = ?', [(int) $authCtx['user_id']]),
+            'requests' => attendance_excused_requests_rows($pdo, 'cs.secretary_user_id = ?', [(int) $authCtx['user_id']], 200, true),
         ], 200);
     } catch (\Throwable $e) {
         error_log('Secretary excused request list error: ' . sanitize_for_log($e));

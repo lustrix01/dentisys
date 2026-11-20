@@ -38,6 +38,7 @@ import { isViewOnlyClass, isArchivedCurrentYear, archiveGroup, type ArchiveReaso
 import { Student } from '../../types';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { gradeStatusChip } from '../../utils/gradeStatusChip';
 import { ClassCardJoinCode } from '../../components/ClassJoinPanel';
 import { ClassJoinButton } from '../../components/ClassJoinPanel';
 import { AutoSessionsPanel } from '../../components/AutoSessionsPanel';
@@ -1570,11 +1571,19 @@ const handleSendAllStudentInvites = async () => {
                     <h3 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
                       {cls.courseName}
                     </h3>
-                    {componentsLabel && (
-                      <span className="inline-flex px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-300 text-[10px] font-bold" data-testid="class-course-components">
-                        {componentsLabel}
-                      </span>
-                    )}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {componentsLabel && (
+                        <span className="inline-flex px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-300 text-[10px] font-bold" data-testid="class-course-components">
+                          {componentsLabel}
+                        </span>
+                      )}
+                      {!historicalClass && (() => {
+                        const chip = gradeStatusChip(cls);
+                        return (
+                          <span data-testid="class-grade-status" className={`inline-flex whitespace-nowrap px-2 py-0.5 rounded-md text-[10px] font-bold ${chip.tone}`}>{chip.label}</span>
+                        );
+                      })()}
+                    </div>
 
                       <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
                         <div className="flex items-center gap-2">

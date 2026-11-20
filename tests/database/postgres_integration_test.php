@@ -324,7 +324,8 @@ $expectedMigrations = [
     '067_auto_sessions.sql',
     '068_superadmin_role.sql',
     '069_mfa_trusted_devices.sql',
-'070_auth_session_remember.sql',
+    '070_auth_session_remember.sql',
+    '071_grade_submission.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -3659,7 +3660,8 @@ expect_same($historicalRemedialGradeBefore, $historicalRemedialGradeStmt->fetch(
 $historicalRemedialNotificationCountStmt->execute([$historicalRemedialRecipientUserId]);
 expect_same($historicalRemedialNotificationsBefore, (int) $historicalRemedialNotificationCountStmt->fetchColumn(), 'Historical remedial grading leaves notifications unchanged');
 
-// Past school-year classes are view-only for grading and attendance writes.
+// Past school-year classes whose grades are submitted (GRD-004; the 071 backfill does this for real ones) are view-only for grading and attendance writes.
+$pdo->prepare('UPDATE class_sections SET grades_submitted_at = CURRENT_TIMESTAMP, grades_grace_until = NULL WHERE cs_id = ?')->execute([$historicalRemedialClassId]);
 [$historicalConfigStatus] = integration_http_put_json('/api/faculty/grading-config', $seedFacultyAccessToken, [
     'courseId' => $historicalRemedialCourseId,
     'semester' => '1st',
@@ -4607,6 +4609,7 @@ expect_same(1, (int) $archiveNoticeCount->fetchColumn(), 'Restoring a cancelled 
 [$archiveNotArchivedStatus, $archiveNotArchivedBody] = integration_http_json('/api/faculty/classes/restore', $generatedFacultyAccessToken, ['csId' => $archiveIds['C']]);
 expect_same([409, 'This class is not archived.'], [$archiveNotArchivedStatus, $archiveNotArchivedBody['message'] ?? null], 'Restore needs an archived class');
 
+expect_same(200, integration_http_json('/api/faculty/classes/grade-submission', $generatedFacultyAccessToken, ['csId' => $archiveIds['F']])[0], 'Archive fixture: the grades are submitted before archiving as Finished (GRD-004)');
 [$archiveFinishStatus] = $archiveClass($archiveIds['F'], 'finished');
 expect_same(200, $archiveFinishStatus, 'Faculty can archive a class as Finished');
 expect_same(true, $archiveStudentVisible($archiveIds['F']), 'A finished class stays visible to the Student');
@@ -8114,6 +8117,8 @@ require __DIR__ . '/audit_read_integration.php';
 require __DIR__ . '/superadmin_integration.php';
 require __DIR__ . '/superadmin_split_integration.php';
 require __DIR__ . '/superadmin_classes_integration.php';
+require __DIR__ . '/grade_submission_integration.php';
+require __DIR__ . '/grade_change_integration.php';
 require __DIR__ . '/face_flags_integration.php';
 require __DIR__ . '/audit_chain_integration.php';
 require __DIR__ . '/trusted_devices_integration.php';

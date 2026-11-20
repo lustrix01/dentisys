@@ -14,7 +14,7 @@ const SUPERADMIN_CLASSES_PAGE_SIZE = 50;
 function superadmin_class_select(): string
 {
     return "SELECT cs.cs_id, cs.cs_name, cs.school_year, cs.semester, cs.year_level, cs.lec_room, cs.lab_room, cs.meetings_recorded,
-            cs.archive_reason, cs.archived_at, cs.instructor_user_id, c.course_code, COALESCE(cs.course_title, c.name) AS course_title,
+            cs.archive_reason, cs.archived_at, cs.grades_submitted_at, cs.instructor_user_id, c.course_code, COALESCE(cs.course_title, c.name) AS course_title,
             u.display_name AS faculty_name, sec.display_name AS secretary_name,
             (SELECT COUNT(*) FROM enrollments e WHERE e.cs_id = cs.cs_id) AS student_count
         FROM class_sections cs
@@ -43,7 +43,7 @@ function superadmin_class_json(PDO $pdo, array $r, string $currentYear): array
         'rooms' => ['lecture' => $room('Lecture', (string) ($r['lec_room'] ?? '')), 'laboratory' => $room('Laboratory', (string) ($r['lab_room'] ?? ''))],
         'studentCount' => (int) $r['student_count'],
         'secretary' => $r['secretary_name'] === null ? null : ['name' => $r['secretary_name']],
-        'archiveReason' => !$current ? 'completed' : $r['archive_reason'],
+        'archiveReason' => !$current && ($r['archive_reason'] !== null || $r['grades_submitted_at'] !== null) ? 'completed' : $r['archive_reason'],
         'archivedAt' => $r['archive_reason'] !== null && $r['archived_at'] !== null ? audit_manila_iso((string) $r['archived_at']) : null,
         'current' => $current,
         'canChangeFaculty' => $current && $r['archive_reason'] === null,
@@ -108,7 +108,7 @@ function superadmin_classes_list(PDO $pdo): array
         $like = '%' . addcslashes($q, '\\%_') . '%';
         array_push($params, $like, $like, $like, $like);
     }
-    $archivedSql = '(cs.archive_reason IS NOT NULL OR LOWER(cs.school_year) <> LOWER(' . $pdo->quote($current) . '))';
+    $archivedSql = '(cs.archive_reason IS NOT NULL OR (cs.grades_submitted_at IS NOT NULL AND LOWER(cs.school_year) <> LOWER(' . $pdo->quote($current) . ')))';
     $from = ' FROM class_sections cs LEFT JOIN courses c ON c.course_id = cs.course_id LEFT JOIN user_accounts u ON u.user_id = cs.instructor_user_id'
         . ($where ? ' WHERE ' . implode(' AND ', $where) : '');
     $counts = $pdo->prepare("SELECT COUNT(*) FILTER (WHERE NOT {$archivedSql}) AS active, COUNT(*) FILTER (WHERE {$archivedSql}) AS archived" . $from);
@@ -229,6 +229,7 @@ function superadmin_class_change_faculty(PDO $pdo, array $config, array $actor, 
     $toName = (string) $to['display_name'];
     $copied = superadmin_class_copy_grade_config($pdo, $actor, $class, $csId, (int) $from['user_id'], $toUserId, $toName);
     $pdo->prepare('UPDATE class_sections SET instructor_user_id = ? WHERE cs_id = ?')->execute([$toUserId, $csId]);
+    $pdo->prepare("UPDATE grade_change_batches SET faculty_user_id = ? WHERE cs_id = ? AND status IN ('draft', 'pending')")->execute([$toUserId, $csId]); // GRD-004 rule 10
 
     $movedBody = "{$label} was moved to {$toName} by the Superadmin. Reason: {$reason}. It no longer appears in your classes.";
     $assignedBody = "{$label} is now yours. Its students, grades, attendance and sessions came with it. Reason: {$reason}.";

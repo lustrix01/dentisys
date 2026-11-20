@@ -55,7 +55,8 @@ class TermTestStatement extends PDOStatement
             $this->db->terms[] = ['id' => $id, 'school_year' => $p[0], 'semester' => $p[1], 'start_date' => $p[2], 'end_date' => $p[3]];
             $this->rows = [['id' => $id]];
         } elseif (str_contains($this->sql, 'UPDATE academic_terms')) {
-            foreach ($this->db->terms as &$term) if ((int) $term['id'] === (int) $p[3]) { $term['start_date'] = $p[0]; $term['end_date'] = $p[1]; }
+            // start, end, grade_deadline (GRD-004), updated_by, id
+            foreach ($this->db->terms as &$term) if ((int) $term['id'] === (int) $p[4]) { $term['start_date'] = $p[0]; $term['end_date'] = $p[1]; $term['grade_deadline'] = $p[2]; }
         } elseif (str_contains($this->sql, 'UPDATE biometric_profiles')) {
             foreach ($this->db->profiles as &$profile) if ($profile['profile_id'] === $p[3]) {
                 $profile['reference_expires_on'] = $p[0]; $profile['reference_term_id'] = $p[1]; $profile['reference_cs_id'] = $p[2];

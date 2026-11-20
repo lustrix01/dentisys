@@ -78,6 +78,8 @@ $scK3 = $scMakeClass("K3-{$scTag}", $scCourse2, $scFa);           // course 2: F
 $scK4 = $scMakeClass("K4-{$scTag}", $scCourse1, $scFc);           // FC teaches course 1 and has her own weights
 $scK5 = $scMakeClass("K5-{$scTag}", $scCourse2, $scFb, '2ND');    // second semester, owned by FB
 $scPast = $scMakeClass("PAST-{$scTag}", $scCourse1, $scFa, '1ST', $scPastYear);
+// A real past-year class counts as submitted (GRD-004 backfill), so it is Completed and view-only.
+$pdo->prepare('UPDATE class_sections SET grades_submitted_at = CURRENT_TIMESTAMP, grades_grace_until = NULL WHERE cs_id = ?')->execute([$scPast]);
 $scDone = $scMakeClass("DONE-{$scTag}", $scCourse2, $scFa);       // archived: finished
 $scCancel = $scMakeClass("CANC-{$scTag}", $scCourse2, $scFa);     // archived: cancelled
 $scMistake = $scMakeClass("MIST-{$scTag}", $scCourse2, $scFa);    // archived: mistake

@@ -98,6 +98,7 @@ export const AcademicTermsSettings: React.FC = () => {
       semester: term?.semester ?? defaults.semester,
       startDate: term?.startDate ?? '',
       endDate: term?.endDate ?? '',
+      gradeDeadline: term?.gradeDeadline ?? '',
     });
   };
 
@@ -108,7 +109,7 @@ export const AcademicTermsSettings: React.FC = () => {
     setFields({});
     try {
       if (!confirmed) {
-        const preview = await saveAcademicTermApi(draft, true);
+        const preview = await saveAcademicTermApi({ ...draft, gradeDeadline: draft.gradeDeadline || null }, true);
         if (preview.confirmationRequired) {
           setConfirmation(preview.expiringEnrollments ?? 0);
           return;
@@ -116,6 +117,7 @@ export const AcademicTermsSettings: React.FC = () => {
       }
       const result = await saveAcademicTermApi({
         ...draft,
+        gradeDeadline: draft.gradeDeadline || null,
         ...(confirmed ? { confirmedExpiringEnrollments: confirmation ?? 0 } : {}),
       });
       if (result.confirmationRequired) {
@@ -440,6 +442,22 @@ export const AcademicTermsSettings: React.FC = () => {
                       {fields[field] && <span className="text-xs text-rose-600 dark:text-rose-400 mt-1 block">{fields[field]}</span>}
                     </label>
                   ))}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Grade Deadline
+                      <input
+                        type="date"
+                        className={termInputClass}
+                        value={draft.gradeDeadline ?? ''}
+                        onChange={(event) => setDraft({ ...draft, gradeDeadline: event.target.value })}
+                        aria-invalid={!!fields.gradeDeadline}
+                        aria-describedby="term-grade-deadline-hint"
+                      />
+                    </label>
+                    {/* Outside the label, so the field's name stays "Grade Deadline". */}
+                    <span id="term-grade-deadline-hint" className="text-[11px] font-normal text-slate-500 dark:text-slate-400 mt-1 block">Empty means the end date plus 14 days.</span>
+                    {fields.gradeDeadline && <span className="text-xs font-bold text-rose-600 dark:text-rose-400 mt-1 block">{fields.gradeDeadline}</span>}
+                  </div>
                 </div>
               </>
             )}

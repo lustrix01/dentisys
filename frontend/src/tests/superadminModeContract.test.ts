@@ -34,11 +34,12 @@ test('DS18 the Dean / Superadmin switcher and the Superadmin chip are gone', () 
   assert.doesNotMatch(read('../services/apiClient.ts'), /X-DentiSys-(View|Mode)|superadminMode/i);
 });
 
-test('DS16 the Superadmin sidebar: Overview, People & Accounts, Classes, Course Catalog, Academic Terms, Rooms, Face Enrolment Flags, Audit Trail', () => {
+test('DS16 the Superadmin sidebar: Overview, People & Accounts, Classes, Grade Submissions, Course Catalog, Academic Terms, Rooms, Face Enrolment Flags, Audit Trail', () => {
   assert.deepEqual(sidebar.filter(([, p]) => p.startsWith('/superadmin/')), [
     ['Overview', '/superadmin/overview'],
     ['People & Accounts', '/superadmin/people'],
     ['Classes', '/superadmin/classes'],
+    ['Grade Submissions', '/superadmin/grade-submissions'],
     ['Course Catalog', '/superadmin/course-catalog'],
     ['Academic Terms', '/superadmin/terms'],
     ['Rooms', '/superadmin/rooms'],
@@ -50,23 +51,24 @@ test('DS16 the Superadmin sidebar: Overview, People & Accounts, Classes, Course 
   assert.match(layout, /\/superadmin\/settings/);
 });
 
-test('DS17 the Dean sidebar: Dashboard, Reports & Analytics, Faculty Invitations, My Activity', () => {
+test('DS17 the Dean sidebar: Dashboard, Reports & Analytics, Grade Submissions, Faculty Invitations, My Activity', () => {
   const i = sidebar.findIndex(([n, p]) => n === 'Reports & Analytics' && p === '/admin/reports');
   assert.ok(i > 0);
-  assert.deepEqual(sidebar.slice(i - 1, i + 3), [
+  assert.deepEqual(sidebar.slice(i - 1, i + 4), [
     ['Dashboard', '/'],
     ['Reports & Analytics', '/admin/reports'],
+    ['Grade Submissions', '/admin/grade-submissions'],
     ['Faculty Invitations', '/admin/faculty-invite'],
     ['My Activity', '/admin/audit-trail'],
   ]);
-  const deanPaths = sidebar.slice(i - 1, i + 3).map(([, p]) => p);
+  const deanPaths = sidebar.slice(i - 1, i + 4).map(([, p]) => p);
   for (const moved of ['/admin/terms', '/admin/rooms', '/admin/course-catalog', '/admin/classes']) assert.ok(!sidebar.some(([, p]) => p === moved), `${moved} is no Dean sidebar entry`);
-  assert.equal(deanPaths.length, 4);
+  assert.equal(deanPaths.length, 5);
 });
 
 test('DS19 /superadmin/* is Superadmin-only and every page of the sidebar has a route', () => {
   const block = between(app, "<ProtectedRoute allowedRoles={['superadmin']} />", '</Route>');
-  for (const p of ['overview', 'people', 'classes', 'course-catalog', 'terms', 'rooms', 'face-flags', 'audit-trail', 'profile', 'settings']) {
+  for (const p of ['overview', 'people', 'classes', 'grade-submissions', 'course-catalog', 'terms', 'rooms', 'face-flags', 'audit-trail', 'profile', 'settings']) {
     assert.match(block, new RegExp(`path="/superadmin/${p}" element=\\{<(?!Navigate)`), `/superadmin/${p}`);
   }
   assert.match(block, /path="\/superadmin" element=\{<Navigate to="\/superadmin\/overview" replace \/>\}/);

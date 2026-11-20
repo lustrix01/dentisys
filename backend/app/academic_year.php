@@ -49,12 +49,40 @@ function academic_class_section_is_archived(PDO $pdo, int $csId): bool
     return $stmt->fetchColumn() !== false;
 }
 
-/** Refusal text: "Archived" for a current-year archived class, otherwise the past-year text. */
+/** GRD-004: the class's grades are submitted (withdrawn classes are not). */
+function academic_class_section_is_submitted(PDO $pdo, int $csId): bool
+{
+    $stmt = $pdo->prepare('SELECT 1 FROM class_sections WHERE cs_id = ? AND grades_submitted_at IS NOT NULL');
+    $stmt->execute([$csId]);
+
+    return $stmt->fetchColumn() !== false;
+}
+
+/** GRD-004 rule 13: within the 24-hour withdraw period of a submitted, non-archived class. */
+function academic_class_section_in_grace(PDO $pdo, int $csId): bool
+{
+    $stmt = $pdo->prepare('SELECT 1 FROM class_sections WHERE cs_id = ? AND archive_reason IS NULL AND grades_submitted_at IS NOT NULL AND grades_grace_until > now()');
+    $stmt->execute([$csId]);
+
+    return $stmt->fetchColumn() !== false;
+}
+
+/** Roster, class edit, invitations and joins: closed once archived or submitted, a grade-change draft included. */
+function academic_class_section_is_closed(PDO $pdo, int $csId): bool
+{
+    return academic_class_section_is_archived($pdo, $csId) || academic_class_section_is_submitted($pdo, $csId);
+}
+
+/** Refusal text: submitted, "Archived" for a current-year archived class, otherwise the past-year text. */
 function academic_view_only_message(PDO $pdo, int $csId, string $pastMessage = 'Past school-year classes are view-only.'): string
 {
-    $stmt = $pdo->prepare('SELECT school_year, archive_reason FROM class_sections WHERE cs_id = ?');
+    $stmt = $pdo->prepare('SELECT school_year, archive_reason, grades_submitted_at FROM class_sections WHERE cs_id = ?');
     $stmt->execute([$csId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($row && $row['archive_reason'] === null && $row['grades_submitted_at'] !== null) {
+        return 'Grades for this class are submitted.';
+    }
 
     return $row && $row['archive_reason'] !== null && !academic_school_year_is_past($pdo, (string) $row['school_year'])
         ? 'Archived classes are view-only.'
@@ -62,16 +90,72 @@ function academic_view_only_message(PDO $pdo, int $csId, string $pastMessage = '
 }
 
 /**
- * Past school-year and archived (CLS-003) class sections are view-only; mutations must check this.
+ * Archived (CLS-003) and submitted (GRD-004) class sections are view-only; mutations must check this.
+ * A submitted class with a grade change in draft is editable. Past school year alone does not lock.
  */
 function academic_class_section_is_past(PDO $pdo, int $csId): bool
 {
-    $stmt = $pdo->prepare('SELECT school_year FROM class_sections WHERE cs_id = ?');
+    if (academic_class_section_is_archived($pdo, $csId)) {
+        return true;
+    }
+    $stmt = $pdo->prepare(
+        "SELECT 1 FROM class_sections cs
+          WHERE cs.cs_id = ? AND cs.grades_submitted_at IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM grade_change_batches b WHERE b.cs_id = cs.cs_id AND b.status = 'draft')"
+    );
     $stmt->execute([$csId]);
-    $schoolYear = $stmt->fetchColumn();
 
-    return (is_string($schoolYear) && academic_school_year_is_past($pdo, $schoolYear))
-        || academic_class_section_is_archived($pdo, $csId);
+    return $stmt->fetchColumn() !== false;
+}
+
+/** GRD-004: the class's open (draft or pending) grade change batch row, or null. */
+function grade_change_open_batch(PDO $pdo, int $csId, bool $lock = false): ?array
+{
+    $stmt = $pdo->prepare("SELECT * FROM grade_change_batches WHERE cs_id = ? AND status IN ('draft', 'pending')" . ($lock ? ' FOR UPDATE' : ''));
+    $stmt->execute([$csId]);
+
+    return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+}
+
+/** GRD-004: true when any class has an open batch; reads skip the draft/snapshot SQL when nothing is open. */
+function grade_change_any_open(PDO $pdo): bool
+{
+    return $pdo->query("SELECT 1 FROM grade_change_batches WHERE status IN ('draft', 'pending') LIMIT 1")->fetchColumn() !== false;
+}
+
+/**
+ * GRD-004 Faculty overlay: $fallback (a published-grade SQL expression over enrollment alias $e) replaced by the
+ * draft result of the class's open batch when the enrollment has one. $field: percentage|gwa|retention|components.
+ */
+function grade_change_draft_sql(PDO $pdo, string $e, string $field, string $fallback): string
+{
+    if (!grade_change_any_open($pdo)) {
+        return $fallback;
+    }
+    $json = "b.draft_results -> CAST({$e}.enrollment_id AS TEXT)";
+    $value = $field === 'components' ? "{$json} -> 'components'" : "CAST({$json} ->> '{$field}' AS " . ($field === 'retention' ? 'TEXT' : 'NUMERIC') . ')';
+    return "COALESCE((SELECT {$value} FROM grade_change_batches b WHERE b.cs_id = {$e}.cs_id AND b.status IN ('draft', 'pending')), {$fallback})";
+}
+
+/**
+ * GRD-004 snapshot read: what Students, the Class Secretary and the Dean see. A table expression for
+ * attendance_records, assessments or assessment_scores that returns the batch snapshot rows for a class with an open
+ * batch and the live rows otherwise. Plain table name when no batch is open.
+ */
+function grade_change_published_sql(PDO $pdo, string $table): string
+{
+    if (!grade_change_any_open($pdo)) {
+        return $table;
+    }
+    [$key, $classOf] = match ($table) {
+        'attendance_records' => ['attendance', '(SELECT en.cs_id FROM enrollments en WHERE en.enrollment_id = t.enrollment_id)'],
+        'assessments' => ['assessments', 't.cs_id'],
+        'assessment_scores' => ['scores', '(SELECT a.cs_id FROM assessments a WHERE a.assessment_id = t.assessment_id)'],
+    };
+    return "(SELECT t.* FROM {$table} t WHERE NOT EXISTS (SELECT 1 FROM grade_change_batches b WHERE b.status IN ('draft', 'pending') AND b.cs_id = {$classOf})
+              UNION ALL
+              SELECT s.* FROM grade_change_batches b CROSS JOIN LATERAL jsonb_populate_recordset(NULL::{$table}, b.snapshot -> '{$key}') s
+               WHERE b.status IN ('draft', 'pending'))";
 }
 
 function academic_require_current_school_year(PDO $pdo, string $schoolYear, string $field = 'schoolYear'): void
@@ -197,6 +281,15 @@ function academic_term_validate(array $data, array $terms, ?int $id = null): arr
         $dates[$field] = $value;
     }
     if ($errors === [] && $dates['endDate'] <= $dates['startDate']) $errors[] = ['field' => 'endDate', 'message' => 'End date must be after start date.'];
+    $deadline = $data['gradeDeadline'] ?? null;
+    $hasDeadline = array_key_exists('gradeDeadline', $data);
+    if ($hasDeadline && $deadline !== null && $deadline !== '') {
+        $date = is_string($deadline) ? DateTimeImmutable::createFromFormat('!Y-m-d', $deadline, new DateTimeZone('Asia/Manila')) : false;
+        if (!$date || $date->format('Y-m-d') !== $deadline) $errors[] = ['field' => 'gradeDeadline', 'message' => 'Enter a valid calendar date.'];
+        elseif ($errors === [] && $deadline < $dates['endDate']) $errors[] = ['field' => 'gradeDeadline', 'message' => 'The deadline must be on or after the term end (' . $dates['endDate'] . ').'];
+    } else {
+        $deadline = null;
+    }
     if ($errors === []) {
         foreach ($terms as $term) {
             if ((int) $term['id'] === $id || $term['school_year'] !== $year) continue;
@@ -207,7 +300,8 @@ function academic_term_validate(array $data, array $terms, ?int $id = null): arr
         }
     }
     if ($errors !== []) throw new ValidationException($errors);
-    return ['school_year' => $year, 'semester' => $semester, 'start_date' => $dates['startDate'], 'end_date' => $dates['endDate']];
+    return ['school_year' => $year, 'semester' => $semester, 'start_date' => $dates['startDate'], 'end_date' => $dates['endDate']]
+        + ($hasDeadline ? ['grade_deadline' => $deadline] : []);
 }
 
 function academic_term_shift_year(string $date): string
@@ -232,14 +326,14 @@ function academic_terms_list(PDO $pdo): array
     foreach ($terms as $term) {
         $key = $term['school_year'] . ':' . $term['semester'];
         $rows[$key] = ['id' => (int) $term['id'], 'schoolYear' => $term['school_year'], 'semester' => $term['semester'],
-            'startDate' => $term['start_date'], 'endDate' => $term['end_date'], 'classCount' => 0];
+            'startDate' => $term['start_date'], 'endDate' => $term['end_date'], 'gradeDeadline' => $term['grade_deadline'] ?? null, 'classCount' => 0];
     }
     foreach ($pdo->query('SELECT school_year, semester FROM class_sections')->fetchAll(PDO::FETCH_ASSOC) as $class) {
         $semester = academic_term_semester($class['semester']);
         if ($semester === null) continue;
         $key = $class['school_year'] . ':' . $semester;
         $rows[$key] ??= ['id' => null, 'schoolYear' => $class['school_year'], 'semester' => $semester,
-            'startDate' => null, 'endDate' => null, 'classCount' => 0];
+            'startDate' => null, 'endDate' => null, 'gradeDeadline' => null, 'classCount' => 0];
         $rows[$key]['classCount']++;
     }
     $rows = array_values($rows);
@@ -281,6 +375,11 @@ function academic_term_save(PDO $pdo, array $config, array $actor, array $data, 
         throw new ValidationException([['field' => 'semester', 'message' => 'A term identity cannot be changed. Edit its dates instead.']]);
     }
     $term = academic_term_validate($data, $terms, $id);
+    // GRD-004: a saved deadline the request leaves alone must still be on or after the (new) end date.
+    $keptDeadline = array_key_exists('grade_deadline', $term) ? null : ($old['grade_deadline'] ?? null);
+    if ($keptDeadline !== null && $keptDeadline < $term['end_date']) {
+        throw new ValidationException([['field' => 'gradeDeadline', 'message' => 'The deadline must be on or after the term end (' . $term['end_date'] . ').']]);
+    }
     $today = app_local_date($config, attendance_session_now_utc());
     $profiles = ($old === null || $old['start_date'] !== $term['start_date'] || $old['end_date'] !== $term['end_date'])
         ? academic_term_affected_profiles($pdo, $old ?? $term, $terms, $today) : [];
@@ -301,8 +400,15 @@ function academic_term_save(PDO $pdo, array $config, array $actor, array $data, 
         $stmt->execute([$term['school_year'], $term['semester'], $term['start_date'], $term['end_date'], $actor['user_id'], $actor['user_id']]);
         $id = (int) $stmt->fetchColumn();
     } else {
-        $stmt = $pdo->prepare('UPDATE academic_terms SET start_date = ?, end_date = ?, updated_by_user_id = ?, updated_at = CURRENT_TIMESTAMP(6) WHERE id = ?');
-        $stmt->execute([$term['start_date'], $term['end_date'], $actor['user_id'], $id]);
+        // One statement, so the deadline CHECK sees the new end date and the new deadline together.
+        $stmt = $pdo->prepare('UPDATE academic_terms SET start_date = ?, end_date = ?, grade_deadline = ?, updated_by_user_id = ?, updated_at = CURRENT_TIMESTAMP(6) WHERE id = ?');
+        $stmt->execute([$term['start_date'], $term['end_date'], array_key_exists('grade_deadline', $term) ? $term['grade_deadline'] : $keptDeadline, $actor['user_id'], $id]);
+    }
+    if (array_key_exists('grade_deadline', $term) && $term['grade_deadline'] !== ($old['grade_deadline'] ?? null)) {
+        if ($old === null) $pdo->prepare('UPDATE academic_terms SET grade_deadline = ? WHERE id = ?')->execute([$term['grade_deadline'], $id]);
+        audit_record_action($pdo, $config, $actor, 'grading', 'grade_deadline_changed', 'academic_term', (string) $id,
+            'Set the grade submission deadline for ' . $term['semester'] . ' ' . $term['school_year'] . '.',
+            ['before' => ['grade_deadline' => $old['grade_deadline'] ?? null], 'after' => ['grade_deadline' => $term['grade_deadline']]]);
     }
     $newTerms = academic_terms_read($pdo);
     foreach ($profiles as $profile) {

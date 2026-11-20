@@ -30,7 +30,8 @@ import {
   CalendarDays,
   Filter,
   Inbox,
-  Info
+  Info,
+  Lock
 } from 'lucide-react';
 import { flushSync } from 'react-dom';
 import { PrintStyle, PrintHeader, PrintCaption, PrintLegend, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
@@ -44,6 +45,7 @@ import { Student, EnrolledSubject, GradeComponents, Assessment, AssessmentScore 
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { GradebookMatrix } from '../../components/GradebookMatrix';
 import { Modal } from '../../components/Modal';
+import { GradeSubmissionBanner, SubmitGradesButton } from '../../components/GradeSubmissionBanner';
 import Tabs from '../../components/Tabs';
 import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
 import { recordAudit } from '../../services/auditService';
@@ -352,10 +354,25 @@ export const GradeComputation: React.FC = () => {
     );
   }, [currentSchoolYear, currentYearListedClasses, facultyClasses, selectedSchoolYear]);
 
+  // GRD-004: a submitted class (no open grade change draft) is view-only like an archived one.
+  const isLockedBySubmission = useCallback(
+    (c: FacultyClassItem) => isClassCurrentSchoolYear(c) && Boolean(c.gradesSubmitted) && c.gradeChangeStatus !== 'draft',
+    [isClassCurrentSchoolYear],
+  );
+
+  const selectedClass = useMemo(
+    () => facultyClasses.find(item => item.id === selectedClassId) ?? null,
+    [facultyClasses, selectedClassId],
+  );
+
   const selectedClassIsHistorical = useMemo(() => {
-    const classItem = facultyClasses.find(item => item.id === selectedClassId);
-    return Boolean(classItem && (!isClassCurrentSchoolYear(classItem) || isViewOnlyClass(classItem)));
-  }, [facultyClasses, isClassCurrentSchoolYear, selectedClassId]);
+    const classItem = selectedClass;
+    return Boolean(classItem && (!isClassCurrentSchoolYear(classItem) || isViewOnlyClass(classItem) || isLockedBySubmission(classItem)));
+  }, [selectedClass, isClassCurrentSchoolYear, isLockedBySubmission]);
+
+  // Current-year, not archived: the grade submission banner and Submit button apply.
+  const selectedClassIsCurrentActive = Boolean(selectedClass && isClassCurrentSchoolYear(selectedClass) && !isViewOnlyClass(selectedClass));
+  const selectedClassOnlyLocked = Boolean(selectedClass && selectedClassIsCurrentActive && isLockedBySubmission(selectedClass));
 
   const selectedClassIsArchived = useMemo(
     () => isArchivedCurrentYear(facultyClasses.find(item => item.id === selectedClassId)),
@@ -382,20 +399,28 @@ export const GradeComputation: React.FC = () => {
     [selectedYearClasses, selectedSubjectCode],
   );
 
-  useEffect(() => {
+  // The first load also picks the school year; a reload (after submit, withdraw, grade change) keeps the selection.
+  const loadClasses = useCallback((initial: boolean) => {
     // Settings only provide transmutation defaults; a settings failure must not hide the classes.
-    Promise.allSettled([getFacultyClassesApi()])
+    return Promise.allSettled([getFacultyClassesApi()])
       .then(([classesResult]) => {
         if (classesResult.status === 'fulfilled') {
           const classesResponse = classesResult.value;
           const loadedClasses = Array.isArray(classesResponse.classes) ? classesResponse.classes : [];
-          setCurrentSchoolYear(classesResponse.currentSchoolYear || '');
-          setSelectedSchoolYear(classesResponse.currentSchoolYear || '');
+          if (initial) {
+            setCurrentSchoolYear(classesResponse.currentSchoolYear || '');
+            setSelectedSchoolYear(classesResponse.currentSchoolYear || '');
+          }
           setFacultyClasses(loadedClasses);
         }
-        setLoading(false);
+        if (initial) setLoading(false);
       });
   }, []);
+  const reloadClasses = useCallback(() => { void loadClasses(false); }, [loadClasses]);
+
+  useEffect(() => {
+    void loadClasses(true);
+  }, [loadClasses]);
 
   useEffect(() => {
     if (activeCourses.length > 0 && !activeCourses.some(c => c.code === selectedSubjectCode)) {
@@ -1923,6 +1948,10 @@ export const GradeComputation: React.FC = () => {
     return facultyOfferings.find(o => o.key === selectedOfferingKey) || null;
   }, [facultyOfferings, selectedOfferingKey]);
 
+  // GRD-004 rule 4: weights lock while any section of the offering is submitted.
+  const submittedSection = currentOffering?.sections.find(section => section.gradesSubmitted) ?? null;
+  const weightsLocked = submittedSection !== null;
+
   const loadGradingConfig = async (offering: FacultyOffering) => {
     setConfigLoading(true);
     setConfigError(null);
@@ -3392,7 +3421,7 @@ export const GradeComputation: React.FC = () => {
           </select>
         </div>
 
-        <div className="w-full xl:flex-1 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
+        <div className="w-full xl:flex-1 xl:min-w-0 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
           <Filter className="w-4 h-4 shrink-0 text-clinical-600 dark:text-clinical-400" aria-hidden="true" />
           <select
             value={selectedClassId}
@@ -3413,7 +3442,7 @@ export const GradeComputation: React.FC = () => {
                 setSelectedOfferingKey(matchOffering.key);
                 setSelectedAssessmentOfferingKey(matchOffering.key);
               }
-              if (isViewOnlyClass(classItem)) {
+              if (isViewOnlyClass(classItem) || isLockedBySubmission(classItem)) {
                 setActiveSubTab('summaries');
               }
             }}
@@ -3431,9 +3460,16 @@ export const GradeComputation: React.FC = () => {
             )}
           </select>
         </div>
+        {selectedClass && selectedClassIsCurrentActive && !selectedClass.gradesSubmitted && (
+          <SubmitGradesButton classItem={selectedClass} onChanged={reloadClasses} />
+        )}
       </Card>
 
-      {selectedClassIsHistorical && (
+      {selectedClass && selectedClassIsCurrentActive && (
+        <GradeSubmissionBanner key={`${selectedClass.csId}-${selectedClass.gradesSubmitted}-${selectedClass.gradeChangeStatus}`} classItem={selectedClass} onChanged={reloadClasses} />
+      )}
+
+      {selectedClassIsHistorical && !selectedClassOnlyLocked && (
         <div role="status" className="no-print rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
           {selectedClassIsArchived ? 'Archived classes are view-only.' : 'Past school-year classes are view-only.'} Saved grade summaries can be viewed and exported, but grades and grading settings cannot be changed.
         </div>
@@ -4248,6 +4284,13 @@ export const GradeComputation: React.FC = () => {
           </CardHeader>
           <CardContent className="p-6 sm:p-7 space-y-6">
 
+            {submittedSection && currentOffering && (
+              <div role="status" className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 flex items-start gap-3">
+                <Lock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+                <span>Grades for {currentOffering.courseCode} ({submittedSection.csName}) are submitted; weights are locked.</span>
+              </div>
+            )}
+
             {/* First-Save Unmapped Assessment Alert (422) */}
             {assessmentMappingItems.length > 0 && (
               <div className="rounded-xl border p-3 text-xs border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 space-y-3">
@@ -4494,7 +4537,7 @@ export const GradeComputation: React.FC = () => {
 
                     <button
                       type="submit"
-                      disabled={configSaving || !weightCalculation.isExact100 || categoryRows.length === 0}
+                      disabled={configSaving || !weightCalculation.isExact100 || categoryRows.length === 0 || weightsLocked}
                       className="flex items-center gap-1.5 whitespace-nowrap px-5 py-2.5 rounded-2xl bg-clinical-500 hover:bg-clinical-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md transition-all"
                     >
                       <Save className="w-4 h-4" />
@@ -5078,7 +5121,7 @@ export const GradeComputation: React.FC = () => {
                     <div>
                       <button
                         type="submit"
-                        disabled={configSaving || periodValidationError !== null || isLegacyCombinedPeriodConfig}
+                        disabled={configSaving || periodValidationError !== null || isLegacyCombinedPeriodConfig || weightsLocked}
                         className="inline-flex items-center gap-2 whitespace-nowrap px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                       >
                         <Save className="w-4 h-4" />

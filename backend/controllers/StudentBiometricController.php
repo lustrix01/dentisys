@@ -933,7 +933,7 @@ function handle_student_attendance_logs(): void
                     r.status, r.verification_method, r.time_recorded,
                     cs.cs_id, cs.cs_name, c.course_code, c.name AS course_name,
                     s.room
-               FROM attendance_records r
+               FROM " . grade_change_published_sql($pdo, 'attendance_records') . " r
                JOIN enrollments e ON e.enrollment_id = r.enrollment_id
                JOIN class_sections cs ON cs.cs_id = e.cs_id
                JOIN courses c ON c.course_id = cs.course_id

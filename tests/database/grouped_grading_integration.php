@@ -519,6 +519,8 @@ $groupedHistoricalSection->execute([
     $groupedPastYear,
 ]);
 $groupedHistoricalClassId = (int) $groupedHistoricalSection->fetchColumn();
+// A past-year class counts as submitted (GRD-004), which locks the offering's weights.
+$pdo->prepare('UPDATE class_sections SET grades_submitted_at = CURRENT_TIMESTAMP, grades_grace_until = NULL WHERE cs_id = ?')->execute([$groupedHistoricalClassId]);
 $groupedHistoricalOffering = $groupedOffering;
 $groupedHistoricalOffering['schoolYear'] = $groupedPastYear;
 [$groupedHistoricalSaveStatus] = integration_http_put_json(

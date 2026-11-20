@@ -38,10 +38,10 @@ function class_join_link(array $config, string $code): string
     return app_url($config, 'student/classes', ['join' => $code]);
 }
 
-/** A class takes joins while it is not archived, in the current school year, and its term has not ended. */
+/** A class takes joins while it is not archived, its grades are not submitted, and its term has not ended. */
 function class_join_class_is_open(PDO $pdo, array $config, array $class): bool
 {
-    if (($class['archive_reason'] ?? null) !== null || !academic_school_year_is_current($pdo, (string) $class['school_year'])) {
+    if (($class['archive_reason'] ?? null) !== null || ($class['grades_submitted_at'] ?? null) !== null) {
         return false;
     }
     $endDate = academic_resolve_class_term_dates($class, academic_terms_read($pdo))['endDate'];
@@ -51,7 +51,7 @@ function class_join_class_is_open(PDO $pdo, array $config, array $class): bool
 function class_join_class_row(PDO $pdo, int $csId, bool $lock = false): ?array
 {
     $stmt = $pdo->prepare(
-        'SELECT cs.cs_id, cs.cs_name, cs.semester, cs.school_year, cs.term_start_date, cs.term_end_date, cs.archive_reason,
+        'SELECT cs.cs_id, cs.cs_name, cs.semester, cs.school_year, cs.term_start_date, cs.term_end_date, cs.archive_reason, cs.grades_submitted_at,
                 cs.instructor_user_id, cs.join_code, cs.join_code_enabled, cs.join_auto_approve,
                 COALESCE(cs.course_title, c.name) AS course_name, c.course_code, u.display_name AS faculty_name
            FROM class_sections cs JOIN courses c ON c.course_id = cs.course_id

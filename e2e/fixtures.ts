@@ -58,6 +58,7 @@ const KNOWN_API_PATHS = new Set([
   '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/attendance/sessions/upcoming', '/api/student/biometric/profile',
   '/api/student/profile', '/api/student/join-requests',
   '/api/faculty/classes/join', '/api/faculty/classes/join/requests', '/api/faculty/classes/auto-sessions',
+  '/api/faculty/classes/grade-submission', '/api/admin/grade-change-requests', '/api/admin/grade-submissions',
 ]);
 
 const GET_ONLY_API_PATHS = new Set([
@@ -74,6 +75,7 @@ const GET_ONLY_API_PATHS = new Set([
   '/api/student/profile', '/api/student/join-requests',
   '/api/faculty/classes/join', '/api/faculty/classes/join/requests', '/api/faculty/classes/auto-sessions',
   '/api/faculty/attendance/sheet', '/api/admin/reports/attendance-sheet',
+  '/api/faculty/classes/grade-submission', '/api/admin/grade-change-requests', '/api/admin/grade-submissions',
 ]);
 
 const MULTI_METHOD_API_PATHS = new Set([
@@ -102,6 +104,10 @@ function isKnownApiRequest(pathname: string, method: string): boolean {
 
 function responseFor(pathname: string, method: string): unknown {
   if (pathname === '/api/rooms') return roomsJson();
+  // GRD-004 (13.8): a class not yet submitted; no grade change waiting for the Dean.
+  if (pathname === '/api/faculty/classes/grade-submission') return { status: 'not_submitted', deadlineStatus: 'not_submitted', deadline: null, submittedAt: null, graceUntil: null, missing: [], batch: null };
+  if (pathname === '/api/admin/grade-change-requests') return { status: 'ok', requests: [], pendingCount: 0 };
+  if (pathname === '/api/admin/grade-submissions') return { status: 'ok', term: null, classes: [], lateFromEarlierTerms: 0 };
   // Superadmin Overview reads these lists for its tiles.
   if (pathname === '/api/admin/people') return { status: 'ok', people: [], total: 0, page: 1, pageSize: 50 };
   if (pathname === '/api/admin/face-flags') return { status: 'ok', flags: [], total: 0, page: 1, pageSize: 50 };

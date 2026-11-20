@@ -22,6 +22,7 @@ require_once dirname(__DIR__) . '/controllers/SuperadminClassesController.php';
 require_once dirname(__DIR__) . '/controllers/FacultyController.php';
 require_once dirname(__DIR__) . '/controllers/ClassJoinController.php';
 require_once dirname(__DIR__) . '/controllers/AutoSessionsController.php';
+require_once dirname(__DIR__) . '/controllers/GradeSubmissionController.php';
 
 return [
     ['method' => 'GET', 'path' => '/api/admin/academic-terms', 'handler' => 'handle_admin_academic_terms'],
@@ -29,6 +30,11 @@ return [
     ['method' => 'POST', 'path' => '/api/admin/academic-terms/preview', 'handler' => 'handle_admin_academic_terms'],
     ['method' => 'POST', 'path' => '/api/admin/academic-terms/delete', 'handler' => 'handle_admin_academic_terms'],
     ['method' => 'POST', 'path' => '/api/admin/academic-terms/copy', 'handler' => 'handle_admin_academic_terms'],
+    ['method' => 'GET', 'path' => '/api/admin/grade-submissions', 'handler' => 'handle_admin_grade_submissions'],
+    ['method' => 'GET', 'path' => '/api/admin/grade-change-requests', 'handler' => 'handle_admin_grade_change_requests'],
+    ['method' => 'GET', 'path' => '/api/admin/grade-change-requests/detail', 'handler' => 'handle_admin_grade_change_request_detail'],
+    ['method' => 'POST', 'path' => '/api/admin/grade-change-requests/approve', 'handler' => 'handle_admin_grade_change_approve'],
+    ['method' => 'POST', 'path' => '/api/admin/grade-change-requests/reject', 'handler' => 'handle_admin_grade_change_reject'],
     ['method' => 'GET', 'path' => '/api/admin/courses', 'handler' => 'handle_admin_courses'],
     ['method' => 'POST', 'path' => '/api/admin/courses/update', 'handler' => 'handle_admin_courses'],
     ['method' => 'POST', 'path' => '/api/admin/courses/retire', 'handler' => 'handle_admin_courses'],
@@ -862,4 +868,11 @@ return [
         'handler' => 'handle_faculty_class_restore',
         'has_params' => false,
     ],
+    ['method' => 'GET', 'path' => '/api/faculty/classes/grade-submission', 'handler' => 'handle_faculty_grade_submission_get'],
+    ['method' => 'POST', 'path' => '/api/faculty/classes/grade-submission', 'handler' => 'handle_faculty_grade_submission_submit'],
+    ['method' => 'POST', 'path' => '/api/faculty/classes/grade-submission/withdraw', 'handler' => 'handle_faculty_grade_submission_withdraw'],
+    ['method' => 'POST', 'path' => '/api/faculty/classes/grade-change', 'handler' => 'handle_faculty_grade_change_open'],
+    ['method' => 'POST', 'path' => '/api/faculty/classes/grade-change/send', 'handler' => 'handle_faculty_grade_change_send'],
+    ['method' => 'POST', 'path' => '/api/faculty/classes/grade-change/pull-back', 'handler' => 'handle_faculty_grade_change_pull_back'],
+    ['method' => 'POST', 'path' => '/api/faculty/classes/grade-change/discard', 'handler' => 'handle_faculty_grade_change_discard'],
 ];
