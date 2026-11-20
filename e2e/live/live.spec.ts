@@ -593,7 +593,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
 
   // Modal appears
   await expect(page.getByRole('heading', { name: 'Manual Attendance Override' })).toBeVisible();
-  await expect(page.getByText('PRESENT → LATE', { exact: true })).toBeVisible();
+  await expect(page.getByText('Present → Late', { exact: true })).toBeVisible();
 
   // Submitting without reason triggers in-app validation error
   await page.getByRole('button', { name: 'Save override' }).click();
