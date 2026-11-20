@@ -31,7 +31,7 @@ How to work, files, tests and "done when" per item: [colleague plan](archive/col
 - Database migration numbers are reserved: `069` for 9.24, `070` for 9.26, `071` for 13.8.
 - The colleague works on `owhie-responsive`, first brought up to `lighthal9-responsive`, one commit set per item, while the Owner is away; the Owner merges the branch in one go afterwards (`colleague-merge` skill) and reviews the screenshots then.
 - Small shared files (`App.tsx` routes, `apiClient.ts`, types, the sidebar list, `e2e/fixtures.ts`, `spec.md`) may be touched by both; each lane adds its own lines.
-- Only the Owner edits `docs/PRODUCT_BACKLOG.md` and this file; the colleague reports progress.
+- Only the Owner edits `docs/PRODUCT_BACKLOG.md` and this file, except the status updates Claude makes at each push and promote ([release guide](release-guide.md) step 2); the colleague reports progress.
 - Every visible change is approved by the Owner (a demo in the Owner's lane, screenshots at merge for the colleague's), and every spec change needs the Owner's OK.
 
 Owner actions, any time: production `devops` password (9.19), real-phone check on production (9.20), paper wording (13.10).
