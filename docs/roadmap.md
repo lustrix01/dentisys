@@ -6,12 +6,12 @@ Two people work at once, in two lanes that never edit the same screen or backend
 
 ## Owner lane (system changes)
 
-1. Wrong recovery code returns a server error (9.23): on the demo, awaiting promotion.
-2. Remember this device (9.24): on the demo, awaiting promotion.
-3. Remember me (9.26): on the demo, awaiting promotion.
-4. Superadmin sign-in page (12.8): on the demo, awaiting promotion.
-5. Grade submission and Dean approval (13.8): on the demo, awaiting promotion.
-6. Attendance review (13.6, review part, Past Sessions tab): on the demo, awaiting promotion. Moving past sessions to their own page is 13.11, not yet scheduled.
+1. Wrong recovery code returns a server error (9.23): on production (2026-11-21).
+2. Remember this device (9.24): on production (2026-11-21).
+3. Remember me (9.26): on production (2026-11-21).
+4. Superadmin sign-in page (12.8): on production (2026-11-21).
+5. Grade submission and Dean approval (13.8): on production (2026-11-21).
+6. Attendance review (13.6, review part, Past Sessions tab): on production (2026-11-21). Moving past sessions to their own page is 13.11, not yet scheduled.
 7. Face enrolment and check-in speed (13.4), after the Owner's real-phone timing session.
 8. UI formality pass (12.6), after both lanes are done.
 
@@ -19,11 +19,11 @@ Two people work at once, in two lanes that never edit the same screen or backend
 
 How to work, files, tests and "done when" per item: [colleague plan](archive/colleague-plan-2026-11.md).
 
-1. Secretary change-request reason minimum (9.25): Secretary part on the demo, awaiting promotion; the other reason fields are still open.
-2. Retention Monitoring grades first and batch send (13.5): on the demo, awaiting promotion.
-3. Start session hint (13.6, hint part only): on the demo, awaiting promotion.
-4. Layout batch (9.22 with 13.3's 320 px column), after 13.5 because both touch Retention Monitoring: on the demo, awaiting promotion.
-5. Confirmation pop-ups (13.7): on the demo, awaiting promotion.
+1. Secretary change-request reason minimum (9.25): Secretary part on production (2026-11-21); the other reason fields are still open.
+2. Retention Monitoring grades first and batch send (13.5): on production (2026-11-21).
+3. Start session hint (13.6, hint part only): on production (2026-11-21).
+4. Layout batch (9.22 with 13.3's 320 px column), after 13.5 because both touch Retention Monitoring: on production (2026-11-21).
+5. Confirmation pop-ups (13.7): on production (2026-11-21).
 6. Flaky Email Management test (9.21).
 
 ## Rules between the lanes

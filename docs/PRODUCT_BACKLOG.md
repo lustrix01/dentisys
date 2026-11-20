@@ -34,7 +34,7 @@ Owner, 2026-11-19: these come before every backlog item, in this order.
 - **9.19** Production `devops` sudo password (Owner, 2026-11-17): it is still the original one from the emergency kit (an earlier `sudo passwd` changed root's password, not `devops`'s). Change it on the production server with `passwd` as `devops` (no `sudo`), then update the emergency kit.
 - **9.20** Face Registration on production (Owner, 2026-11-17): the Owner checks enrolment and biometric check-in with a real phone camera on bu-dentisys.com after the fixes for action frames the server rejected, uploads cut off by the 30 s browser limit, and error text that blamed lighting for every failure. Open: production Traefik uses its default request read timeout, so an upload slower than about 60 s is still cut off. Owner decision (2026-11-20): if the real-phone check shows slow uploads are being cut off, the Owner raises the production Traefik read timeout to 120 s on the production server (Claude never touches production).
 - **9.21** Flaky mocked browser tests (2026-11-17): with 8 workers and one local retry, a test that passes only on retry is reported as "flaky" and does not fail `check.ps1`. Each one hides a timing bug in the app or the test (the TimePicker re-sync race was a real app bug; the Secretary Excused test recorded the page's GET refresh as the request). Fix one, then remove it here; add any new flaky test the run reports.
-- **9.25** Other reason fields that require 8 characters (People & Accounts, Face Enrolment Flags, Audit Trail revoke): check each tells the user the minimum before they press the button, as the Secretary attendance change request now does (built 2026-11-20, see "On the demo, awaiting promotion").
+- **9.25** Other reason fields that require 8 characters (People & Accounts, Face Enrolment Flags, Audit Trail revoke): check each tells the user the minimum before they press the button, as the Secretary attendance change request now does (built 2026-11-20, on production 2026-11-21, see "Done").
 - **9.27** Breadcrumb navigation (Owner, 2026-11-20): every part of the trail above the page title takes you to that page, e.g. Home goes to the Dashboard. Since the Owhie merge (2026-11-20) the page you are on is a link too (Owhie's change, kept for now; reason not recorded). Check every crumb for every role goes where its name says, and ask Owhie why the current page links to itself before deciding whether it stays.
 - **9.28** Capitals (Owner ruling 2026-11-20, `ui-fix-demo/references/dentisys.md`): CSS capitals stay only on table column headers, the printed class list and the emphasised red action button of a dialog that needs it (Cancel · RETIRE, DELETE, CONFIRM). The Owhie merge removed them from 44 small labels; about 260 places still use them (small labels above a value, form labels, chips, headings) and the emphasised dialog buttons do not have them yet. One `ui-fix-demo` batch with its own demo; update `docs/frontend.md` "Page patterns" with the rule.
 - **9.29** Grades page layout (device audit during 13.8, 2026-11-21; not caused by 13.8): on Assessments Manager at Desktop 1920 the sticky page header covers the S.Y. select of the class picker; on the iPhone 393 Grade Weights Editor tab the card title "Configure Grading Weights & Schema" overlaps the Reload button. One `ui-fix-demo` Route B batch.
@@ -69,7 +69,15 @@ The full report text, what DentiSYS did at the time, the gaps, open questions an
 
 # On the demo, awaiting promotion
 
-Built and running on the demo, not yet on production. Each moves to [Done](#done) after the Owner promotes it. Full text and Owner decisions: [items built on 2026-11-20](archive/backlog-built-2026-11-20.md) [items from the Owhie merge](archive/backlog-built-2026-11-20-owhie.md) and [13.8](archive/backlog-built-2026-11-21.md).
+Built and running on the demo, not yet on production. Each moves to [Done](#done) after the Owner promotes it.
+
+Nothing at the moment.
+
+---
+
+# Done
+
+Full text and Owner decisions of these items: [backlog items closed before 2026-11-14](archive/backlog-done-2026-11.md). Promoted to production on 2026-11-21 (sha c17ad942): [items built on 2026-11-20](archive/backlog-built-2026-11-20.md) [items from the Owhie merge](archive/backlog-built-2026-11-20-owhie.md) and [13.8](archive/backlog-built-2026-11-21.md).
 
 - **9.23** A malformed recovery code on the 2FA sign-in page fails as a wrong code ("Invalid recovery code.", 400) instead of a server error. Commit bb2bdbe.
 - **9.24** 2FA "Remember this device for 30 days" at sign-in (migration 069), with "Forget my trusted devices" in Profile. Commit 112b338.
@@ -82,14 +90,7 @@ Built and running on the demo, not yet on production. Each moves to [Done](#done
 - **13.5** Faculty Retention Monitoring puts the grade right after Student on all three tabs; At-Risk Students and Remedials tick rows and open Email Management with them preselected (Send advisory / Send remedial notices). Owhie merge 5210a14.
 - **13.6** (hint part) Start Session says "You can change the date and time." Owhie merge 5210a14.
 - **13.7** Confirmations before every one-click data change that had none: single-row Approve / Reject of requests, join requests and join switches (automatic approval on warns that anyone with the code joins without review), Save grade weights, Superadmin restores. Owhie merge 5210a14.
-
 - **13.8** Grade submission, deadlines and Dean approval (GRD-004, migration 071): Faculty submit a class's grades (24-hour withdraw), the class locks with its shared grade weights, grade changes go through a draft the Dean approves or rejects on the new Grade Submissions page (Superadmin read-only), and each term has a deadline on Academic Terms. Contract: [grade-submission.md](contracts/grade-submission.md). Commit 8dca163.
----
-
-# Done
-
-Full text and Owner decisions of these items: [backlog items closed before 2026-11-14](archive/backlog-done-2026-11.md).
-
 - **P3** Owhie's `owhie-responsive` (exports, confirmations, session scheduling) merged with `lighthal9-superadmin`, six Owner rulings applied; `lighthal9-responsive` moves to that merge. Record: [owhie-exports-sessions-merge-2026-11.md](archive/owhie-exports-sessions-merge-2026-11.md).
 - **P2** Superadmin pages checked on the device list (11 core devices, light and dark): no sideways scroll or cut-off text; phone card labels on People & Accounts, Face Enrolment Flags and Course Catalog use the readable small-text grey. Layout findings shared with the Dean are 9.22.
 - **P1** Superadmin Classes with live records: every Faculty member's real classes and rosters, read-only, with one action, Change Faculty (grade weights copied to the new Faculty member). Contract: [superadmin-classes.md](contracts/superadmin-classes.md).
