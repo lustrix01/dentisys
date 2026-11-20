@@ -30,11 +30,6 @@ export interface ParsedRosterStudent {
 const NAME_SUFFIX = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i;
 const SURNAME_PARTICLE = /^(de|del|dela|delos|delas|dos|san|santa|sta\.?|sto\.?|van|von|da|di|du|la|los|las)$/i;
 
-/** CSV template offered by the roster importer. */
-export function getSampleRegistrarCSV(): string {
-  return 'Student Number,Last Name,First Name,Middle Name,Email,Year Level,Sex,Contact #\n2099-1234-56789,Dela Cruz,Ana,Reyes,ana.fixture@bicol-u.edu.ph,4,Female,\n2099-01-12345,Peña,José,,jose.fixture@bicol-u.edu.ph,3,Male,';
-}
-
 /** Last, First Middle: last given token (with surname particles) is the middle name; the Faculty still reviews every split. */
 export function splitFullName(rawName: string) {
   const cleaned = rawName.normalize('NFC').trim().replace(/\s+/g, ' ');

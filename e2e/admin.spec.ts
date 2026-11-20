@@ -597,9 +597,58 @@ test.describe('Superadmin setup pages', () => {
     await expect(old).toHaveCount(0);
 
     await blocked.getByRole('button', { name: 'Restore' }).click();
+    const restoreDialog = page.getByRole('dialog');
+    await expect(restoreDialog).toContainText('Review this action');
+    await expect(restoreDialog).toContainText('Restore Simulation Lab? It will be available for classes to use again.');
+    await restoreDialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(restoreDialog).toHaveCount(0);
+    expect(posted).toHaveLength(1);
+    await blocked.getByRole('button', { name: 'Restore' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Restore', exact: true }).click();
     expect(posted[1]).toEqual({ path: '/restore', roomId: 4 });
     await expect(page.getByRole('status').filter({ hasText: 'Simulation Lab restored.' })).toBeVisible();
     await expect(page.getByTestId('room-Simulation Lab')).toContainText('Active'); // back on the Rooms tab
+  });
+
+  test('Rooms page: Restore a retired category asks first; Cancel sends nothing', async ({ page }) => {
+    const posted = await mockRooms(page);
+    await page.goto('/superadmin/rooms');
+    await page.getByRole('tab', { name: /^Retired/ }).click();
+    await page.getByRole('button', { name: 'Restore category Old Wing' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Review this action');
+    await expect(dialog).toContainText('Restore Old Wing? It will be available when adding or editing rooms.');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(posted).toEqual([]);
+    await page.getByRole('button', { name: 'Restore category Old Wing' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Restore', exact: true }).click();
+    await expect.poll(() => posted.length).toBe(1);
+    expect(posted[0]).toEqual({ path: 'cat/restore', categoryId: 4 });
+  });
+
+  test('Course Catalog: Restore a retired course asks first; Cancel sends nothing', async ({ page }) => {
+    const course = { id: 7, courseCode: 'DENT 101', name: 'Oral Anatomy', units: 3, lectureUnits: 2, labUnits: 1, status: 'retired', retiredAt: '2026-06-01', classCount: 2, currentClassCount: 0 };
+    const posted: unknown[] = [];
+    await page.route('**/api/admin/courses**', async route => {
+      if (route.request().method() === 'GET') return route.fulfill({ json: { status: 'ok', courses: [course] } });
+      posted.push({ path: new URL(route.request().url()).pathname, ...route.request().postDataJSON() });
+      course.status = 'active';
+      return route.fulfill({ json: { status: 'ok', course } });
+    });
+    await page.goto('/superadmin/course-catalog?tab=retired');
+    await page.getByRole('button', { name: 'Restore DENT 101' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Review this action');
+    await expect(dialog).toContainText('Restore DENT 101? It will be available in Faculty course lists again.');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(posted).toEqual([]);
+    await page.getByRole('button', { name: 'Restore DENT 101' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Restore', exact: true }).click();
+    await expect.poll(() => posted.length).toBe(1);
+    expect(posted[0]).toEqual({ path: '/api/admin/courses/restore', id: 7 });
+    await expect(page.getByRole('status').filter({ hasText: 'DENT 101 restored.' })).toBeVisible();
   });
 
   test('Rooms page: add, rename and retire a category', async ({ page }) => {

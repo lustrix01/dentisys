@@ -698,7 +698,7 @@ test.describe('P03 Student identity and authentication', () => {
     });
     await page.goto('/student/attendance-logs');
     await expect(page.getByRole('status')).toContainText('Attendance Logs unavailable');
-    await expect(page.getByRole('link', { name: 'Attendance Logs' })).toHaveCount(0);
+    await expect(page.locator('aside').getByRole('link', { name: 'Attendance Logs' })).toHaveCount(0);
   });
 
   test('disabled biometric provider blocks Face and hides prototype biometric Profile state', async ({ page }) => {

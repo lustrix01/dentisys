@@ -2823,7 +2823,7 @@ export const GradeComputation: React.FC = () => {
         ? 'Convert this saved combined period configuration to Lecture/Laboratory grading? Existing category IDs, assessment links, scores, history, and saved grades will be preserved. Assign every category to a component, set both component lists to 100%, and resolve any assessment mappings. This conversion cannot be reversed.'
         : isOverallConversion
           ? 'Convert this saved overall configuration to Lecture/Laboratory period grading? Existing category IDs, scores, history, and saved grades will be preserved. Assign every category to a component and set both component lists to 100% before saving.'
-          : 'Save these grade weights? Grades for this course are computed with the saved weights.',
+          : "Save these grade weights? Every student's grade in this class is recalculated with them.",
       isForwardGroupedConversion || isOverallConversion ? 'Confirm forward grading conversion' : 'Save grade weights'
     );
     if (!confirmed) return;

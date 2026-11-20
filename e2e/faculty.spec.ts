@@ -7,6 +7,11 @@ import { strFromU8, unzipSync } from '../frontend/node_modules/fflate';
 
 // On-screen dates use the short month (spec UI-001 wording): '2026-11-17' -> 'Nov 17, 2026'.
 const shortDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+const emptyFacultyDashboardKpis = {
+  status: 'ok', currentSchoolYear: '2026-2027', availableSchoolYears: [],
+  kpis: { assignedStudents: 0, activeClasses: 0, averageAttendance: null, retentionAlerts: 0, goodStanding: 0, remedialCount: 0, irregularReenrollmentCount: 0 },
+  classes: [],
+};
 
 // Grade exports download .xlsx: unzip it and return all the XML text the workbook holds (cell values and shared strings).
 const readDownloadedXlsxText = async (download: Download) => {
@@ -164,6 +169,7 @@ test.describe('Faculty Module E2E Tests', () => {
           providers: { identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: false } }, email: { active: 'mailpit' }, biometrics: { active: 'disabled' }, location: { active: 'disabled' } },
           features: { browser_attendance_prototype: false, student_auth_enabled: false },
         });
+        if (path === '/api/faculty/dashboard/kpis') return json(emptyFacultyDashboardKpis);
         if (path === '/api/faculty/students') return json([
           { id: '42', studentId: 'P03-42', name: 'Canonical Student', email: 'student@bicol-u.edu.ph', yearLevel: 4, status: 'active', classSections: [{ classId: '77', className: 'Section 4-A', enrollmentId: '88' }] },
           { id: 'not-canonical', studentId: 'P03-43', name: 'Unscoped Student', email: 'unscoped@bicol-u.edu.ph', yearLevel: 4, status: 'active', classSections: [] },
@@ -186,10 +192,8 @@ test.describe('Faculty Module E2E Tests', () => {
       await appPage.fill('input[type="password"]', 'Password123!');
       await appPage.click('button[type="submit"]');
       await expect(appPage).toHaveURL('/');
-      await appPage.evaluate(() => {
-        window.history.pushState({}, '', '/email-management');
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      });
+      await appPage.getByRole('link', { name: 'Email Management', exact: true }).click();
+      await expect(appPage).toHaveURL('/email-management');
       // The roster loads after the in-app navigation; allow for a busy test
       // machine (parallel workers) instead of the default 5 s.
       await expect(appPage.getByText('Canonical Student')).toBeVisible({ timeout: 20000 });
@@ -382,6 +386,122 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.getByRole('button', { name: 'Hide join code' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  // Join Code dialog of a class roster: every change asks first (Cancel sends nothing), then the confirmed click sends one request.
+  const openJoinCodeDialog = async (page: Page, setup: (calls: Array<{ path: string; body: Record<string, unknown> }>) => Promise<void>) => {
+    const calls: Array<{ path: string; body: Record<string, unknown> }> = [];
+    const cls = { id: '91', csId: 91, csName: 'NEW601-A', courseId: 9, courseCode: 'NEW601', courseName: 'Advanced Clinic', units: 3, lectureUnits: 2, labUnits: 1, courseUnitsEditable: true, hasGrades: false, schoolYear: '2026-2027', isCurrentSchoolYear: true, isHistorical: false, semester: '1ST', yearLevel: 6, block: 'A', schedule: null, lecRoom: 'Lecture Hall A (Mon 08:00 AM - 09:00 AM)', labRoom: null, meetings: [], enrolledCount: 0, instructorName: 'Prof. Jane Doe', status: 'Active', joinCode: 'K7M-4QX', joinCodeEnabled: true };
+    await page.route('**/api/faculty/classes', route => route.fulfill({ json: { status: 'ok', currentSchoolYear: '2026-2027', classes: [cls] } }));
+    await setup(calls);
+    await page.click('a[href="/classes"]');
+    await page.getByRole('button', { name: 'View roster' }).click();
+    await page.getByRole('button', { name: /^Join code/ }).click();
+    await expect(page.getByRole('dialog', { name: 'Join Code' })).toBeVisible();
+    return calls;
+  };
+
+  test('Join code: Approve and Reject a join request ask first; Cancel sends nothing', async ({ page }) => {
+    let waiting = [
+      { requestId: 5, studentId: 1, studentNumber: '2024-0005', name: 'Maria Santos', email: 'maria@bicol-u.edu.ph', requestedAt: '2026-09-20T03:00:00Z' },
+      { requestId: 6, studentId: 2, studentNumber: '2024-0006', name: 'Juan Reyes', email: 'juan@bicol-u.edu.ph', requestedAt: '2026-09-20T04:00:00Z' },
+    ];
+    const calls = await openJoinCodeDialog(page, async calls => {
+      await page.route('**/api/faculty/classes/join**', route => {
+        const path = new URL(route.request().url()).pathname;
+        if (route.request().method() === 'GET') {
+          if (path.endsWith('/requests')) return route.fulfill({ json: { status: 'ok', requests: waiting } });
+          return route.fulfill({ json: { status: 'ok', csId: 91, code: 'K7M-4QX', link: null, enabled: true, open: true, autoApprove: false } });
+        }
+        const body = route.request().postDataJSON() as Record<string, unknown>;
+        calls.push({ path, body });
+        waiting = waiting.filter(item => item.requestId !== body.requestId);
+        return route.fulfill({ json: { status: 'ok' } });
+      });
+    });
+    const join = page.getByRole('dialog', { name: 'Join Code' });
+    const confirm = page.getByRole('dialog', { name: /join request$/ });
+    const maria = join.getByRole('listitem').filter({ hasText: 'Maria Santos' });
+    const juan = join.getByRole('listitem').filter({ hasText: 'Juan Reyes' });
+
+    await maria.getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect(confirm).toContainText('Review this action');
+    await expect(confirm).toContainText("Approve Maria Santos's request to join? Maria Santos will be added to the class.");
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+    await expect(confirm).toHaveCount(0);
+    expect(calls).toEqual([]);
+    await maria.getByRole('button', { name: 'Approve', exact: true }).click();
+    await confirm.getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect.poll(() => calls).toEqual([{ path: '/api/faculty/classes/join/requests/approve', body: { csId: 91, requestId: 5 } }]);
+
+    await juan.getByRole('button', { name: 'Reject', exact: true }).click();
+    await expect(confirm).toContainText("Reject Juan Reyes's request to join? Juan Reyes's request to join will be rejected.");
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+    await expect(confirm).toHaveCount(0);
+    expect(calls).toHaveLength(1);
+    await juan.getByRole('button', { name: 'Reject', exact: true }).click();
+    await confirm.getByRole('button', { name: 'Reject', exact: true }).click();
+    await expect.poll(() => calls).toHaveLength(2);
+    expect(calls[1]).toEqual({ path: '/api/faculty/classes/join/requests/reject', body: { csId: 91, requestId: 6 } });
+  });
+
+  test('Join code: Code On and Auto-Approve ask first; only turning Auto-Approve on warns about joining without review', async ({ page }) => {
+    const state = { csId: 91, code: 'K7M-4QX', link: null, enabled: true, open: true, autoApprove: false };
+    const calls = await openJoinCodeDialog(page, async calls => {
+      await page.route('**/api/faculty/classes/join**', route => {
+        const path = new URL(route.request().url()).pathname;
+        if (route.request().method() === 'GET') {
+          if (path.endsWith('/requests')) return route.fulfill({ json: { status: 'ok', requests: [] } });
+          return route.fulfill({ json: { status: 'ok', ...state } });
+        }
+        const body = route.request().postDataJSON() as Record<string, unknown>;
+        calls.push({ path, body });
+        Object.assign(state, { enabled: body.enabled ?? state.enabled, autoApprove: body.autoApprove ?? state.autoApprove });
+        return route.fulfill({ json: { status: 'ok', ...state } });
+      });
+    });
+    const join = page.getByRole('dialog', { name: 'Join Code' });
+    const confirm = page.getByRole('dialog', { name: /^Turn / });
+    const settings = '/api/faculty/classes/join/settings';
+
+    // Code On: turn it off, Cancel first.
+    await join.getByRole('group', { name: 'Code On' }).getByRole('button', { name: 'Off', exact: true }).click();
+    await expect(confirm).toContainText('Review this action');
+    await expect(confirm).toContainText('Turn class joining off for this class?');
+    await expect(confirm).not.toContainText('without review');
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+    await expect(confirm).toHaveCount(0);
+    expect(calls).toEqual([]);
+    await join.getByRole('group', { name: 'Code On' }).getByRole('button', { name: 'Off', exact: true }).click();
+    await confirm.getByRole('button', { name: 'Turn off', exact: true }).click();
+    await expect.poll(() => calls).toEqual([{ path: settings, body: { csId: 91, enabled: false } }]);
+    await join.getByRole('group', { name: 'Code On' }).getByRole('button', { name: 'On', exact: true }).click();
+    await expect(confirm).toContainText('Turn class joining on for this class?');
+    await confirm.getByRole('button', { name: 'Turn on', exact: true }).click();
+    await expect.poll(() => calls).toHaveLength(2);
+    expect(calls[1]).toEqual({ path: settings, body: { csId: 91, enabled: true } });
+
+    // Auto-Approve ON carries the extra sentence; Cancel sends nothing.
+    await join.getByRole('group', { name: 'Auto-Approve' }).getByRole('button', { name: 'On', exact: true }).click();
+    await expect(confirm).toContainText('Turn automatic approval on for this class? Anyone with the code joins without review.');
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+    await expect(confirm).toHaveCount(0);
+    expect(calls).toHaveLength(2);
+    await join.getByRole('group', { name: 'Auto-Approve' }).getByRole('button', { name: 'On', exact: true }).click();
+    await confirm.getByRole('button', { name: 'Turn on', exact: true }).click();
+    await expect.poll(() => calls).toHaveLength(3);
+    expect(calls[2]).toEqual({ path: settings, body: { csId: 91, autoApprove: true } });
+
+    // Auto-Approve OFF has no such sentence.
+    await join.getByRole('group', { name: 'Auto-Approve' }).getByRole('button', { name: 'Off', exact: true }).click();
+    await expect(confirm).toContainText('Turn automatic approval off for this class?');
+    await expect(confirm).not.toContainText('without review');
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+    expect(calls).toHaveLength(3);
+    await join.getByRole('group', { name: 'Auto-Approve' }).getByRole('button', { name: 'Off', exact: true }).click();
+    await confirm.getByRole('button', { name: 'Turn off', exact: true }).click();
+    await expect.poll(() => calls).toHaveLength(4);
+    expect(calls[3]).toEqual({ path: settings, body: { csId: 91, autoApprove: false } });
+  });
+
   test('Edit Class offers the same lecture/lab component choices and sends changed units', async ({ page }) => {
     const editableClass = { id: '91', csId: 91, csName: 'NEW601-A', courseId: 9, courseCode: 'NEW601', courseName: 'Advanced Clinic', units: 3, lectureUnits: 2, labUnits: 1, courseUnitsEditable: true, hasGrades: false, schoolYear: '2026-2027', isCurrentSchoolYear: true, isHistorical: false, semester: '1ST', yearLevel: 6, block: 'A', schedule: null, lecRoom: 'Lecture Hall A (Mon 08:00 AM - 09:00 AM)', labRoom: 'Simulation Lab (Wed 10:00 AM - 01:00 PM)', enrolledCount: 0, instructorName: 'Prof. Jane Doe', status: 'Active' };
     const updates: Array<Record<string, unknown>> = [];
@@ -532,6 +652,7 @@ test.describe('Faculty Module E2E Tests', () => {
         if (path === '/api/auth/login') return json({ type: 'direct_login', access_token: 'mock-faculty-token' });
         if (path === '/api/auth/me') return json({ id: 200, login_email: 'faculty@bicol-u.edu.ph', display_name: 'Prof. Jane Doe', role: 'faculty' });
         if (path === '/api/runtime-config') return json({ status: 'ok', environment: 'test', allowed_email_domains: ['bicol-u.edu.ph'], providers: { identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: false } }, email: { active: 'mailpit' }, biometrics: { active: 'disabled' }, location: { active: 'disabled' } }, features: { browser_attendance_prototype: false, student_auth_enabled: false } });
+        if (path === '/api/faculty/dashboard/kpis') return json(emptyFacultyDashboardKpis);
         if (path === '/api/faculty/students') return json([{ id: '42', studentId: 'P03-42', name: 'Canonical Student', email: 'student@bicol-u.edu.ph', yearLevel: 4, status: 'active', classSections: [{ classId: '77', className: 'Section 4-A', enrollmentId: '88' }] }]);
         if (path === '/api/secretary/invitations') return json([]);
         if (path === '/api/faculty/email-logs') return json({ status: 'ok', actions: emailLogs });
@@ -546,7 +667,8 @@ test.describe('Faculty Module E2E Tests', () => {
       await appPage.fill('input[type="password"]', 'Password123!');
       await appPage.click('button[type="submit"]');
       await expect(appPage).toHaveURL('/');
-      await appPage.evaluate(() => { window.history.pushState({}, '', '/email-management'); window.dispatchEvent(new PopStateEvent('popstate')); });
+      await appPage.getByRole('link', { name: 'Email Management', exact: true }).click();
+      await expect(appPage).toHaveURL('/email-management');
       await expect(appPage.getByText('Canonical Student')).toBeVisible();
       await appPage.locator('tbody input[type="checkbox"]').first().check();
       await appPage.getByRole('button', { name: /Send Invitations \(1\)/i }).click();
@@ -577,6 +699,7 @@ test.describe('Faculty Module E2E Tests', () => {
           providers: { identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: false } }, email: { active: 'mailpit' }, biometrics: { active: 'disabled' }, location: { active: 'disabled' } },
           features: { browser_attendance_prototype: false, student_auth_enabled: false },
         });
+        if (path === '/api/faculty/dashboard/kpis') return json(emptyFacultyDashboardKpis);
         if (path === '/api/faculty/email-logs') return json({ status: 'ok', actions: [{
           id: 'act-1', type: 'At-Risk Notification', sentAt: '2026-10-14T01:00:00Z', recipients: [
             { name: 'Ana Student', email: 'ana@bicol-u.edu.ph', status: 'Sent', failureReason: null },
@@ -591,7 +714,8 @@ test.describe('Faculty Module E2E Tests', () => {
       await appPage.fill('input[type="password"]', 'Password123!');
       await appPage.click('button[type="submit"]');
       await expect(appPage).toHaveURL('/');
-      await appPage.evaluate(() => { window.history.pushState({}, '', '/email-management'); window.dispatchEvent(new PopStateEvent('popstate')); });
+      await appPage.getByRole('link', { name: 'Email Management', exact: true }).click();
+      await expect(appPage).toHaveURL('/email-management');
       await appPage.getByRole('tab', { name: /Email History Log/ }).click();
       const historyTable = appPage.getByRole('table').filter({ hasText: 'Date Sent' });
       await expect(historyTable.getByText('3 recipients', { exact: true })).toBeVisible();
@@ -1414,8 +1538,52 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(panel).toContainText('Alice Green');
     await expect(panel).toContainText('Medical certificate given to the Secretary');
     await panel.getByRole('button', { name: 'Approve', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Approve attendance request' }).getByRole('button', { name: 'Approve', exact: true }).click();
     await expect.poll(() => decision).toEqual({ requestId: '31', decision: 'approve' });
     await expect(panel).toContainText('Excused request approved');
+  });
+
+  test('Secretary requests: single-row Approve and Reject ask first with the outcome; Cancel sends nothing', async ({ page }) => {
+    const decisions: Record<string, unknown>[] = [];
+    const base = {
+      status: 'pending', studentNumber: '2024-0001', classId: '1', className: 'Section A', courseCode: 'CLIN401', sessionId: '900',
+      sessionDate: '2026-09-20', sessionCode: 'CS1-20260920', reason: 'Medical certificate', requestedBy: 'Bea Alonzo', requestedAt: '2026-09-20T03:00:00Z',
+      decidedBy: null, decidedAt: null, decisionNote: null, currentStatus: 'absent',
+    };
+    const rows = [
+      { ...base, id: '31', studentId: '1001', studentName: 'Alice Green', requestedStatus: 'late' },
+      { ...base, id: '32', studentId: '1002', studentName: 'Bob White' },
+    ];
+    await page.route('**/api/faculty/excused-requests', route => route.fulfill({ json: { status: 'ok', requests: rows.filter(r => !decisions.some(d => d.requestId === r.id)) } }));
+    await page.route('**/api/faculty/excused-requests/decide', route => {
+      decisions.push(route.request().postDataJSON() as Record<string, unknown>);
+      return route.fulfill({ json: { status: 'ok', message: 'Decision saved.', request: null } });
+    });
+    await page.goto('/attendance?tab=requests');
+    const panel = page.getByRole('region', { name: 'Secretary requests' });
+    const alice = panel.getByRole('listitem').filter({ hasText: 'Alice Green' });
+    const bob = panel.getByRole('listitem').filter({ hasText: 'Bob White' });
+
+    await alice.getByRole('button', { name: 'Approve', exact: true }).click();
+    const approve = page.getByRole('dialog', { name: 'Approve attendance request' });
+    await expect(approve).toContainText('Review this action');
+    await expect(approve).toContainText('Approve the attendance request from Alice Green? The attendance record will change to Late.');
+    await approve.getByRole('button', { name: 'Cancel' }).click();
+    await expect(approve).toHaveCount(0);
+    expect(decisions).toEqual([]);
+    await alice.getByRole('button', { name: 'Approve', exact: true }).click();
+    await approve.getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect.poll(() => decisions).toEqual([{ requestId: '31', decision: 'approve' }]);
+
+    await bob.getByRole('button', { name: 'Reject', exact: true }).click();
+    const reject = page.getByRole('dialog', { name: 'Reject attendance request' });
+    await expect(reject).toContainText('Reject the attendance request from Bob White? The attendance record will stay as it is.');
+    await reject.getByRole('button', { name: 'Cancel' }).click();
+    await expect(reject).toHaveCount(0);
+    expect(decisions).toHaveLength(1);
+    await bob.getByRole('button', { name: 'Reject', exact: true }).click();
+    await reject.getByRole('button', { name: 'Reject', exact: true }).click();
+    await expect.poll(() => decisions).toEqual([{ requestId: '31', decision: 'approve' }, { requestId: '32', decision: 'reject' }]);
   });
 
   test('Secretary requests: requested vs current status, bulk approve sends a list, reject sends a note', async ({ page }) => {
@@ -1452,6 +1620,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await cara.getByRole('button', { name: 'Note', exact: true }).click();
     await cara.getByLabel('Decision note for Cara Gray').fill('Student was absent');
     await cara.getByRole('button', { name: 'Reject' }).click();
+    await page.getByRole('dialog', { name: 'Reject attendance request' }).getByRole('button', { name: 'Reject', exact: true }).click();
     await expect.poll(() => decisions).toEqual([{ requestId: '33', decision: 'reject', note: 'Student was absent' }]);
     // Bulk approve two.
     await panel.getByLabel('Select Alice Green').check();
@@ -1828,6 +1997,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect.poll(() => writing).toBe(true);
     await page.getByRole('tab', { name: /^Secretary Requests/ }).dispatchEvent('click');
     await page.getByRole('region', { name: 'Secretary requests' }).getByRole('button', { name: 'Approve', exact: true }).dispatchEvent('click'); // the Save override modal overlay now really covers the page (styles on)
+    await page.getByRole('dialog', { name: 'Approve attendance request' }).getByRole('button', { name: 'Approve', exact: true }).dispatchEvent('click');
     await expect(page.getByText('Bob approval saved.', { exact: true })).toBeVisible();
     await page.getByRole('tab', { name: /^Assigned Classes\s+\d+$/ }).dispatchEvent('click'); // back to the roll call
     expect(reads).toBe(1);
@@ -2648,7 +2818,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(nameInputs.nth(1)).toHaveValue('Quizzes');
 
       await page.getByRole('button', { name: /Save grade weights/i }).click();
-      // Saving asks for confirmation first.
+      // Saving asks for confirmation first, and says what it does.
+      await expect(page.getByRole('dialog', { name: 'Save grade weights' })).toContainText("Save these grade weights? Every student's grade in this class is recalculated with them.");
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
       await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();

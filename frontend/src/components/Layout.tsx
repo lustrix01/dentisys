@@ -600,8 +600,9 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     return crumbs;
   };
 
-  const breadcrumbs = getBreadcrumbs();
-  const currentPageTitle = navItems.find(x => x.path === location.pathname)?.name || breadcrumbs[breadcrumbs.length - 1]?.name || 'DentiSYS Portal';
+  const routeBreadcrumbs = getBreadcrumbs();
+  const currentPageTitle = navItems.find(x => x.path === location.pathname)?.name || routeBreadcrumbs[routeBreadcrumbs.length - 1]?.name || 'DentiSYS Portal';
+  const breadcrumbs = routeBreadcrumbs;
   const CurrentPageIcon = (currentPageItem ?? navItems.find(item => item.name === currentPageTitle))?.icon ?? User;
 
   return (
@@ -842,7 +843,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                   onClick={() => setIsSidebarOpen(false)}
                   className={`relative group flex items-center transition-all duration-150 ${
                     isSidebarCollapsed
-                      ? 'w-14 py-1.5 mx-auto flex-col justify-center rounded-xl'
+                    ? 'w-16 py-1.5 mx-auto flex-col justify-center rounded-xl'
                       : 'justify-between px-3.5 py-2.5 rounded-xl'
                   } ${
                     isActive
@@ -860,7 +861,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                     )}
                   </div>
                   {isSidebarCollapsed && (
-                    <span aria-hidden="true" className={`mt-1 max-w-full truncate text-[10px] leading-none tracking-tight ${isActive ? 'font-bold' : 'font-medium'}`}>
+                    <span aria-hidden="true" className={`mt-1 max-w-full truncate text-[9px] leading-tight tracking-tight ${isActive ? 'font-bold' : 'font-medium'}`}>
                       {item.short ?? item.name}
                     </span>
                   )}
@@ -905,25 +906,25 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       }`}>
 
         {/* Desktop Header */}
-        <header className="print:!hidden hidden md:flex items-center justify-between px-8 py-4 border-b border-slate-200/40 dark:border-slate-900/40 bg-white/30 dark:bg-slate-950/20 backdrop-blur-md sticky top-0 z-30">
+        <header className="print:!hidden hidden md:flex items-center justify-between px-8 py-[3px] border-b border-slate-200/40 dark:border-slate-900/40 bg-white/30 dark:bg-slate-950/20 backdrop-blur-md sticky top-0 z-40">
 
           {/* Dynamic Breadcrumbs Area */}
-          <div className="flex flex-col space-y-1">
-            <nav className="flex items-center space-x-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
+          <div className="flex flex-col space-y-0">
+            <nav className="flex min-h-11 items-center space-x-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
               {breadcrumbs.map((crumb, idx) => (
                 <React.Fragment key={crumb.path + idx}>
                   {idx > 0 && <span className="text-slate-300 dark:text-slate-700">/</span>}
-                  {idx === breadcrumbs.length - 1 ? (
+                  {idx === breadcrumbs.length - 1 && location.pathname === '/' ? (
                     <span className="text-slate-500 dark:text-slate-400 font-semibold">{crumb.name}</span>
                   ) : (
-                    <Link to={crumb.path} className={`${colors.crumbHover} transition-colors`}>
+                    <Link to={crumb.path} className={`inline-flex min-h-11 items-center rounded-lg px-2 -mx-2 ${colors.crumbHover} transition-colors`}>
                       {crumb.name}
                     </Link>
                   )}
                 </React.Fragment>
               ))}
             </nav>
-            <h1 className="text-xl font-bold font-heading text-slate-800 dark:text-slate-100">
+            <h1 className="relative -top-1 text-xl font-bold font-heading text-slate-800 dark:text-slate-100">
               {currentPageTitle}
             </h1>
           </div>

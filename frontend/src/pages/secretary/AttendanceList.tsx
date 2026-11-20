@@ -820,7 +820,7 @@ export const AttendanceList: React.FC = () => {
                       <div className="space-y-2.5">
                         {/* Top Row: Secretary Blue Badge, Section Label & Live Dot */}
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 text-[10px] font-extrabold uppercase tracking-wider">
+                          <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 text-[10px] font-extrabold tracking-wider">
                             {[c.courseCode, c.yearLevel ? `Year ${c.yearLevel}` : ''].filter(Boolean).join(' • ')}
                           </span>
 
@@ -940,7 +940,7 @@ export const AttendanceList: React.FC = () => {
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-1.5">
                 <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-extrabold bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300">
-                  {activeCard?.courseCode || activeCard?.className || className || 'SECTION'}
+                  {activeCard?.courseCode || activeCard?.className || className || 'Section'}
                 </span>
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">&bull;</span>
                 <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
@@ -982,16 +982,16 @@ export const AttendanceList: React.FC = () => {
             {/* Session strip: read-only status on the left, actions on the right (phone: stacked) */}
             <div className="flex flex-col gap-3.5 rounded-2xl border border-slate-200/80 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-900/40 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:p-4">
               <div role="status" aria-live="polite" className="min-w-0 flex-1">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Session status</span>
+                <span className="text-[10px] font-extrabold tracking-wider text-slate-500 dark:text-slate-400">Session status</span>
                 <div className="mt-1.5">
                   {loading || sessionLoading ? (
-                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-extrabold tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
                       <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                       Checking
                     </span>
                   ) : liveCurrentSession ? (
                     <span className="inline-flex max-w-full flex-col items-start gap-0.5 rounded-full border border-blue-300/80 bg-blue-50 px-3.5 py-1.5 text-blue-700 dark:border-blue-700/60 dark:bg-blue-950/50 dark:text-blue-200">
-                      <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider">
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold tracking-wider">
                         <span className="relative flex h-2 w-2">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
@@ -1009,14 +1009,14 @@ export const AttendanceList: React.FC = () => {
                     </span>
                   ) : scheduledSession ? (
                     <span className="inline-flex max-w-full flex-col items-start gap-0.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3.5 py-1.5 text-indigo-700 dark:text-indigo-300">
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider">Scheduled session</span>
+                      <span className="text-[10px] font-extrabold tracking-wider">Scheduled session</span>
                       <span className="mt-0.5 flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] font-semibold text-indigo-700/90 dark:text-indigo-200/90">
                         {scheduledSession.sessionDate && <span>{scheduledSession.sessionDate}</span>}
                         <span>{formatVisibleTime(scheduledSession.openingTime)}&ndash;{formatVisibleTime(scheduledSession.classEndTime)}</span>
                       </span>
                     </span>
                   ) : (
-                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-extrabold tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
                       <span className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-600" aria-hidden="true" />
                       No session running
                     </span>
@@ -1025,7 +1025,7 @@ export const AttendanceList: React.FC = () => {
               </div>
 
               <div className="flex flex-col gap-1.5 sm:shrink-0 sm:items-end">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 sm:text-right">Actions</span>
+                <span className="text-[10px] font-extrabold tracking-wider text-slate-500 dark:text-slate-400 sm:text-right">Actions</span>
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
                   <button
                     type="button"
@@ -1079,12 +1079,12 @@ export const AttendanceList: React.FC = () => {
 
           {/* 2. Streamlined Worksheet Controls & Search Bar */}
           <Card className="p-4 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs space-y-3">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
               {/* Left: Worksheet Date with Quick 'Jump to Today' */}
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700">
                   <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Attendance Date:</span>
+                  <span className="text-[10px] font-extrabold tracking-wider text-slate-500 dark:text-slate-400">Attendance Date:</span>
                   <input
                     type="date"
                     value={date}
@@ -1125,7 +1125,7 @@ export const AttendanceList: React.FC = () => {
               </div>
 
               {/* Right: Search Input & Attendance Status Filter */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 max-w-full md:max-w-lg">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5 flex-1 max-w-full xl:max-w-none">
                 <div className="relative flex-1">
                   <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
@@ -1186,7 +1186,7 @@ export const AttendanceList: React.FC = () => {
               <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-800/80 text-xs">
                 {shownSessions.length > 0 && (
                 <label className="flex min-w-0 max-w-full items-center gap-2 font-bold text-slate-600 dark:text-slate-300">
-                  <span className="shrink-0 text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Switch Session:</span>
+                  <span className="shrink-0 text-[10px] tracking-wider text-slate-500 dark:text-slate-400">Switch Session:</span>
                   <select
                     value={sessionId}
                     disabled={submitting}
@@ -1212,11 +1212,11 @@ export const AttendanceList: React.FC = () => {
           {revokedSessionOpen && openSession && (
             <div className="space-y-1 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-300 font-extrabold text-[10px] uppercase tracking-wider">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-300 font-extrabold text-[10px] tracking-wider">
                   <Ban className="w-3 h-3 text-rose-600" />
                   Session revoked
                 </span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-300 font-extrabold text-[10px] uppercase tracking-wider">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-300 font-extrabold text-[10px] tracking-wider">
                   View-only
                 </span>
                 <span className="font-mono text-slate-500 font-bold">Code: {openSession.sessionCode}</span>
@@ -1434,7 +1434,7 @@ export const AttendanceList: React.FC = () => {
                           <span className="font-mono text-sm font-extrabold text-blue-700 dark:text-blue-300">
                             {liveCurrentSession.sessionCode}
                           </span>
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                             {liveCurrentSession.status}
                           </span>
@@ -1585,11 +1585,11 @@ export const AttendanceList: React.FC = () => {
                         <div className="space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-bold text-slate-800 dark:text-slate-100">{s.subjectCode || 'Class Session'}</span>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                               {countdown}
                             </span>
                             <span className="font-mono text-xs text-slate-500 dark:text-slate-400">({s.sessionCode})</span>
-                            {s.autoSession && <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Auto</span>}
+                            {s.autoSession && <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-extrabold tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Auto</span>}
                           </div>
                           <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
                             <span>Date: {sDate}</span>
@@ -1803,7 +1803,7 @@ export const AttendanceList: React.FC = () => {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Current:</span>
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-wider">Current:</span>
                   <span className={`rounded-lg px-2.5 py-1 text-xs font-extrabold capitalize ${statusClass[selectedRecord.status] || 'bg-slate-100 text-slate-600'}`}>
                     {isRecorded(selectedRecord) ? selectedRecord.status : 'Not recorded'}
                   </span>
@@ -1813,7 +1813,7 @@ export const AttendanceList: React.FC = () => {
 
             {/* Status selection */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+              <label className="block text-xs font-bold tracking-wider text-slate-500 dark:text-slate-400 mb-2">
                 Target Status
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -1855,8 +1855,8 @@ export const AttendanceList: React.FC = () => {
 
             {/* Reason */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                {reasonRequired ? 'Reason' : 'Reason (optional)'}
+              <label className="block text-xs font-bold tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                {reasonRequired ? 'Reason (at least 8 characters)' : 'Reason (optional)'}
               </label>
               <textarea
                 value={reason}
@@ -1889,7 +1889,7 @@ export const AttendanceList: React.FC = () => {
               <button
                 type="button"
                 onClick={() => void handleSaveOverride()}
-                disabled={submitting || (reasonRequired && reason.trim().length < 8) || overrideStatus === selectedRecord.status}
+                disabled={submitting || overrideStatus === selectedRecord.status}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-blue-600/20 hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
               >
                 {submitting ? 'Sending…' : 'Send for approval'}

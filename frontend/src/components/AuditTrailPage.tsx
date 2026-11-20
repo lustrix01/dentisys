@@ -567,9 +567,9 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent, superadmi
                           <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">When</dt>
                           <dd className="text-slate-600 dark:text-slate-400">{formatManilaWhen(entry.occurredAt)}</dd>
                           <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Who</dt>
-                          <dd className="break-words">
+                          <dd className="min-w-0 break-words">
                             <span className="font-bold text-slate-800 dark:text-slate-200">{entry.who ? entry.who.name : entry.whoText ?? '—'}</span>
-                            {entry.who && <span className="text-slate-500 dark:text-slate-400"> · {entry.who.roleLabel}</span>}
+                            {entry.who && <span className="block text-slate-500 dark:text-slate-400">{entry.who.roleLabel}</span>}
                           </dd>
                           <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">What</dt>
                           <dd className="font-semibold text-slate-700 dark:text-slate-300 break-words">{entry.what}</dd>

@@ -7,7 +7,7 @@ import type { CourseFilters } from './courseCatalogFilters';
 import { SortableHeader, ariaSort } from '../../components/SortableHeader';
 import { ListToolbar, SearchField } from '../../components/FilterBars';
 import { Modal } from '../../components/Modal';
-import { showFeedback } from '../../components/FeedbackCenter';
+import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
 import { useAuth } from '../../context/AuthContext';
 import { downloadXlsx } from '../../utils/xlsxDownload';
 import { buildReportSheet } from '../../utils/reportWorkbook';
@@ -98,7 +98,10 @@ export const CourseCatalog: React.FC = () => {
     const target = retiring;
     void run(() => retireCourseApi(target.id, reason.trim() || undefined), `${target.courseCode} retired.`, () => { setRetiring(null); setReason(''); });
   };
-  const restoreCourse = (course: CatalogCourse) => void run(() => restoreCourseApi(course.id), `${course.courseCode} restored.`, () => undefined);
+  const restoreCourse = async (course: CatalogCourse) => {
+    if (!await requestConfirmation(`Restore ${course.courseCode}? It will be available in Faculty course lists again.`, 'Restore course', 'Restore')) return;
+    await run(() => restoreCourseApi(course.id), `${course.courseCode} restored.`, () => undefined);
+  };
 
   const actions = (course: CatalogCourse) => course.status === 'active' ? (
     <>

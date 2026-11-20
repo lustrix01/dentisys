@@ -1126,7 +1126,7 @@ export const AttendanceMonitoring: React.FC = () => {
 
           {/* School Year / Term Selector */}
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">S.Y.:</span>
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-wider">School year:</span>
             <select
               aria-label="Attendance school year"
               value={selectedSchoolYear}
@@ -1177,11 +1177,11 @@ export const AttendanceMonitoring: React.FC = () => {
                   <div className="space-y-2.5">
                     {/* Top Row: Colorful Badge, Section Label & Live Dot */}
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-extrabold uppercase tracking-wider">
+                      <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-extrabold tracking-wider">
                         {c.courseCode} &bull; Year {c.yearLevel || 1}
                       </span>
                       {isArchivedClass && (
-                        <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">Archived</span>
+                        <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-extrabold tracking-wider">Archived</span>
                       )}
 
                       <div className="flex items-center gap-2">
@@ -1292,7 +1292,7 @@ export const AttendanceMonitoring: React.FC = () => {
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-1.5">
                 <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
-                  {selectedClass?.courseCode || 'CLASS'}
+                  {selectedClass?.courseCode || 'Class'}
                 </span>
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">&bull;</span>
                 <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
@@ -1337,21 +1337,21 @@ export const AttendanceMonitoring: React.FC = () => {
             {/* Session strip: read-only status on the left, actions on the right (phone: stacked) */}
             <div className="flex flex-col gap-3.5 rounded-2xl border border-slate-200/80 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-900/40 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:p-4">
               <div role="status" aria-live="polite" className="min-w-0 flex-1">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Session status</span>
+                <span className="text-[10px] font-extrabold tracking-wider text-slate-500 dark:text-slate-400">Session status</span>
                 <div className="mt-1.5">
                   {loadingWorksheet ? (
-                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-extrabold tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
                       <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                       Checking
                     </span>
                   ) : selectedClassIsPast ? (
-                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-amber-300/80 bg-amber-50 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-700 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200">
+                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-amber-300/80 bg-amber-50 px-3 py-1.5 text-[10px] font-extrabold tracking-wider text-amber-700 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200">
                       <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
                       View only
                     </span>
                   ) : liveCurrentSession ? (
                     <span className="inline-flex max-w-full flex-col items-start gap-0.5 rounded-full border border-emerald-300/80 bg-emerald-50 px-3.5 py-1.5 text-emerald-700 dark:border-emerald-700/60 dark:bg-emerald-950/50 dark:text-emerald-200">
-                      <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider">
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold tracking-wider">
                         <span className="relative flex h-2 w-2">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
@@ -1369,14 +1369,14 @@ export const AttendanceMonitoring: React.FC = () => {
                     </span>
                   ) : scheduledWorksheetSession ? (
                     <span className="inline-flex max-w-full flex-col items-start gap-0.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3.5 py-1.5 text-indigo-700 dark:text-indigo-300">
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider">Scheduled session</span>
+                      <span className="text-[10px] font-extrabold tracking-wider">Scheduled session</span>
                       <span className="mt-0.5 flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] font-semibold text-indigo-700/90 dark:text-indigo-200/90">
                         {scheduledWorksheetSession.sessionDate && <span>{formatShortDate(scheduledWorksheetSession.sessionDate)}</span>}
                         <span>{formatVisibleTime(scheduledWorksheetSession.openingTime)}&ndash;{formatVisibleTime(scheduledWorksheetSession.classEndTime)}</span>
                       </span>
                     </span>
                   ) : (
-                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-extrabold tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
                       <span className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-600" aria-hidden="true" />
                       No session running
                     </span>
@@ -1385,7 +1385,7 @@ export const AttendanceMonitoring: React.FC = () => {
               </div>
 
               <div className="flex flex-col gap-1.5 sm:shrink-0 sm:items-end">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 sm:text-right">Actions</span>
+                <span className="text-[10px] font-extrabold tracking-wider text-slate-500 dark:text-slate-400 sm:text-right">Actions</span>
                 <div className="flex flex-wrap gap-2 sm:items-center sm:justify-end">
                   {selectedClass && archiveGroup(selectedClass) !== 'removed' && (
                     <button
@@ -1484,12 +1484,12 @@ export const AttendanceMonitoring: React.FC = () => {
             </select>
           </div>
 
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
             {/* Left: Worksheet Date with Quick 'Jump to Today' */}
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700">
                 <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Attendance Date:</span>
+                <span className="text-[10px] font-extrabold tracking-wider text-slate-500 dark:text-slate-400">Attendance Date:</span>
                 <input
                   type="date"
                   value={selectedDate}
@@ -1511,7 +1511,7 @@ export const AttendanceMonitoring: React.FC = () => {
             </div>
 
             {/* Right: Search Input & Attendance Status Filter */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 max-w-full md:max-w-lg">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5 flex-1 max-w-full xl:max-w-none">
               <div className="relative flex-1">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -1632,11 +1632,11 @@ export const AttendanceMonitoring: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border p-3 text-xs border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 animate-fade-in">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-300 font-extrabold text-[10px] uppercase tracking-wider">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-300 font-extrabold text-[10px] tracking-wider">
                     <Ban className="w-3 h-3 text-rose-600" />
                     Session revoked
                   </span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-300 font-extrabold text-[10px] uppercase tracking-wider">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-300 font-extrabold text-[10px] tracking-wider">
                     View-only
                   </span>
                   <span className="font-mono text-slate-500 font-bold">
@@ -1899,15 +1899,15 @@ export const AttendanceMonitoring: React.FC = () => {
               </div>
               <div className="flex justify-between items-center pt-1 border-t border-slate-200 dark:border-slate-800">
                 <span>Current Status:</span>
-                <span className="font-bold uppercase text-slate-700 dark:text-slate-300">
-                  {correctionTarget.status || 'Not recorded'}
+                <span className="font-bold text-slate-700 dark:text-slate-300">
+                  {correctionTarget.status ? correctionTarget.status.charAt(0).toUpperCase() + correctionTarget.status.slice(1) : 'Not recorded'}
                 </span>
               </div>
               {correctionTarget.status && correctionTarget.status !== targetStatus && (
                 <div className="flex justify-between items-center">
                   <span>Change:</span>
                   <span className="font-bold font-mono text-amber-700 dark:text-amber-300">
-                    {correctionTarget.status.toUpperCase()} → {targetStatus.toUpperCase()}
+                    {correctionTarget.status.charAt(0).toUpperCase() + correctionTarget.status.slice(1)} → {targetStatus.charAt(0).toUpperCase() + targetStatus.slice(1)}
                   </span>
                 </div>
               )}
@@ -2140,7 +2140,7 @@ export const AttendanceMonitoring: React.FC = () => {
             )}
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/50">
-              <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Selected session</p>
+              <p className="text-[10px] font-extrabold tracking-wider text-slate-500 dark:text-slate-400">Selected session</p>
               <p className="mt-1 font-bold text-slate-800 dark:text-slate-100">
                 {editingSession.sessionCode} · Status: <span className="capitalize">{editingSession.status}</span>
               </p>
@@ -2435,7 +2435,7 @@ export const AttendanceMonitoring: React.FC = () => {
                     <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 space-y-2.5">
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <div className="flex items-center gap-2">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider ${
                             liveCurrentSession.status === 'active'
                               ? 'bg-emerald-500 text-white'
                               : 'bg-slate-600 text-white'
@@ -2588,7 +2588,7 @@ export const AttendanceMonitoring: React.FC = () => {
                               <span className="font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
                                 {session.sessionCode}
                               </span>
-                              {session.autoSession && <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Auto</span>}
+                              {session.autoSession && <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-extrabold tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">Auto</span>}
                               {startsInLabel && (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                                   <Clock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />

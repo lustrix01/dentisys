@@ -393,7 +393,9 @@ for (const boundary of [
     const submit = page.getByRole('button', { name: 'Send for approval', exact: true });
     await expect(reason).toHaveAttribute('maxlength', String(boundary.limit));
     await reason.fill('1234567');
-    await expect(submit).toBeDisabled();
+    await expect(submit).toBeEnabled();
+    await submit.click();
+    await expect(page.getByText('Provide a reason of 8–500 characters.', { exact: true })).toBeVisible();
     expect(overrides).toEqual([]);
     expect(requests).toEqual([]);
     const text = 'R'.repeat(boundary.length);

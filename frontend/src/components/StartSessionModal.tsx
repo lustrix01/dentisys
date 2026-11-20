@@ -248,7 +248,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   const boxClass = 'rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/50';
   const info = (Tag: 'p' | 'span') => (
     <>
-      <Tag className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Selected class</Tag>
+      <Tag className="block text-[10px] font-extrabold tracking-wider text-slate-500 dark:text-slate-400">Selected class</Tag>
       <Tag className="mt-1 block font-bold text-slate-800 dark:text-slate-100">{summary}</Tag>
       <Tag className="mt-0.5 block text-[11px] text-slate-500">Session date: {formatShortDate(sessionDate)} · Asia/Manila</Tag>
     </>
@@ -347,6 +347,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
         )}
 
         <SessionTimeFields times={times} onChange={setTimes} sessionDate={sessionDate} accent={accent} part="main" endHint="The session ends automatically at this time; students without a record are marked Absent." />
+        <p className="-mt-2 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">You can change the date and time.</p>
 
         <div>
           <button

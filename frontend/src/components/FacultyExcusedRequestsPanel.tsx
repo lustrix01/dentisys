@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Filter as FilterIcon, Inbox, Search } from 'lucide-react';
 import { Card } from './Card';
 import { Modal } from './Modal';
+import { requestConfirmation } from './FeedbackCenter';
 import { formatManilaWhen } from '../services/auditService';
 import { formatShortDate } from '../utils/sessionDate';
 import { formatVisibleTime } from '../utils/timeDisplay.ts';
@@ -112,6 +113,15 @@ export const FacultyExcusedRequestsPanel: React.FC<{
 
   // withNote: only a single-row Reject sends its optional note; bulk calls never do.
   const decide = async (ids: string[], decision: 'approve' | 'reject', withNote = false) => {
+    if (ids.length === 1) {
+      const request = requests.find(item => item.id === ids[0]);
+      const action = decision === 'approve' ? 'Approve' : 'Reject';
+      const approvedText = request?.requestedStatus
+        ? ` The attendance record will change to ${word(request.requestedStatus)}.`
+        : ' The attendance record will be marked excused.';
+      const detail = decision === 'approve' ? approvedText : ' The attendance record will stay as it is.';
+      if (!await requestConfirmation(`${action} the attendance request from ${request?.studentName ?? 'this student'}?${detail}`, `${action} attendance request`, action)) return;
+    }
     setBusy(true);
     setError(null);
     try {
