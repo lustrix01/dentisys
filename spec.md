@@ -1156,9 +1156,9 @@ Adopt the source Attendance Monitoring interface, consolidating Start Attendance
 
 Use the source start-session presentation with PDF-directed improvements. Existing ATT rules still govern timing, geofence, ownership, correction, history, and Excused approval. A source delete/relaunch control does not authorize erasing attendance history or reusing verification.
 
-Attendance Monitoring shows an Assigned Classes grid and a Worksheet for the selected class (the roll call of student attendance), plus a "New attendance session" action placed apart from every session list. A session modal has two tabs: Current Session, and Upcoming Sessions with countdowns; upcoming sessions have Edit and Revoke. There is no past-sessions list. Session timing uses exact times only (quick choices are removed); timing validation is unchanged. The Secretary uses the same structure in the blue palette.
+Attendance Monitoring shows an Assigned Classes grid and a Worksheet for the selected class (the roll call of student attendance), plus a "New attendance session" action placed apart from every session list. A session modal has three tabs: Current Session; Upcoming Sessions with countdowns, where upcoming sessions have Edit and Revoke; and Past Sessions, newest first, each with its Present, Late, Absent and Excused counts (Not recorded when above 0) and a From–To date filter. Revoked sessions appear there only behind a switch, and choosing a session opens its roll call. For a past-school-year class or one archived as Finished, the modal shows only Past Sessions and every roll call is view-only. The Secretary's session modal keeps two tabs. Session timing uses exact times only (quick choices are removed); timing validation is unchanged. The Secretary uses the same structure in the blue palette.
 
-History: 2026-10-10 Sessions and Roll call views; 2026-10-12 Assigned Classes grid, Worksheet, two-tab session modal. Records: docs/archive/.
+History: 2026-10-10 Sessions and Roll call views; 2026-10-12 Assigned Classes grid, Worksheet, two-tab session modal; 2026-11-20 Past Sessions tab (13.6). Records: docs/archive/.
 
 ## CLS-002 - Current-year creation and historical classes (PDF page 9)
 

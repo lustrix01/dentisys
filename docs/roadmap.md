@@ -11,7 +11,7 @@ Two people work at once, in two lanes that never edit the same screen or backend
 3. Remember me (9.26): on the demo, awaiting promotion.
 4. Superadmin sign-in page (12.8): on the demo, awaiting promotion.
 5. Grade submission and Dean approval (13.8). Starts after the colleague's branch is merged, since it changes the same Retention and Attendance screens.
-6. Attendance review screen (13.6, review part): the Owner picks its look from a demo first, then the UI-005 spec change and the build.
+6. Attendance review (13.6, review part): a Past Sessions tab in the Sessions dialog, built on `lighthal9-backlog`. Moving past sessions to their own page is 13.11, not yet scheduled.
 7. Face enrolment and check-in speed (13.4), after the Owner's real-phone timing session.
 8. UI formality pass (12.6), after both lanes are done.
 

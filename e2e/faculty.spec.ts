@@ -1076,7 +1076,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.getByLabel('Attendance school year').selectOption('2024-2025');
     const oldCard = page.locator('div.group').filter({ hasText: 'OLD401' });
     await expect(oldCard).toHaveCount(1);
-    await expect(oldCard.getByRole('button', { name: 'Sessions', exact: true })).toBeDisabled();
+    await expect(oldCard.getByRole('button', { name: 'Sessions', exact: true })).toBeEnabled(); // 13.6: opens Past Sessions only
     await oldCard.getByRole('button', { name: 'View attendance', exact: true }).click();
     await expect(page.getByText('Past school-year attendance is view-only.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Start session', exact: true })).toBeDisabled();
@@ -1098,7 +1098,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     const cards = page.locator('div.group');
     await expect(cards.last()).toContainText('FIN501');
     await expect(cards.last().getByText('Archived', { exact: true })).toBeVisible();
-    await expect(cards.last().getByRole('button', { name: 'Sessions', exact: true })).toHaveCount(0);
+    await expect(cards.last().getByRole('button', { name: 'Sessions', exact: true })).toBeVisible(); // 13.6: Past Sessions only
     await expect(cards.first().getByRole('button', { name: 'Sessions', exact: true })).toBeVisible();
   });
 
@@ -5037,5 +5037,197 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.keyboard.press('Escape');
       await expect(trigger).toBeFocused();
     });
+  });
+});
+
+test.describe('Past Sessions tab (13.6)', () => {
+  const baseClass = {
+    id: '1', csId: 1, csName: 'CLIN401 - Section A', courseId: 101, courseCode: 'CLIN401', courseName: 'Clinical Dentistry I', units: 3.0,
+    schoolYear: '2025-2026', semester: '1st', yearLevel: 4, block: 'A', schedule: 'Room 101', enrolledCount: 3, instructorName: 'Prof. Jane Doe', status: 'Active',
+  };
+  const mk = (sessionId: string, sessionDate: string, status: string, extra: Record<string, unknown> = {}) => ({
+    sessionId, sessionDate, sessionCode: `PAST-${sessionId}`, status, room: 'Room 101', openingTime: '08:00', presentCutoff: '08:30', lateCutoff: '10:30', classEndTime: '11:00',
+    biometricRequired: false, geofenceEnabled: false, geofenceLatitude: null, geofenceLongitude: null, geofenceRadiusMeters: 250, createdByRole: 'faculty', ...extra,
+  });
+  // 801 and 802 ended, 803 revoked, 804 still "scheduled" but its time passed years ago.
+  const sessions = [mk('801', '2026-09-10', 'ended'), mk('802', '2026-09-17', 'ended'), mk('803', '2026-09-24', 'revoked'), mk('804', '2020-01-01', 'scheduled')];
+  const worksheet = {
+    classSection: { id: '1', name: 'CLIN401 - Section A', block: 'A', semester: '1st', schoolYear: '2025-2026', status: 'Active' },
+    course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I', units: 3.0 },
+    date: '2026-09-20', attendanceSession: null, attendanceSessions: [], roster: [], managedSessions: sessions,
+  };
+  // The sheet holds saved statuses only and leaves out the revoked session (803); 3 active students.
+  const sheet = {
+    class: { csId: '1', courseCode: 'CLIN401', courseName: 'Clinical Dentistry I', sectionName: 'CLIN401 - Section A', schoolYear: '2025-2026', semester: '1st' },
+    sessions: [{ id: '801', date: '2026-09-10', openingTime: '08:00' }, { id: '802', date: '2026-09-17', openingTime: '08:00' }, { id: '804', date: '2020-01-01', openingTime: '08:00' }],
+    students: [1, 2, 3].map(n => ({ enrollmentId: String(n), studentNumber: `2024-000${n}`, lastName: `Student${n}`, firstName: 'Test', middleName: null })),
+    records: [
+      { enrollmentId: '1', sessionId: '801', status: 'present' }, { enrollmentId: '2', sessionId: '801', status: 'late' }, { enrollmentId: '3', sessionId: '801', status: 'absent' },
+      { enrollmentId: '1', sessionId: '802', status: 'PRESENT' }, { enrollmentId: '2', sessionId: '802', status: 'present' },
+    ],
+  };
+
+  let worksheetUrls: string[] = [];
+  let sheetRequests = 0;
+
+  const mockPage = async (page: Page, opts: { classes?: Record<string, unknown>[]; sheetStatus?: number } = {}) => {
+    worksheetUrls = [];
+    sheetRequests = 0;
+    await page.route('**/api/auth/login', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ type: 'direct_login', access_token: 'mock-faculty-token' }) }));
+    await page.route('**/api/auth/me', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 200, login_email: 'faculty@bicol-u.edu.ph', display_name: 'Prof. Jane Doe', role: 'faculty' }) }));
+    await page.route('**/api/faculty/classes', route => route.fulfill({ json: { status: 'ok', currentSchoolYear: '2025-2026', classes: opts.classes ?? [baseClass] } }));
+    await page.route('**/api/faculty/attendance?*', route => {
+      worksheetUrls.push(route.request().url());
+      return route.fulfill({ json: { status: 'ok', worksheet } });
+    });
+    await page.route('**/api/faculty/attendance/sheet?*', route => {
+      sheetRequests++;
+      return opts.sheetStatus && opts.sheetStatus >= 400
+        ? route.fulfill({ status: opts.sheetStatus, json: { status: 'error', message: 'Server error' } })
+        : route.fulfill({ json: { status: 'ok', sheet } });
+    });
+    await page.goto('/login');
+    await page.fill('input[inputmode="email"]', 'faculty@bicol-u.edu.ph');
+    await page.fill('input[type="password"]', 'Password123!');
+    await page.click('button[type="submit"]');
+    await expect(page).toHaveURL('/');
+    await page.goto('/attendance');
+  };
+
+  const openPast = async (page: Page) => {
+    await openWorksheet(page, 'CLIN401 - Section A');
+    await page.getByRole('button', { name: 'Sessions', exact: true }).click();
+    await page.getByRole('button', { name: /Past Sessions/ }).click();
+    return page.getByRole('dialog');
+  };
+  const cardOf = (dialog: ReturnType<Page['getByRole']>, code: string) => dialog.getByRole('button').filter({ hasText: code });
+
+  test('Past Sessions tab shows the badge of non-revoked sessions and the dialog still opens on Current', async ({ page }) => {
+    await mockPage(page);
+    await openWorksheet(page, 'CLIN401 - Section A');
+    await page.getByRole('button', { name: 'Sessions', exact: true }).click();
+    await expect(page.getByRole('button', { name: /Current Session/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Upcoming Sessions/ })).toBeVisible();
+    const pastTab = page.getByRole('button', { name: /Past Sessions/ });
+    await expect(pastTab).toContainText('3');
+    expect(sheetRequests).toBe(0);
+    await pastTab.click();
+    await expect.poll(() => sheetRequests).toBe(1);
+  });
+
+  test('cards are newest first and show the status counts, with Not recorded only above zero', async ({ page }) => {
+    await mockPage(page);
+    const dialog = await openPast(page);
+    const cards = dialog.getByRole('button').filter({ hasText: /PAST-80/ });
+    await expect(cards).toHaveCount(3);
+    await expect(cards.nth(0)).toContainText('PAST-802');
+    await expect(cards.nth(1)).toContainText('PAST-801');
+    await expect(cards.nth(2)).toContainText('PAST-804');
+    await expect(cards.nth(0)).toContainText(shortDate('2026-09-17'));
+    await expect(cards.nth(0)).toContainText('8:00 AM – 11:00 AM');
+    await expect(cards.nth(0)).toContainText('2 Present · 0 Late · 0 Absent · 0 Excused · 1 Not recorded');
+    await expect(cards.nth(1)).toContainText('1 Present · 1 Late · 1 Absent · 0 Excused');
+    await expect(cards.nth(1)).not.toContainText('Not recorded');
+    await expect(cards.nth(2)).toContainText('0 Present · 0 Late · 0 Absent · 0 Excused · 3 Not recorded');
+  });
+
+  test('From and To filter the cards inclusively; Clear and the empty texts work', async ({ page }) => {
+    await mockPage(page);
+    const dialog = await openPast(page);
+    const [from, to] = [dialog.locator('input[type="date"]').nth(0), dialog.locator('input[type="date"]').nth(1)];
+    const cards = dialog.getByRole('button').filter({ hasText: /PAST-80/ });
+    await expect(dialog.getByRole('button', { name: 'Clear', exact: true })).toHaveCount(0);
+    await from.fill('2026-09-10');
+    await expect(cards).toHaveCount(2);
+    await expect(dialog.getByRole('button', { name: 'Clear', exact: true })).toBeVisible();
+    await to.fill('2026-09-10');
+    await expect(cards).toHaveCount(1);
+    await expect(cards.first()).toContainText('PAST-801');
+    await from.fill('2026-10-01');
+    await to.fill('2026-10-31');
+    await expect(cards).toHaveCount(0);
+    await expect(dialog.getByText('No sessions between these dates.', { exact: true })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Clear', exact: true }).click();
+    await expect(cards).toHaveCount(3);
+    await expect(from).toHaveValue('');
+    await expect(to).toHaveValue('');
+  });
+
+  test('revoked sessions stay hidden until the switch shows them, and a revoked card has no counts', async ({ page }) => {
+    await mockPage(page);
+    const dialog = await openPast(page);
+    await expect(dialog.getByText('PAST-803')).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Show (1)', exact: true }).click();
+    const revoked = cardOf(dialog, 'PAST-803');
+    await expect(revoked).toContainText("Revoked · doesn't count");
+    await expect(revoked).not.toContainText('Present');
+    await expect(dialog.getByRole('button').filter({ hasText: /PAST-80/ }).first()).toContainText('PAST-803');
+    await dialog.getByRole('button', { name: 'Hide', exact: true }).click();
+    await expect(dialog.getByText('PAST-803')).toHaveCount(0);
+  });
+
+  test('a class with no past sessions says so', async ({ page }) => {
+    await mockPage(page);
+    await page.unroute('**/api/faculty/attendance?*');
+    await page.route('**/api/faculty/attendance?*', route => route.fulfill({ json: { status: 'ok', worksheet: { ...worksheet, managedSessions: [] } } }));
+    const dialog = await openPast(page);
+    await expect(dialog.getByText('No past sessions yet.', { exact: true })).toBeVisible();
+  });
+
+  test('clicking a card closes the dialog and opens that session\'s roll call', async ({ page }) => {
+    await mockPage(page);
+    const dialog = await openPast(page);
+    worksheetUrls = [];
+    await cardOf(dialog, 'PAST-801').click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect.poll(() => worksheetUrls.at(-1) ?? '').toContain('date=2026-09-10');
+    expect(worksheetUrls.at(-1)).toContain('sessionId=801');
+    expect(worksheetUrls.at(-1)).toContain('csId=1');
+    await expect(page.locator('input[type="date"]')).toHaveValue('2026-09-10');
+  });
+
+  test('clicking a revoked card opens its roll call too', async ({ page }) => {
+    await mockPage(page);
+    const dialog = await openPast(page);
+    await dialog.getByRole('button', { name: 'Show (1)', exact: true }).click();
+    worksheetUrls = [];
+    await cardOf(dialog, 'PAST-803').click();
+    await expect.poll(() => worksheetUrls.at(-1) ?? '').toContain('sessionId=803');
+    expect(worksheetUrls.at(-1)).toContain('date=2026-09-24');
+  });
+
+  test('cards still show when the counts request fails, with a message instead of counts', async ({ page }) => {
+    await mockPage(page, { sheetStatus: 500 });
+    const dialog = await openPast(page);
+    await expect(dialog.getByText("Counts couldn't load. Open a session to see its roll call.", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole('button').filter({ hasText: /PAST-80/ })).toHaveCount(3);
+    await expect(dialog).not.toContainText('Present ·');
+  });
+
+  test('a past school-year class opens Sessions with only the Past Sessions tab', async ({ page }) => {
+    await mockPage(page, { classes: [baseClass, { ...baseClass, id: '4', csId: 4, courseId: 103, courseCode: 'OLD401', csName: 'OLD401 - Section A', schoolYear: '2024-2025' }] });
+    await page.getByLabel('Attendance school year').selectOption('2024-2025');
+    const oldCard = page.locator('div.group').filter({ hasText: 'OLD401' });
+    await oldCard.getByRole('button', { name: 'Sessions', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('button', { name: /Past Sessions/ })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /Current Session/ })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: /Upcoming Sessions/ })).toHaveCount(0);
+    await expect(dialog.getByRole('button').filter({ hasText: /PAST-80/ })).toHaveCount(3);
+  });
+
+  test('a class archived as Finished opens Sessions with only Past Sessions; Cancelled classes have no Sessions button', async ({ page }) => {
+    await mockPage(page, { classes: [
+      { ...baseClass, id: '5', csId: 5, courseId: 104, courseCode: 'FIN501', csName: 'FIN501 - Section A', isArchived: true, archiveReason: 'finished', archivedAt: '2026-10-20' },
+      { ...baseClass, id: '6', csId: 6, courseId: 105, courseCode: 'CAN601', csName: 'CAN601 - Section A', isArchived: true, archiveReason: 'cancelled', archivedAt: '2026-10-20' },
+      baseClass,
+    ] });
+    await expect(page.getByText('CAN601')).toHaveCount(0);
+    const finished = page.locator('div.group').filter({ hasText: 'FIN501' });
+    await finished.getByRole('button', { name: 'Sessions', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('button', { name: /Past Sessions/ })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /Current Session/ })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: /Upcoming Sessions/ })).toHaveCount(0);
   });
 });
