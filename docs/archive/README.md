@@ -83,6 +83,7 @@ These documents are kept for history. They describe past plans, handoffs, and ev
 - [spec.md merge proposal](spec-merge-proposal-2026-11.md)
 - [Backlog items closed before 2026-11-14](backlog-done-2026-11.md)
 - [Backlog items built on 2026-11-20 (9.23, 9.24, 9.26, 12.8)](backlog-built-2026-11-20.md)
+- [Backlog items built in the Owhie merge on 2026-11-20 (9.22, 9.25, 13.3, 13.5, 13.6 hint, 13.7)](backlog-built-2026-11-20-owhie.md)
 - [Owner decisions, 2026-11-14 (docs sync grill)](owner-decisions-2026-11-14.md)
 - [UI items, 2026-11-14 (docs-sync step 8)](ui-step8-2026-11-14.md)
 - [Owner decisions, 2026-11-14 (second session)](owner-decisions-2026-11-14-second.md)
