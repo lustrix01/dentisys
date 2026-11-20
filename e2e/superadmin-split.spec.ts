@@ -113,7 +113,7 @@ test.describe('First sign-in of the Superadmin', () => {
     }));
     await page.route('**/api/auth/mfa/enroll/**', route => { bearers.push(route.request().headers()['authorization'] ?? ''); return route.fallback(); });
     await page.route('**/api/auth/me', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 100, user_id: 100, login_email: 'superadmin@bicol-u.edu.ph', display_name: 'Sam Superadmin', role: 'superadmin' }) }));
-    await page.goto('/login');
+    await page.goto('/superadmin/sign-in');
     await page.fill('input[inputmode="email"]', 'superadmin@bicol-u.edu.ph');
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');

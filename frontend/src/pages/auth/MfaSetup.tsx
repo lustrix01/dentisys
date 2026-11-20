@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, ArrowLeft, AlertCircle, KeyRound } from 'lucide-react';
 import { startEnrollment, confirmEnrollment, getMe, setAccessToken as setApiAccessToken, ApiError } from '../../services/apiClient';
+import { signInPath } from '../../utils/signInPage';
 import { useAuth } from '../../context/AuthContext';
 
 // The Superadmin's first-sign-in 2FA step (contract DS24). Card copied from MfaVerify.tsx,
@@ -27,7 +28,7 @@ export function MfaSetup() {
   }, [twoFactorSetupToken]);
 
   if (!twoFactorSetupToken) {
-    navigate('/login', { replace: true });
+    navigate(signInPath(), { replace: true });
     return null;
   }
 
@@ -45,7 +46,7 @@ export function MfaSetup() {
       if (err instanceof ApiError && err.status === 401) {
         clearAuth();
         setContextError('Your session has expired. Sign in again.');
-        navigate('/login', { replace: true });
+        navigate(signInPath(), { replace: true });
       } else {
         setError(err instanceof Error ? err.message : 'Could not confirm the authenticator. Try again.');
       }
@@ -138,7 +139,7 @@ export function MfaSetup() {
               </form>
             )}
 
-            <button onClick={() => navigate('/login', { replace: true })}
+            <button onClick={() => navigate(signInPath(), { replace: true })}
               className="mt-4 w-full flex items-center justify-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-all cursor-pointer">
               <ArrowLeft className="w-3.5 h-3.5" />
               Back to login

@@ -1804,6 +1804,7 @@ $newResetPassword = 'ResetFacultyPass123!';
 ]);
 expect_same(200, $confirmResetStatus, 'Valid password reset token changes the password');
 expect_same('ok', $confirmResetBody['status'] ?? null, 'Valid password reset returns the standard success status');
+expect_same('/login', $confirmResetBody['sign_in_path'] ?? null, 'Password reset of a non-Superadmin answers sign_in_path /login (12.8)');
 $usedValidTokenStmt = $pdo->prepare('SELECT used_at FROM security_tokens WHERE token_id = ?');
 $usedValidTokenStmt->execute([$validResetTokenId]);
 expect_true($usedValidTokenStmt->fetchColumn() !== null, 'Successful password reset consumes the token');
@@ -2251,8 +2252,9 @@ expect_same(200, $facultyInspectStatus, 'Valid Faculty invitation is inspectable
 expect_same($acceptFacultyEmail, $facultyInspectBody['invitation']['email'] ?? null, 'Inspection shows the invited Faculty identity');
 [$facultyGoogleAcceptStatus] = integration_http_json('/api/auth/faculty/activate', '', ['token' => $knownFacultyToken, 'password' => 'FacultyInvitePass123!', 'credential' => 'google-id-token']);
 expect_same(400, $facultyGoogleAcceptStatus, 'Faculty invitation acceptance rejects a Google credential (REG-003)');
-[$facultyAcceptStatus] = integration_http_json('/api/auth/faculty/activate', '', ['token' => $knownFacultyToken, 'password' => 'FacultyInvitePass123!']);
+[$facultyAcceptStatus, $facultyAcceptBody] = integration_http_json('/api/auth/faculty/activate', '', ['token' => $knownFacultyToken, 'password' => 'FacultyInvitePass123!']);
 expect_same(200, $facultyAcceptStatus, 'Faculty invitation acceptance activates with a required password');
+expect_same('/login', $facultyAcceptBody['sign_in_path'] ?? null, 'Faculty invitation acceptance answers sign_in_path /login (12.8)');
 $acceptedFacultyStmt = $pdo->prepare('SELECT role, status, password_hash FROM user_accounts WHERE user_id = ?');
 $acceptedFacultyStmt->execute([$acceptFacultyId]);
 $acceptedFaculty = $acceptedFacultyStmt->fetch(PDO::FETCH_ASSOC);

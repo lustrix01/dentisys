@@ -129,6 +129,8 @@ DentiSYS supports two normal primary authentication methods:
 
 Google Sign-In supplements password authentication; it does not replace it.
 
+Owner-approved amendment (2026-11-20): The Superadmin signs in only at `/superadmin/sign-in`, which is linked from nowhere; that page refuses every other role, and the shared `/login` refuses the Superadmin. A refusal answers like a wrong password (Google: like an unknown account), counts toward the sign-in rate limit and is audited as "wrong sign-in page".
+
 An eligible Google-linked account MUST remain usable through email + password.
 
 Conceptually:

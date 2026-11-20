@@ -133,10 +133,27 @@ function handle_google_login(): void
             }
             $remember = $body['data']['remember'];
         }
+        if (array_key_exists('sign_in_page', $body['data']) && $body['data']['sign_in_page'] !== 'superadmin') {
+            google_auth_error('INVALID_REQUEST', 'sign_in_page must be "superadmin" or left out.', 400);
+            return;
+        }
+        $superadminPage = array_key_exists('sign_in_page', $body['data']);
 
         $claims = google_auth_verify_login_credential($config, $context, $body['data']['credential']);
 
         $user = google_auth_user_by_subject($pdo, $claims['sub']);
+        // 12.8: the wrong sign-in page answers exactly like an unknown Google account.
+        $wrongPage = static function (array $account) use ($pdo, $config, $context, $superadminPage): bool {
+            if (!auth_wrong_sign_in_page((string) $account['role'], $superadminPage)) {
+                return false;
+            }
+            google_auth_audit($pdo, $config, $context, 'google_login_denied', 'Failed', (int) $account['user_id'], 'Google Sign-In refused: wrong sign-in page.');
+            google_auth_error('NO_EXISTING_ACCOUNT', 'No existing DentiSYS account was found.', 404);
+            return true;
+        };
+        if ($user !== null && $wrongPage($user)) {
+            return;
+        }
         if ($user !== null) {
             $pdo->beginTransaction();
             try {
@@ -182,6 +199,9 @@ function handle_google_login(): void
         if ($matching === null) {
             google_auth_audit($pdo, $config, $context, 'google_login_denied', 'Failed', null, 'No existing DentiSYS account matched the verified Google identity.');
             google_auth_error('NO_EXISTING_ACCOUNT', 'No existing DentiSYS account was found.', 404);
+            return;
+        }
+        if ($wrongPage($matching)) {
             return;
         }
         if (!empty($matching['google_subject'])) {

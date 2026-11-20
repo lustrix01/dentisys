@@ -115,7 +115,7 @@ Development-only credentials (every account of a role shares the password):
 
 | Role | E-mail | Password |
 | --- | --- | --- |
-| Superadmin | `superadmin@bicol-u.edu.ph` | `Superadmin123!`, then the 6-digit code for authenticator secret `JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP` |
+| Superadmin | `superadmin@bicol-u.edu.ph` | `Superadmin123!` at `/superadmin/sign-in` (the shared `/login` refuses it), then the 6-digit code for authenticator secret `JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP` |
 | Dean (Admin) | `admin@bicol-u.edu.ph` | `Admin123!` |
 | Faculty | `faculty@bicol-u.edu.ph` | `Faculty123!` |
 | Secretary | `secretary@bicol-u.edu.ph` | `Secretary123!` |

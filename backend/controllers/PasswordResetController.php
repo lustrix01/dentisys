@@ -303,6 +303,7 @@ function handle_password_reset_confirm(): void
         json_response([
             'status' => 'ok',
             'message' => 'Password reset successfully. You may now sign in with your new password.',
+            'sign_in_path' => auth_sign_in_path((string) $user['role']),
         ], 200);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());

@@ -1,7 +1,7 @@
 {
   "_note": "Seeded local dev accounts only (docs/demo-accounts.md, audit/common.ts). Never put demo-site or production passwords here.",
   "baseURL": "http://localhost:5173",
-  "login": { "path": "/login", "email": "input[inputmode=\"email\"]", "password": "input[type=\"password\"]", "submit": "button[type=\"submit\"]", "notAfter": "^/(login|2fa|mfa)" },
+  "login": { "path": "/login", "paths": { "superadmin": "/superadmin/sign-in" }, "email": "input[inputmode=\"email\"]", "password": "input[type=\"password\"]", "submit": "button[type=\"submit\"]", "notAfter": "^/(login|superadmin/sign-in|2fa|mfa)" },
   "accounts": {
     "superadmin": ["superadmin@bicol-u.edu.ph", "Superadmin123!", "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"],
     "admin": ["admin@bicol-u.edu.ph", "Admin123!"],

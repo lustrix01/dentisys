@@ -51,8 +51,8 @@ export function ActivateFaculty() {
     setSubmitting(true);
     setError('');
     try {
-      await activateFacultyInvitation(token, password);
-      navigate('/login?activated=1', { replace: true });
+      const result = await activateFacultyInvitation(token, password);
+      navigate(`${result.sign_in_path === '/superadmin/sign-in' ? result.sign_in_path : '/login'}?activated=1`, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not accept the Faculty invitation. Try again.');
     } finally {

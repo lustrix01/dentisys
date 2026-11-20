@@ -319,7 +319,7 @@ export async function openAccountMenu(page: Page) {
 export async function signInAs(page: Page, role: 'admin' | 'superadmin', displayName = role === 'admin' ? 'Dr. Dean Admin' : 'Sam Superadmin') {
   await page.route('**/api/auth/login', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ type: 'direct_login', access_token: `mock-${role}-token` }) }));
   await page.route('**/api/auth/me', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 100, user_id: 100, login_email: `${role}@bicol-u.edu.ph`, display_name: displayName, role }) }));
-  await page.goto('/login');
+  await page.goto(role === 'superadmin' ? '/superadmin/sign-in' : '/login'); // 12.8: the Superadmin has its own sign-in page
   await page.fill('input[inputmode="email"]', `${role}@bicol-u.edu.ph`);
   await page.fill('input[type="password"]', 'Password123!');
   await page.click('button[type="submit"]');

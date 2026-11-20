@@ -1,5 +1,6 @@
 import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { signInPath } from '../utils/signInPage';
 import { rememberJoinReturn } from '../utils/classJoinCode';
 import { useAuth } from '../context/AuthContext';
 import type { UserRole } from '../types/auth';
@@ -22,7 +23,7 @@ export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
 
   if (phase !== 'authenticated' || !user) {
     rememberJoinReturn(location.pathname + location.search); // CLS-004: a join link survives sign-in
-    return <Navigate to="/login" replace />;
+    return <Navigate to={signInPath()} replace />;
   }
 
   if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {

@@ -105,7 +105,7 @@ It reads `~\.dentisys\prod-test.env` (yours only: `PROD_BASE_URL` and an email a
 The Superadmin account exists only after the server script creates it (spec SYS-001, README B5a). When a release brings the Superadmin role (migration `068_superadmin_role.sql`) to a site that has no Superadmin yet, the Dean loses the setup and account pages at once, so create the Superadmin right after the new version runs:
 
 - Demo: Claude, right after step 5, runs `account-admin.php create-superadmin` in the demo's web container through `.\scripts\demo-vps.ps1 run` (pipe `YES` to it), with the demo Superadmin address from `~/.dentisys/demo.env`.
-- Production: the Owner, right after step 9, runs the same command on the production server with the college's Superadmin address. The link goes to that address; the Superadmin sets the password and, at the first sign-in, 2FA.
+- Production: the Owner, right after step 9, runs the same command on the production server with the college's Superadmin address. The link goes to that address; the Superadmin sets the password and, at the first sign-in (at `/superadmin/sign-in`, where the page sends it), 2FA.
 
 ### Rolling back
 

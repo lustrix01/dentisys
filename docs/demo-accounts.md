@@ -18,7 +18,7 @@ Every account of a role uses that role's password. Current school year in the se
 | Role | E-mail | Notes |
 |---|---|---|
 | Admin | `admin@bicol-u.edu.ph` | Dean (admin pages only) |
-| Superadmin | `superadmin@bicol-u.edu.ph` | Signs in with the password, then the 6-digit code from authenticator secret `JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP` (dev only) |
+| Superadmin | `superadmin@bicol-u.edu.ph` | Signs in at `/superadmin/sign-in` (the shared `/login` refuses it) with the password, then the 6-digit code from authenticator secret `JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP` (dev only) |
 | Faculty | `faculty@bicol-u.edu.ph` | Teaches CLINIC-4A and CLINIC-4B this year, plus past sections |
 | Secretary | `secretary@bicol-u.edu.ph` | Bea Mercado Alonzo, class secretary of CLINIC-4B (4th year, block B) |
 | Student | `student@bicol-u.edu.ph` | Juan Miguel Reyes Dela Cruz, 1st year, DENT-1A |

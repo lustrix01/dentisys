@@ -4,6 +4,7 @@
 //   node <skill>/scripts/shots.mjs <app.json> <targets.json> <outDir> <before|after|A|B|C>
 // writes <outDir>/<mode>/{vp,crop,meta}/<id>-<Device>-<theme>.{png,json}
 // app.json accounts: role => [email, password, optional dev TOTP secret; with it the 2FA code step is filled in].
+// app.json login.paths: role => sign-in page, when it is not login.path.
 // endsOn: the page a flow is meant to end on when it is not the route (verify.py checks it instead of route).
 // target fields: id, device (a name from audit/devices.json, a tier "quick"|"core"|"full" = every device in it,
 //   a Playwright profile or "Desktop 1440 900"), role, route, mock?, tab?, fill?, upload?, click?, steps?, sel?, text? (regex),
@@ -61,7 +62,7 @@ for (const [k, list] of groups) {
   page.on('pageerror', e => pageErrors.push(e.message)); // a crashed page screenshots as blank: fail the target instead
   if (role !== 'public') {
     const [email, password, totpSecret] = APP.accounts[role];
-    await page.goto(APP.login.path);
+    await page.goto(APP.login.paths?.[role] ?? APP.login.path); // 12.8: the Superadmin has its own sign-in page
     await page.fill(APP.login.email, email);
     await page.fill(APP.login.password, password);
     await page.click(APP.login.submit);

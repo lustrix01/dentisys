@@ -435,8 +435,8 @@ async function request<T>(
   return responseData as T;
 }
 
-export function login(email: string, password: string, remember = false): Promise<LoginResponse> {
-  return request<LoginResponse>('POST', '/auth/login', { email, password, remember });
+export function login(email: string, password: string, remember = false, superadminPage = false): Promise<LoginResponse> {
+  return request<LoginResponse>('POST', '/auth/login', { email, password, remember, ...(superadminPage ? { sign_in_page: 'superadmin' } : {}) });
 }
 
 export interface GoogleLoginResponse extends LoginResponse {
@@ -447,8 +447,8 @@ export interface GoogleLoginResponse extends LoginResponse {
   linked?: boolean;
 }
 
-export function loginWithGoogle(credential: string, remember = false): Promise<GoogleLoginResponse> {
-  return request<GoogleLoginResponse>('POST', '/auth/google', { credential, remember });
+export function loginWithGoogle(credential: string, remember = false, superadminPage = false): Promise<GoogleLoginResponse> {
+  return request<GoogleLoginResponse>('POST', '/auth/google', { credential, remember, ...(superadminPage ? { sign_in_page: 'superadmin' } : {}) });
 }
 
 export function linkGoogleAccount(linkChallengeToken: string, password: string): Promise<GoogleLoginResponse> {
@@ -690,7 +690,7 @@ export function getFacultyInvitation(token: string): Promise<{
   return request('GET', `/auth/faculty/invitation?token=${encodeURIComponent(token)}`);
 }
 
-export function activateFacultyInvitation(token: string, password: string): Promise<{ status: string; message: string }> {
+export function activateFacultyInvitation(token: string, password: string): Promise<{ status: string; message: string; sign_in_path?: string }> {
   return request('POST', '/auth/faculty/activate', { token, password });
 }
 
@@ -734,7 +734,7 @@ export function requestPasswordResetApi(email: string): Promise<{ status: string
   return request('POST', '/auth/password/reset-request', { email });
 }
 
-export function confirmPasswordResetApi(token: string, password: string): Promise<{ status: string; message: string }> {
+export function confirmPasswordResetApi(token: string, password: string): Promise<{ status: string; message: string; sign_in_path?: string }> {
   return request('POST', '/auth/password/reset-confirm', { token, password });
 }
 

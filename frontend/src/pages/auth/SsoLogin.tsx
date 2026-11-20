@@ -13,6 +13,7 @@ import {
   setAccessToken as setApiAccessToken,
   ApiError,
 } from '../../services/apiClient';
+import { rememberSignInPage } from '../../utils/signInPage';
 
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
 const emailDomainError = (value: string): string => value.includes('@')
@@ -38,18 +39,36 @@ declare global {
   }
 }
 
-export function SsoLogin() {
+export function SsoLogin({ superadmin = false }: { superadmin?: boolean }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialEmail = searchParams.get('email') || '';
   const { beginLogin, storeTwoFactorChallenge, storeTwoFactorSetup, setAccessToken, setUser, setAuthenticated } = useAuth();
   const runtimeConfig = useRuntimeConfig();
-  const mockIdentityEnabled = runtimeConfig.features.student_auth_enabled
+  const mockIdentityEnabled = !superadmin
+    && runtimeConfig.features.student_auth_enabled
     && runtimeConfig.providers.identity.development_mock.enabled;
   const googleEnabled = runtimeConfig.providers.identity.google.enabled
     && Boolean(runtimeConfig.providers.identity.google.client_id);
   const activated = searchParams.get('activated') === '1';
-  const invitationRequired = searchParams.get('invitationRequired') === '1';
+  const invitationRequired = !superadmin && searchParams.get('invitationRequired') === '1';
+
+  // The Superadmin page is linked from nowhere: keep it out of search engines (12.8).
+  useEffect(() => { rememberSignInPage(superadmin); }, [superadmin]);
+
+  useEffect(() => {
+    if (!superadmin) return;
+    const previousTitle = document.title;
+    document.title = 'Superadmin Sign In · DentiSYS';
+    const robots = document.createElement('meta');
+    robots.name = 'robots';
+    robots.content = 'noindex';
+    document.head.appendChild(robots);
+    return () => {
+      document.title = previousTitle;
+      robots.remove();
+    };
+  }, [superadmin]);
 
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
@@ -79,7 +98,7 @@ export function SsoLogin() {
     setIsLoading(true);
     setError('');
     try {
-      const result = await loginWithGoogle(credential, rememberMe);
+      const result = await loginWithGoogle(credential, rememberMe, superadmin);
       if (result.type === 'direct_login' && result.access_token) {
         await completeServerAuthentication(result.access_token);
       } else if (result.type === 'two_factor_required' && result.two_factor_challenge_token) {
@@ -227,7 +246,7 @@ export function SsoLogin() {
     setError('');
 
     try {
-      const result = await apiLogin(loginEmail, password, rememberMe);
+      const result = await apiLogin(loginEmail, password, rememberMe, superadmin);
 
       if (result.type === 'direct_login' && result.access_token) {
         await completeServerAuthentication(result.access_token);
@@ -288,7 +307,7 @@ export function SsoLogin() {
           {/* Login heading */}
           <div className="space-y-1">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-heading">
-              Login
+              {superadmin ? 'Superadmin Sign In' : 'Login'}
             </h1>
             <p className="text-sm text-slate-500">
               Enter your account details to continue
@@ -422,20 +441,22 @@ export function SsoLogin() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-x-4">
-              <label className="flex min-h-11 md:min-h-6 cursor-pointer items-center gap-2.5 text-xs font-bold text-slate-700 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={e => setRememberMe(e.target.checked)}
-                  disabled={isLoading}
-                  className="h-4 w-4 shrink-0 accent-accent-600"
-                />
-                Remember me for 7 days
-              </label>
+            <div className={`flex flex-wrap items-center gap-x-4 ${superadmin ? 'justify-end' : 'justify-between'}`}>
+              {!superadmin && (
+                <label className="flex min-h-11 md:min-h-6 cursor-pointer items-center gap-2.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={e => setRememberMe(e.target.checked)}
+                    disabled={isLoading}
+                    className="h-4 w-4 shrink-0 accent-accent-600"
+                  />
+                  Remember me for 7 days
+                </label>
+              )}
               <span className="text-xs">
                 <Link
-                  to="/forgot-password"
+                  to={superadmin ? '/forgot-password?from=superadmin' : '/forgot-password'}
                   className="whitespace-nowrap text-xs font-semibold text-purple-600 hover:text-purple-700 hover:underline transition-colors"
                 >
                   Forgot password?

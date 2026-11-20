@@ -7,7 +7,7 @@ import { nextCode, SUPERADMIN_EMAIL, SUPERADMIN_PASSWORD } from './superadminSig
 test.describe.configure({ timeout: 180_000 });
 
 async function passwordStep(page: Page): Promise<void> {
-  await page.goto('/login');
+  await page.goto('/superadmin/sign-in'); // 12.8
   await page.locator('input[inputmode="email"]').fill(SUPERADMIN_EMAIL);
   await page.locator('input[type="password"]').fill(SUPERADMIN_PASSWORD);
   await page.locator('button[type="submit"]').click();
@@ -16,7 +16,7 @@ async function passwordStep(page: Page): Promise<void> {
 /** Leaves the account with no remembered device, so later runs and scripts that expect the code step still get it. */
 async function forgetTrustedDevices(page: Page): Promise<void> {
   await page.goto('about:blank');
-  const login = await page.request.post('/api/auth/login', { data: { email: SUPERADMIN_EMAIL, password: SUPERADMIN_PASSWORD } });
+  const login = await page.request.post('/api/auth/login', { data: { email: SUPERADMIN_EMAIL, password: SUPERADMIN_PASSWORD, sign_in_page: 'superadmin' } });
   let body = await login.json();
   if (body.two_factor_required) {
     const verify = await page.request.post('/api/auth/mfa/verify', {
@@ -57,7 +57,7 @@ test('a ticked device skips the code at the next sign-in until it is forgotten',
     // 2. Normal sign-out keeps the device remembered.
     await page.locator('header button:has(.lucide-chevron-down)').click();
     await page.getByRole('button', { name: 'Sign out' }).click();
-    await expect(page).toHaveURL(/\/login/);
+    await expect(page).toHaveURL('/superadmin/sign-in');
     expect((await page.context().cookies()).some(c => c.name === 'trusted_device')).toBe(true);
 
     // 3. Password only: no code step, straight to the Overview.

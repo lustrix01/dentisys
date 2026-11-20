@@ -70,10 +70,38 @@ function reject_control_chars_no_trim(string $value, string $field): void
     }
 }
 
+/** 12.8: the sign-in page a role uses; the Superadmin has its own, everyone else the shared /login. */
+function auth_sign_in_path(string $role): string
+{
+    return $role === 'superadmin' ? '/superadmin/sign-in' : '/login';
+}
+
+/**
+ * 12.8: which sign-in page a request came from. A missing field means the shared /login.
+ * @return bool true for the Superadmin page
+ */
+function auth_sign_in_page_is_superadmin(array $body): bool
+{
+    if (!array_key_exists('sign_in_page', $body)) {
+        return false;
+    }
+    if ($body['sign_in_page'] !== 'superadmin') {
+        throw new ValidationException([['field' => 'sign_in_page', 'message' => 'sign_in_page must be "superadmin" or left out.']]);
+    }
+    return true;
+}
+
+/** 12.8: true when the account may not sign in on the page the request came from. */
+function auth_wrong_sign_in_page(string $role, bool $superadminPage): bool
+{
+    return ($role === 'superadmin') !== $superadminPage;
+}
+
 function auth_runtime_login(PDO $pdo, array $config, array $body, array $context): array
 {
     $email = validate_institutional_email((string) ($body['email'] ?? ''));
     $password = extract_password($body, 'password');
+    $superadminPage = auth_sign_in_page_is_superadmin($body);
 
     $rateStorage = [
         'dir' => $config['rate_limit']['storage_dir'],
@@ -99,6 +127,13 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
 
     if (!password_verify_user_password($password, (string) $user['password_hash'])) {
         auth_audit_denial($pdo, $config, $context, 'login_failed', "Password sign-in failed for {$email}: wrong password.");
+        rate_limit_record_login_failure($rateStorage, $emailScope, 'post_auth_failed_login', 900, 5, 900);
+        throw new InvalidCredentialsException('Invalid credentials.');
+    }
+
+    // 12.8: the wrong page answers and counts exactly like a wrong password, before the status check.
+    if (auth_wrong_sign_in_page((string) $user['role'], $superadminPage)) {
+        auth_audit_denial($pdo, $config, $context, 'login_failed', "Password sign-in failed for {$email}: wrong sign-in page.");
         rate_limit_record_login_failure($rateStorage, $emailScope, 'post_auth_failed_login', 900, 5, 900);
         throw new InvalidCredentialsException('Invalid credentials.');
     }

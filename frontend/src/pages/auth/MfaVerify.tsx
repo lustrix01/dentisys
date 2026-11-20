@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, ArrowLeft, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { signInPath } from '../../utils/signInPage';
 import { verifyMfa, recoverMfa, getMe, setAccessToken as setApiAccessToken, ApiError } from '../../services/apiClient';
 
 type Mode = 'totp' | 'recovery';
@@ -23,7 +24,7 @@ export function MfaVerify() {
   const [error, setError] = useState('');
 
   if (!twoFactorToken) {
-    navigate('/login', { replace: true });
+    navigate(signInPath(), { replace: true });
     return null;
   }
 
@@ -57,7 +58,7 @@ export function MfaVerify() {
       if (err instanceof ApiError && err.status === 401) {
         clearAuth();
         setContextError('Your session has expired. Sign in again.');
-        navigate('/login', { replace: true });
+        navigate(signInPath(), { replace: true });
       } else {
         const message = err instanceof Error ? err.message : 'An error occurred.';
         setError(message || 'Invalid verification code.');
@@ -154,7 +155,7 @@ export function MfaVerify() {
             <button
               onClick={() => {
                 clearAuth();
-                navigate('/login', { replace: true });
+                navigate(signInPath(), { replace: true });
               }}
               className="mt-4 w-full flex items-center justify-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-all cursor-pointer"
             >

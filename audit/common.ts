@@ -11,8 +11,9 @@ export type Role = (typeof ALL_ROLES)[number];
 
 // Local seeded dev accounts only (docs/demo-accounts.md, database/seeds/development-demo.sql).
 // totp: the seeded dev authenticator secret (development-demo.sql 1b); the Superadmin must pass 2FA.
-export const ACCOUNTS: Record<Exclude<Role, 'public'>, { email: string; password: string; totp?: string }> = {
-  superadmin: { email: 'superadmin@bicol-u.edu.ph', password: 'Superadmin123!', totp: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP' },
+// signInPath: the Superadmin signs in at its own page (12.8); everyone else uses /login.
+export const ACCOUNTS: Record<Exclude<Role, 'public'>, { email: string; password: string; totp?: string; signInPath?: string }> = {
+  superadmin: { email: 'superadmin@bicol-u.edu.ph', password: 'Superadmin123!', totp: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', signInPath: '/superadmin/sign-in' },
   admin: { email: 'admin@bicol-u.edu.ph', password: 'Admin123!' },
   faculty: { email: 'faculty@bicol-u.edu.ph', password: 'Faculty123!' },
   secretary: { email: 'secretary@bicol-u.edu.ph', password: 'Secretary123!' },

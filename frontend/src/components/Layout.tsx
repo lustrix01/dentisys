@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { rememberSignInPage, signInPath } from '../utils/signInPage';
 import {
   LayoutDashboard,
   Users,
@@ -124,6 +125,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const linkedStudentView = user?.role === 'secretary' && Boolean(user.student)
     && location.pathname.startsWith('/student/');
   const superadminView = user?.role === 'superadmin';
+  // 12.8: a Superadmin tab (also a new or reloaded one) signs out to its own page.
+  useEffect(() => { if (superadminView) rememberSignInPage(true); }, [superadminView]);
   const currentUser = {
     name: user?.display_name ?? '',
     email: user?.login_email ?? '',
@@ -273,7 +276,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const handleLogout = async () => {
     await logout();
     setIsProfileOpen(false);
-    navigate('/login', { replace: true });
+    navigate(signInPath(), { replace: true });
   };
 
   const getNavItems = (): NavItem[] => {

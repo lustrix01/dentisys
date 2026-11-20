@@ -1157,6 +1157,7 @@ function handle_auth_faculty_invitation_accept(): void
         }
         auth_controller_emit(auth_build_no_store_json_response([
             'status' => 'ok', 'message' => 'Faculty account activated. You may now sign in.',
+            'sign_in_path' => auth_sign_in_path((string) $account['role']),
         ], 200));
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());

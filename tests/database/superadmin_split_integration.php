@@ -51,7 +51,8 @@ $spSecretOf = static function (int $userId) use ($pdo, $spMfaKey): ?string {
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     return $row === false ? null : mfa_decrypt_secret(pdo_binary_value($row['ciphertext']), pdo_binary_value($row['nonce']), pdo_binary_value($row['auth_tag']), $spMfaKey);
 };
-$spLogin = static fn(string $email, string $password): array => integration_http_json('/api/auth/login', '', ['email' => $email, 'password' => $password]);
+// 12.8: the Superadmin signs in on its own page, so its sign-ins pass $superPage = true; everyone else uses the shared /login.
+$spLogin = static fn(string $email, string $password, bool $superPage = false): array => integration_http_json('/api/auth/login', '', ['email' => $email, 'password' => $password] + ($superPage ? ['sign_in_page' => 'superadmin'] : []));
 $spField = static fn(array $body, string $field): bool => in_array($field, array_column($body['errors'] ?? [], 'field'), true);
 
 // ---- A. Database: migration 068 on existing data, one Superadmin row, identity (DS1, DS2, DS4) ----
@@ -351,8 +352,9 @@ pdo_bind_binary($spTokenInsert, 2, hash('sha256', $spKnownToken, true));
 $spTokenInsert->execute();
 [$spInspectStatus, $spInspect] = integration_http_get_json('/api/auth/faculty/invitation?token=' . rawurlencode($spKnownToken), '');
 expect_true($spInspectStatus === 200 && ($spInspect['invitation']['email'] ?? '') === $spNewEmail, 'DS10: the Superadmin invitation can be inspected');
-[$spActivateStatus] = integration_http_json('/api/auth/faculty/activate', '', ['token' => $spKnownToken, 'password' => $spPass]);
+[$spActivateStatus, $spActivate] = integration_http_json('/api/auth/faculty/activate', '', ['token' => $spKnownToken, 'password' => $spPass]);
 expect_same(200, $spActivateStatus, 'DS10: accepting the invitation sets the password');
+expect_same('/superadmin/sign-in', $spActivate['sign_in_path'] ?? null, '12.8: accepting the Superadmin invitation answers sign_in_path /superadmin/sign-in');
 expect_same(['superadmin', 'Active'], [$spRole($spNewId), $spOne('SELECT status FROM user_accounts WHERE user_id = ?', [$spNewId])], 'DS10: the account stays a Superadmin and becomes Active');
 expect_true(password_verify($spPass, (string) $spOne('SELECT password_hash FROM user_accounts WHERE user_id = ?', [$spNewId])), 'DS10: the password the person typed is the stored one');
 expect_same(400, integration_http_json('/api/auth/faculty/activate', '', ['token' => $spKnownToken, 'password' => 'Another1!Passw0rd'])[0], 'DS10: a used invitation cannot be accepted again');
@@ -361,8 +363,8 @@ expect_true($spCode !== 0 && $spCount("SELECT COUNT(*) FROM user_accounts WHERE 
 
 // DS11: no 2FA yet -> no session, only a short-lived setup token.
 $spSessionsBefore = $spCount('SELECT COUNT(*) FROM auth_sessions WHERE user_id = ?', [$spNewId]);
-expect_same(401, $spLogin($spNewEmail, 'Wrong1!Passw0rd')[0], 'DS11: a wrong password is refused as for anyone');
-[$spLoginStatus, $spLoginBody] = $spLogin($spNewEmail, $spPass);
+expect_same(401, $spLogin($spNewEmail, 'Wrong1!Passw0rd', true)[0], 'DS11: a wrong password is refused as for anyone');
+[$spLoginStatus, $spLoginBody] = $spLogin($spNewEmail, $spPass, true);
 expect_true($spLoginStatus === 200 && ($spLoginBody['type'] ?? '') === 'two_factor_setup_required' && ($spLoginBody['two_factor_required'] ?? null) === true && ($spLoginBody['two_factor_enrolled'] ?? null) === false
     && is_string($spLoginBody['two_factor_setup_token'] ?? null) && ($spLoginBody['expires_in'] ?? 0) === 300, 'DS11: a Superadmin without 2FA gets two_factor_setup_required with a 300-second setup token');
 expect_true(!array_key_exists('access_token', $spLoginBody) && !array_key_exists('user', $spLoginBody) && $spCount('SELECT COUNT(*) FROM auth_sessions WHERE user_id = ?', [$spNewId]) === $spSessionsBefore, 'DS11: no session and no access token exist yet');
@@ -406,10 +408,61 @@ expect_true($spResetRequest === 200 && $spCount("SELECT COUNT(*) FROM security_t
 
 // With 2FA the sign-in uses the existing code step.
 $spForgetStep($spNewId);
-[$spChallengeStatus, $spChallenge] = $spLogin($spNewEmail, $spPass);
+[$spChallengeStatus, $spChallenge] = $spLogin($spNewEmail, $spPass, true);
 expect_true($spChallengeStatus === 200 && ($spChallenge['type'] ?? '') === 'two_factor_required' && is_string($spChallenge['two_factor_challenge_token'] ?? null), 'DS11: a Superadmin with 2FA gets the existing code step');
 [$spVerifyStatus, $spVerify] = integration_http_json('/api/auth/mfa/verify', (string) $spChallenge['two_factor_challenge_token'], ['code' => $spTotp($spSecret)]);
 expect_true($spVerifyStatus === 200 && is_string($spVerify['access_token'] ?? null) && $spGet('/api/admin/overview', (string) $spVerify['access_token'])[0] === 200, 'DS11: the code opens the session');
+
+// 12.8: the Superadmin signs in on /superadmin/sign-in only; every other role signs in on /login only. A wrong page answers and counts like a wrong password.
+$spPageAudit = static fn(string $like): int => $spCount("SELECT COUNT(*) FROM audit_events WHERE action_code = 'login_failed' AND description LIKE ?", [$like]);
+$spWrongPageRows = static fn(string $email): int => $spPageAudit("%{$email}: wrong sign-in page.");
+[$spPageStatus, $spPageBody] = $spLogin($spNewEmail, $spPass);
+expect_true($spPageStatus === 401 && ($spPageBody['message'] ?? '') === 'Invalid credentials.', '12.8: the Superadmin on /login is refused as 401 "Invalid credentials."');
+expect_true(!array_key_exists('access_token', $spPageBody) && !array_key_exists('two_factor_challenge_token', $spPageBody) && !array_key_exists('two_factor_setup_token', $spPageBody), '12.8: the refusal carries no token and no 2FA step');
+expect_same(1, $spWrongPageRows($spNewEmail), '12.8: the Superadmin on /login writes one login_failed audit row ending "wrong sign-in page."');
+$spForgetStep($spNewId);
+expect_same('two_factor_required', $spLogin($spNewEmail, $spPass, true)[1]['type'] ?? null, '12.8: the Superadmin on /superadmin/sign-in reaches the 2FA step as before');
+[$spPageStatus, $spPageBody] = $spLogin($spEmailOf($spF2), $saPass, true);
+expect_true($spPageStatus === 401 && ($spPageBody['message'] ?? '') === 'Invalid credentials.', '12.8: Faculty on /superadmin/sign-in is refused as 401 "Invalid credentials."');
+expect_same(1, $spWrongPageRows($spEmailOf($spF2)), '12.8: Faculty on the Superadmin page writes one "wrong sign-in page." audit row');
+expect_same(200, $spLogin($spEmailOf($spF2), $saPass)[0], '12.8: the same Faculty account still signs in on /login');
+foreach ([['Dean', $spDeanEmail, $demoPasswords['admin@bicol-u.edu.ph']], ['Secretary', $spEmailOf($spSecretaryUser), $saPass]] as [$spRoleName, $spRoleEmail, $spRolePass]) {
+    expect_same(401, $spLogin($spRoleEmail, $spRolePass, true)[0], "12.8: the {$spRoleName} on /superadmin/sign-in is refused");
+    expect_same(200, $spLogin($spRoleEmail, $spRolePass)[0], "12.8: the {$spRoleName} still signs in on /login");
+}
+// A wrong password on the wrong page is the ordinary wrong-password path (no "wrong sign-in page" row).
+$spBefore = $spWrongPageRows($spEmailOf($spF2));
+expect_same(401, $spLogin($spEmailOf($spF2), 'Wrong1!Passw0rd', true)[0], '12.8: a wrong password on the wrong page is refused');
+expect_same($spBefore, $spWrongPageRows($spEmailOf($spF2)), '12.8: a wrong password on the wrong page is audited as a wrong password, not as the wrong page');
+// The page check comes before the status check: a deactivated account with the right password gets 401, not 403.
+expect_same(401, $spLogin($spEmailOf($spOff), $saPass, true)[0], '12.8: a deactivated Faculty account on the Superadmin page is 401');
+expect_same(403, $spLogin($spEmailOf($spOff), $saPass)[0], '12.8: the deactivated account on /login keeps its normal 403');
+// A bad value is a 400 and counts nowhere.
+foreach (['login', 'Superadmin', '', 'admin'] as $spBadPage) {
+    [$spBadStatus, $spBad] = integration_http_json('/api/auth/login', '', ['email' => $spNewEmail, 'password' => $spPass, 'sign_in_page' => $spBadPage]);
+    expect_true($spBadStatus === 400 && $spField($spBad, 'sign_in_page'), '12.8: sign_in_page ' . json_encode($spBadPage) . ' is a 400 on sign_in_page');
+}
+expect_same(400, integration_http_json('/api/auth/login', '', ['email' => $spNewEmail, 'password' => $spPass, 'sign_in_page' => null])[0], '12.8: sign_in_page null is a 400');
+expect_same(400, integration_http_json('/api/auth/google', '', ['credential' => 'x', 'sign_in_page' => 'login'])[0], '12.8: Google sign-in with a bad sign_in_page is a 400');
+// Wrong-page refusals count toward the per-email lock: the sixth try is blocked even on the right page with the right password.
+$spLockId = $saAccount("sp-lock-{$spTag}@bicol-u.edu.ph", 'faculty', "Sp Lock {$spTag}");
+$spLockEmail = $spEmailOf($spLockId);
+for ($spTry = 1; $spTry <= 5; $spTry++) { // like a wrong password, the fifth failure is the one that starts the lock
+    expect_same($spTry < 5 ? 401 : 429, $spLogin($spLockEmail, $saPass, true)[0], "12.8: wrong-page try {$spTry} of 5 is " . ($spTry < 5 ? '401' : '429 (the lock starts)'));
+}
+expect_same(5, $spWrongPageRows($spLockEmail), '12.8: each of the five wrong-page tries is audited');
+expect_same(429, $spLogin($spLockEmail, $saPass)[0], '12.8: five wrong-page refusals lock the email: the sixth try on the right page is blocked');
+
+// 12.8: reset-confirm answers the sign-in page of the account's role.
+$spResetRaw = bin2hex(random_bytes(16));
+$pdo->prepare("INSERT INTO security_tokens (purpose, user_id, secret_hash, issued_at, expires_at) VALUES ('password_reset', ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6) + INTERVAL '1 hour')")->execute([$spNewId, hash('sha256', $spResetRaw)]);
+[$spResetStatus, $spResetBody] = integration_http_json('/api/auth/password/reset-confirm', '', ['token' => $spResetRaw, 'password' => 'Superadm1n!Reset2']);
+expect_true($spResetStatus === 200 && ($spResetBody['sign_in_path'] ?? null) === '/superadmin/sign-in', '12.8: the Superadmin password reset answers sign_in_path /superadmin/sign-in');
+$pdo->prepare('UPDATE user_accounts SET password_hash = ? WHERE user_id = ?')->execute([password_hash_user_password($spPass), $spNewId]); // the later checks use $spPass
+$spFacultyResetRaw = bin2hex(random_bytes(16));
+$pdo->prepare("INSERT INTO security_tokens (purpose, user_id, secret_hash, issued_at, expires_at) VALUES ('password_reset', ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6) + INTERVAL '1 hour')")->execute([$spF3, hash('sha256', $spFacultyResetRaw)]);
+[$spResetStatus, $spResetBody] = integration_http_json('/api/auth/password/reset-confirm', '', ['token' => $spFacultyResetRaw, 'password' => 'Faculty!Reset2Pass']);
+expect_true($spResetStatus === 200 && ($spResetBody['sign_in_path'] ?? null) === '/login', '12.8: a Faculty password reset answers sign_in_path /login');
 
 // D18: lockout reset on the server.
 $spOldSession = (string) $spVerify['access_token'];
@@ -423,7 +476,7 @@ $spReset = $spAudit('superadmin_2fa_reset', (string) $spNewId);
 expect_true(count($spReset) === 1 && $spReset[0]['actor_role'] === 'system' && $spReset[0]['reason'] === 'Lost the authenticator and the recovery codes', 'Section 7: superadmin_2fa_reset is audited once as System with the reason');
 [$spCode] = $mvRun(['reset-superadmin-2fa', '--reason', 'Resetting a second time'], "YES\n");
 expect_true($spCode !== 0 && count($spAudit('superadmin_2fa_reset', (string) $spNewId)) === 1, 'Section 6: reset-superadmin-2fa refuses when the Superadmin has no 2FA');
-expect_same('two_factor_setup_required', $spLogin($spNewEmail, $spPass)[1]['type'] ?? null, 'D18: the next sign-in opens Set up 2FA again');
+expect_same('two_factor_setup_required', $spLogin($spNewEmail, $spPass, true)[1]['type'] ?? null, 'D18: the next sign-in opens Set up 2FA again');
 
 // D4, D17, section 6: move-email moves the Superadmin's email; the Dean's moves are in the app.
 $spMoved = "sp-super-moved-{$spTag}@bicol-u.edu.ph";
@@ -437,7 +490,7 @@ $spMailBefore = [$spOutbox($spNewEmail), $spOutbox($spMoved)];
 expect_same(0, $spCode, 'D4: move-email moves the Superadmin to a new address');
 expect_same([$spMoved, $spNewEmail], [$spOne('SELECT login_email FROM user_accounts WHERE user_id = ?', [$spNewId]), $spOne('SELECT email FROM retired_emails WHERE user_id = ?', [$spNewId])], 'D17: the email changes and the old address is retired');
 expect_true($spLiveSessions($spNewId) === 0 && $spOne('SELECT google_subject FROM user_accounts WHERE user_id = ?', [$spNewId]) === null, 'D4: the Superadmin is signed out and the Google link is removed');
-expect_true($spLogin($spMoved, $spPass)[0] !== 200 && $spLogin($spNewEmail, $spPass)[0] !== 200, 'D4: the old password no longer signs in on either address');
+expect_true($spLogin($spMoved, $spPass, true)[0] !== 200 && $spLogin($spNewEmail, $spPass, true)[0] !== 200, 'D4: the old password no longer signs in on either address');
 expect_same([$spMailBefore[0], $spMailBefore[1] + 1], [$spOutbox($spNewEmail), $spOutbox($spMoved)], 'D4: a set-password link goes to the new address only');
 expect_same(1, count($spAudit('account_email_moved', (string) $spNewId)), 'Section 7: the move is audited once');
 [$spCode] = $mvRun(['unretire-email', $spNewEmail, '--reason', 'College gave it back'], "YES\n");

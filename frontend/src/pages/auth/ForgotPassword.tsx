@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Mail, CheckCircle2, RefreshCw } from 'lucide-react';
 import { requestPasswordReset, validateBicolUEmail } from '../../services/authService';
 
@@ -15,6 +15,9 @@ function completeInstitutionalEmail(value: string): string {
 }
 
 export function ForgotPassword() {
+  // 12.8: opened from the Superadmin page, Back returns there.
+  const [searchParams] = useSearchParams();
+  const backTo = searchParams.get('from') === 'superadmin' ? '/superadmin/sign-in' : '/login';
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -100,7 +103,7 @@ export function ForgotPassword() {
         <main className="w-full md:order-2 md:w-1/2 min-h-0 bg-white dark:bg-slate-900 p-7 sm:p-8 lg:p-9 flex flex-col justify-between">
           <div className="flex justify-start">
             <Link
-              to="/login"
+              to={backTo}
               className="whitespace-nowrap text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer px-2 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -219,7 +222,7 @@ export function ForgotPassword() {
               </div>
 
               <Link
-                to="/login"
+                to={backTo}
                 className="whitespace-nowrap w-full py-2.5 px-4 rounded-xl font-semibold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.99] transition-all shadow-sm flex items-center justify-center gap-2"
               >
                 Return to login

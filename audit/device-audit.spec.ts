@@ -9,7 +9,7 @@ import { ACCOUNTS, freshTotp, OUT, PARTS_DIR, wantedDevices, wantedRoles, type R
 // Routes per role: App.tsx route table + sidebar nav in components/Layout.tsx (admin/faculty/
 // secretary/student nav lists). Detail pages that need an id are left out.
 const ROUTES: Record<Role, string[]> = {
-  public: ['/landing', '/login'],
+  public: ['/landing', '/login', '/superadmin/sign-in'],
   // Redirect aliases (/admin/faculty-approval, /retention-criteria, /users, /audit, /rules) are left out:
   // they only land on pages already listed here.
   // Superadmin nav (Layout.tsx superadminView); the Dean's old /admin setup links only redirect here.
@@ -347,8 +347,8 @@ for (const device of wantedDevices()) for (const role of wantedRoles()) {
     // Refresh tokens are single-use (reuse revokes the session), so a saved storageState cannot be
     // shared between contexts: sign in once per device x role through the real /login page.
     if (role !== 'public') {
-      const { email, password, totp } = ACCOUNTS[role];
-      await page.goto('/login');
+      const { email, password, totp, signInPath } = ACCOUNTS[role];
+      await page.goto(signInPath ?? '/login');
       await page.fill('input[inputmode="email"]', email);
       await page.fill('input[type="password"]', password);
       await page.click('button[type="submit"]');
@@ -357,7 +357,7 @@ for (const device of wantedDevices()) for (const role of wantedRoles()) {
         await page.fill('input[inputmode="numeric"]', await freshTotp(totp));
         await page.click('button[type="submit"]');
       }
-      await page.waitForURL(u => !/^\/(login|2fa|mfa)/.test(u.pathname), { timeout: 20_000 });
+      await page.waitForURL(u => !/^\/(login|superadmin\/sign-in|2fa|mfa)/.test(u.pathname), { timeout: 20_000 });
       await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
     }
     const entries: unknown[] = [];
@@ -388,7 +388,7 @@ for (const device of wantedDevices()) for (const role of wantedRoles()) {
         if (res && !res.ok()) err(`HTTP ${res.status()}`);
         await settle(page);
         const path = new URL(page.url()).pathname;
-        if (role !== 'public' && /^\/(login|landing)/.test(path)) err(`redirected to ${path}`);
+        if (role !== 'public' && /^\/(login|landing|superadmin\/sign-in)/.test(path)) err(`redirected to ${path}`);
         if (await page.getByText(/something went wrong|page not found/i).first().isVisible().catch(() => false)) err('error page text visible');
       } catch (e) {
         err(String((e as Error).message).split('\n')[0]);

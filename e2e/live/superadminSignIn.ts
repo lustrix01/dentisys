@@ -39,9 +39,9 @@ export async function nextCode(): Promise<string> {
   return totp(SUPERADMIN_TOTP_SECRET, step);
 }
 
-/** Signs in through the real form: password, then the authenticator code. Lands on the Overview. */
+/** Signs in through the real form at /superadmin/sign-in (12.8): password, then the authenticator code. Lands on the Overview. */
 export async function signInSuperadmin(page: Page): Promise<void> {
-  await page.goto('/login');
+  await page.goto('/superadmin/sign-in');
   await page.locator('input[inputmode="email"]').fill(SUPERADMIN_EMAIL);
   await page.locator('input[type="password"]').fill(SUPERADMIN_PASSWORD);
   await page.locator('button[type="submit"]').click();

@@ -256,12 +256,13 @@ export const requestPasswordReset = async (email: string): Promise<{ success: bo
   }
 };
 
-export const confirmPasswordReset = async (token: string, password: string): Promise<{ success: boolean; message: string }> => {
+export const confirmPasswordReset = async (token: string, password: string): Promise<{ success: boolean; message: string; signInPath?: string }> => {
   try {
     const res = await confirmPasswordResetApi(token, password);
     return {
       success: true,
       message: res.message,
+      signInPath: res.sign_in_path === '/superadmin/sign-in' ? res.sign_in_path : '/login',
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to reset password.';

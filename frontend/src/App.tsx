@@ -207,6 +207,7 @@ function App() {
 
             {/* Primary SSO Login & Dev Password Login */}
             <Route path="/login" element={<SsoLogin />} />
+            <Route path="/superadmin/sign-in" element={<SsoLogin superadmin />} />
             <Route path="/login/dev" element={<Navigate to="/login" replace />} />
             <Route path="/dev-login" element={<Navigate to="/login" replace />} />
             <Route path="/2fa/verify" element={<MfaVerify />} />

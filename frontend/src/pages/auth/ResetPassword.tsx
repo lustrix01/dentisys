@@ -41,7 +41,7 @@ export function ResetPassword() {
     if (res.success) {
       setSuccess('Password reset successfully! Redirecting to sign in...');
       setTimeout(() => {
-        navigate('/login');
+        navigate(res.signInPath ?? '/login');
       }, 2000);
     } else {
       setError(res.message);
