@@ -128,10 +128,13 @@ export const EmailManagement: React.FC = () => {
 
   const classIdOf = (classItem: any) => String(classItem.csId || classItem.id || '');
 
-  // Deep link from Retention Monitoring: ?tab=remedial&enrollment=<id>. Read once on load.
+  // Deep links from Retention Monitoring can preselect one or more notice recipients.
   const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState<Tab>(() => (searchParams.get('tab') === 'remedial' ? 'remedial' : 'student_invites'));
-  const preselectEnrollmentId = useRef<string | null>(searchParams.get('tab') === 'remedial' ? searchParams.get('enrollment') : null);
+  const [tab, setTab] = useState<Tab>(() => {
+    const requestedTab = searchParams.get('tab');
+    return requestedTab === 'remedial' || requestedTab === 'midterm_advisory' ? requestedTab : 'student_invites';
+  });
+  const preselectEnrollmentIds = useRef(searchParams.getAll('enrollment'));
   const [selected, setSelected] = useState<string[]>([]);
 
   // Filter Dropdown States
@@ -285,12 +288,16 @@ export const EmailManagement: React.FC = () => {
   );
   const selectedNoticeRows = selectableNoticeRows.filter(row => selected.includes(row.enrollmentId));
 
-  // Tick the linked student once, after the list has loaded. Unknown or ineligible ids are ignored.
+  // Tick linked students once, after the list has loaded. Unknown or ineligible ids are ignored.
   useEffect(() => {
-    const id = preselectEnrollmentId.current;
-    if (id === null || loadingRetention || retentionRecords.length === 0) return;
-    preselectEnrollmentId.current = null;
-    if (tab === 'remedial' && selectableNoticeRows.some(row => String(row.enrollmentId) === id)) setSelected([id]);
+    const ids = preselectEnrollmentIds.current;
+    if (ids.length === 0 || loadingRetention || retentionRecords.length === 0) return;
+    preselectEnrollmentIds.current = [];
+    if (tab === 'remedial' || tab === 'midterm_advisory') {
+      setSelected(selectableNoticeRows
+        .filter(row => ids.includes(String(row.enrollmentId)))
+        .map(row => row.enrollmentId));
+    }
   }, [loadingRetention, retentionRecords, selectableNoticeRows, tab]);
 
   const [secretarySort, setSecretarySort] = useState<StudentSort>({ key: 'default', dir: 'asc' });

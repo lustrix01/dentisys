@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, CheckCircle2, ChevronRight, Plus, Search, Calculator, Filter } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronRight, Plus, Search, Calculator, Filter, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
@@ -296,6 +296,8 @@ const statusBadgeClasses = (state: FacultyRetentionState): string => {
 
 export const RetentionMonitoring: React.FC = () => {
   const navigate = useNavigate();
+  const [selectedAdvisoryEnrollments, setSelectedAdvisoryEnrollments] = useState<string[]>([]);
+  const [selectedRemedialEnrollments, setSelectedRemedialEnrollments] = useState<string[]>([]);
   const [retentionRecords, setRetentionRecords] = useState<FacultyRetentionRecord[]>([]);
   const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -555,6 +557,16 @@ export const RetentionMonitoring: React.FC = () => {
   const sortedMidterm = sortRowsBy(midtermDisplayRecords, midSort, { student: r => r.studentName, grade: r => r.midtermPercentage });
   const sortedWatchlist = sortRowsBy(watchlistRecords, watchSort, { student: r => r.studentName, grade: r => r.gwa, state: r => r.state });
   const sortedRemedials = sortRowsBy(remedialRows, remSort, { student: r => r.record.studentName, stage: r => r.progression.stage });
+
+  const openEmailManagement = (tab: 'midterm_advisory' | 'remedial', enrollments: string[]) => {
+    const params = new URLSearchParams({ tab });
+    enrollments.forEach(enrollmentId => params.append('enrollment', enrollmentId));
+    navigate(`/email-management?${params.toString()}`);
+  };
+  const canSelectRemedialNotice = (row: RetentionRemedialRow) => (
+    row.record.schoolYear === currentSchoolYear
+    && row.progression.attempts.some(attempt => attempt.status === 'pending' && Boolean(attempt.scheduledDate))
+  );
 
   const selectedScheduleRecord = useMemo(
     () => usableRecords.find(record => record.enrollmentId === selectedScheduleEnrollmentId) ?? null,
@@ -988,6 +1000,14 @@ export const RetentionMonitoring: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
+                disabled={selectedAdvisoryEnrollments.length === 0}
+                onClick={() => openEmailManagement('midterm_advisory', selectedAdvisoryEnrollments)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                <Send className="h-3.5 w-3.5" /> Send advisory
+              </button>
+              <button
+                type="button"
                 onClick={() => setShowAtRiskOnly(prev => !prev)}
                 aria-pressed={showAtRiskOnly}
                 className={`inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -1014,8 +1034,8 @@ export const RetentionMonitoring: React.FC = () => {
               <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 max-md:hidden">
                 <tr>
                   <th className="p-3" aria-sort={ariaSort(midSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={midSort} onSort={setMidSort} /></th>
-                  <th className="p-3">Class</th>
                   <th className="p-3" aria-sort={ariaSort(midSort, 'grade')}><SortableHeader label="Final Midterm Grade" sortKey="grade" sort={midSort} onSort={setMidSort} /></th>
+                  <th className="p-3">Class</th>
                   <th className="p-3">Risk Standing</th>
                   <th className="p-3">Status</th>
                 </tr>
@@ -1025,11 +1045,24 @@ export const RetentionMonitoring: React.FC = () => {
                   return (
                     <tr key={record.enrollmentId} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
                       <td className="p-3 font-bold max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm">
-                        <span className="sr-only md:hidden">Student: </span>{record.studentName}
-                        <span className="block text-[10px] font-normal text-slate-500 dark:text-slate-400 max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{record.studentNumber}</span>
+                        <div className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedAdvisoryEnrollments.includes(record.enrollmentId)}
+                            disabled={!isMidtermAtRisk(record) || record.schoolYear !== currentSchoolYear}
+                            aria-label={`Select ${record.studentName || 'student'} for Midterm Advisory`}
+                            onChange={() => setSelectedAdvisoryEnrollments(previous => previous.includes(record.enrollmentId)
+                              ? previous.filter(id => id !== record.enrollmentId)
+                              : [...previous, record.enrollmentId])}
+                            className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-600 disabled:opacity-40"
+                          />
+                          <div className="min-w-0">
+                            <span className="sr-only md:hidden">Student: </span>{record.studentName}
+                            <span className="block text-[10px] font-normal text-slate-500 dark:text-slate-400 max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{record.studentNumber}</span>
+                          </div>
+                        </div>
                       </td>
-                      <td className="p-3 max-md:order-2 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Class: </span>{record.className}</td>
-                      <td className="p-3 max-md:order-3 max-md:p-0">
+                      <td className="p-3 max-md:order-2 max-md:p-0">
                         <span className="sr-only md:hidden">Final Midterm Grade: </span>
                         {isFiniteNumber(record.midtermPercentage) ? (
                           <div className="font-mono">
@@ -1042,6 +1075,7 @@ export const RetentionMonitoring: React.FC = () => {
                           <span className="text-slate-500 dark:text-slate-400 italic">Incomplete assessments</span>
                         )}
                       </td>
+                      <td className="p-3 max-md:order-3 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Class: </span>{record.className}</td>
                       <td className="p-3 max-md:order-4 max-md:p-0 max-md:empty:hidden">
                         {isMidtermAtRisk(record) && (
                           <span className="inline-flex rounded-full px-2 py-1 text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300">At risk</span>
@@ -1097,15 +1131,15 @@ export const RetentionMonitoring: React.FC = () => {
           ) : (
           <div className="table-pin table-pin-first table-pin-blocks">
             <table className="w-full text-left text-xs border-collapse max-md:block">
-              <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4" aria-sort={ariaSort(watchSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={watchSort} onSort={setWatchSort} /></th><th className="py-3 px-4">Student No.</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center" aria-sort={ariaSort(watchSort, 'grade')}><SortableHeader label="Course Grade" sortKey="grade" sort={watchSort} onSort={setWatchSort} /></th><th className="py-3 px-4" aria-sort={ariaSort(watchSort, 'state')}><SortableHeader label="State" sortKey="state" sort={watchSort} onSort={setWatchSort} /></th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
+              <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4" aria-sort={ariaSort(watchSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={watchSort} onSort={setWatchSort} /></th><th className="py-3 px-4 text-center" aria-sort={ariaSort(watchSort, 'grade')}><SortableHeader label="Course Grade" sortKey="grade" sort={watchSort} onSort={setWatchSort} /></th><th className="py-3 px-4">Student No.</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4" aria-sort={ariaSort(watchSort, 'state')}><SortableHeader label="State" sortKey="state" sort={watchSort} onSort={setWatchSort} /></th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
                 {sortedWatchlist.map(record => (
                   <tr key={record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm"><span className="sr-only md:hidden">Student: </span>{textOrUnavailable(record.studentName, 'Student name unavailable')}</td>
-                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-mono max-md:order-2 max-md:p-0 max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student Number: </span>{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
-                    <td className="py-3.5 px-4 font-mono max-md:order-3 max-md:p-0"><span className="sr-only md:hidden">Subject: </span>{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
-                    <td className="py-3.5 px-4 max-md:order-4 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Class: </span>{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
-                    <td className="py-3.5 px-4 text-center font-mono max-md:order-5 max-md:p-0 max-md:text-left"><span className="md:hidden font-sans text-slate-500 dark:text-slate-400">Course grade </span>{isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage} grade={record.gwa}>{formatGrade(record.gwa)}</GradeValue> : 'Grade unavailable'}<span className="block text-[10px] text-slate-500 dark:text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
+                    <td className="py-3.5 px-4 text-center font-mono max-md:order-2 max-md:p-0 max-md:text-left"><span className="md:hidden font-sans text-slate-500 dark:text-slate-400">Course grade </span>{isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage} grade={record.gwa}>{formatGrade(record.gwa)}</GradeValue> : 'Grade unavailable'}<span className="block text-[10px] text-slate-500 dark:text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
+                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-mono max-md:order-3 max-md:p-0 max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student Number: </span>{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
+                    <td className="py-3.5 px-4 font-mono max-md:order-4 max-md:p-0"><span className="sr-only md:hidden">Subject: </span>{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
+                    <td className="py-3.5 px-4 max-md:order-5 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Class: </span>{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
                     <td className="py-3.5 px-4 max-md:order-6 max-md:p-0"><span className="sr-only md:hidden">State: </span><button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1.5 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button></td>
                     <td className="py-3.5 px-4 text-right max-md:order-7 max-md:ml-auto max-md:p-0"><div className="flex items-center justify-end gap-1.5"><button type="button" onClick={() => openSchedule(record)} disabled={!canScheduleRecord(record)} title={!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam'} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button></div></td>
                   </tr>
@@ -1121,6 +1155,14 @@ export const RetentionMonitoring: React.FC = () => {
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Remedial Progression ({remedialRows.length})</h2><p className="text-xs text-slate-500 dark:text-slate-400">Attempt stages, scores and outcomes are read from the authoritative retention API. Removal is unavailable because no approved authoritative delete contract exists.</p></div>
+            <button
+              type="button"
+              disabled={selectedRemedialEnrollments.length === 0}
+              onClick={() => openEmailManagement('remedial', selectedRemedialEnrollments)}
+              className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              <Send className="h-3.5 w-3.5" /> Send remedial notices
+            </button>
           </div>
           {remedialRows.length === 0 ? (
             // Outside the table so the message is not centred across a table wider than a phone screen.
@@ -1128,14 +1170,32 @@ export const RetentionMonitoring: React.FC = () => {
           ) : (
           <div className="table-pin table-pin-first table-pin-blocks">
             <table className="w-full min-w-[1080px] table-fixed text-left text-xs border-collapse max-md:min-w-0 max-md:table-auto max-md:block">
-              <colgroup className="max-md:hidden"><col style={{ width: '18%' }} /><col style={{ width: '17%' }} /><col style={{ width: '10%' }} /><col style={{ width: '15%' }} /><col style={{ width: '22%' }} /><col style={{ width: '18%' }} /></colgroup>
-              <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-3" aria-sort={ariaSort(remSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={remSort} onSort={setRemSort} /></th><th className="py-3 px-3">Subject / Class</th><th className="py-3 px-3 text-center">Original Grade</th><th className="py-3 px-3 text-center">Attempts</th><th className="py-3 px-3" aria-sort={ariaSort(remSort, 'stage')}><SortableHeader label="Current Stage" sortKey="stage" sort={remSort} onSort={setRemSort} /></th><th className="py-3 px-3">Actions</th></tr></thead>
+              <colgroup className="max-md:hidden"><col style={{ width: '20%' }} /><col style={{ width: '10%' }} /><col style={{ width: '17%' }} /><col style={{ width: '12%' }} /><col style={{ width: '22%' }} /><col style={{ width: '19%' }} /></colgroup>
+              <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-3" aria-sort={ariaSort(remSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={remSort} onSort={setRemSort} /></th><th className="py-3 px-3 text-center">Original Grade</th><th className="py-3 px-3">Subject / Class</th><th className="py-3 px-3 text-center">Attempts</th><th className="py-3 px-3" aria-sort={ariaSort(remSort, 'stage')}><SortableHeader label="Current Stage" sortKey="stage" sort={remSort} onSort={setRemSort} /></th><th className="py-3 px-3">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
                 {sortedRemedials.map(row => (
                   <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
-                    <td className="py-3.5 px-3 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm"><span className="sr-only md:hidden">Student: </span>{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-500 dark:text-slate-400 font-mono max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
-                    <td className="py-3.5 px-3 max-md:order-2 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Subject / Class: </span><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-500 dark:text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
-                    <td className="py-3.5 px-3 text-center font-bold text-slate-800 dark:text-slate-100 max-md:order-3 max-md:p-0 max-md:text-left"><span className="md:hidden font-normal text-slate-500 dark:text-slate-400">Original grade </span>{isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage} grade={row.record.gwa}>{formatGrade(row.record.gwa)}</GradeValue> : <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Grade unavailable</span>}</td>
+                    <td className="py-3.5 px-3 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm">
+                      <div className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedRemedialEnrollments.includes(row.record.enrollmentId)}
+                          disabled={!canSelectRemedialNotice(row)}
+                          aria-label={`Select ${row.record.studentName || 'student'} for a remedial notice`}
+                          title={!canSelectRemedialNotice(row) ? 'Only current-year remedial attempts with a scheduled date can receive a notice.' : undefined}
+                          onChange={() => setSelectedRemedialEnrollments(previous => previous.includes(row.record.enrollmentId)
+                            ? previous.filter(id => id !== row.record.enrollmentId)
+                            : [...previous, row.record.enrollmentId])}
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-600 disabled:opacity-40"
+                        />
+                        <div className="min-w-0">
+                          <span className="sr-only md:hidden">Student: </span>{textOrUnavailable(row.record.studentName, 'Student name unavailable')}
+                          <span className="block text-[10px] text-slate-500 dark:text-slate-400 font-mono max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-3 text-center font-bold text-slate-800 dark:text-slate-100 max-md:order-2 max-md:p-0 max-md:text-left"><span className="md:hidden font-normal text-slate-500 dark:text-slate-400">Original grade </span>{isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage} grade={row.record.gwa}>{formatGrade(row.record.gwa)}</GradeValue> : <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Grade unavailable</span>}</td>
+                    <td className="py-3.5 px-3 max-md:order-3 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Subject / Class: </span><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-500 dark:text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
                     <td className="py-3.5 px-3 text-center max-md:order-4 max-md:w-full max-md:p-0 max-md:text-left">
                       <span className="sr-only md:hidden">Attempts: </span>
                       {(() => {

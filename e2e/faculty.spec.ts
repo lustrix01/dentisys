@@ -7,6 +7,11 @@ import { strFromU8, unzipSync } from '../frontend/node_modules/fflate';
 
 // On-screen dates use the short month (spec UI-001 wording): '2026-11-17' -> 'Nov 17, 2026'.
 const shortDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+const emptyFacultyDashboardKpis = {
+  status: 'ok', currentSchoolYear: '2026-2027', availableSchoolYears: [],
+  kpis: { assignedStudents: 0, activeClasses: 0, averageAttendance: null, retentionAlerts: 0, goodStanding: 0, remedialCount: 0, irregularReenrollmentCount: 0 },
+  classes: [],
+};
 
 // Grade exports download .xlsx: unzip it and return all the XML text the workbook holds (cell values and shared strings).
 const readDownloadedXlsxText = async (download: Download) => {
@@ -164,6 +169,7 @@ test.describe('Faculty Module E2E Tests', () => {
           providers: { identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: false } }, email: { active: 'mailpit' }, biometrics: { active: 'disabled' }, location: { active: 'disabled' } },
           features: { browser_attendance_prototype: false, student_auth_enabled: false },
         });
+        if (path === '/api/faculty/dashboard/kpis') return json(emptyFacultyDashboardKpis);
         if (path === '/api/faculty/students') return json([
           { id: '42', studentId: 'P03-42', name: 'Canonical Student', email: 'student@bicol-u.edu.ph', yearLevel: 4, status: 'active', classSections: [{ classId: '77', className: 'Section 4-A', enrollmentId: '88' }] },
           { id: 'not-canonical', studentId: 'P03-43', name: 'Unscoped Student', email: 'unscoped@bicol-u.edu.ph', yearLevel: 4, status: 'active', classSections: [] },
@@ -186,10 +192,8 @@ test.describe('Faculty Module E2E Tests', () => {
       await appPage.fill('input[type="password"]', 'Password123!');
       await appPage.click('button[type="submit"]');
       await expect(appPage).toHaveURL('/');
-      await appPage.evaluate(() => {
-        window.history.pushState({}, '', '/email-management');
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      });
+      await appPage.getByRole('link', { name: 'Email Management', exact: true }).click();
+      await expect(appPage).toHaveURL('/email-management');
       // The roster loads after the in-app navigation; allow for a busy test
       // machine (parallel workers) instead of the default 5 s.
       await expect(appPage.getByText('Canonical Student')).toBeVisible({ timeout: 20000 });
@@ -532,6 +536,7 @@ test.describe('Faculty Module E2E Tests', () => {
         if (path === '/api/auth/login') return json({ type: 'direct_login', access_token: 'mock-faculty-token' });
         if (path === '/api/auth/me') return json({ id: 200, login_email: 'faculty@bicol-u.edu.ph', display_name: 'Prof. Jane Doe', role: 'faculty' });
         if (path === '/api/runtime-config') return json({ status: 'ok', environment: 'test', allowed_email_domains: ['bicol-u.edu.ph'], providers: { identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: false } }, email: { active: 'mailpit' }, biometrics: { active: 'disabled' }, location: { active: 'disabled' } }, features: { browser_attendance_prototype: false, student_auth_enabled: false } });
+        if (path === '/api/faculty/dashboard/kpis') return json(emptyFacultyDashboardKpis);
         if (path === '/api/faculty/students') return json([{ id: '42', studentId: 'P03-42', name: 'Canonical Student', email: 'student@bicol-u.edu.ph', yearLevel: 4, status: 'active', classSections: [{ classId: '77', className: 'Section 4-A', enrollmentId: '88' }] }]);
         if (path === '/api/secretary/invitations') return json([]);
         if (path === '/api/faculty/email-logs') return json({ status: 'ok', actions: emailLogs });
@@ -546,7 +551,8 @@ test.describe('Faculty Module E2E Tests', () => {
       await appPage.fill('input[type="password"]', 'Password123!');
       await appPage.click('button[type="submit"]');
       await expect(appPage).toHaveURL('/');
-      await appPage.evaluate(() => { window.history.pushState({}, '', '/email-management'); window.dispatchEvent(new PopStateEvent('popstate')); });
+      await appPage.getByRole('link', { name: 'Email Management', exact: true }).click();
+      await expect(appPage).toHaveURL('/email-management');
       await expect(appPage.getByText('Canonical Student')).toBeVisible();
       await appPage.locator('tbody input[type="checkbox"]').first().check();
       await appPage.getByRole('button', { name: /Send Invitations \(1\)/i }).click();
@@ -577,6 +583,7 @@ test.describe('Faculty Module E2E Tests', () => {
           providers: { identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: false } }, email: { active: 'mailpit' }, biometrics: { active: 'disabled' }, location: { active: 'disabled' } },
           features: { browser_attendance_prototype: false, student_auth_enabled: false },
         });
+        if (path === '/api/faculty/dashboard/kpis') return json(emptyFacultyDashboardKpis);
         if (path === '/api/faculty/email-logs') return json({ status: 'ok', actions: [{
           id: 'act-1', type: 'At-Risk Notification', sentAt: '2026-10-14T01:00:00Z', recipients: [
             { name: 'Ana Student', email: 'ana@bicol-u.edu.ph', status: 'Sent', failureReason: null },
@@ -591,7 +598,8 @@ test.describe('Faculty Module E2E Tests', () => {
       await appPage.fill('input[type="password"]', 'Password123!');
       await appPage.click('button[type="submit"]');
       await expect(appPage).toHaveURL('/');
-      await appPage.evaluate(() => { window.history.pushState({}, '', '/email-management'); window.dispatchEvent(new PopStateEvent('popstate')); });
+      await appPage.getByRole('link', { name: 'Email Management', exact: true }).click();
+      await expect(appPage).toHaveURL('/email-management');
       await appPage.getByRole('tab', { name: /Email History Log/ }).click();
       const historyTable = appPage.getByRole('table').filter({ hasText: 'Date Sent' });
       await expect(historyTable.getByText('3 recipients', { exact: true })).toBeVisible();

@@ -86,15 +86,29 @@ export const ClassJoinButton: React.FC<{ csId: number; onApproved?: () => void }
     if (!await requestConfirmation('The old code and link stop working.', 'New Code', 'New code')) return;
     await run(async () => { setSettings(await newClassJoinCodeApi(csId)); showFeedback('New code made.', 'success'); }, 'Could not make a new code.');
   };
-  const change = (patch: { enabled?: boolean; autoApprove?: boolean }) =>
-    run(async () => { setSettings(await updateClassJoinSettingsApi({ csId, ...patch })); }, 'Could not save the change.');
-  const decide = (action: 'approve' | 'reject', request: ClassJoinRequestItem) =>
-    run(async () => {
+  const change = async (patch: { enabled?: boolean; autoApprove?: boolean }) => {
+    const setting = patch.enabled !== undefined ? 'class joining' : 'automatic approval';
+    const turningOn = patch.enabled ?? patch.autoApprove;
+    if (!await requestConfirmation(
+      `Turn ${setting} ${turningOn ? 'on' : 'off'} for this class?`,
+      `Turn ${setting} ${turningOn ? 'on' : 'off'}`,
+      turningOn ? 'Turn on' : 'Turn off'
+    )) return;
+    await run(async () => { setSettings(await updateClassJoinSettingsApi({ csId, ...patch })); }, 'Could not save the change.');
+  };
+  const decide = async (action: 'approve' | 'reject', request: ClassJoinRequestItem) => {
+    const actionLabel = action === 'approve' ? 'Approve' : 'Reject';
+    const detail = action === 'approve'
+      ? `${request.name} will be added to the class.`
+      : `${request.name}'s request to join will be rejected.`;
+    if (!await requestConfirmation(`${actionLabel} ${request.name}'s request to join? ${detail}`, `${actionLabel} join request`, actionLabel)) return;
+    await run(async () => {
       await decideClassJoinRequestApi(action, { csId, requestId: request.requestId });
       showFeedback(action === 'approve' ? `${request.name} was added to the class.` : 'Request rejected.', 'success');
       await load();
       if (action === 'approve') onApproved?.();
     }, 'Could not save the decision.');
+  };
 
   const off = settings ? !settings.enabled : false;
 

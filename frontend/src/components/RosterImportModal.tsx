@@ -11,7 +11,6 @@ import {
   X,
   Plus,
   RefreshCw,
-  Download,
   Trash2,
   Users,
   Search,
@@ -25,7 +24,6 @@ import { validateBicolUEmail } from '../services/authService';
 import {
   ParsedRosterStudent,
   parseCSVRoster,
-  getSampleRegistrarCSV,
   validateRosterStudents,
   compareRosterHeader,
   findClassMatchingHeader,
@@ -90,9 +88,9 @@ const PDF_LAYOUT_ERROR = 'This PDF does not use the class list layout, so no stu
 const PDF_SCANNED_ERROR = 'This PDF has no readable text, so no students were read. Use the official list of enrolled students PDF, or a CSV roster file.';
 const PDF_UNREADABLE_ERROR = 'This PDF could not be read, so no students were read. Use the official list of enrolled students PDF, or a CSV roster file.';
 const PDF_NO_ROWS_ERROR = 'No students were read from this PDF. Check that it is the official list of enrolled students PDF, or use a CSV roster file.';
-const CSV_LAYOUT_ERROR = "This file's columns do not match the roster layout, so no students were read. Use the sample CSV or the official class list PDF.";
+const CSV_LAYOUT_ERROR = "This file's columns do not match the roster layout, so no students were read. Check the column headings or use the official class list PDF.";
 // Amber warning, not an error: the rows were read by column position (headerless CSV support is kept).
-const CSV_POSITIONAL_WARNING = 'No column headings were recognised, so this file was read by column position. Check the preview against your file, or use the sample CSV.';
+const CSV_POSITIONAL_WARNING = 'No column headings were recognised, so this file was read by column position. Check the preview against your file.';
 const fileErrorNoteCls = 'rounded-xl border p-3 text-xs';
 const fileErrorRoseCls = `${fileErrorNoteCls} border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200`;
 const fileErrorAmberCls = `${fileErrorNoteCls} border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200`;
@@ -273,19 +271,6 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
     } finally {
       if (sequence === parseSequence.current) setIsParsing(false);
     }
-  };
-
-  const handleDownloadSample = () => {
-    const csvContent = getSampleRegistrarCSV();
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'dentisys_provisional_roster_template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   };
 
   const handleRemoveStudent = (tempKey: string) => {
@@ -672,14 +657,6 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
             <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
               File (.csv, .tsv, .txt, .pdf)
             </span>
-            <button
-              type="button"
-              onClick={handleDownloadSample}
-              className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Download sample CSV
-            </button>
           </div>
 
           <div

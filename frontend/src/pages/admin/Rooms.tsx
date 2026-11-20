@@ -3,7 +3,7 @@ import { Archive, DoorOpen, MapPin, Navigation, Pencil, Plus, RotateCcw, Trash2 
 import Tabs from '../../components/Tabs';
 import { ListToolbar } from '../../components/FilterBars';
 import { Modal } from '../../components/Modal';
-import { showFeedback } from '../../components/FeedbackCenter';
+import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
 import { LocationPicker } from '../../components/LocationPicker';
 import { cleanRadiusText, parseRadius, RADIUS_RANGE_ERROR } from '../../utils/geofenceRadius';
 import {
@@ -107,6 +107,14 @@ export const Rooms: React.FC = () => {
       radius: room?.radiusMeters != null ? String(room.radiusMeters) : '',
       original: room,
     });
+  };
+  const restoreCategory = async (category: RoomCategory) => {
+    if (!await requestConfirmation(`Restore ${category.name}? It will be available when adding or editing rooms.`, 'Restore room category', 'Restore')) return;
+    await run(() => restoreRoomCategoryApi(category.categoryId), `${category.name} restored.`, { close: () => undefined, toRooms: true });
+  };
+  const restoreRoom = async (room: RoomRecord) => {
+    if (!await requestConfirmation(`Restore ${room.name}? It will be available for classes to use again.`, 'Restore room', 'Restore')) return;
+    await run(() => restoreRoomApi(room.roomId), `${room.name} restored.`, { close: () => undefined, toRooms: true });
   };
 
   const run = async (action: () => Promise<unknown>, done: string, opts: { close?: () => void; toRooms?: boolean } = {}) => {
@@ -313,7 +321,7 @@ export const Rooms: React.FC = () => {
                   {(tab === 'rooms' || catRetired) && (
                     <div className="flex shrink-0 items-center gap-2">
                       {catRetired ? (
-                        <button type="button" aria-label={`Restore category ${cat.name}`} title={`Restore category ${cat.name}`} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800" disabled={busy} onClick={() => run(() => restoreRoomCategoryApi(cat.categoryId), `${cat.name} restored.`, { close: () => undefined, toRooms: true })}><RotateCcw className="h-4 w-4" /></button>
+                        <button type="button" aria-label={`Restore category ${cat.name}`} title={`Restore category ${cat.name}`} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800" disabled={busy} onClick={() => void restoreCategory(cat)}><RotateCcw className="h-4 w-4" /></button>
                       ) : (
                         <>
                           <button type="button" aria-label={`Rename category ${cat.name}`} title={`Rename category ${cat.name}`} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800" disabled={busy} onClick={() => { setError(''); setCatDraft({ categoryId: cat.categoryId, name: cat.name }); }}><Pencil className="h-4 w-4" /></button>
@@ -363,7 +371,7 @@ export const Rooms: React.FC = () => {
                                 title={`Restore room ${room.name}`}
                                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                                 disabled={busy}
-                                onClick={() => run(() => restoreRoomApi(room.roomId), `${room.name} restored.`, { close: () => undefined, toRooms: true })}
+                                onClick={() => void restoreRoom(room)}
                               >
                                 <RotateCcw className="h-4 w-4" />
                               </button>

@@ -119,7 +119,7 @@ export const FeedbackCenter: React.FC = () => {
       >
         <div className="space-y-5">
           <div className={`rounded-2xl border p-4 sm:p-5 ${confirmationColors.panel}`}>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Review this action</p>
+            <p className="text-[10px] font-bold tracking-wider text-slate-500 dark:text-slate-400">Review this action</p>
             <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700 dark:text-slate-200">{confirmation?.message}</p>
           </div>
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">

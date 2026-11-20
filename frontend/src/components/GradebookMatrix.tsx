@@ -435,7 +435,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
     <div className="space-y-3">
       {/* Interactive Filters Bar */}
       <div className="space-y-2.5 px-5 py-3 bg-white dark:bg-slate-900 border-b dark:border-slate-800 text-xs">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Student Search */}
           <div className="relative w-full sm:w-[280px] sm:shrink-0">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -459,9 +459,9 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-2 dark:border-slate-800 dark:bg-slate-950/50">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-2 rounded-2xl bg-slate-50/70 p-2 dark:bg-slate-950/50">
           <div className="flex items-center gap-1.5 max-sm:hidden">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Keep visible while scrolling:</span>
+            <span className="text-[10px] font-bold tracking-wider text-slate-500 dark:text-slate-400">Keep visible while scrolling:</span>
             <div role="group" aria-label="Keep visible while scrolling" className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-700">
               {([['Name', false], ['Student No. and name', true]] as const).map(([label, both]) => (
                 <button
@@ -485,7 +485,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
             <>
               {/* Period Filter */}
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Period:</span>
+                <span className="text-[10px] font-bold tracking-wider text-slate-500 dark:text-slate-400">Period:</span>
                 <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-700">
                   <button
                     type="button"
@@ -526,7 +526,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
               {/* Component Filter */}
               {config?.componentMode === 'lecture_laboratory' && (
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Component:</span>
+                <span className="text-[10px] font-bold tracking-wider text-slate-500 dark:text-slate-400">Component:</span>
                 <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-700">
                   <button
                     type="button"

@@ -66,7 +66,7 @@ Every tab bar uses `Tabs`, which also gives screen readers the tab roles and let
 
 ## Phone blocks
 
-On phones (below 768 px), every Student and Secretary data table shows stacked row cards instead of horizontal scrolling; each card preserves every field and action. The same phone-block pattern applies to the Faculty and Reports lists named in `spec.md` UI-001. Fields without a visible label get a screen-reader label. Tablet and desktop layouts keep their tables. Other tables scroll sideways inside their card on phones, never the whole page.
+On phones (below 768 px), every Student and Secretary data table shows stacked row cards instead of horizontal scrolling; each card preserves every field and action. The same phone-block pattern applies to the Faculty and Reports lists named in `spec.md` UI-001. It also applies to the Faculty Reports Retention & Remedials list. Fields without a visible label get a screen-reader label. Tablet and desktop layouts keep their tables. Other tables scroll sideways inside their card on phones, never the whole page.
 
 ## Authentication routes
 

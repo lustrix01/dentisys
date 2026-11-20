@@ -1116,9 +1116,9 @@ export const Reports: React.FC = () => {
             />
           </div>
 
-          <div className="table-pin table-pin-first">
-            <table className="w-full text-left">
-              <thead>
+          <div className="table-pin table-pin-first table-pin-blocks">
+            <table className="w-full text-left max-md:block">
+              <thead className="max-md:hidden">
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
                   <th className="px-5 py-3" aria-sort={ariaSort(retentionSort, 'name')}><SortableHeader label="Student Details" sortKey="name" sort={retentionSort} onSort={setRetentionSort} /></th>
                   <th className="px-5 py-3 text-center" aria-sort={ariaSort(retentionSort, 'grade')}><SortableHeader label="Standing Grade" sortKey="grade" sort={retentionSort} onSort={setRetentionSort} /></th>
@@ -1126,7 +1126,7 @@ export const Reports: React.FC = () => {
                   <th className="px-5 py-3">Remedial Program Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium max-md:block">
                 {sortedFacultyStudents.map((student: any) => {
                   const warnings = retentionUnavailable ? [] : (student.enrolledSubjects || []).filter((sub: any) =>
                     assignedSubjects.includes(sub.code)
@@ -1136,16 +1136,18 @@ export const Reports: React.FC = () => {
                   const remedialStatus = remedialStatusFor(student);
 
                   return (
-                    <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
-                      <td className="px-5 py-3.5">
+                    <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10 max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1 max-md:border-t max-md:border-slate-100 max-md:px-4 max-md:py-3.5 dark:max-md:border-slate-800">
+                      <td className="px-5 py-3.5 max-md:order-1 max-md:w-full max-md:px-0 max-md:pb-0">
                         <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
                         <span className="whitespace-nowrap text-[10px]">{student.studentId} • Year {student.yearLevel}</span>
                       </td>
-                      <td className="px-5 py-3.5 text-center font-bold text-slate-800 dark:text-slate-100">
+                      <td className="px-5 py-3.5 text-center font-bold text-slate-800 dark:text-slate-100 max-md:order-2 max-md:px-0 max-md:py-1 max-md:text-left">
+                        <span className="mr-1 font-normal text-slate-500 dark:text-slate-400 md:hidden">Standing grade:</span>
                         {gwa !== null ? gwa.toFixed(2) : '—'}
                       </td>
-                      <td className={`px-5 py-3.5 text-center font-semibold ${!retentionUnavailable && warnings.length > 0 ? 'text-rose-500' : 'text-slate-500 dark:text-slate-400'}`}>{retentionUnavailable ? 'Unavailable' : warnings.length}</td>
-                      <td className="px-5 py-3.5 dark:text-slate-400">
+                      <td className={`px-5 py-3.5 text-center font-semibold max-md:order-3 max-md:px-0 max-md:py-1 max-md:text-left ${!retentionUnavailable && warnings.length > 0 ? 'text-rose-500' : 'text-slate-500 dark:text-slate-400'}`}><span className="mr-1 font-normal text-slate-500 dark:text-slate-400 md:hidden">Courses in remedial:</span>{retentionUnavailable ? 'Unavailable' : warnings.length}</td>
+                      <td className="px-5 py-3.5 dark:text-slate-400 max-md:order-4 max-md:w-full max-md:px-0 max-md:pt-1">
+                        <span className="mr-1 text-slate-500 dark:text-slate-400 md:hidden">Remedial program status:</span>
                         {remedialStatus === 'No remedial' || remedialStatus === 'Unavailable' ? (
                           <span className="font-medium text-slate-500 dark:text-slate-400">{remedialStatus}</span>
                         ) : (
