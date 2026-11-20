@@ -2,8 +2,8 @@ import { test, expect, type Page } from '@playwright/test';
 
 // Backlog 9.26 "Remember me for 7 days" against the real backend and the dev seed: the refresh cookie is a 7-day cookie when the box is
 // ticked and a browser-session cookie when it is not. The seeded Faculty account has no 2FA, so the password step signs in directly.
-const EMAIL = 'faculty@bicol-u.edu.ph';
-const PASSWORD = 'Faculty123!';
+const EMAIL = process.env.E2E_FACULTY_EMAIL ?? 'faculty@bicol-u.edu.ph';
+const PASSWORD = process.env.E2E_FACULTY_PASSWORD ?? 'Faculty123!';
 
 async function signIn(page: Page, tick: boolean): Promise<void> {
   await page.goto('/login');
