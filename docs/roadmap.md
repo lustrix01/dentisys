@@ -6,10 +6,10 @@ Two people work at once, in two lanes that never edit the same screen or backend
 
 ## Owner lane (system changes)
 
-1. Wrong recovery code returns a server error (9.23).
-2. Remember this device (9.24).
-3. Remember me (9.26).
-4. Superadmin sign-in page (12.8).
+1. Wrong recovery code returns a server error (9.23): on the demo, awaiting promotion.
+2. Remember this device (9.24): on the demo, awaiting promotion.
+3. Remember me (9.26): on the demo, awaiting promotion.
+4. Superadmin sign-in page (12.8): on the demo, awaiting promotion.
 5. Grade submission and Dean approval (13.8). Starts after the colleague's branch is merged, since it changes the same Retention and Attendance screens.
 6. Attendance review screen (13.6, review part): the Owner picks its look from a demo first, then the UI-005 spec change and the build.
 7. Face enrolment and check-in speed (13.4), after the Owner's real-phone timing session.
