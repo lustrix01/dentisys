@@ -34,6 +34,7 @@ Repo `C:\Users\decha\Desktop\Github\dentisys`. Rules in `AGENTS.md` and `CLAUDE.
 - One control per job on a toolbar (2026-11-17): Reports keep one Excel and one PDF control; a tab with several reports turns each into a ▾ menu instead of adding buttons.
 - Open menus and popovers never print: their panel carries `no-print` (2026-11-18).
 - A status in a table with a pinned first column may wrap on phones when one line cannot fit beside the pinned column even after swiping (2026-11-19, Faculty Retention "Remedial exam scheduled": one line from 480 px up, phones wrap). Readable beats one line; measure the room before forcing `nowrap`.
+- No dropdown to pick one student or record where the page already has a search bar (2026-11-20, 13.6): the search box narrows the rows instead. A dropdown filter of students was counter-productive before.
 - Time entry is the clock-style wheel (`components/TimePicker.tsx`), never a grid of tap buttons.
 - Demo shots keep the page's existing toolbar in frame, or the Owner reads the toolbar as removed.
 - A demo shows each device's whole screen (2026-11-20, iPad Pro 13 looked cut): only print and full-page shots are trimmed to their top; `build-demo.py` never crops a viewport shot.
