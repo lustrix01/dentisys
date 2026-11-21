@@ -3378,7 +3378,7 @@ export const GradeComputation: React.FC = () => {
 
 
       {/* Unified Class and Course Selector Bar for All Tabs */}
-      <Card className="no-print p-4 flex flex-col xl:flex-row gap-4 xl:items-center">
+      <Card className="no-print p-4 flex flex-col xl:flex-row gap-4 xl:items-center scroll-mt-6">
         <div className="w-full xl:w-56 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
           <CalendarDays className="w-4 h-4 shrink-0 text-clinical-600 dark:text-clinical-400" aria-hidden="true" />
           <select
@@ -4228,7 +4228,7 @@ export const GradeComputation: React.FC = () => {
         <Card className="max-w-4xl mx-auto shadow-sm border border-slate-200/90 dark:border-slate-800 rounded-3xl overflow-hidden bg-white dark:bg-slate-900">
           <CardHeader className="relative border-b border-slate-100 dark:border-slate-800/80 p-6 sm:p-7">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-              <div className="space-y-1 sm:pr-24">
+              <div className="space-y-1 pr-24 sm:pr-28">
                 <CardTitle className="text-lg sm:text-xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2.5">
                   <Settings className="w-5 h-5 text-clinical-600 dark:text-clinical-400" />
                   <span>Configure Grading Weights & Schema</span>
