@@ -51,7 +51,9 @@ test('Secretary reason and Admin revoke reason show the server field error inlin
   const secretary = read('pages/secretary/AttendanceList.tsx');
   assert.match(secretary, /apiFieldErrors\(err\)\.reason/);
   assert.match(secretary, /id="err-override-reason"/);
-  assert.match(read('pages/admin/SystemAudit.tsx'), /setRevokeError\(apiFieldErrors\(err\)\.reason \?\?/);
+  const audit = read('pages/admin/SystemAudit.tsx');
+  assert.match(audit, /setRevokeError\(apiFieldErrors\(err\)\.reason \?\?/);
+  assert.match(audit, /Reason \(8 to 240 characters\)/);
 });
 
 test('Form inputs carry the server limits: auth, faculty invitation, roster import, edit class', () => {
