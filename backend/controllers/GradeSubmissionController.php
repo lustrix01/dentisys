@@ -204,20 +204,49 @@ function handle_admin_grade_submissions(): void
         $status = is_string($_GET['status'] ?? null) ? $_GET['status'] : '';
         $stmt = $pdo->query(
             "SELECT cs.cs_id, cs.cs_name, cs.school_year, cs.semester, cs.term_end_date, cs.course_id, cs.grades_submitted_at,
-                    c.course_code, u.display_name AS faculty_name
+                    cs.archive_reason, c.course_code, u.display_name AS faculty_name
                FROM class_sections cs JOIN courses c ON c.course_id = cs.course_id
                LEFT JOIN user_accounts u ON u.user_id = cs.instructor_user_id
               WHERE cs.archive_reason IS NULL OR cs.archive_reason = 'finished'
               ORDER BY c.course_code, cs.cs_name, cs.cs_id"
         );
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $class) {
+        $allClasses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $fallbackYear = null;
+        $fallbackSemester = null;
+        if ($term === null) {
+            $currentYear = academic_current_school_year($pdo);
+            $activeClasses = array_values(array_filter($allClasses, static fn(array $c): bool => $c['archive_reason'] === null));
+            $candidates = $activeClasses !== [] ? $activeClasses : $allClasses;
+            $currentCandidates = array_values(array_filter($candidates, static fn(array $c): bool => $c['school_year'] === $currentYear));
+            $source = $currentCandidates !== [] ? $currentCandidates : $candidates;
+            if ($source !== []) {
+                $semOrder = ['1ST' => 0, '2ND' => 1, 'Summer' => 2];
+                usort($source, static function (array $a, array $b) use ($semOrder): int {
+                    $yearCmp = strcmp($b['school_year'], $a['school_year']);
+                    if ($yearCmp !== 0) { return $yearCmp; }
+                    $semA = $semOrder[academic_term_semester($a['semester'] ?? null) ?? ''] ?? -1;
+                    $semB = $semOrder[academic_term_semester($b['semester'] ?? null) ?? ''] ?? -1;
+                    return $semB <=> $semA;
+                });
+                $fallbackYear = $source[0]['school_year'];
+                $fallbackSemester = academic_term_semester($source[0]['semester'] ?? null) ?? '1ST';
+            } else {
+                $fallbackYear = $currentYear;
+                $fallbackSemester = '1ST';
+            }
+        }
+        foreach ($allClasses as $class) {
             $classTerm = grade_submission_term($terms, $class);
-            $deadline = grade_submission_deadline($classTerm, $class);
+            $deadline = grade_submission_deadline($term !== null ? $classTerm : null, $class);
             $deadlineStatus = grade_submission_deadline_status($deadline, $class['grades_submitted_at'], $now);
             if ($term !== null && $classTerm !== null && $classTerm['start_date'] < $term['start_date'] && $deadlineStatus === 'late') {
                 $late++;
             }
-            if ($classTerm === null || $term === null || (int) $classTerm['id'] !== (int) $term['id']
+            $matchesTerm = $term !== null
+                ? ($classTerm !== null && (int) $classTerm['id'] === (int) $term['id'])
+                : ($class['school_year'] === $fallbackYear && academic_term_semester($class['semester'] ?? null) === $fallbackSemester);
+            if (!$matchesTerm
                 || ($courseId !== null && (int) $class['course_id'] !== $courseId) || ($status !== '' && $status !== $deadlineStatus)) {
                 continue;
             }
@@ -225,7 +254,8 @@ function handle_admin_grade_submissions(): void
                 'faculty' => $class['faculty_name'] ?? 'Faculty', 'deadline' => $deadline, 'deadlineStatus' => $deadlineStatus,
                 'submittedAt' => grade_submission_time($class['grades_submitted_at'])];
         }
-        json_response(['status' => 'ok', 'term' => $term === null ? null : ['id' => (int) $term['id'], 'schoolYear' => $term['school_year'], 'semester' => $term['semester']],
+        json_response(['status' => 'ok', 'term' => $term !== null ? ['id' => (int) $term['id'], 'schoolYear' => $term['school_year'], 'semester' => $term['semester']]
+            : ['id' => 0, 'schoolYear' => $fallbackYear, 'semester' => $fallbackSemester],
             'classes' => $classes, 'lateFromEarlierTerms' => $late]);
     } catch (\Throwable $e) {
         error_log('Admin grade submissions error: ' . sanitize_for_log($e));

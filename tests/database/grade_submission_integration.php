@@ -307,3 +307,38 @@ expect_true(($gsListed2[$gsL1]['deadlineStatus'] ?? 'late') !== 'late', 'Dean li
 expect_same('submitted', $gsListed2[$gsL2]['deadlineStatus'] ?? null, 'Dean list: a submission before the new deadline is plain submitted');
 expect_same(200, integration_http_json('/api/admin/academic-terms', $superAccessToken, array_merge($gsTermPayload, ['id' => $gsTermId, 'gradeDeadline' => '2099-12-31']))[0], 'Deadline: saving the same date again is accepted');
 expect_same($gsDeadlineAudit + 1, $gsAuditCount('grade_deadline_changed'), 'Deadline: an unchanged deadline writes no new audit row');
+
+// ---- 11. Fallback when academic_terms has no row for the current term (9.30) ----
+$gsFbClass = $gsMakeClass('FB');
+$pdo->prepare('UPDATE class_sections SET term_end_date = ? WHERE cs_id = ?')->execute(['2026-11-20', $gsFbClass]);
+$gsBioBackup = $gsRows('SELECT profile_id, reference_term_id FROM biometric_profiles WHERE reference_term_id IS NOT NULL');
+$gsTermsBackup = $gsRows('SELECT * FROM academic_terms');
+try {
+    $pdo->exec('UPDATE biometric_profiles SET reference_term_id = NULL WHERE reference_term_id IS NOT NULL');
+    $pdo->exec('DELETE FROM academic_terms');
+    [$gsFallbackStatus, $gsFallbackList] = $gsList('', $adminAccessToken);
+    expect_same(200, $gsFallbackStatus, 'Dean list fallback: 200 when academic_terms is empty');
+    expect_same(0, (int) ($gsFallbackList['term']['id'] ?? -1), 'Dean list fallback: term id is 0');
+    expect_same($gsYear, $gsFallbackList['term']['schoolYear'] ?? null, 'Dean list fallback: schoolYear is current school year');
+    expect_same('1ST', $gsFallbackList['term']['semester'] ?? null, 'Dean list fallback: semester is derived from active classes');
+    $gsFallbackRows = array_column($gsFallbackList['classes'] ?? [], null, 'csId');
+    expect_true(isset($gsFallbackRows[$gsFbClass]), 'Dean list fallback: class is listed when academic_terms is empty');
+    expect_same('2026-12-04', $gsFallbackRows[$gsFbClass]['deadline'] ?? null, 'Dean list fallback: deadline uses class term_end_date + 14 days');
+    expect_true(isset($gsFallbackRows[$gsG1]), 'Dean list fallback: G1 without term_end_date is also listed');
+    expect_same(null, $gsFallbackRows[$gsG1]['deadline'] ?? 'not-null', 'Dean list fallback: G1 without term_end_date has null deadline');
+    [$gsFbCourseStatus, $gsFbCourseList] = $gsList('?courseId=' . $gsCourse, $adminAccessToken);
+    expect_true(isset(array_column($gsFbCourseList['classes'] ?? [], null, 'csId')[$gsFbClass]), 'Dean list fallback: courseId filter works');
+    [$gsFbOtherStatus, $gsFbOtherList] = $gsList('?courseId=999999', $adminAccessToken);
+    expect_same([], $gsFbOtherList['classes'] ?? ['not-empty'], 'Dean list fallback: non-matching courseId returns empty classes');
+} finally {
+    foreach ($gsTermsBackup as $t) {
+        $pdo->prepare('INSERT INTO academic_terms (id, school_year, semester, start_date, end_date, created_by_user_id, updated_by_user_id, created_at, updated_at, grade_deadline) OVERRIDING SYSTEM VALUE VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            ->execute([$t['id'], $t['school_year'], $t['semester'], $t['start_date'], $t['end_date'], $t['created_by_user_id'], $t['updated_by_user_id'], $t['created_at'], $t['updated_at'], $t['grade_deadline']]);
+    }
+    if ($gsTermsBackup !== []) {
+        $pdo->exec("SELECT setval(pg_get_serial_sequence('academic_terms', 'id'), COALESCE((SELECT MAX(id) FROM academic_terms), 1))");
+    }
+    foreach ($gsBioBackup as $b) {
+        $pdo->prepare('UPDATE biometric_profiles SET reference_term_id = ? WHERE profile_id = ?')->execute([$b['reference_term_id'], $b['profile_id']]);
+    }
+}
