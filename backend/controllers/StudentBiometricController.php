@@ -102,20 +102,13 @@ function handle_student_biometric_consent(): void
     try {
         [$config, $pdo, $authCtx, $identity] = student_biometric_controller_context();
         $body = request_body();
-        if (!$body['has_body']) {
+        if (!$body['has_body'] || !is_array($body['data'])) {
             throw new StudentBiometricException('Request body required.', 400, 'BAD_REQUEST');
         }
         $granted = filter_var($body['data']['granted'] ?? null, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
         $disclosureVersion = trim((string) ($body['data']['disclosureVersion'] ?? ''));
         if ($granted === null || $disclosureVersion === '' || strlen($disclosureVersion) > 100) {
             throw new ValidationException([['field' => 'granted', 'message' => 'A boolean consent decision and disclosure version are required.']]);
-        }
-        if (!$granted) {
-            $existing = student_biometric_profile($pdo, $identity['student_id']);
-            if ($existing !== null && $existing['protected_object_reference'] !== null) {
-                student_biometric_require_sidecar($config);
-                student_biometric_sidecar_revoke($config, (string) $existing['protected_object_reference']);
-            }
         }
         $now = attendance_session_now_utc()->format('Y-m-d H:i:s.u');
         $pdo->beginTransaction();
@@ -128,14 +121,13 @@ function handle_student_biometric_consent(): void
                          student_id, consent_status, face_enrolled,
                          consent_disclosure_version, consent_responded_at,
                          enrollment_status, recorded_by_user_id, created_at, updated_at
-                     ) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)"
+                     ) VALUES (?, ?, 0, ?, ?, 'not_enrolled', ?, ?, ?)"
                 );
                 $insert->execute([
                     $identity['student_id'],
                     $granted ? 'approved' : 'declined',
                     $disclosureVersion,
                     $now,
-                    $granted ? 'not_enrolled' : 'revoked',
                     $authCtx['user_id'],
                     $now,
                     $now,
@@ -154,18 +146,51 @@ function handle_student_biometric_consent(): void
                 );
                 $update->execute([$disclosureVersion, $now, $status, $authCtx['user_id'], $now, (int) $row['profile_id']]);
             } else {
+                // Backlog 12.10: consent withdrawal cannot bypass Superadmin-approved revocation (12.9).
+                $recoveredStaleActive = false;
+                if ($row['enrollment_status'] === 'enrolling') {
+                    $enrollingSince = $row['updated_at'] !== null
+                        ? new DateTimeImmutable((string) $row['updated_at'], new DateTimeZone('UTC'))
+                        : null;
+                    $staleBefore = attendance_session_now_utc()->modify('-' . STUDENT_BIOMETRIC_ENROLLING_STALE_SECONDS . ' seconds');
+                    if ($enrollingSince !== null && $enrollingSince > $staleBefore) {
+                        throw new StudentBiometricException(
+                            'A biometric enrollment operation is already in progress. Retry after it finishes.',
+                            409,
+                            'biometric_enrollment_in_progress'
+                        );
+                    }
+                    // Recover stale interrupted enrollment before expiry checks so past-term rows can auto-expire.
+                    $recoveredStatus = $row['protected_object_reference'] !== null ? 'active' : 'not_enrolled';
+                    $recover = $pdo->prepare(
+                        'UPDATE biometric_profiles SET enrollment_status = ?, updated_at = ? WHERE profile_id = ?'
+                    );
+                    $recover->execute([$recoveredStatus, $now, (int) $row['profile_id']]);
+                    $row['enrollment_status'] = $recoveredStatus;
+                    $recoveredStaleActive = ($recoveredStatus === 'active');
+                }
+                // Expire past-term enrollments first so an already-expired face does not block pre-enrollment refusal.
+                $row = student_biometric_expire_if_needed($pdo, $config, $authCtx, $context, $identity['student_id'], $row);
+                $before = student_biometric_snapshot($row);
+                if ($row['enrollment_status'] === 'active' || $row['protected_object_reference'] !== null) {
+                    if ($recoveredStaleActive) {
+                        // Persist the recovered active state so a follow-up revoke-request does not hit no_active_enrollment.
+                        $pdo->commit();
+                    }
+                    throw new StudentBiometricException(
+                        'Face revocation requires Superadmin approval. Submit a revocation request with a reason.',
+                        409,
+                        'revocation_approval_required'
+                    );
+                }
                 $update = $pdo->prepare(
                     "UPDATE biometric_profiles
                         SET consent_status = 'declined', consent_disclosure_version = ?,
-                            consent_responded_at = ?, enrollment_status = 'revoked',
-                            face_enrolled = 0, template_reference = NULL,
-                            image_references = NULL, protected_object_reference = NULL,
-                            reference_expires_on = NULL, usable_sample_count = NULL,
-                            revoked_at = ?, revoked_by_user_id = ?, recorded_by_user_id = ?,
-                            updated_at = ?
+                            consent_responded_at = ?, enrollment_status = ?,
+                            recorded_by_user_id = ?, updated_at = ?
                       WHERE profile_id = ?"
                 );
-                $update->execute([$disclosureVersion, $now, $now, $authCtx['user_id'], $authCtx['user_id'], $now, (int) $row['profile_id']]);
+                $update->execute([$disclosureVersion, $now, $row['enrollment_status'], $authCtx['user_id'], $now, (int) $row['profile_id']]);
             }
             $row = student_biometric_profile($pdo, $identity['student_id'], true);
             // R3: no row when the consent decision did not change.
@@ -1019,7 +1044,7 @@ function handle_student_attendance_location_check(): void
         [$config, $pdo, $authCtx, $identity] = student_biometric_controller_context();
         attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
         $body = request_body();
-        if (!$body['has_body']) {
+        if (!$body['has_body'] || !is_array($body['data'])) {
             throw new StudentBiometricException('Request body required.', 400, 'BAD_REQUEST');
         }
         $data = $body['data'];

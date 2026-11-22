@@ -293,6 +293,269 @@ $ffProfileRow->execute([$ffStuId]);
 $ffProfState = $ffProfileRow->fetch(PDO::FETCH_ASSOC);
 expect_same(['active', 'approved', $ffOriginalRef], [$ffProfState['enrollment_status'], $ffProfState['consent_status'], $ffProfState['protected_object_reference']], 'Legacy DELETE keeps profile active and .sface untouched');
 
+// (a2) Backlog 12.10: PUT /api/student/biometric/consent { granted: false } cannot bypass revocation approval for enrolled Students.
+$ffLogBeforeConsent = count($ffReadSidecarLog());
+$ffConsentAuditCount = static function (int $sid, string $action) use ($pdo): int {
+    $st = $pdo->prepare('SELECT COUNT(*) FROM audit_events WHERE target_type = ? AND target_id = ? AND action_code = ?');
+    $st->execute(['student_biometric_profile', (string) $sid, $action]);
+    return (int) $st->fetchColumn();
+};
+$ffRevokedAuditBefore = $ffConsentAuditCount($ffStuId, 'biometric_consent_revoked');
+[$ffConsentDenyStatus, $ffConsentDenyBody] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffStuToken, [
+    'granted' => false,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(409, $ffConsentDenyStatus, 'PUT /api/student/biometric/consent { granted: false } is blocked with 409 for active enrollment (12.10)');
+expect_same('revocation_approval_required', $ffConsentDenyBody['code'] ?? null, 'Blocked consent withdrawal returns revocation_approval_required (12.10)');
+expect_same($ffLogBeforeConsent, count($ffReadSidecarLog()), 'Blocked consent withdrawal makes zero sidecar revoke calls (12.10)');
+$ffProfileRow->execute([$ffStuId]);
+$ffProfAfterConsentDeny = $ffProfileRow->fetch(PDO::FETCH_ASSOC);
+expect_same(['active', 'approved', $ffOriginalRef], [$ffProfAfterConsentDeny['enrollment_status'], $ffProfAfterConsentDeny['consent_status'], $ffProfAfterConsentDeny['protected_object_reference']], 'Blocked consent withdrawal leaves profile active and .sface untouched (12.10)');
+expect_same($ffRevokedAuditBefore, $ffConsentAuditCount($ffStuId, 'biometric_consent_revoked'), 'Blocked consent withdrawal writes no biometric_consent_revoked audit row (12.10)');
+
+// Pre-enrollment decline, idempotency, enrolling guard, stale enrolling recovery, and expired-active decline (12.10).
+$ffPreEmail = "ff-pre-{$ffTag}@bicol-u.edu.ph";
+$ffPreUserId = $saAccount($ffPreEmail, 'student', "Ff Pre {$ffLetters}", "FF-{$ffTag}-PRE");
+$ffPreId = (int) $pdo->query("SELECT student_id FROM students WHERE student_account_user_id = {$ffPreUserId}")->fetchColumn();
+[, $ffPreLogin] = integration_http_json('/api/auth/login', '', ['email' => $ffPreEmail, 'password' => $saPass]);
+$ffPreToken = (string) ($ffPreLogin['access_token'] ?? '');
+
+// 1) Never enrolled (no row) -> 200, consent declined, enrollment_status stays not_enrolled, audited once.
+$ffLogBeforePre = count($ffReadSidecarLog());
+[$ffPreDecline1Status, $ffPreDecline1Body] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => false,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(200, $ffPreDecline1Status, 'Pre-enrollment consent decline succeeds with 200 (12.10)');
+expect_same(false, $ffPreDecline1Body['consentGranted'] ?? null, 'Pre-enrollment decline sets consentGranted false (12.10)');
+expect_same('not_enrolled', $ffPreDecline1Body['enrollmentStatus'] ?? null, 'Pre-enrollment decline keeps enrollmentStatus not_enrolled instead of revoked (12.10)');
+expect_same(1, $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked'), 'Pre-enrollment decline records biometric_consent_revoked audit row (12.10)');
+expect_same($ffLogBeforePre, count($ffReadSidecarLog()), 'Pre-enrollment decline makes zero sidecar calls (12.10)');
+
+// 2) Repeat decline -> 200, no duplicate audit row (R3).
+[$ffPreDecline2Status] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => false,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(200, $ffPreDecline2Status, 'Repeated pre-enrollment decline is idempotent (12.10)');
+expect_same(1, $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked'), 'Repeated pre-enrollment decline writes no duplicate audit row (12.10)');
+
+// 3) Grant consent -> approved + not_enrolled, then decline again -> declined + not_enrolled.
+[$ffPreGrantStatus, $ffPreGrantBody] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => true,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(200, $ffPreGrantStatus, 'Pre-enrollment consent grant succeeds (12.10)');
+expect_same(true, $ffPreGrantBody['consentGranted'] ?? null, 'Pre-enrollment grant sets consentGranted true (12.10)');
+expect_same(1, $ffConsentAuditCount($ffPreId, 'biometric_consent_granted'), 'Pre-enrollment grant writes biometric_consent_granted audit row (12.10)');
+
+[$ffPreDecline3Status, $ffPreDecline3Body] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => false,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(200, $ffPreDecline3Status, 'Withdrawing pre-enrollment consent before capture succeeds (12.10)');
+expect_same('not_enrolled', $ffPreDecline3Body['enrollmentStatus'] ?? null, 'Withdrawing pre-enrollment consent keeps enrollmentStatus not_enrolled (12.10)');
+expect_same(2, $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked'), 'Withdrawing pre-enrollment consent after grant writes second biometric_consent_revoked audit row (12.10)');
+
+// 4) Fresh enrolling -> 409 biometric_enrollment_in_progress, zero sidecar calls, profile & audit untouched.
+$pdo->prepare("UPDATE biometric_profiles SET consent_status = 'approved', face_enrolled = 0, enrollment_status = 'enrolling', protected_object_reference = NULL, usable_sample_count = NULL, revoked_at = NULL, updated_at = CURRENT_TIMESTAMP(6) WHERE student_id = ?")->execute([$ffPreId]);
+$ffLogBeforeEnrolling = count($ffReadSidecarLog());
+$ffRevokedBeforeEnrolling = $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked');
+[$ffEnrollingStatus, $ffEnrollingBody] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => false,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(409, $ffEnrollingStatus, 'Consent withdrawal during active enrolling returns 409 (12.10)');
+expect_same('biometric_enrollment_in_progress', $ffEnrollingBody['code'] ?? null, 'Consent withdrawal during active enrolling returns biometric_enrollment_in_progress (12.10)');
+expect_same($ffLogBeforeEnrolling, count($ffReadSidecarLog()), 'Consent withdrawal during active enrolling makes zero sidecar calls (12.10)');
+$ffProfileRow->execute([$ffPreId]);
+$ffProfAfterEnrolling = $ffProfileRow->fetch(PDO::FETCH_ASSOC);
+expect_same(['enrolling', 'approved', null], [$ffProfAfterEnrolling['enrollment_status'], $ffProfAfterEnrolling['consent_status'], $ffProfAfterEnrolling['protected_object_reference']], 'Consent withdrawal during active enrolling leaves profile untouched (12.10)');
+expect_same($ffRevokedBeforeEnrolling, $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked'), 'Consent withdrawal during active enrolling writes no biometric_consent_revoked audit row (12.10)');
+
+// 5) Stale enrolling with non-expired protected_object_reference -> recovers to active and returns 409 revocation_approval_required.
+$ffStaleRef = 'sface/stale' . bin2hex(random_bytes(8));
+$pdo->prepare(
+    "UPDATE biometric_profiles
+        SET consent_status = 'approved', face_enrolled = 1, enrollment_status = 'enrolling',
+            protected_object_reference = ?, reference_expires_on = '2099-12-31', usable_sample_count = 25,
+            enrolled_at = CURRENT_TIMESTAMP(6), revoked_at = NULL,
+            updated_at = CURRENT_TIMESTAMP(6) - INTERVAL '10 minutes'
+      WHERE student_id = ?"
+)->execute([$ffStaleRef, $ffPreId]);
+$ffLogBeforeStaleActive = count($ffReadSidecarLog());
+$ffRevokedBeforeStaleActive = $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked');
+[$ffStaleActiveStatus, $ffStaleActiveBody] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => false,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(409, $ffStaleActiveStatus, 'Stale enrolling with existing .sface returns 409 (12.10)');
+expect_same('revocation_approval_required', $ffStaleActiveBody['code'] ?? null, 'Stale enrolling with existing .sface requires revocation approval (12.10)');
+expect_same($ffLogBeforeStaleActive, count($ffReadSidecarLog()), 'Stale enrolling with existing .sface makes zero sidecar calls (12.10)');
+$ffProfileRow->execute([$ffPreId]);
+$ffProfAfterStaleActive = $ffProfileRow->fetch(PDO::FETCH_ASSOC);
+expect_same(['active', 'approved', $ffStaleRef], [$ffProfAfterStaleActive['enrollment_status'], $ffProfAfterStaleActive['consent_status'], $ffProfAfterStaleActive['protected_object_reference']], 'Stale enrolling with existing .sface recovers enrollment_status to active and preserves reference/consent (12.10)');
+expect_same($ffRevokedBeforeStaleActive, $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked'), 'Stale enrolling with existing .sface writes no biometric_consent_revoked audit row (12.10)');
+
+// 5b) Stale enrolling with past-expiry reference_expires_on -> recovers to active, auto-expires via sidecar, and declines (200).
+$ffStaleExpRef = 'sface/staleexp' . bin2hex(random_bytes(8));
+$pdo->prepare(
+    "UPDATE biometric_profiles
+        SET consent_status = 'approved', face_enrolled = 1, enrollment_status = 'enrolling',
+            protected_object_reference = ?, reference_expires_on = '2020-12-31', usable_sample_count = 25,
+            enrolled_at = CURRENT_TIMESTAMP(6), revoked_at = NULL,
+            updated_at = CURRENT_TIMESTAMP(6) - INTERVAL '10 minutes'
+      WHERE student_id = ?"
+)->execute([$ffStaleExpRef, $ffPreId]);
+$ffLogBeforeStaleExp = count($ffReadSidecarLog());
+$ffRevokedBeforeStaleExp = $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked');
+[$ffStaleExpStatus, $ffStaleExpBody] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => false,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(200, $ffStaleExpStatus, 'Stale enrolling with past-expiry .sface auto-expires and returns 200 (12.10)');
+expect_same(false, $ffStaleExpBody['consentGranted'] ?? null, 'Stale enrolling past-expiry decline sets consentGranted false (12.10)');
+expect_same('expired', $ffStaleExpBody['enrollmentStatus'] ?? null, 'Stale enrolling past-expiry decline sets enrollmentStatus expired (12.10)');
+$ffLogAfterStaleExp = array_slice($ffReadSidecarLog(), $ffLogBeforeStaleExp);
+expect_true(count(array_filter($ffLogAfterStaleExp, static fn(array $e): bool => ($e['path'] ?? '') === '/v1/reference/revoke' && ($e['json']['protectedObjectReference'] ?? '') === $ffStaleExpRef)) === 1, 'Stale enrolling past-expiry decline revokes expired sidecar reference (12.10)');
+$ffProfileRow->execute([$ffPreId]);
+$ffProfAfterStaleExp = $ffProfileRow->fetch(PDO::FETCH_ASSOC);
+expect_same(['expired', 'declined', null], [$ffProfAfterStaleExp['enrollment_status'], $ffProfAfterStaleExp['consent_status'], $ffProfAfterStaleExp['protected_object_reference']], 'Stale enrolling past-expiry decline persists expired/declined and clears reference (12.10)');
+expect_same($ffRevokedBeforeStaleExp + 1, $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked'), 'Stale enrolling past-expiry decline records biometric_consent_revoked once (12.10)');
+
+// 6) Stale enrolling without a protected_object_reference -> recovers to not_enrolled and declines (200).
+$pdo->prepare("UPDATE biometric_profiles SET consent_status = 'approved', face_enrolled = 0, enrollment_status = 'enrolling', protected_object_reference = NULL, reference_expires_on = NULL, usable_sample_count = NULL, enrolled_at = NULL, revoked_at = NULL, updated_at = CURRENT_TIMESTAMP(6) - INTERVAL '10 minutes' WHERE student_id = ?")->execute([$ffPreId]);
+[$ffStaleNoneStatus, $ffStaleNoneBody] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => false,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(200, $ffStaleNoneStatus, 'Stale enrolling without .sface recovers and allows consent decline (12.10)');
+expect_same('not_enrolled', $ffStaleNoneBody['enrollmentStatus'] ?? null, 'Stale enrolling recovery sets enrollmentStatus not_enrolled (12.10)');
+
+// 7) Active enrollment past reference_expires_on -> auto-expires first, then allows consent decline while preserving expired status.
+$ffExpiredRef = 'sface/exp' . bin2hex(random_bytes(8));
+$pdo->prepare("UPDATE biometric_profiles SET consent_status = 'approved', face_enrolled = 1, enrollment_status = 'active', protected_object_reference = ?, reference_expires_on = '2020-12-31', usable_sample_count = 25, enrolled_at = CURRENT_TIMESTAMP(6), revoked_at = NULL WHERE student_id = ?")->execute([$ffExpiredRef, $ffPreId]);
+$ffLogBeforeExp = count($ffReadSidecarLog());
+[$ffExpDeclineStatus, $ffExpDeclineBody] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => false,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(200, $ffExpDeclineStatus, 'Consent decline on past-expiry active profile auto-expires cleanly and returns 200 (12.10)');
+expect_same(false, $ffExpDeclineBody['consentGranted'] ?? null, 'Past-expiry consent decline sets consentGranted false (12.10)');
+expect_same('expired', $ffExpDeclineBody['enrollmentStatus'] ?? null, 'Past-expiry consent decline preserves enrollmentStatus expired (12.10)');
+$ffLogAfterExp = array_slice($ffReadSidecarLog(), $ffLogBeforeExp);
+expect_true(count(array_filter($ffLogAfterExp, static fn(array $e): bool => ($e['path'] ?? '') === '/v1/reference/revoke' && ($e['json']['protectedObjectReference'] ?? '') === $ffExpiredRef)) === 1, 'Past-expiry consent decline revokes only the expired sidecar reference via expiry path (12.10)');
+
+// 8) Revoked profile with approved consent (post-Superadmin direct revoke state) + granted: false -> 200, preserves revoked, audited once, R3 repeat no-op.
+$pdo->prepare(
+    "UPDATE biometric_profiles
+        SET consent_status = 'approved', face_enrolled = 0, enrollment_status = 'revoked',
+            protected_object_reference = NULL, reference_expires_on = NULL, usable_sample_count = NULL,
+            revoked_at = CURRENT_TIMESTAMP(6), updated_at = CURRENT_TIMESTAMP(6)
+      WHERE student_id = ?"
+)->execute([$ffPreId]);
+$ffLogBeforeRevDecline = count($ffReadSidecarLog());
+$ffRevokedBefore8 = $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked');
+[$ffRevDecline1Status, $ffRevDecline1Body] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => false,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(200, $ffRevDecline1Status, 'Consent decline on revoked+approved profile succeeds with 200 (12.10)');
+expect_same(false, $ffRevDecline1Body['consentGranted'] ?? null, 'Revoked+approved decline sets consentGranted false (12.10)');
+expect_same('revoked', $ffRevDecline1Body['enrollmentStatus'] ?? null, 'Revoked+approved decline preserves enrollmentStatus revoked (12.10)');
+expect_same($ffRevokedBefore8 + 1, $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked'), 'Revoked+approved decline records biometric_consent_revoked once (12.10)');
+expect_same($ffLogBeforeRevDecline, count($ffReadSidecarLog()), 'Revoked+approved decline makes zero sidecar calls (12.10)');
+[$ffRevDecline2Status, $ffRevDecline2Body] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => false,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(200, $ffRevDecline2Status, 'Repeat consent decline on revoked+declined profile returns 200 (12.10)');
+expect_same('revoked', $ffRevDecline2Body['enrollmentStatus'] ?? null, 'Repeat consent decline on revoked profile preserves enrollmentStatus revoked (12.10)');
+expect_same($ffRevokedBefore8 + 1, $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked'), 'Repeat consent decline on revoked profile writes no duplicate audit row (12.10)');
+expect_same($ffLogBeforeRevDecline, count($ffReadSidecarLog()), 'Repeat consent decline on revoked profile makes zero sidecar calls (12.10)');
+
+// 9) Already expired profile with approved consent + granted: false -> 200, preserves expired, audited once, R3 repeat no-op.
+$pdo->prepare(
+    "UPDATE biometric_profiles
+        SET consent_status = 'approved', face_enrolled = 0, enrollment_status = 'expired',
+            protected_object_reference = NULL, reference_expires_on = '2020-12-31', usable_sample_count = NULL,
+            revoked_at = NULL, updated_at = CURRENT_TIMESTAMP(6)
+      WHERE student_id = ?"
+)->execute([$ffPreId]);
+$ffLogBeforeAlreadyExp = count($ffReadSidecarLog());
+$ffRevokedBefore9 = $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked');
+[$ffAlreadyExp1Status, $ffAlreadyExp1Body] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => false,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(200, $ffAlreadyExp1Status, 'Consent decline on already-expired+approved profile succeeds with 200 (12.10)');
+expect_same(false, $ffAlreadyExp1Body['consentGranted'] ?? null, 'Already-expired decline sets consentGranted false (12.10)');
+expect_same('expired', $ffAlreadyExp1Body['enrollmentStatus'] ?? null, 'Already-expired decline preserves enrollmentStatus expired (12.10)');
+expect_same($ffRevokedBefore9 + 1, $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked'), 'Already-expired decline records biometric_consent_revoked once (12.10)');
+expect_same($ffLogBeforeAlreadyExp, count($ffReadSidecarLog()), 'Already-expired decline makes zero sidecar calls (12.10)');
+[$ffAlreadyExp2Status, $ffAlreadyExp2Body] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => false,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(200, $ffAlreadyExp2Status, 'Repeat consent decline on expired+declined profile returns 200 (12.10)');
+expect_same('expired', $ffAlreadyExp2Body['enrollmentStatus'] ?? null, 'Repeat consent decline on expired profile preserves enrollmentStatus expired (12.10)');
+expect_same($ffRevokedBefore9 + 1, $ffConsentAuditCount($ffPreId, 'biometric_consent_revoked'), 'Repeat consent decline on expired profile writes no duplicate audit row (12.10)');
+expect_same($ffLogBeforeAlreadyExp, count($ffReadSidecarLog()), 'Repeat consent decline on expired profile makes zero sidecar calls (12.10)');
+
+// 11) granted: true regression checks on revoked, expired, and active profiles (including R3 repeat-grant check).
+$pdo->prepare(
+    "UPDATE biometric_profiles
+        SET consent_status = 'declined', face_enrolled = 0, enrollment_status = 'revoked',
+            protected_object_reference = NULL, reference_expires_on = NULL, usable_sample_count = NULL,
+            revoked_at = CURRENT_TIMESTAMP(6), updated_at = CURRENT_TIMESTAMP(6)
+      WHERE student_id = ?"
+)->execute([$ffPreId]);
+$ffLogBeforeGrantRev = count($ffReadSidecarLog());
+$ffGrantedBefore11a = $ffConsentAuditCount($ffPreId, 'biometric_consent_granted');
+[$ffGrantRevStatus, $ffGrantRevBody] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => true,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(200, $ffGrantRevStatus, 'Consent grant on revoked profile succeeds with 200 (12.10)');
+expect_same(true, $ffGrantRevBody['consentGranted'] ?? null, 'Consent grant on revoked profile sets consentGranted true (12.10)');
+expect_same('not_enrolled', $ffGrantRevBody['enrollmentStatus'] ?? null, 'Consent grant on revoked profile resets enrollmentStatus to not_enrolled (12.10)');
+expect_same($ffGrantedBefore11a + 1, $ffConsentAuditCount($ffPreId, 'biometric_consent_granted'), 'Consent grant on revoked profile records biometric_consent_granted (12.10)');
+expect_same($ffLogBeforeGrantRev, count($ffReadSidecarLog()), 'Consent grant on revoked profile makes zero sidecar calls (12.10)');
+
+$pdo->prepare(
+    "UPDATE biometric_profiles
+        SET consent_status = 'declined', face_enrolled = 0, enrollment_status = 'expired',
+            protected_object_reference = NULL, reference_expires_on = '2020-12-31', usable_sample_count = NULL,
+            revoked_at = NULL, updated_at = CURRENT_TIMESTAMP(6)
+      WHERE student_id = ?"
+)->execute([$ffPreId]);
+$ffLogBeforeGrantExp = count($ffReadSidecarLog());
+$ffGrantedBefore11b = $ffConsentAuditCount($ffPreId, 'biometric_consent_granted');
+[$ffGrantExpStatus, $ffGrantExpBody] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffPreToken, [
+    'granted' => true,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(200, $ffGrantExpStatus, 'Consent grant on expired profile succeeds with 200 (12.10)');
+expect_same(true, $ffGrantExpBody['consentGranted'] ?? null, 'Consent grant on expired profile sets consentGranted true (12.10)');
+expect_same('not_enrolled', $ffGrantExpBody['enrollmentStatus'] ?? null, 'Consent grant on expired profile resets enrollmentStatus to not_enrolled (12.10)');
+expect_same($ffGrantedBefore11b + 1, $ffConsentAuditCount($ffPreId, 'biometric_consent_granted'), 'Consent grant on expired profile records biometric_consent_granted (12.10)');
+expect_same($ffLogBeforeGrantExp, count($ffReadSidecarLog()), 'Consent grant on expired profile makes zero sidecar calls (12.10)');
+
+$ffLogBeforeStuGrant = count($ffReadSidecarLog());
+$ffStuGrantedBefore = $ffConsentAuditCount($ffStuId, 'biometric_consent_granted');
+[$ffStuGrantStatus, $ffStuGrantBody] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffStuToken, [
+    'granted' => true,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(200, $ffStuGrantStatus, 'Consent grant on active+approved profile succeeds with 200 (12.10)');
+expect_same(true, $ffStuGrantBody['consentGranted'] ?? null, 'Consent grant on active+approved profile keeps consentGranted true (12.10)');
+expect_same('active', $ffStuGrantBody['enrollmentStatus'] ?? null, 'Consent grant on active+approved profile preserves enrollmentStatus active (12.10)');
+$ffProfileRow->execute([$ffStuId]);
+$ffProfAfterStuGrant = $ffProfileRow->fetch(PDO::FETCH_ASSOC);
+expect_same(['active', 'approved', $ffOriginalRef], [$ffProfAfterStuGrant['enrollment_status'], $ffProfAfterStuGrant['consent_status'], $ffProfAfterStuGrant['protected_object_reference']], 'Consent grant on active+approved profile keeps .sface active (12.10)');
+expect_same($ffStuGrantedBefore, $ffConsentAuditCount($ffStuId, 'biometric_consent_granted'), 'Consent grant on already-approved active profile writes no duplicate biometric_consent_granted audit row (12.10)');
+expect_same($ffLogBeforeStuGrant, count($ffReadSidecarLog()), 'Consent grant on active+approved profile makes zero sidecar calls (12.10)');
+
 // (b) POST /api/student/biometrics/revoke-request validation, creation, duplicate 409, GET profile state, attendance while pending, DELETE cancel + 404.
 [$ffShortReqStatus] = integration_http_json('/api/student/biometrics/revoke-request', $ffStuToken, ['reason' => 'Too']);
 expect_same(422, $ffShortReqStatus, 'Revoke request rejects reason shorter than 8 characters');
@@ -313,6 +576,24 @@ expect_same('revoke_request_pending', $ffDupReqBody['code'] ?? null, 'Duplicate 
 
 [$ffGetBioStatus, $ffGetBioBody] = integration_http_get_json('/api/student/biometrics', $ffStuToken);
 expect_true($ffGetBioStatus === 200 && ($ffGetBioBody['pendingRevokeRequest']['requestId'] ?? null) === $ffReqId1 && array_key_exists('latestRejectedRevokeRequest', $ffGetBioBody) && $ffGetBioBody['latestRejectedRevokeRequest'] === null, 'GET /api/student/biometrics exposes pendingRevokeRequest');
+
+// 10) Active profile with pending revoke request + consent granted: false -> 409 revocation_approval_required, zero sidecar calls, profile & pending request untouched.
+$ffLogBeforePendingDeny = count($ffReadSidecarLog());
+$ffRevokedBeforePendingDeny = $ffConsentAuditCount($ffStuId, 'biometric_consent_revoked');
+[$ffPendingDenyStatus, $ffPendingDenyBody] = $ffSidecarHttpJson('PUT', '/api/student/biometric/consent', $ffStuToken, [
+    'granted' => false,
+    'disclosureVersion' => 'v1.1-2026-09',
+]);
+expect_same(409, $ffPendingDenyStatus, 'Consent withdrawal while revoke request is pending returns 409 (12.10)');
+expect_same('revocation_approval_required', $ffPendingDenyBody['code'] ?? null, 'Consent withdrawal while revoke request is pending returns revocation_approval_required (12.10)');
+expect_same($ffLogBeforePendingDeny, count($ffReadSidecarLog()), 'Consent withdrawal while revoke request is pending makes zero sidecar calls (12.10)');
+expect_same($ffRevokedBeforePendingDeny, $ffConsentAuditCount($ffStuId, 'biometric_consent_revoked'), 'Consent withdrawal while revoke request is pending writes no biometric_consent_revoked audit row (12.10)');
+$ffProfileRow->execute([$ffStuId]);
+$ffProfAfterPendingDeny = $ffProfileRow->fetch(PDO::FETCH_ASSOC);
+expect_same(['active', 'approved', $ffOriginalRef], [$ffProfAfterPendingDeny['enrollment_status'], $ffProfAfterPendingDeny['consent_status'], $ffProfAfterPendingDeny['protected_object_reference']], 'Consent withdrawal while revoke request is pending keeps profile active/approved (12.10)');
+$ffPendingReqStmt = $pdo->prepare('SELECT status FROM face_revoke_requests WHERE request_id = ?');
+$ffPendingReqStmt->execute([$ffReqId1]);
+expect_same('pending', $ffPendingReqStmt->fetchColumn(), 'Consent withdrawal while revoke request is pending leaves pending request untouched (12.10)');
 
 // Verify Student can still check in for attendance while revocation request is pending.
 $ffTodayManila = (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d');

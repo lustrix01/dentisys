@@ -186,7 +186,20 @@ biometric_expect_true(
     array_key_exists('pendingRevokeRequest', $profileResponse) && array_key_exists('latestRejectedRevokeRequest', $profileResponse),
     'Biometric profile response exposes pendingRevokeRequest and latestRejectedRevokeRequest'
 );
-biometric_expect_true(str_contains($controller, "status = 'revoked'") && str_contains($controller, "attendance_session_fetch_for_student"), 'Revocation blocks Student capture while preserving the session record path');
+$attendanceSessionsSource = file_get_contents(dirname(__DIR__, 2) . '/backend/app/attendance_sessions.php');
+$revokedSessionDecision = attendance_session_timing_decision(
+    array_merge($session, ['status' => 'revoked']),
+    new DateTimeImmutable('2026-09-22 00:30:00', new DateTimeZone('UTC')),
+    $config
+);
+biometric_expect_true(
+    $revokedSessionDecision['allowed'] === false
+        && $revokedSessionDecision['code'] === 'session_revoked'
+        && str_contains($attendanceSessionsSource, "\$status === 'revoked'")
+        && str_contains($controller, 'attendance_session_fetch_for_student')
+        && str_contains($controller, "strtolower((string) \$session['status']) !== 'active'"),
+    'Revocation blocks Student capture while preserving the session record path'
+);
 biometric_expect_true(
     str_contains($controller, 'function handle_student_biometric_guidance')
         && str_contains($controller, 'student_biometric_validate_guidance_challenge')
@@ -202,6 +215,21 @@ biometric_expect_true(
 );
 biometric_expect_true(str_contains($controller, 'function handle_student_attendance_logs') && str_contains($controller, 'WHERE e.student_id = ?'), 'Student attendance logs are scoped to the authenticated Student identity');
 biometric_expect_true(str_contains($controller, "biometric_enrollment_succeeded") && str_contains($controller, "biometric_revoke_requested") && str_contains($controller, "biometric_revoke_request_cancelled"), 'Biometric profile and revocation-request lifecycle actions are audited');
+$consentFnStart = strpos($controller, 'function handle_student_biometric_consent()');
+$consentFnEnd = strpos($controller, 'function handle_student_biometric_challenge()');
+biometric_expect_true($consentFnStart !== false && $consentFnEnd !== false && $consentFnEnd > $consentFnStart, 'Consent handler is located in StudentBiometricController');
+$consentFnSource = substr($controller, (int) $consentFnStart, (int) $consentFnEnd - (int) $consentFnStart);
+biometric_expect_true(!str_contains($consentFnSource, 'student_biometric_sidecar_revoke'), 'Consent handler never directly deletes a biometric reference in the sidecar (12.10)');
+biometric_expect_true(
+    str_contains($consentFnSource, 'student_biometric_expire_if_needed')
+        && str_contains($consentFnSource, "'biometric_enrollment_in_progress'")
+        && str_contains($consentFnSource, "'revocation_approval_required'"),
+    'Consent handler checks expiry and blocks active/enrolling withdrawal without Superadmin approval (12.10)'
+);
+biometric_expect_true(
+    str_contains($consentFnSource, "!is_array(\$body['data'])"),
+    'Consent handler rejects non-array JSON request bodies before reading consent fields'
+);
 $facultyController = file_get_contents(dirname(__DIR__, 2) . '/backend/controllers/FacultyController.php');
 $secretaryController = file_get_contents(dirname(__DIR__, 2) . '/backend/controllers/SecretaryController.php');
 biometric_expect_true(str_contains($facultyController, 'attendance_session_require_timing_for_biometric') && str_contains($secretaryController, 'attendance_session_require_timing_for_biometric'), 'Faculty and Secretary session creation enforce timing for biometric-required sessions');

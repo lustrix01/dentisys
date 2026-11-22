@@ -38,9 +38,16 @@ starting a second sidecar operation while the first request may still finish.
 {"granted":true,"disclosureVersion":"v1.0-2026"}
 ```
 
-Consent is required before enrollment or attendance capture. `DELETE
-/api/student/biometric/profile` revokes consent and enrollment. The server
-revokes the sidecar reference before clearing the database metadata.
+Consent is required before enrollment or attendance capture. `PUT
+/api/student/biometric/consent` with `{"granted":false,...}` is allowed only
+before enrollment (or after expiry/revocation) and records `consent_status =
+'declined'` without touching the sidecar; for an active enrollment it returns
+`409 revocation_approval_required`, and for an in-flight enrollment it returns
+`409 biometric_enrollment_in_progress`. `DELETE /api/student/biometric/profile`
+and `DELETE /api/student/biometrics` return `409 revocation_approval_required`;
+enrolled Students submit a revocation request via `POST
+/api/student/biometrics/revoke-request` for Superadmin approval, which revokes
+the sidecar reference before clearing the database metadata.
 
 `POST /api/student/biometric/liveness/challenge` accepts JSON:
 
@@ -163,7 +170,8 @@ The backend uses the normal error envelope with these biometric codes:
 
 `AUTHENTICATION_REQUIRED`, `ACCESS_DENIED`, `consent_required`,
 `biometric_not_enrolled`, `enrollment_expired`, `session_not_active`,
-`biometric_enrollment_in_progress`,
+`biometric_enrollment_in_progress`, `revocation_approval_required`,
+`revoke_request_pending`, `no_pending_revoke_request`, `face_update_mismatch`,
 `attendance_not_open`, `attendance_capture_closed`, `challenge_invalid`,
 `challenge_expired`, `idempotency_key_required`, `idempotency_conflict`,
 `liveness_failed`, `biometric_verification_failed`, `quality_failed`,
