@@ -327,6 +327,7 @@ $expectedMigrations = [
     '070_auth_session_remember.sql',
     '071_grade_submission.sql',
     '072_face_revoke_requests.sql',
+    '073_grade_release_gates.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -3382,9 +3383,9 @@ expect_true(!str_contains($historyJson, 'History grouping subject') && !str_cont
 expect_true(!str_contains(json_encode($otherHistoryBody, JSON_THROW_ON_ERROR), 'legacy.history@bicol-u.edu.ph'), 'Another sender never sees these actions');
 $pdo->prepare('DELETE FROM email_outbox WHERE email_id = ?')->execute([$legacyHistoryEmailId]);
 
-// Owner decision: a computed grade that moves an enrollment into remedial, or
-// clears it, notifies the Student once per change. A 5.0 uses irregular
-// reenrollment instead and must not send a remedial notice. Rolled back afterwards.
+// GRD-004 Q5 (12.12): auto-save / recompute (faculty_save_computed_grade) never sends
+// remedial_assignment notifications; notifications are sent on Submit grades and Dean Approve.
+// Rolled back afterwards.
 $pdo->beginTransaction();
 try {
     $pdo->prepare("UPDATE enrollments SET retention_state = 'active', retention_override_state = NULL, retention_override_gwa = NULL WHERE enrollment_id = ?")
@@ -3396,13 +3397,10 @@ try {
     };
     faculty_save_computed_grade($pdo, 70.0, 5.0, 'remedial', ['fixture' => 'remedial'], $demoStudentEnrollmentId);
     expect_same(0, $gradeNotificationCount(), 'A 5.0 irregular reenrollment grade does not send a remedial notice');
-    faculty_save_computed_grade($pdo, 70.0, 5.0, 'remedial', ['fixture' => 'remedial'], $demoStudentEnrollmentId);
-    expect_same(0, $gradeNotificationCount(), 'Recomputing a 5.0 sends no remedial notice');
+    faculty_save_computed_grade($pdo, 68.0, 2.6, 'remedial', ['fixture' => 'remedial'], $demoStudentEnrollmentId);
+    expect_same(0, $gradeNotificationCount(), 'Auto-saving a 2.6 remedial grade sends no remedial notice before Submit');
     faculty_save_computed_grade($pdo, 90.0, 1.75, 'active', ['fixture' => 'cleared'], $demoStudentEnrollmentId);
-    expect_same(1, $gradeNotificationCount(), 'Clearing the stored remedial state through a computed grade notifies the Student once');
-    $clearedTitle = $pdo->prepare("SELECT title FROM notifications WHERE entity_type = 'enrollment' AND entity_id = ? AND deduplication_key LIKE 'grade-retention:%:remedial:active:%'");
-    $clearedTitle->execute([(string) $demoStudentEnrollmentId]);
-    expect_true(str_starts_with((string) $clearedTitle->fetchColumn(), 'Remedial no longer required'), 'The clearing notification says remedial is no longer required');
+    expect_same(0, $gradeNotificationCount(), 'Clearing a stored remedial state through auto-save sends no remedial notice before Submit');
 } finally {
     $pdo->rollBack();
 }
@@ -3429,6 +3427,10 @@ $studentNotificationGradeStateStmt = $pdo->prepare(
 $studentNotificationGradeStateStmt->execute([$studentNotificationEnrollmentId]);
 $studentNotificationOriginalGradeState = $studentNotificationGradeStateStmt->fetch(PDO::FETCH_ASSOC);
 expect_true(is_array($studentNotificationOriginalGradeState), 'Notification fixture enrollment grade state is readable');
+// The remedial and report fixtures below require the class grades to be submitted (GRD-004 12.12);
+// mark $studentClassId submitted for this block and restore it afterwards so later assessment tests stay editable.
+$pdo->prepare('UPDATE class_sections SET grades_submitted_at = CURRENT_TIMESTAMP, grades_grace_until = NULL WHERE cs_id = ?')
+    ->execute([$studentClassId]);
 // The legacy remedial endpoint correctly requires an eligible completed grade;
 // make this test enrollment eligible and restore its original state afterwards.
 $pdo->prepare("UPDATE enrollments SET final_gwa = 2.5, retention_state = 'active' WHERE enrollment_id = ?")
@@ -3760,7 +3762,7 @@ $facultyReportGwaStmt = $pdo->prepare(
        JOIN user_accounts ua ON ua.user_id = cs.instructor_user_id
        LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
       WHERE e.student_id = ? AND ua.login_email = 'faculty@bicol-u.edu.ph'
-        AND LOWER(e.status) = 'active' AND COALESCE(egb.final_gwa, e.final_gwa) IS NOT NULL"
+        AND LOWER(e.status) = 'active' AND cs.grades_submitted_at IS NOT NULL AND COALESCE(egb.final_gwa, e.final_gwa) IS NOT NULL"
 );
 $facultyReportGwaStmt->execute([$invitedStudentId]);
 expect_same((float) $facultyReportGwaStmt->fetchColumn(), (float) ($facultyReportStudent['overallGWA'] ?? 0), 'Faculty report overall GWA is the unit-weighted average, not the last class grade');
@@ -3934,8 +3936,11 @@ $remedialStudentRow = array_values(array_filter(
 expect_true(is_array($remedialStudentRow), 'Student retention reload includes the canonical remedial enrollment');
 expect_same('passed', $remedialStudentRow['remedialProgression']['stage'] ?? null, 'Student sees the same server-owned remedial stage as Faculty');
 
+// Simulate a withdrawn submission before recomputing, then re-submit for the remaining remedial checks.
+$pdo->prepare('UPDATE class_sections SET grades_submitted_at = NULL, grades_grace_until = NULL WHERE cs_id = ?')->execute([$studentClassId]);
 [$remedialComputeStatus] = integration_http_json('/api/faculty/grades/compute', $seedFacultyAccessToken, ['classId' => (string) $studentClassId]);
 expect_same(200, $remedialComputeStatus, 'Ordinary grade recomputation returns HTTP 200 after remedial progression');
+$pdo->prepare('UPDATE class_sections SET grades_submitted_at = CURRENT_TIMESTAMP, grades_grace_until = NULL WHERE cs_id = ?')->execute([$studentClassId]);
 $remedialRowsStmt->execute([$invitedEnrollmentId]);
 expect_same(2, count($remedialRowsStmt->fetchAll(PDO::FETCH_ASSOC)), 'Ordinary grade recomputation does not erase canonical remedial progression');
 $remedialOriginalStmt->execute([$invitedEnrollmentId]);
@@ -4013,6 +4018,8 @@ expect_same('legacy_unclassified', $legacyReloadRow['remedialProgression']['stag
 [$legacyCanonicalWriteStatus, $legacyCanonicalWriteBody] = $remedialPost((int) $studentNotificationTarget['enrollment_id'], ['attemptNumber' => 1, 'percentage' => 50], $seedFacultyAccessToken);
 expect_same(409, $legacyCanonicalWriteStatus, 'Canonical remedial write does not start a sequence from ambiguous legacy JSON');
 expect_same('REMEDIAL_LEGACY_UNCLASSIFIED', $remedialErrorCode($legacyCanonicalWriteBody), 'Ambiguous legacy remedial data returns a reconciliation error');
+$pdo->prepare('UPDATE class_sections SET grades_submitted_at = NULL, grades_grace_until = NULL, grades_submitted_by = NULL WHERE cs_id = ?')
+    ->execute([$studentClassId]);
 
 $studentRefresh = auth_runtime_refresh($pdo, $studentConfig, $studentContext, $studentCredentials['refresh_token']);
 expect_same('rotated', $studentRefresh['type'], 'Established Student refresh succeeds when Student auth is disabled');
@@ -8120,6 +8127,7 @@ require __DIR__ . '/superadmin_split_integration.php';
 require __DIR__ . '/superadmin_classes_integration.php';
 require __DIR__ . '/grade_submission_integration.php';
 require __DIR__ . '/grade_change_integration.php';
+require __DIR__ . '/grade_release_gates_integration.php';
 require __DIR__ . '/face_flags_integration.php';
 require __DIR__ . '/audit_chain_integration.php';
 require __DIR__ . '/trusted_devices_integration.php';

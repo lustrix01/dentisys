@@ -161,7 +161,7 @@ export const RealStudentDashboard: React.FC = () => {
   const { student, summary, classes } = data;
   const standingChip = (cls: (typeof classes)[number]) => {
     const retentionKey = cls.retentionState?.toLowerCase();
-    const noGradeYet = cls.grade === null && (!cls.retentionState || retentionKey === 'active');
+    const noGradeYet = cls.grade === null;
     return (
       <span
         className={`inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold ${

@@ -145,3 +145,39 @@ test('Reports and dashboards show computed retention only, with At Risk and no l
 test('API error mapping: a 404 shows the backend message instead of the generic text', () => {
   assert.match(apiClient, /if \(status === 404\) return backendMessage \|\| 'The requested record was not found\.';/);
 });
+
+test('12.12 + 12.13: Retention Monitoring & Email Management show signpost banners to /grades and disable Remedial controls while unsubmitted or open grade change', () => {
+  const emailPage = fs.readFileSync(path.join(currentDirectory, '../pages/faculty/EmailManagement.tsx'), 'utf8');
+
+  // Signpost banners link directly to /grades with no duplicate publish/submit buttons.
+  for (const pageText of [retentionPage, emailPage]) {
+    assert.match(pageText, /unpublishedMidtermClassCount > 0/);
+    assert.match(pageText, /unsubmittedFinalClassCount > 0/);
+    assert.match(pageText, /<Link to="\/grades"[^>]*>\s*Open Grade Computation\s*<\/Link>/);
+    assert.doesNotMatch(pageText, /publishMidtermAdvisoryApi|gradeSubmissionActionApi/);
+  }
+
+  // Retention Monitoring disables remedial actions when gradesSubmitted === false or hasOpenGradeChange === true.
+  assert.match(retentionPage, /record\.gradesSubmitted === false \|\| cls\?\.gradesSubmitted === false/);
+  assert.match(retentionPage, /record\.hasOpenGradeChange === true \|\| cls\?\.gradeChangeStatus === 'draft' \|\| cls\?\.gradeChangeStatus === 'pending'/);
+  assert.match(retentionPage, /remedialWriteBlockedReason\(row\.record\) === null/);
+  assert.match(retentionPage, /const blocked = remedialWriteBlockedReason\(record\);\s*const disabled = !canScheduleRecord\(record\) \|\| Boolean\(blocked\);/);
+  assert.match(retentionPage, /disabled=\{Boolean\(blocked\)\}/);
+
+  // Email Management disables remedial selection and date editing when grades are unsubmitted or a grade change is open.
+  assert.match(emailPage, /row\.gradesSubmitted === false/);
+  assert.match(emailPage, /row\.hasOpenGradeChange === true/);
+  assert.match(emailPage, /disabled=\{!isOfficialBicolEmail\(row\.email\) \|\| !hasScheduledDate \|\| rowBlocked\}/);
+  assert.match(emailPage, /disabled=\{rowBlocked\}/);
+});
+
+test('12.12 + 12.13: Student retention surfaces respect published midterm flag and never show Cleared when grade is null', () => {
+  const studentPage = fs.readFileSync(path.join(currentDirectory, '../pages/student/RetentionMonitoring.tsx'), 'utf8');
+  const studentSurfaces = fs.readFileSync(path.join(currentDirectory, '../pages/student/RealStudentSurfaces.tsx'), 'utf8');
+
+  assert.match(studentPage, /Boolean\(r\.midtermEvaluation\?\.isAtRisk\)\s*&& r\.midtermEvaluation\?\.published !== false\s*&& r\.grade === null/);
+  assert.match(studentPage, /r\.midtermEvaluation && r\.midtermEvaluation\.published !== false && !r\.midtermEvaluation\.complete/);
+  assert.match(studentPage, /isPending \? 'In progress' : isAtRisk \? 'Deficient' : 'Cleared'/);
+  assert.match(studentSurfaces, /const noGradeYet = cls\.grade === null;/);
+  assert.match(studentSurfaces, /noGradeYet \? 'No grade yet' : retentionStateLabel\(cls\.retentionState\)/);
+});

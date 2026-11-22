@@ -310,6 +310,7 @@ export const GradeComputation: React.FC = () => {
   const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>('');
   const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
+  const [submissionRefreshKey, setSubmissionRefreshKey] = useState(0);
 
   const [loading, setLoading] = useState(true);
 
@@ -1253,6 +1254,7 @@ export const GradeComputation: React.FC = () => {
       }
       await refreshAssessments();
       setSelectedClassId(assClassId);
+      setSubmissionRefreshKey(k => k + 1);
       showFeedback(response.message || 'Assessment saved successfully.', 'success');
       setIsAssessmentModalOpen(false);
     } catch (requestError) {
@@ -1424,6 +1426,7 @@ export const GradeComputation: React.FC = () => {
 
   // The save endpoint recomputes the class's grades itself and returns the results.
   const showRecomputeNotice = (response?: { results?: FacultyGradeComputeResult[]; recomputeFailed?: boolean }): void => {
+    setSubmissionRefreshKey(k => k + 1);
     if (response?.recomputeFailed) {
       showFeedback('Scores saved, but persisted grade recomputation could not complete.', 'info');
     } else if (response?.results?.some(result => result.status === 'incomplete_attendance')) {
@@ -3048,6 +3051,7 @@ export const GradeComputation: React.FC = () => {
       }
       setAssessmentAssignments({});
       setComponentMappingError(null);
+      setSubmissionRefreshKey(k => k + 1);
       showFeedback('Grade weights saved successfully.', 'success');
     } catch (err) {
       if (err instanceof ApiError) {
@@ -3476,7 +3480,12 @@ export const GradeComputation: React.FC = () => {
       </Card>
 
       {selectedClass && selectedClassIsCurrentActive && (
-        <GradeSubmissionBanner key={`${selectedClass.csId}-${selectedClass.gradesSubmitted}-${selectedClass.gradeChangeStatus}`} classItem={selectedClass} onChanged={reloadClasses} />
+        <GradeSubmissionBanner
+          key={selectedClass.csId}
+          classItem={selectedClass}
+          onChanged={reloadClasses}
+          refreshToken={`${selectedClass.gradesSubmitted}-${selectedClass.gradeChangeStatus}-${selectedClass.midtermPublished}-${selectedClass.midtermAdvisoryDirty}-${submissionRefreshKey}`}
+        />
       )}
 
       {selectedClassIsHistorical && !selectedClassOnlyLocked && (
@@ -4192,6 +4201,7 @@ export const GradeComputation: React.FC = () => {
                                 try {
                                   await saveFacultyAssessmentsApi([{ ...ass, status: 'Archived' }]);
                                   await refreshAssessments();
+                                  setSubmissionRefreshKey(k => k + 1);
                                   showFeedback('Assessment archived.', 'success');
                                 } catch (requestError) {
                                   showFeedback(requestError instanceof Error ? requestError.message : 'Could not archive the assessment.', 'error');
@@ -4209,6 +4219,7 @@ export const GradeComputation: React.FC = () => {
                                 try {
                                   const response = await deleteFacultyAssessmentApi(ass.id);
                                   await refreshAssessments();
+                                  setSubmissionRefreshKey(k => k + 1);
                                   showFeedback(response.message || 'Assessment deleted.', 'success');
                                 } catch (requestError) {
                                   showFeedback(requestError instanceof Error ? requestError.message : 'Could not delete the assessment.', 'error');

@@ -469,6 +469,13 @@ test('fresh grouped offering saves in the editor, recomputes from live scores, a
   await expect(facultyRow.getByRole('cell', { name: '2.4', exact: true })).toBeVisible();
   await expect(main.getByText(/All 1 student grade\(s\) recomputed and persisted successfully\./)).toBeVisible();
 
+  // GRD-004 (12.12): Students see Final course grade and breakdowns once Faculty submits the class grades.
+  const submitRes = await page.request.post('/api/faculty/classes/grade-submission', {
+    headers: { ...facultyHeaders, 'Content-Type': 'application/json' },
+    data: { csId: Number(classId) },
+  });
+  expect(submitRes.ok(), await submitRes.text()).toBeTruthy();
+
   await page.goto('about:blank');
   const student = await login(page, studentEmail, studentPassword);
   const studentHeaders = { Authorization: `Bearer ${student.access_token}` };

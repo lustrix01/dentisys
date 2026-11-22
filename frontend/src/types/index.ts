@@ -415,6 +415,7 @@ export interface StudentAcademicClass {
 }
 
 export interface MidtermEvaluation {
+  published?: boolean;
   complete: boolean;
   percentage: number | null;
   /** Value before the whole-percent rounding, for the grade hover steps. */

@@ -45,7 +45,7 @@ academic_contract_assert(!str_contains($admin, "'grade' => \$s['final_gwa'] !== 
 academic_contract_assert(str_contains($admin, "'attendanceRate' => \$attendanceRate"), 'Admin dashboard exposes computed attendance rate');
 
 academic_contract_assert(str_contains($student, 'require_student_identity'), 'Student academic reads use canonical token identity');
-academic_contract_assert(str_contains($student, "'grade' => \$row['final_gwa'] !== null ? (float) \$row['final_gwa'] : null"), 'Student class reads preserve pending grades as null');
+academic_contract_assert(str_contains($student, "\$submittedGwa = \$gradesSubmitted && \$row['final_gwa'] !== null ? (float) \$row['final_gwa'] : null;") && str_contains($student, "'grade' => \$submittedGwa"), 'Student class reads preserve pending and unsubmitted grades as null');
 academic_contract_assert(str_contains($student, 'handle_student_dashboard_get'), 'Student dashboard read handler exists');
 
 academic_contract_assert(str_contains($migration, 'CREATE TABLE IF NOT EXISTS notifications'), 'Notification migration is additive');

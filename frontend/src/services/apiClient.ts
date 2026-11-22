@@ -1005,12 +1005,17 @@ export interface FacultyRetentionRecord {
   remedialProgression?: FacultyRemedialProgression;
   /** Server-computed: grade at/above the trigger, current school year, not legacy. */
   remedialEligible?: boolean;
+  /** GRD-004 / 12.12: whether the class grades are submitted and whether a grade change is open. */
+  gradesSubmitted?: boolean;
+  hasOpenGradeChange?: boolean;
 }
 
 export function getFacultyRetentionApi(): Promise<{
   status: string;
   currentSchoolYear?: string;
   retentionThreshold?: number;
+  unpublishedMidtermClassCount?: number;
+  unsubmittedFinalClassCount?: number;
   retention: FacultyRetentionRecord[];
 }> {
   return request('GET', '/faculty/retention');
@@ -1846,6 +1851,11 @@ export interface FacultyClassItem extends Partial<ClassSessionDefaults> {
   gradeDeadlineStatus?: GradeDeadlineStatus;
   /** The open grade change of the class, if any. */
   gradeChangeStatus?: 'draft' | 'pending' | null;
+  /** GRD-004 / 12.13: pre-submission Midterm advisory publication state. */
+  midtermPublished?: boolean;
+  midtermPublishedAt?: string | null;
+  midtermAdvisoryDirty?: boolean;
+  midtermAtRiskCount?: number;
   /** This Faculty member may change the shared course's lecture/lab units. */
   courseUnitsEditable?: boolean;
   schoolYear: string;
@@ -1953,8 +1963,29 @@ export function archiveClassApi(data: {
   return request('POST', '/faculty/classes/archive', data);
 }
 
-// GRD-004 grade submission (docs/contracts/grade-submission.md "API").
+// GRD-004 grade submission (docs/contracts/grade-submission.md and docs/contracts/grade-release-gates.md).
 export type GradeDeadlineStatus = 'not_submitted' | 'late' | 'submitted' | 'submitted_late';
+export interface GradeSubmissionRetentionImpact {
+  enrollmentId: number;
+  name: string;
+  studentNumber: string;
+  grade: number;
+  outcome: 'remedial' | 'irregular_reenrollment';
+}
+export interface GradeSubmissionMidtermState {
+  eligible: boolean;
+  schemaMode: 'periods' | 'overall';
+  published: boolean;
+  publishedAt: string | null;
+  dirty: boolean;
+  readyCount: number;
+  atRisk: Array<{ enrollmentId: number; name: string; studentNumber: string; grade: number; percentage: number }>;
+  missing: Array<{ name: string; studentNumber: string; missingCount: number }>;
+  diff: {
+    added: Array<{ enrollmentId: number; name: string; studentNumber: string; grade: number }>;
+    removed: Array<{ enrollmentId: number; name: string; studentNumber: string; grade: number | null }>;
+  };
+}
 export interface GradeSubmissionState {
   status: 'not_submitted' | 'submitted';
   deadlineStatus: GradeDeadlineStatus;
@@ -1963,9 +1994,17 @@ export interface GradeSubmissionState {
   graceUntil: string | null;
   missing: { name: string; studentNumber: string; missingCount: number }[];
   batch: { batchId: number; status: 'draft' | 'pending' | 'rejected'; reason: string | null; sentAt: string | null; decisionReason: string | null } | null;
+  retentionImpact?: GradeSubmissionRetentionImpact[];
+  midterm?: GradeSubmissionMidtermState;
 }
 export function getGradeSubmissionApi(csId: number): Promise<GradeSubmissionState> {
   return request('GET', `/faculty/classes/grade-submission?csId=${csId}`);
+}
+export function publishMidtermAdvisoryApi(csId: number): Promise<GradeSubmissionState> {
+  return request('POST', '/faculty/classes/midterm-advisory/publish', { csId });
+}
+export function unpublishMidtermAdvisoryApi(csId: number): Promise<GradeSubmissionState> {
+  return request('POST', '/faculty/classes/midterm-advisory/unpublish', { csId });
 }
 export type GradeSubmissionAction = 'submit' | 'withdraw' | 'open' | 'send' | 'pull-back' | 'discard';
 const GRADE_SUBMISSION_PATHS: Record<GradeSubmissionAction, string> = {

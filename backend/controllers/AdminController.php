@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/app/remedial_attempts.php';
+require_once dirname(__DIR__) . '/app/grade_release_gates.php';
 
 if (!function_exists('sanitize_for_log')) {
     function sanitize_for_log(\Throwable $e): string
@@ -118,9 +119,11 @@ function handle_admin_dashboard_kpis(): void
                 COALESCE(pi.last_name, s.last_name) AS last_name,
                 s.year_level, 
                 s.status AS student_status,
-                AVG(COALESCE(egb.final_gwa, e.final_gwa)) AS final_gwa,
-                MAX(CASE " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)', 'COALESCE(egb.final_gwa, e.final_gwa)') . "
-                    WHEN 'remedial' THEN 3 WHEN 'irregular_reenrollment' THEN 2 ELSE 1 END) AS risk_score
+                AVG(CASE WHEN cs_scope.grades_submitted_at IS NOT NULL THEN COALESCE(egb.final_gwa, e.final_gwa) ELSE NULL END) AS final_gwa,
+                MAX(CASE WHEN cs_scope.grades_submitted_at IS NOT NULL THEN
+                    CASE " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)', 'COALESCE(egb.final_gwa, e.final_gwa)') . "
+                        WHEN 'remedial' THEN 3 WHEN 'irregular_reenrollment' THEN 2 ELSE 1 END
+                    ELSE 1 END) AS risk_score
             FROM students s
             LEFT JOIN enrollments e ON s.student_id = e.student_id AND e.cs_id NOT IN (SELECT hx.cs_id FROM class_sections hx WHERE hx.archive_reason IN ('cancelled', 'mistake'))
             LEFT JOIN class_sections cs_scope ON cs_scope.cs_id = e.cs_id
@@ -213,12 +216,17 @@ function handle_admin_dashboard_kpis(): void
         // course in the current school year (spec 2026-10-17), counted once each.
         if ($schoolYear === null || strcasecmp((string) $schoolYear, (string) $currentSchoolYear) === 0) {
             $midtermStmt = $pdo->prepare("
-                SELECT e.enrollment_id, e.student_id, e.cs_id, COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa, e.remedial_state_json
+                SELECT e.enrollment_id, e.student_id, e.cs_id,
+                       CASE WHEN cs.grades_submitted_at IS NOT NULL THEN COALESCE(egb.final_gwa, e.final_gwa) ELSE NULL END AS final_gwa,
+                       e.remedial_state_json,
+                       cs.grades_submitted_at, cs.midterm_published_at, cs.midterm_published_snapshot
                 FROM enrollments e
                 JOIN class_sections cs ON cs.cs_id = e.cs_id
                 LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
                 WHERE LOWER(e.status) = 'active' AND UPPER(cs.school_year) = UPPER(:current_year)
                   AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
+                  AND cs.grades_submitted_at IS NULL
+                  AND cs.midterm_published_at IS NOT NULL
             ");
             $midtermStmt->execute([':current_year' => (string) $currentSchoolYear]);
             $midtermRows = $midtermStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -711,17 +719,17 @@ function handle_admin_reports_summary(): void
                     COALESCE(pi.last_name, s.last_name) AS last_name,
                     COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix,
                     s.bu_email, s.year_level, s.status, b.consent_status, b.face_enrolled,
-                    COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
-                    COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
-                    " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)', 'COALESCE(egb.final_gwa, e.final_gwa)') . " AS retention_state,
+                    CASE WHEN cs.grades_submitted_at IS NOT NULL THEN COALESCE(egb.final_gwa, e.final_gwa) ELSE NULL END AS final_gwa,
+                    CASE WHEN cs.grades_submitted_at IS NOT NULL THEN COALESCE(egb.final_percentage, e.final_percentage) ELSE NULL END AS final_percentage,
+                    CASE WHEN cs.grades_submitted_at IS NOT NULL THEN " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)', 'COALESCE(egb.final_gwa, e.final_gwa)') . " ELSE 'active' END AS retention_state,
                     e.enrollment_id, e.remedial_state_json, ers.status AS normalized_remedial_status,
                     ers.original_grade AS normalized_original_grade,
                     ers.remedial_score AS normalized_remedial_score,
                     ers.remedial_grade AS normalized_remedial_grade,
                     ers.exam_date AS normalized_exam_date,
                     ers.notes AS normalized_remedial_notes,
-                    e.grade_components_json, e.clinic_hours_completed,
-                    cs.cs_id, cs.cs_name, cs.archive_reason, c.course_code, c.name AS course_name, c.units, c.is_clinical,
+                    CASE WHEN cs.grades_submitted_at IS NOT NULL THEN e.grade_components_json ELSE NULL END AS grade_components_json, e.clinic_hours_completed,
+                    cs.cs_id, cs.cs_name, cs.archive_reason, cs.grades_submitted_at, c.course_code, c.name AS course_name, c.units, c.is_clinical,
                     COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(ipi.name_prefix, ''), NULLIF(ipi.first_name, ''),
                         NULLIF(ipi.middle_name, ''), NULLIF(ipi.last_name, ''), NULLIF(ipi.name_suffix, '')), ''), iu.display_name) AS instructor_name
              FROM students s
@@ -814,7 +822,10 @@ function handle_admin_reports_summary(): void
                     $grouped[$id]['overallGWA'] = round($gwaTotals[$id]['weighted'] / $gwaTotals[$id]['units'], 2);
                 }
                 $enrollmentId = (int) $s['enrollment_id'];
-                $progression = $progressions[$enrollmentId] ?? remedial_attempts_empty_progression();
+                $gradesSubmitted = $s['grades_submitted_at'] !== null;
+                $progression = $gradesSubmitted
+                    ? ($progressions[$enrollmentId] ?? remedial_attempts_empty_progression())
+                    : remedial_attempts_empty_progression();
                 $grouped[$id]['enrolledSubjects'][] = [
                     'enrollmentId' => (string) $enrollmentId,
                     'remedialProgression' => $progression,
@@ -830,10 +841,10 @@ function handle_admin_reports_summary(): void
                     'hasRemedial' => $s['retention_state'] === 'remedial',
                     'components' => $s['grade_components_json'] ? json_decode($s['grade_components_json'], true) : null,
                 ];
-                $legacyRemedial = remedial_state_json_legacy_payload($s['remedial_state_json']);
+                $legacyRemedial = $gradesSubmitted ? remedial_state_json_legacy_payload($s['remedial_state_json']) : null;
                 // enrollment_remedial_states is a projection of the same JSON,
                 // so an override-only value (not a remedial record) is skipped.
-                if ($progression['attempts'] !== []) {
+                if ($gradesSubmitted && $progression['attempts'] !== []) {
                     // Current attempts take precedence over the legacy record for the same enrollment.
                     foreach ($progression['attempts'] as $attempt) {
                         $grouped[$id]['remedialExams'][] = [

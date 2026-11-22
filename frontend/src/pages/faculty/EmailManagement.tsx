@@ -13,9 +13,10 @@ import {
   UserPlus,
   CalendarDays,
   Filter,
-  Inbox
+  Inbox,
+  Info
 } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import Tabs from '../../components/Tabs';
 import { showFeedback, requestConfirmation } from '../../components/FeedbackCenter';
@@ -64,6 +65,8 @@ export const EmailManagement: React.FC = () => {
   const [dbStudents, setDbStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
   const [retentionRecords, setRetentionRecords] = useState<FacultyRetentionRecord[]>([]);
+  const [serverUnpublishedMidtermCount, setServerUnpublishedMidtermCount] = useState<number | undefined>(undefined);
+  const [serverUnsubmittedFinalCount, setServerUnsubmittedFinalCount] = useState<number | undefined>(undefined);
   const [currentSchoolYear, setCurrentSchoolYear] = useState<string>('');
   const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('all');
   const syInitializedRef = useRef(false);
@@ -220,6 +223,8 @@ export const EmailManagement: React.FC = () => {
     try {
       const response = await getFacultyRetentionApi();
       setRetentionRecords(Array.isArray(response.retention) ? response.retention : []);
+      setServerUnpublishedMidtermCount(response.unpublishedMidtermClassCount);
+      setServerUnsubmittedFinalCount(response.unsubmittedFinalClassCount);
     } catch (error) {
       notify({ type: 'error', message: error instanceof Error ? error.message : 'Could not load the current Midterm and Remedial eligibility list.' });
     } finally {
@@ -283,8 +288,34 @@ export const EmailManagement: React.FC = () => {
     return [{ ...record, email: record.email || student?.email || '', pendingAttempt }];
   }), [retentionRecords, safeStudents, selectedClassId, selectedCourse, sectionChoices, selectedSchoolYear, search, tab]);
 
+  const currentActiveClasses = useMemo(() => (
+    classes.filter((c: any) =>
+      c.isCurrentSchoolYear !== false
+      && !c.isHistorical
+      && c.archiveReason !== 'cancelled'
+      && c.archiveReason !== 'mistake'
+      && !c.isArchived
+      && String(c.status || '').toLowerCase() === 'active'
+    )
+  ), [classes]);
+  const unpublishedMidtermClassCount = serverUnpublishedMidtermCount
+    ?? currentActiveClasses.filter((c: any) => !c.gradesSubmitted && !c.midtermPublished).length;
+  const unsubmittedFinalClassCount = serverUnsubmittedFinalCount
+    ?? currentActiveClasses.filter((c: any) => !c.gradesSubmitted).length;
+  const isCurrentOrAllSchoolYear = !currentSchoolYear || selectedSchoolYear === 'all' || selectedSchoolYear === currentSchoolYear;
+
+  const isRemedialRowBlocked = useCallback((row: FacultyRetentionRecord) => {
+    const cls = classes.find((c: any) => classIdOf(c) === String(row.classId));
+    return row.gradesSubmitted === false
+      || row.hasOpenGradeChange === true
+      || cls?.gradesSubmitted === false
+      || cls?.gradeChangeStatus === 'draft'
+      || cls?.gradeChangeStatus === 'pending';
+  }, [classes]);
+
   const selectableNoticeRows = noticeRows.filter(row =>
-    isOfficialBicolEmail(row.email) && (tab !== 'remedial' || Boolean(row.pendingAttempt?.scheduledDate))
+    isOfficialBicolEmail(row.email)
+    && (tab !== 'remedial' || (Boolean(row.pendingAttempt?.scheduledDate) && !isRemedialRowBlocked(row)))
   );
   const selectedNoticeRows = selectableNoticeRows.filter(row => selected.includes(row.enrollmentId));
 
@@ -1006,6 +1037,30 @@ export const EmailManagement: React.FC = () => {
             </div>
           </div>
 
+          {!loadingRetention && isCurrentOrAllSchoolYear && tab === 'midterm_advisory' && unpublishedMidtermClassCount > 0 && (
+            <div role="status" className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+              <div className="flex items-start gap-3 min-w-0">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-clinical-600 dark:text-clinical-400" aria-hidden="true" />
+                <span>Some active classes do not have a published Midterm advisory yet. Publish in Grade Computation to send Midterm advisory emails.</span>
+              </div>
+              <Link to="/grades" className="shrink-0 font-bold text-clinical-700 hover:underline dark:text-clinical-400">
+                Open Grade Computation
+              </Link>
+            </div>
+          )}
+
+          {!loadingRetention && isCurrentOrAllSchoolYear && tab === 'remedial' && unsubmittedFinalClassCount > 0 && (
+            <div role="status" className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+              <div className="flex items-start gap-3 min-w-0">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-clinical-600 dark:text-clinical-400" aria-hidden="true" />
+                <span>Final grades and Remedial notices become available after grades are submitted in Grade Computation.</span>
+              </div>
+              <Link to="/grades" className="shrink-0 font-bold text-clinical-700 hover:underline dark:text-clinical-400">
+                Open Grade Computation
+              </Link>
+            </div>
+          )}
+
           {loadingRetention ? (
             <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading current eligibility…</div>
           ) : noticeRows.length === 0 ? (
@@ -1094,6 +1149,7 @@ export const EmailManagement: React.FC = () => {
                   {sortedNoticeRows.map(row => {
                     const isChecked = selected.includes(row.enrollmentId);
                     const hasScheduledDate = Boolean(row.pendingAttempt?.scheduledDate);
+                    const rowBlocked = isRemedialRowBlocked(row);
                     const isEditing = editingRemedialId === row.enrollmentId;
                     const isSaving = savingRemedialId === row.enrollmentId;
                     const statusClass = row.remedialNoticeStatus === 'Sent'
@@ -1120,9 +1176,10 @@ export const EmailManagement: React.FC = () => {
                           <input
                             type="checkbox"
                             checked={isChecked}
-                            disabled={!isOfficialBicolEmail(row.email) || !hasScheduledDate}
+                            disabled={!isOfficialBicolEmail(row.email) || !hasScheduledDate || rowBlocked}
                             onChange={() => toggleSelect(row.enrollmentId)}
                             aria-label={`Select ${row.studentName ?? 'student'} for Remedial Notice`}
+                            title={rowBlocked ? 'Submit the class grades and close any open grade change in Grade Computation before sending.' : undefined}
                             className="h-4 w-4 accent-emerald-600 disabled:opacity-40"
                           />
                         </td>
@@ -1173,11 +1230,13 @@ export const EmailManagement: React.FC = () => {
                           ) : (
                             <button
                               type="button"
+                              disabled={rowBlocked}
+                              title={rowBlocked ? 'Submit the class grades and close any open grade change in Grade Computation before updating remedial dates.' : undefined}
                               onClick={() => {
                                 setEditingRemedialId(row.enrollmentId);
                                 setRemedialDateDraft(row.pendingAttempt?.scheduledDate ?? '');
                               }}
-                              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                             >{hasScheduledDate ? 'Edit date' : 'Add date'}</button>
                           )}
                         </td>

@@ -45,7 +45,7 @@ $fn = static function (string $name) use ($ctl): string {
 function ", $start + 1) - $start);
 };
 $save = $fn('faculty_save_computed_grade');
-recompute_expect(str_contains($save, 'bool $release = false') && str_contains($save, "(\$release ? '' : 'retention_override_state = NULL") && str_contains($save, 'if (!$release && $before !== null'), 'default save clears overrides and notifies; release keeps and stays silent');
+recompute_expect(str_contains($save, 'bool $release = false') && str_contains($save, "(\$release ? '' : 'retention_override_state = NULL") && !str_contains($save, 'faculty_notify_grade_retention_change'), 'default save clears overrides and stays silent on auto-save (GRD-004 12.12 notifies on Submit/Dean Approve)');
 recompute_expect(str_contains($fn('faculty_recompute_class_grades'), 'bool $release = false') && str_contains($ctl, '$breakdown, (int) $enrollmentId, $release)'), 'release flag reaches the save');
 recompute_expect(substr_count($ctl, '$retentionThreshold, true') === 0, 'no controller path passes release');
 recompute_expect(str_contains($src, 'archive_reason IS NULL') && str_contains($src, 'school_year >= ?'), 'only current-year non-archived classes are selected');

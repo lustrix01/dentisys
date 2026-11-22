@@ -1,16 +1,16 @@
 # Grade submission, deadlines and Dean approval (13.8)
 
-Owner decisions 2026-11-20 (backlog 13.8), settled with the Owner's `/grill-me` on 2026-11-20 (decisions Q1-Q26 below). A critic review of the build plan (2026-11-20) added the implementation notes.
+Owner decisions 2026-11-20 (backlog 13.8), settled with the Owner's `/grill-me` on 2026-11-20 (decisions Q1-Q26 below). A critic review of the build plan (2026-11-20) added the implementation notes. Extended by [grade-release-gates.md](grade-release-gates.md) for pre-submit Midterm advisory publication (12.13) and gating external Final grades and Retention Status behind grade submission (12.12).
 
 ## Rule
 
-A class stays editable until its Faculty submit the grades; submitting locks it, and after a 24-hour grace any change goes through one batch the Dean approves.
+A class's scores stay working drafts inside Grade Computation until Faculty explicitly release them: **Publish Midterm advisory** releases Midterm grades and At-Risk status for `periods`-mode classes while keeping scores editable, and **Submit grades** releases Final grades and Retention Status and locks the class; after a 24-hour grace any change goes through one batch the Dean approves.
 
 ## Per role
 
 | Role | What they do |
 |---|---|
-| Faculty | Submit grades per class (any time); Withdraw within 24 h; after that Request grade change, edit the draft, Send for Dean approval with one reason, Pull back or Discard while pending. |
+| Faculty | Publish/update/unpublish Midterm advisory for `periods`-mode classes before submission; Submit grades per class (any time); Withdraw within 24 h; after that Request grade change, edit the draft, Send for Dean approval with one reason, Pull back or Discard while pending. |
 | Dean | Grade Submissions page: Submissions tab and Change Requests tab; approves or rejects a whole batch (reject needs a reason). Teaches no class. |
 | Superadmin | Sets the submission deadline on Academic Terms; sees Grade Submissions read-only in Superadmin mode (Q19). Approves nothing. |
 | Class Secretary | Attendance change requests on a submitted class are refused; during a draft sees the submitted copy (Q20). |
@@ -30,9 +30,9 @@ Deadline status, computed on every read from the current deadline and the latest
 
 ## Rules
 
-1. Submit is refused while an attendance session of the class is open (Q14). A confirmation lists students with missing scores and still allows submitting.
+1. Submit is refused while an attendance session of the class is open (Q14). A confirmation lists students with missing scores and students entering Remedial or Irregular reenrollment, and still allows submitting.
 2. Each submission sets a fresh 24-hour grace. Withdraw needs no approval.
-3. A submitted class (in grace or after) is view-only like an archived class. Past school year alone no longer makes a class view-only; an unsubmitted class stays active and Late into the next school year (Q23). Remedial and cost recovery stay recordable (existing exemption).
+3. A submitted class (in grace or after) is view-only like an archived class. Past school year alone no longer makes a class view-only; an unsubmitted class stays active and Late into the next school year (Q23). Remedial and cost recovery stay recordable while submitted with no open grade change; external Final grades and Retention Status stay gated until submission ([grade-release-gates.md](grade-release-gates.md)).
 4. Grade weights (shared by a Faculty member's sections of one course and term) lock while any of those sections is submitted, in grace or after: "Grades for DENT 101 (A) are submitted; weights are locked." Withdrawing unlocks them (Q25). A draft never changes weights (Q24).
 5. No session opens or is created for a submitted class or a class in Draft or Pending: auto-sessions are not created (Q11), and an already scheduled session does not open; it stays in the list and opens normally if Faculty withdraw before its time. Nothing is revoked (Q26).
 6. At most one batch per class. Approval applies the changes, records old → new values and locks the class again with no new grace. Reject (reason required) and Discard restore the class to its submitted state.
@@ -80,7 +80,9 @@ Faculty (own classes only; others 403):
 
 | Method | Path | Input | Output |
 |---|---|---|---|
-| GET | `/api/faculty/classes/grade-submission` | `csId` | `{status, deadlineStatus, deadline, submittedAt, graceUntil, missing:[{name, studentNumber, missingCount}], batch:{batchId, status, reason, sentAt, decisionReason}\|null}` |
+| GET | `/api/faculty/classes/grade-submission` | `csId` | `{status, deadlineStatus, deadline, submittedAt, graceUntil, missing:[{name, studentNumber, missingCount}], retentionImpact, midterm, batch:{batchId, status, reason, sentAt, decisionReason}\|null}` |
+| POST | `/api/faculty/classes/midterm-advisory/publish` | `{csId}` | same object (`midterm.published = true`, `dirty = false`) |
+| POST | `/api/faculty/classes/midterm-advisory/unpublish` | `{csId}` | same object (`midterm.published = false`) |
 | POST | `/api/faculty/classes/grade-submission` | `{csId}` | same object |
 | POST | `/api/faculty/classes/grade-submission/withdraw` | `{csId}` | same object |
 | POST | `/api/faculty/classes/grade-change` | `{csId}` | same object (batch in `draft`) |
@@ -100,7 +102,7 @@ Dean (decides) and Superadmin (read-only GETs; POSTs 403):
 
 The deadline is one more field, `gradeDeadline`, on the existing `/api/admin/academic-terms` save.
 
-The Faculty class list (`GET /api/faculty/classes`) adds `gradesSubmitted`, `gradeDeadlineStatus` (as above) and `gradeChangeStatus` (`draft | pending | null`) to each class, for the class card chip.
+The Faculty class list (`GET /api/faculty/classes`) adds `gradesSubmitted`, `gradeDeadlineStatus` (as above), `gradeChangeStatus` (`draft | pending | null`), `midtermPublished`, `midtermPublishedAt`, `midtermAdvisoryDirty` and `midtermAtRiskCount` to each class, for the class card chip and status counts.
 
 Errors (409 unless stated):
 - "End the open attendance session first."
@@ -134,7 +136,7 @@ POST /api/faculty/classes/grade-change/send
 
 ## Screens (parts confirmed in the ui-fix-demo Stage 1 demo, approved 2026-11-21: https://claude.ai/artifact/M9dwYpjY5NLAXW6gS4hUX3)
 
-- Faculty class: status chip on the class card (Q6: no reminders); banner per state (Q5, Q22): in grace "Submitted. You can withdraw until <date, time>." + Withdraw; submitted "Grades submitted on <date>." + Request grade change; draft "Grade change draft." + Send for Dean approval / Discard; pending "Sent for Dean approval on <date>." + Pull back; rejected "Grade change rejected: <reason>." Submit confirmation copies the 13.7 confirmation dialog. Grade Weights shows the weights-locked message (rule 4).
+- Faculty class: status chip on the class card (`Not submitted`, `Midterm published`, `Late`, `Submitted`, `Submitted late`, `Grade change draft`, `Awaiting Dean approval`); banner per state (Q5, Q22): pre-submit Midterm advisory lifecycle (`Publish Midterm advisory` / `Unpublish` / `Update advisory` when dirty in `periods` mode); in grace "Submitted. You can withdraw until <date, time>." + Withdraw; submitted "Grades submitted on <date>." + Request grade change; draft "Grade change draft." + Send for Dean approval / Discard; pending "Sent for Dean approval on <date>." + Pull back; rejected "Grade change rejected: <reason>." Submit confirmation lists missing scores and Remedial/Irregular reenrollment impact. Grade Weights shows the weights-locked message (rule 4). See [grade-release-gates.md](grade-release-gates.md) for the Retention Monitoring and Email Management signpost banners.
 - Dean: sidebar item "Grade Submissions" with a pending count badge; tabs, filter bar and table copy the Attendance Monitoring Secretary requests tab; batch rows expand to their changes.
 - Superadmin: same page in Superadmin mode, without Approve / Reject.
 

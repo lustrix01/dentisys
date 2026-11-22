@@ -1,10 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, Clock, Edit, Send } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AlertCircle, CheckCircle2, Clock, Edit, Info, Send } from 'lucide-react';
 import {
   getGradeSubmissionApi,
   gradeSubmissionActionApi,
+  publishMidtermAdvisoryApi,
+  unpublishMidtermAdvisoryApi,
   type FacultyClassItem,
   type GradeSubmissionAction,
+  type GradeSubmissionMidtermState,
   type GradeSubmissionState,
 } from '../services/apiClient';
 import { formatManilaWhen } from '../services/auditService';
@@ -59,22 +62,70 @@ async function runAction(
   }
 }
 
-export const GradeSubmissionBanner: React.FC<{ classItem: FacultyClassItem; onChanged: () => void }> = ({ classItem, onChanged }) => {
+function formatMidtermConfirmMessage(label: string, midterm: GradeSubmissionMidtermState, isUpdate: boolean): string {
+  const sections: string[] = [
+    isUpdate
+      ? `Update the published Midterm advisory for ${label}?`
+      : `Publish the Midterm advisory for ${label}?`,
+  ];
+
+  if (midterm.atRisk.length > 0) {
+    const atRiskLines = midterm.atRisk.slice(0, 8).map(s => `• ${s.name} (${s.studentNumber}) — ${s.grade.toFixed(1)}`);
+    if (midterm.atRisk.length > 8) atRiskLines.push(`• ...and ${midterm.atRisk.length - 8} more`);
+    sections.push(`At-Risk students (${midterm.atRisk.length}):\n${atRiskLines.join('\n')}`);
+  } else {
+    sections.push('No students are At Risk. Publishing makes computed Midterm grades visible to students.');
+  }
+
+  if (isUpdate) {
+    const added = midterm.diff?.added ?? [];
+    const removed = midterm.diff?.removed ?? [];
+    if (added.length > 0) {
+      const addedLines = added.slice(0, 5).map(s => `• ${s.name} (${s.studentNumber}) — ${s.grade.toFixed(1)}`);
+      if (added.length > 5) addedLines.push(`• ...and ${added.length - 5} more`);
+      sections.push(`Newly added to At Risk (${added.length}):\n${addedLines.join('\n')}`);
+    }
+    if (removed.length > 0) {
+      const removedLines = removed.slice(0, 5).map(s => `• ${s.name} (${s.studentNumber})${s.grade !== null ? ` — ${s.grade.toFixed(1)}` : ''}`);
+      if (removed.length > 5) removedLines.push(`• ...and ${removed.length - 5} more`);
+      sections.push(`Cleared from At Risk (${removed.length}):\n${removedLines.join('\n')}`);
+    }
+  }
+
+  if (midterm.missing.length > 0) {
+    const missingLines = midterm.missing.slice(0, 5).map(m => `• ${m.name} (${m.studentNumber}) — ${m.missingCount} missing`);
+    if (midterm.missing.length > 5) missingLines.push(`• ...and ${midterm.missing.length - 5} more`);
+    sections.push(`${midterm.missing.length} ${midterm.missing.length === 1 ? 'student has' : 'students have'} missing Midterm scores:\n${missingLines.join('\n')}`);
+  }
+
+  sections.push('Flagged students will appear on At-Risk Students and Midterm Advisory and receive an in-app notice. Emails are sent separately from Email Management.');
+  return sections.join('\n\n');
+}
+
+export const GradeSubmissionBanner: React.FC<{
+  classItem: FacultyClassItem;
+  onChanged: () => void;
+  refreshToken?: string | number;
+}> = ({ classItem, onChanged, refreshToken }) => {
   const { csId, courseCode, csName } = classItem;
   const [state, setState] = useState<GradeSubmissionState | null>(null);
   const [busy, setBusy] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState('');
+  const prevCsIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setState(null);
+    if (prevCsIdRef.current !== csId) {
+      prevCsIdRef.current = csId;
+      setState(null);
+    }
     getGradeSubmissionApi(csId)
       .then(next => { if (!cancelled) setState(next); })
       .catch(() => { if (!cancelled) setState(null); });
     return () => { cancelled = true; };
-  }, [csId]);
+  }, [csId, refreshToken]);
 
   const act = useCallback(async (
     action: GradeSubmissionAction,
@@ -87,6 +138,42 @@ export const GradeSubmissionBanner: React.FC<{ classItem: FacultyClassItem; onCh
     setBusy(false);
     if (next) setState(next);
     return next !== null;
+  }, [csId, onChanged]);
+
+  const actMidterm = useCallback(async (kind: 'publish' | 'unpublish', midterm: GradeSubmissionMidtermState, classLabel: string) => {
+    const isUpdate = kind === 'publish' && midterm.published;
+    const confirmation = kind === 'publish'
+      ? {
+          title: isUpdate ? 'Update Midterm Advisory' : 'Publish Midterm Advisory',
+          confirmLabel: isUpdate ? 'Update advisory' : 'Publish Midterm advisory',
+          message: formatMidtermConfirmMessage(classLabel, midterm, isUpdate),
+        }
+      : {
+          title: 'Unpublish Midterm Advisory',
+          confirmLabel: 'Unpublish',
+          message: `Unpublish the Midterm advisory for ${classLabel}? Published Midterm grades and Midterm Advisory will be hidden from Students until published again. Entered scores stay saved.`,
+        };
+    if (!(await requestConfirmation(confirmation.message, confirmation.title, confirmation.confirmLabel))) return;
+    setBusy(true);
+    try {
+      const next = kind === 'publish'
+        ? await publishMidtermAdvisoryApi(csId)
+        : await unpublishMidtermAdvisoryApi(csId);
+      setState(next);
+      onChanged();
+      showFeedback(
+        kind === 'unpublish'
+          ? 'Midterm advisory unpublished.'
+          : isUpdate
+            ? 'Midterm advisory updated.'
+            : 'Midterm advisory published.',
+        'success',
+      );
+    } catch (err) {
+      showFeedback(errorText(err), 'error');
+    } finally {
+      setBusy(false);
+    }
   }, [csId, onChanged]);
 
   if (!state) return null;
@@ -119,6 +206,7 @@ export const GradeSubmissionBanner: React.FC<{ classItem: FacultyClassItem; onCh
   let tone: keyof typeof BOX_TONES;
   let text: string;
   let buttons: React.ReactNode;
+  let useInfoIcon = false;
   if (batch?.status === 'draft') {
     tone = 'amber';
     text = 'Grade change draft.';
@@ -154,16 +242,58 @@ export const GradeSubmissionBanner: React.FC<{ classItem: FacultyClassItem; onCh
       text = `Grades submitted on ${state.submittedAt ? formatShortDate(state.submittedAt.slice(0, 10)) : ''}.`;
       buttons = requestChange('emerald');
     }
+  } else if (!classItem.isArchived && state.midterm?.schemaMode === 'periods') {
+    const midterm = state.midterm;
+    if (!midterm.published && midterm.readyCount > 0) {
+      tone = 'information';
+      useInfoIcon = true;
+      text = midterm.atRisk.length > 0
+        ? `Midterm advisory not published (${midterm.atRisk.length} At-Risk ready).`
+        : `Midterm advisory not published (Midterm grades ready for ${midterm.readyCount} ${midterm.readyCount === 1 ? 'student' : 'students'}).`;
+      buttons = (
+        <button type="button" disabled={busy} onClick={() => { void actMidterm('publish', midterm, label); }} className={PRIMARY}>
+          Publish Midterm advisory
+        </button>
+      );
+    } else if (midterm.published && !midterm.dirty) {
+      tone = 'information';
+      useInfoIcon = true;
+      const publishedDate = midterm.publishedAt ? formatShortDate(midterm.publishedAt.slice(0, 10)) : '';
+      text = publishedDate
+        ? `Midterm advisory published on ${publishedDate} · ${midterm.atRisk.length} At-Risk.`
+        : `Midterm advisory published · ${midterm.atRisk.length} At-Risk.`;
+      buttons = secondary('slate', 'Unpublish', () => { void actMidterm('unpublish', midterm, label); });
+    } else if (midterm.published && midterm.dirty) {
+      tone = 'amber';
+      const addedCount = midterm.diff?.added?.length ?? 0;
+      const removedCount = midterm.diff?.removed?.length ?? 0;
+      const diffParts: string[] = [];
+      if (addedCount > 0) diffParts.push(`+${addedCount} At-Risk`);
+      if (removedCount > 0) diffParts.push(`${removedCount} cleared`);
+      const diffSummary = diffParts.length > 0 ? ` (${diffParts.join(', ')})` : '';
+      text = `Midterm scores changed since published${diffSummary}.`;
+      buttons = (
+        <>
+          {secondary('amber', 'Unpublish', () => { void actMidterm('unpublish', midterm, label); })}
+          <button type="button" disabled={busy} onClick={() => { void actMidterm('publish', midterm, label); }} className={PRIMARY}>
+            Update advisory
+          </button>
+        </>
+      );
+    } else {
+      return null;
+    }
   } else {
     return null;
   }
 
   const { box, icon, Icon } = BOX_TONES[tone];
+  const BannerIcon = useInfoIcon ? Info : Icon;
   return (
     <>
       <div role="status" className={`no-print rounded-xl border p-3 text-xs ${box} flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
         <div className="flex items-start gap-3 min-w-0">
-          <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${icon}`} aria-hidden="true" />
+          <BannerIcon className={`mt-0.5 h-4 w-4 shrink-0 ${icon}`} aria-hidden="true" />
           <span className="font-semibold">{text}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">{buttons}</div>
@@ -207,13 +337,23 @@ export const SubmitGradesButton: React.FC<{ classItem: FacultyClassItem; onChang
   const submit = async () => {
     setBusy(true);
     try {
-      const { missing } = await getGradeSubmissionApi(csId);
+      const { missing, retentionImpact = [] } = await getGradeSubmissionApi(csId);
       let message = `Submit the grades for ${courseCode} ${csName}? The class becomes view-only. You can withdraw within 24 hours.`;
       if (missing.length > 0) {
         const lines = missing.slice(0, 5).map(m => `• ${m.name} (${m.missingCount} missing)`);
-        if (missing.length > 5) lines.push(`• and ${missing.length - 5} more`);
+        if (missing.length > 5) lines.push(`• ...and ${missing.length - 5} more`);
         message += `\n\n${missing.length} ${missing.length === 1 ? 'student has' : 'students have'} missing scores:\n${lines.join('\n')}\n\nYou can still submit.`;
       }
+      if (retentionImpact.length > 0) {
+        const impactLines = retentionImpact.slice(0, 8).map(item => {
+          const outcomeLabel = item.outcome === 'irregular_reenrollment' ? 'Irregular reenrollment' : 'Remedial';
+          const gradeText = typeof item.grade === 'number' ? item.grade.toFixed(1) : String(item.grade);
+          return `• ${item.name} (${item.studentNumber}) — ${gradeText} (${outcomeLabel})`;
+        });
+        if (retentionImpact.length > 8) impactLines.push(`• ...and ${retentionImpact.length - 8} more`);
+        message += `\n\n${retentionImpact.length} ${retentionImpact.length === 1 ? 'student enters' : 'students enter'} Retention Status:\n${impactLines.join('\n')}`;
+      }
+      message += '\n\nSubmitted grades activate Retention Status and notify Remedial students in-app.';
       if (!(await requestConfirmation(message, 'Submit Grades', 'Submit'))) return;
       await runAction('submit', csId, onChanged);
     } catch (err) {

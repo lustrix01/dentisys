@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-// GRD-004 grade submission (docs/contracts/grade-submission.md). Slice 1: submit, withdraw, deadlines, Dean list. Slice 2: grade change batches.
+// GRD-004 grade submission (docs/contracts/grade-submission.md, docs/contracts/grade-release-gates.md).
 require_once __DIR__ . '/FacultyController.php';
 require_once __DIR__ . '/AdminController.php';
+require_once dirname(__DIR__) . '/app/grade_release_gates.php';
 
 const GRADE_SUBMISSION_DEADLINE_GRACE_DAYS = 14;
 
@@ -68,11 +69,46 @@ function grade_submission_class_row(PDO $pdo, int $csId, bool $lock = false): ar
 {
     $stmt = $pdo->prepare(
         'SELECT cs.cs_id, cs.cs_name, cs.school_year, cs.semester, cs.term_start_date, cs.term_end_date, cs.archive_reason,
-                cs.grades_submitted_at, cs.grades_grace_until
+                cs.grades_submitted_at, cs.grades_grace_until, cs.instructor_user_id,
+                cs.midterm_published_at, cs.midterm_published_by, cs.midterm_published_snapshot
            FROM class_sections cs WHERE cs.cs_id = ?' . ($lock ? ' FOR UPDATE OF cs' : '')
     );
     $stmt->execute([$csId]);
     return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+/** Active students whose computed final grade will place them in Remedial or Irregular reenrollment on Submit. */
+function grade_submission_retention_impact(PDO $pdo, int $csId): array
+{
+    $threshold = remedial_attempts_course_grade_threshold($pdo);
+    $stmt = $pdo->prepare(
+        "SELECT e.enrollment_id,
+                COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
+                s.student_number,
+                TRIM(COALESCE(pi.last_name, s.last_name) || ', ' || COALESCE(pi.first_name, s.first_name)) AS name
+           FROM enrollments e
+           JOIN students s ON s.student_id = e.student_id
+           LEFT JOIN person_identities pi ON pi.person_id = s.person_id
+           LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+          WHERE e.cs_id = ?
+            AND LOWER(e.status) = 'active'
+            AND COALESCE(egb.final_gwa, e.final_gwa) IS NOT NULL
+            AND COALESCE(egb.final_gwa, e.final_gwa) >= ?
+          ORDER BY COALESCE(pi.last_name, s.last_name), COALESCE(pi.first_name, s.first_name), s.student_id"
+    );
+    $stmt->execute([$csId, $threshold]);
+    $impact = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $gwa = (float) $row['final_gwa'];
+        $impact[] = [
+            'enrollmentId' => (int) $row['enrollment_id'],
+            'name' => (string) $row['name'],
+            'studentNumber' => (string) $row['student_number'],
+            'grade' => $gwa,
+            'outcome' => $gwa >= 5.0 ? 'irregular_reenrollment' : 'remedial',
+        ];
+    }
+    return $impact;
 }
 
 /** The batch of the Faculty object: the open one, or the latest decided one when it was rejected and the class has had no new submission since. */
@@ -95,6 +131,8 @@ function grade_submission_payload(PDO $pdo, int $csId): array
     $class = grade_submission_class_row($pdo, $csId);
     $deadline = grade_submission_deadline(grade_submission_term(academic_terms_read($pdo), $class), $class);
     $submitted = $class['grades_submitted_at'] !== null;
+    $midterm = grade_release_compute_midterm_preview($pdo, $csId, $class);
+    unset($midterm['liveEntries'], $midterm['prevEntries'], $midterm['publishedAtRiskCount']);
     return [
         'status' => $submitted ? 'submitted' : 'not_submitted',
         'deadlineStatus' => grade_submission_deadline_status($deadline, $class['grades_submitted_at'], attendance_session_now_utc()),
@@ -102,6 +140,8 @@ function grade_submission_payload(PDO $pdo, int $csId): array
         'submittedAt' => grade_submission_time($class['grades_submitted_at']),
         'graceUntil' => grade_submission_time($class['grades_grace_until']),
         'missing' => $submitted ? [] : grade_submission_missing($pdo, $csId),
+        'retentionImpact' => $submitted ? [] : grade_submission_retention_impact($pdo, $csId),
+        'midterm' => $midterm,
         'batch' => grade_change_batch_payload($pdo, $csId, $class['grades_submitted_at']),
     ];
 }
@@ -145,11 +185,96 @@ function grade_submission_faculty_handle(string $action): void
                 : ($class['grades_submitted_at'] !== null ? 'Grades are already submitted.'
                 : ($open->fetchColumn() !== false ? 'End the open attendance session first.' : null));
             if ($error !== null) { $pdo->rollBack(); safe_error_response($error, 409); return; }
+            try {
+                $pdo->exec('SAVEPOINT grade_submit_recompute');
+                $currentSchoolYear = academic_current_school_year($pdo);
+                $retentionThreshold = remedial_attempts_course_grade_threshold($pdo);
+                faculty_recompute_class_grades($pdo, (int) $authCtx['user_id'], $csId, $currentSchoolYear, $retentionThreshold);
+                $pdo->exec('RELEASE SAVEPOINT grade_submit_recompute');
+            } catch (\Throwable $recomputeError) {
+                $pdo->exec('ROLLBACK TO SAVEPOINT grade_submit_recompute');
+                error_log('Grade submission recompute skipped: ' . sanitize_for_log($recomputeError));
+            }
             $graceUntil = $now->modify('+24 hours');
             $pdo->prepare('UPDATE class_sections SET grades_submitted_at = ?, grades_grace_until = ?, grades_submitted_by = ? WHERE cs_id = ?')
                 ->execute([$now->format('Y-m-d H:i:sO'), $graceUntil->format('Y-m-d H:i:sO'), (int) $authCtx['user_id'], $csId]);
+            $enrStmt = $pdo->prepare(
+                "SELECT e.enrollment_id,
+                        COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
+                        e.retention_state,
+                        e.remedial_state_json
+                   FROM enrollments e
+                   LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+                  WHERE e.cs_id = ? AND LOWER(e.status) = 'active'
+                  ORDER BY e.enrollment_id"
+            );
+            $enrStmt->execute([$csId]);
+            $enrRows = $enrStmt->fetchAll(PDO::FETCH_ASSOC);
+            if ($enrRows !== []) {
+                $legacyByEnrollment = [];
+                foreach ($enrRows as $er) {
+                    $legacyByEnrollment[(int) $er['enrollment_id']] = remedial_state_json_is_legacy($er['remedial_state_json']);
+                }
+                $progressions = remedial_attempts_load($pdo, array_keys($legacyByEnrollment), $legacyByEnrollment);
+                foreach ($enrRows as $er) {
+                    $eid = (int) $er['enrollment_id'];
+                    $gwa = $er['final_gwa'] !== null ? (float) $er['final_gwa'] : null;
+                    $effectiveState = retention_effective_state((string) $er['retention_state'], $progressions[$eid] ?? [], $gwa);
+                    grade_release_notify_remedial_transition($pdo, $eid, $gwa, $effectiveState);
+                }
+            }
             audit_record_action($pdo, $config, $authCtx, 'grading', 'grades_submitted', 'class_section', (string) $csId,
                 "Submitted the grades of {$label}.", ['scope_cs_id' => $csId, 'after' => ['grades_submitted_at' => $now->format('c'), 'grades_grace_until' => $graceUntil->format('c')]]);
+        } elseif ($action === 'midterm-publish') {
+            if ($class['archive_reason'] !== null) { $pdo->rollBack(); safe_error_response('Grades for this class are archived.', 409); return; }
+            if ($class['grades_submitted_at'] !== null) { $pdo->rollBack(); safe_error_response('Grades for this class are already submitted.', 409); return; }
+            $preview = grade_release_compute_midterm_preview($pdo, $csId, $class);
+            if ($preview['schemaMode'] !== 'periods') {
+                $pdo->rollBack();
+                safe_error_response('Midterm advisory applies only to classes using Midterm and Final periods.', 409);
+                return;
+            }
+            if ((int) $preview['readyCount'] === 0) {
+                $pdo->rollBack();
+                safe_error_response('Enter complete Midterm scores for at least one student before publishing.', 409);
+                return;
+            }
+            $isUpdate = $class['midterm_published_at'] !== null;
+            $prevEntries = $preview['prevEntries'];
+            $nextEntries = $preview['liveEntries'];
+            $snapshotJson = json_encode(['version' => 1, 'entries' => (object) $nextEntries], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $pdo->prepare('UPDATE class_sections SET midterm_published_at = ?, midterm_published_by = ?, midterm_published_snapshot = CAST(? AS JSONB) WHERE cs_id = ?')
+                ->execute([$now->format('Y-m-d H:i:sO'), (int) $authCtx['user_id'], $snapshotJson, $csId]);
+            $notifStats = grade_release_notify_midterm_transitions($pdo, $csId, $prevEntries, $nextEntries);
+            if (!$isUpdate) {
+                audit_record_action($pdo, $config, $authCtx, 'grading', 'midterm_advisory_published', 'class_section', (string) $csId,
+                    "Published the Midterm advisory of {$label}.",
+                    ['scope_cs_id' => $csId, 'after' => [
+                        'publishedStudents' => count($nextEntries),
+                        'atRiskCount' => count($preview['atRisk']),
+                        'notifiedAtRisk' => $notifStats['notifiedAtRisk'],
+                    ]]);
+            } else {
+                audit_record_action($pdo, $config, $authCtx, 'grading', 'midterm_advisory_updated', 'class_section', (string) $csId,
+                    "Updated the Midterm advisory of {$label}.",
+                    ['scope_cs_id' => $csId, 'after' => [
+                        'publishedStudents' => count($nextEntries),
+                        'atRiskCount' => count($preview['atRisk']),
+                        'addedAtRisk' => count($preview['diff']['added']),
+                        'removedAtRisk' => count($preview['diff']['removed']),
+                        'notifiedAtRisk' => $notifStats['notifiedAtRisk'],
+                        'notifiedCleared' => $notifStats['notifiedCleared'],
+                    ]]);
+            }
+        } elseif ($action === 'midterm-unpublish') {
+            if ($class['archive_reason'] !== null) { $pdo->rollBack(); safe_error_response('Grades for this class are archived.', 409); return; }
+            if ($class['grades_submitted_at'] !== null) { $pdo->rollBack(); safe_error_response('Grades for this class are already submitted.', 409); return; }
+            if ($class['midterm_published_at'] === null) { $pdo->rollBack(); safe_error_response('Midterm advisory is not published for this class.', 409); return; }
+            $pdo->prepare('UPDATE class_sections SET midterm_published_at = NULL, midterm_published_by = NULL, midterm_published_snapshot = NULL WHERE cs_id = ?')
+                ->execute([$csId]);
+            audit_record_action($pdo, $config, $authCtx, 'grading', 'midterm_advisory_unpublished', 'class_section', (string) $csId,
+                "Unpublished the Midterm advisory of {$label}.",
+                ['scope_cs_id' => $csId, 'before' => ['midterm_published_at' => grade_submission_time($class['midterm_published_at'])]]);
         } else {
             if ($class['grades_submitted_at'] === null) { $pdo->rollBack(); safe_error_response('Grades for this class are not submitted.', 409); return; }
             if ($class['grades_grace_until'] === null || new DateTimeImmutable($class['grades_grace_until']) <= $now) {
@@ -173,6 +298,8 @@ function grade_submission_faculty_handle(string $action): void
 function handle_faculty_grade_submission_get(): void { grade_submission_faculty_handle('read'); }
 function handle_faculty_grade_submission_submit(): void { grade_submission_faculty_handle('submit'); }
 function handle_faculty_grade_submission_withdraw(): void { grade_submission_faculty_handle('withdraw'); }
+function handle_faculty_midterm_advisory_publish(): void { grade_submission_faculty_handle('midterm-publish'); }
+function handle_faculty_midterm_advisory_unpublish(): void { grade_submission_faculty_handle('midterm-unpublish'); }
 function handle_faculty_grade_change_open(): void { grade_submission_faculty_handle('open'); }
 function handle_faculty_grade_change_send(): void { grade_submission_faculty_handle('send'); }
 function handle_faculty_grade_change_pull_back(): void { grade_submission_faculty_handle('pull-back'); }
@@ -656,10 +783,33 @@ function grade_change_admin_handle(string $action): void
         $label = $row['course_code'] . ' (' . $row['cs_name'] . ')';
         $approve = $action === 'approve';
         if ($approve) {
-            foreach (json_decode((string) $row['draft_results'], true) ?: [] as $enrollmentId => $result) {
+            $draftResults = json_decode((string) $row['draft_results'], true) ?: [];
+            foreach ($draftResults as $enrollmentId => $result) {
                 faculty_save_computed_grade($pdo, (float) $result['percentage'], (float) $result['gwa'], (string) $result['retention'], (array) $result['components'], (int) $enrollmentId, false, true);
             }
             $pdo->prepare('UPDATE class_sections SET grades_grace_until = NULL WHERE cs_id = ?')->execute([$csId]);
+            if ($draftResults !== []) {
+                $draftEnrollmentIds = array_values(array_filter(array_map('intval', array_keys($draftResults)), static fn(int $id): bool => $id > 0));
+                if ($draftEnrollmentIds !== []) {
+                    $ph = implode(',', array_fill(0, count($draftEnrollmentIds), '?'));
+                    $legStmt = $pdo->prepare("SELECT enrollment_id, remedial_state_json FROM enrollments WHERE enrollment_id IN ({$ph})");
+                    $legStmt->execute($draftEnrollmentIds);
+                    $legacyByEnrollment = [];
+                    foreach ($legStmt->fetchAll(PDO::FETCH_ASSOC) as $legRow) {
+                        $legacyByEnrollment[(int) $legRow['enrollment_id']] = remedial_state_json_is_legacy($legRow['remedial_state_json']);
+                    }
+                    $progressions = remedial_attempts_load($pdo, $draftEnrollmentIds, $legacyByEnrollment);
+                    foreach ($draftResults as $enrollmentId => $result) {
+                        $eid = (int) $enrollmentId;
+                        if ($eid <= 0) {
+                            continue;
+                        }
+                        $gwa = isset($result['gwa']) && is_numeric($result['gwa']) ? (float) $result['gwa'] : null;
+                        $effectiveState = retention_effective_state((string) ($result['retention'] ?? 'active'), $progressions[$eid] ?? [], $gwa);
+                        grade_release_notify_remedial_transition($pdo, $eid, $gwa, $effectiveState);
+                    }
+                }
+            }
         } else {
             grade_change_restore($pdo, $row);
         }

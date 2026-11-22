@@ -916,6 +916,8 @@ return [
     ['method' => 'GET', 'path' => '/api/faculty/classes/grade-submission', 'handler' => 'handle_faculty_grade_submission_get'],
     ['method' => 'POST', 'path' => '/api/faculty/classes/grade-submission', 'handler' => 'handle_faculty_grade_submission_submit'],
     ['method' => 'POST', 'path' => '/api/faculty/classes/grade-submission/withdraw', 'handler' => 'handle_faculty_grade_submission_withdraw'],
+    ['method' => 'POST', 'path' => '/api/faculty/classes/midterm-advisory/publish', 'handler' => 'handle_faculty_midterm_advisory_publish'],
+    ['method' => 'POST', 'path' => '/api/faculty/classes/midterm-advisory/unpublish', 'handler' => 'handle_faculty_midterm_advisory_unpublish'],
     ['method' => 'POST', 'path' => '/api/faculty/classes/grade-change', 'handler' => 'handle_faculty_grade_change_open'],
     ['method' => 'POST', 'path' => '/api/faculty/classes/grade-change/send', 'handler' => 'handle_faculty_grade_change_send'],
     ['method' => 'POST', 'path' => '/api/faculty/classes/grade-change/pull-back', 'handler' => 'handle_faculty_grade_change_pull_back'],

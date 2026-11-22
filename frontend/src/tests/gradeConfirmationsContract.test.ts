@@ -42,3 +42,33 @@ test('5.2 no prompt on tab or view switch; leaving the page asks only when unsav
   assert.match(page, /!unsavedWorkRef\.current \|\| link\.target/);
   assert.match(page, /if \(!weightsDirtyRef\.current && !singleDirtyRef\.current/);
 });
+
+test('12.12 + 12.13: class-picker bar keeps only Submit grades while GradeSubmissionBanner manages Midterm advisory and retentionImpact preview', () => {
+  const banner = fs.readFileSync(path.join(here, '../components/GradeSubmissionBanner.tsx'), 'utf8');
+
+  // Class-picker bar only renders SubmitGradesButton (no duplicate Publish button).
+  const pickerCard = page.slice(page.indexOf('aria-label={`Class:'), page.indexOf('<GradeSubmissionBanner'));
+  assert.match(pickerCard, /!selectedClass\.gradesSubmitted && \(\s*<SubmitGradesButton/);
+  assert.doesNotMatch(pickerCard, /Publish Midterm|Update advisory|Unpublish/);
+
+  // GradeSubmissionBanner pre-submit Midterm lifecycle states & confirmations.
+  assert.match(banner, /!classItem\.isArchived && state\.midterm\?\.schemaMode === 'periods'/);
+  assert.match(banner, /!midterm\.published && midterm\.readyCount > 0/);
+  assert.match(banner, /midterm\.published && !midterm\.dirty/);
+  assert.match(banner, /midterm\.published && midterm\.dirty/);
+  assert.match(banner, /Publish Midterm advisory/);
+  assert.match(banner, /Update advisory/);
+  assert.match(banner, /Unpublish/);
+  assert.match(banner, /publishMidtermAdvisoryApi\(csId\)/);
+  assert.match(banner, /unpublishMidtermAdvisoryApi\(csId\)/);
+  assert.match(banner, /No students are At Risk/);
+  assert.match(banner, /Newly added to At Risk/);
+  assert.match(banner, /Cleared from At Risk/);
+  assert.match(banner, /missing Midterm scores/);
+
+  // Submit grades confirmation lists missing scores AND retentionImpact (Remedial / Irregular reenrollment).
+  const submitFn = banner.slice(banner.indexOf('export const SubmitGradesButton'));
+  assert.match(submitFn, /const \{ missing, retentionImpact = \[\] \} = await getGradeSubmissionApi\(csId\);/);
+  assert.match(submitFn, /outcome === 'irregular_reenrollment' \? 'Irregular reenrollment' : 'Remedial'/);
+  assert.match(submitFn, /Submitted grades activate Retention Status and notify Remedial students in-app\./);
+});

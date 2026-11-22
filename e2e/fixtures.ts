@@ -63,7 +63,8 @@ const KNOWN_API_PATHS = new Set([
   '/api/student/biometric/liveness/challenge', '/api/student/biometric/liveness/guidance',
   '/api/student/profile', '/api/student/join-requests',
   '/api/faculty/classes/join', '/api/faculty/classes/join/requests', '/api/faculty/classes/auto-sessions',
-  '/api/faculty/classes/grade-submission', '/api/admin/grade-change-requests', '/api/admin/grade-submissions',
+  '/api/faculty/classes/grade-submission', '/api/faculty/classes/midterm-advisory/publish', '/api/faculty/classes/midterm-advisory/unpublish',
+  '/api/admin/grade-change-requests', '/api/admin/grade-submissions',
 ]);
 
 const GET_ONLY_API_PATHS = new Set([

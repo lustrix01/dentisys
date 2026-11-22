@@ -172,7 +172,7 @@ foreach ([$gdS1, $gdS2, $gdS3] as $gdPerson) {
 }
 $gdPublishedBefore = [$gdGradeDb($gdS1['enrollmentId']), $gdGradeDb($gdS2['enrollmentId'])];
 $gdStudentBefore = $gdStudentView($gdA, $gdTokenStudent);
-expect_true(($gdStudentBefore['grade'] ?? null) !== null && ($gdStudentBefore['midterm'] ?? null) !== null, 'Open setup: the Student sees a grade and a midterm evaluation');
+expect_true(($gdStudentBefore['grade'] ?? null) !== null && ($gdStudentBefore['midterm'] ?? null) === null, 'Open setup: the Student sees a submitted grade and retired midterm evaluation');
 $gdLogBefore = $gdStudentLogStatus($gdA['records']['One'], $gdTokenStudent);
 expect_same('present', $gdLogBefore, 'Open setup: the Student sees the present attendance record');
 $gdFacultyGradeBefore = $gdFacultyGrade($gdA, 'One', $gdTokenFa);

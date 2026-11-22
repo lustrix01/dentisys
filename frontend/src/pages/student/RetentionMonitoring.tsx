@@ -252,16 +252,18 @@ export const RetentionMonitoring: React.FC = () => {
     !remedialReviewRecords.includes(record) && !activeRemedialRecords.includes(record));
   const remedialRecordCount = activeRemedialRecords.length + remedialHistoryRecords.length;
 
-  // Midterm Advisory Records (server rule: complete midterm, no final grade or remedial record, 2.5 or worse)
+  // Midterm Advisory Records (published Midterm snapshot, before Final submission, 2.5 or worse)
   const midtermRiskRecords = useMemo(() => {
     return currentRecords.filter(r =>
       Boolean(r.midtermEvaluation?.isAtRisk)
+      && r.midtermEvaluation?.published !== false
+      && r.grade === null
     );
   }, [currentRecords]);
 
-  // Current courses still waiting for midterm scores (no final grade or remedial record yet).
+  // Current courses with a published Midterm advisory still waiting on a student's missing Midterm scores.
   const midtermWaitingRecords = useMemo(() => currentRecords.filter(r =>
-    r.midtermEvaluation && !r.midtermEvaluation.complete && r.midtermEvaluation.totalCount > 0
+    r.midtermEvaluation && r.midtermEvaluation.published !== false && !r.midtermEvaluation.complete && r.midtermEvaluation.totalCount > 0
     && r.grade === null && readRemedialProgression(r).stage === 'none'
   ), [currentRecords]);
   const byCourse = (rows: StudentAcademicClass[]) => courseSort.key === 'none' ? rows : [...rows].sort((a, b) => compareValues(a.courseCode, b.courseCode, courseSort.dir));

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, CheckCircle2, ChevronRight, Plus, Search, Calculator, Filter, Send } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { CalendarDays, CheckCircle2, ChevronRight, Info, Plus, Search, Calculator, Filter, Send } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import Tabs from '../../components/Tabs';
@@ -300,6 +300,8 @@ export const RetentionMonitoring: React.FC = () => {
   const [selectedRemedialEnrollments, setSelectedRemedialEnrollments] = useState<string[]>([]);
   const [retentionRecords, setRetentionRecords] = useState<FacultyRetentionRecord[]>([]);
   const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
+  const [serverUnpublishedMidtermCount, setServerUnpublishedMidtermCount] = useState<number | undefined>(undefined);
+  const [serverUnsubmittedFinalCount, setServerUnsubmittedFinalCount] = useState<number | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notification, setNotificationState] = useState<Notification | null>(null);
@@ -348,6 +350,8 @@ export const RetentionMonitoring: React.FC = () => {
       const response = await getFacultyRetentionApi();
       const records = Array.isArray(response.retention) ? response.retention : [];
       setRetentionRecords(records);
+      setServerUnpublishedMidtermCount(response.unpublishedMidtermClassCount);
+      setServerUnsubmittedFinalCount(response.unsubmittedFinalClassCount);
       const curSy = response.currentSchoolYear || '';
       setCurrentSchoolYear(curSy);
       if (!syInitializedRef.current) {
@@ -408,6 +412,34 @@ export const RetentionMonitoring: React.FC = () => {
     });
     return map;
   }, [facultyClasses]);
+
+  const currentActiveClasses = useMemo(() => (
+    facultyClasses.filter(c =>
+      c.isCurrentSchoolYear !== false
+      && !c.isHistorical
+      && c.archiveReason !== 'cancelled'
+      && c.archiveReason !== 'mistake'
+      && !c.isArchived
+      && (c.status || '').toLowerCase() === 'active'
+    )
+  ), [facultyClasses]);
+
+  const unpublishedMidtermClassCount = serverUnpublishedMidtermCount
+    ?? currentActiveClasses.filter(c => !c.gradesSubmitted && !c.midtermPublished).length;
+  const unsubmittedFinalClassCount = serverUnsubmittedFinalCount
+    ?? currentActiveClasses.filter(c => !c.gradesSubmitted).length;
+  const isCurrentOrAllSchoolYear = !currentSchoolYear || selectedSchoolYear === 'all' || selectedSchoolYear === currentSchoolYear;
+
+  const remedialWriteBlockedReason = useCallback((record: FacultyRetentionRecord): string | null => {
+    const cls = classesById.get(String(record.classId));
+    if (record.gradesSubmitted === false || cls?.gradesSubmitted === false) {
+      return 'Submit the class grades in Grade Computation before recording a remedial result.';
+    }
+    if (record.hasOpenGradeChange === true || cls?.gradeChangeStatus === 'draft' || cls?.gradeChangeStatus === 'pending') {
+      return 'Finish or discard the open grade change before recording a remedial result.';
+    }
+    return null;
+  }, [classesById]);
 
   const classFilterLabel = useCallback((record: FacultyRetentionRecord) => {
     const classItem = classesById.get(String(record.classId));
@@ -565,6 +597,7 @@ export const RetentionMonitoring: React.FC = () => {
   };
   const canSelectRemedialNotice = (row: RetentionRemedialRow) => (
     row.record.schoolYear === currentSchoolYear
+    && remedialWriteBlockedReason(row.record) === null
     && row.progression.attempts.some(attempt => attempt.status === 'pending' && Boolean(attempt.scheduledDate))
   );
 
@@ -602,6 +635,11 @@ export const RetentionMonitoring: React.FC = () => {
     && usableRecords.some(record => record.classId === selectedClassId && isPastYearRecord(record));
 
   const openSchedule = (record: FacultyRetentionRecord) => {
+    const blocked = remedialWriteBlockedReason(record);
+    if (blocked) {
+      showFeedback(blocked, 'info');
+      return;
+    }
     if (isPastYearRecord(record)) {
       showFeedback('Past school-year classes are view-only.', 'info');
       return;
@@ -622,6 +660,11 @@ export const RetentionMonitoring: React.FC = () => {
   const [costRecoveryRecord, setCostRecoveryRecord] = useState<FacultyRetentionRecord | null>(null);
   const [costRecoveryGrade, setCostRecoveryGrade] = useState('');
   const openCostRecovery = (row: RetentionRemedialRow) => {
+    const blocked = remedialWriteBlockedReason(row.record);
+    if (blocked) {
+      showFeedback(blocked, 'info');
+      return;
+    }
     setCostRecoveryRecord(row.record);
     setCostRecoveryGrade('');
   };
@@ -660,6 +703,11 @@ export const RetentionMonitoring: React.FC = () => {
   };
 
   const openResolve = (row: RetentionRemedialRow) => {
+    const blocked = remedialWriteBlockedReason(row.record);
+    if (blocked) {
+      showFeedback(blocked, 'info');
+      return;
+    }
     const attemptNumber = pendingAttemptNumber(row.progression);
     if (!attemptNumber) {
       showFeedback('Only a server-authorized pending attempt can be graded.', 'info');
@@ -1029,6 +1077,18 @@ export const RetentionMonitoring: React.FC = () => {
             </div>
           </div>
 
+          {!isLoading && isCurrentOrAllSchoolYear && unpublishedMidtermClassCount > 0 && (
+            <div role="status" className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+              <div className="flex items-start gap-3 min-w-0">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-clinical-600 dark:text-clinical-400" aria-hidden="true" />
+                <span>Some active classes do not have a published Midterm advisory yet. Publish in Grade Computation to list At-Risk students.</span>
+              </div>
+              <Link to="/grades" className="shrink-0 font-bold text-clinical-700 hover:underline dark:text-clinical-400">
+                Open Grade Computation
+              </Link>
+            </div>
+          )}
+
           <div className="table-pin table-pin-first table-pin-blocks">
             <table className="w-full text-left text-xs max-md:block">
               <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 max-md:hidden">
@@ -1125,6 +1185,17 @@ export const RetentionMonitoring: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Retention Status ({watchlistRecords.length})</h2><p className="text-xs text-slate-500 dark:text-slate-400">Final grades and computed retention status. Select a status to view policy progression.</p></div>
           </div>
+          {!isLoading && isCurrentOrAllSchoolYear && unsubmittedFinalClassCount > 0 && (
+            <div role="status" className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+              <div className="flex items-start gap-3 min-w-0">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-clinical-600 dark:text-clinical-400" aria-hidden="true" />
+                <span>Final grades and Retention Status appear after grades are submitted in Grade Computation.</span>
+              </div>
+              <Link to="/grades" className="shrink-0 font-bold text-clinical-700 hover:underline dark:text-clinical-400">
+                Open Grade Computation
+              </Link>
+            </div>
+          )}
           {watchlistRecords.length === 0 ? (
             // Outside the table so the message is not centred across a table wider than a phone screen.
             isLoading ? <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading retention records…</div> : <div className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{selectedClassId !== 'all' || selectedSubjectCode !== 'all' || searchQuery.trim() ? 'No students needing retention action match these filters.' : 'No students need retention action in this school year.'}</h3></div>
@@ -1141,7 +1212,15 @@ export const RetentionMonitoring: React.FC = () => {
                     <td className="py-3.5 px-4 font-mono max-md:order-4 max-md:p-0"><span className="sr-only md:hidden">Subject: </span>{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
                     <td className="py-3.5 px-4 max-md:order-5 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Class: </span>{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
                     <td className="py-3.5 px-4 max-md:order-6 max-md:p-0"><span className="sr-only md:hidden">State: </span><button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1.5 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button></td>
-                    <td className="py-3.5 px-4 text-right max-md:order-7 max-md:ml-auto max-md:p-0"><div className="flex items-center justify-end gap-1.5"><button type="button" onClick={() => openSchedule(record)} disabled={!canScheduleRecord(record)} title={!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam'} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button></div></td>
+                    <td className="py-3.5 px-4 text-right max-md:order-7 max-md:ml-auto max-md:p-0"><div className="flex items-center justify-end gap-1.5">{(() => {
+                      const blocked = remedialWriteBlockedReason(record);
+                      const disabled = !canScheduleRecord(record) || Boolean(blocked);
+                      const titleText = blocked
+                        ?? (!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam');
+                      return (
+                        <button type="button" onClick={() => openSchedule(record)} disabled={disabled} title={titleText} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button>
+                      );
+                    })()}</div></td>
                   </tr>
                 ))}
               </tbody>
@@ -1164,6 +1243,17 @@ export const RetentionMonitoring: React.FC = () => {
               <Send className="h-3.5 w-3.5" /> Send remedial notices
             </button>
           </div>
+          {!isLoading && isCurrentOrAllSchoolYear && unsubmittedFinalClassCount > 0 && (
+            <div role="status" className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+              <div className="flex items-start gap-3 min-w-0">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-clinical-600 dark:text-clinical-400" aria-hidden="true" />
+                <span>Final grades and Retention Status appear after grades are submitted in Grade Computation.</span>
+              </div>
+              <Link to="/grades" className="shrink-0 font-bold text-clinical-700 hover:underline dark:text-clinical-400">
+                Open Grade Computation
+              </Link>
+            </div>
+          )}
           {remedialRows.length === 0 ? (
             // Outside the table so the message is not centred across a table wider than a phone screen.
             isLoading ? <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading remedial records…</div> : <div className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No remedial records match the selected filters.</h3></div>
@@ -1228,49 +1318,68 @@ export const RetentionMonitoring: React.FC = () => {
                       </div>
                     </td>
                     <td className="py-3.5 px-3 max-md:order-6 max-md:w-full max-md:p-0">
-                      <div className="flex flex-nowrap items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => openPolicyProgression(row.record)}
-                          className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
-                          title="View complete attempt history and progression details"
-                        >
-                          Details <ChevronRight className="h-3 w-3" />
-                        </button>
-                        {canScheduleRecord(row.record) && !isPastYearRecord(row.record) && (
-                          <button
-                            type="button"
-                            onClick={() => openSchedule(row.record)}
-                            className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
-                          >
-                            Schedule attempt {allowedAttemptNumbers(row.progression)[0]}
-                          </button>
-                        )}
-                        {pendingAttemptNumber(row.progression) && row.record.state !== 'archived' && (
-                          <button
-                            type="button"
-                            onClick={() => openResolve(row)}
-                            className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
-                          >
-                            Grade attempt {pendingAttemptNumber(row.progression)}
-                          </button>
-                        )}
-                        {row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived' && (
-                          <button
-                            type="button"
-                            onClick={() => openCostRecovery(row)}
-                            className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
-                          >
-                            Record cost recovery
-                          </button>
-                        )}
-                        {row.progression.legacyUnclassified && (
-                          <span className="text-[10px] text-amber-600" title="Legacy remedial data must be classified by the server before another write">
-                            Legacy / unclassified
-                          </span>
-                        )}
-                        <span className="sr-only" title="No approved authoritative delete endpoint exists">Removal unavailable</span>
-                      </div>
+                      {(() => {
+                        const blocked = remedialWriteBlockedReason(row.record);
+                        const hasWriteAction = (canScheduleRecord(row.record) && !isPastYearRecord(row.record))
+                          || Boolean(pendingAttemptNumber(row.progression) && row.record.state !== 'archived')
+                          || (row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived');
+                        return (
+                          <div className="space-y-1">
+                            <div className="flex flex-nowrap items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openPolicyProgression(row.record)}
+                                className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+                                title="View complete attempt history and progression details"
+                              >
+                                Details <ChevronRight className="h-3 w-3" />
+                              </button>
+                              {canScheduleRecord(row.record) && !isPastYearRecord(row.record) && (
+                                <button
+                                  type="button"
+                                  disabled={Boolean(blocked)}
+                                  title={blocked ?? undefined}
+                                  onClick={() => openSchedule(row.record)}
+                                  className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
+                                >
+                                  Schedule attempt {allowedAttemptNumbers(row.progression)[0]}
+                                </button>
+                              )}
+                              {pendingAttemptNumber(row.progression) && row.record.state !== 'archived' && (
+                                <button
+                                  type="button"
+                                  disabled={Boolean(blocked)}
+                                  title={blocked ?? undefined}
+                                  onClick={() => openResolve(row)}
+                                  className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
+                                >
+                                  Grade attempt {pendingAttemptNumber(row.progression)}
+                                </button>
+                              )}
+                              {row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived' && (
+                                <button
+                                  type="button"
+                                  disabled={Boolean(blocked)}
+                                  title={blocked ?? undefined}
+                                  onClick={() => openCostRecovery(row)}
+                                  className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
+                                >
+                                  Record cost recovery
+                                </button>
+                              )}
+                              {row.progression.legacyUnclassified && (
+                                <span className="text-[10px] text-amber-600" title="Legacy remedial data must be classified by the server before another write">
+                                  Legacy / unclassified
+                                </span>
+                              )}
+                              <span className="sr-only" title="No approved authoritative delete endpoint exists">Removal unavailable</span>
+                            </div>
+                            {blocked && hasWriteAction && (
+                              <p className="text-[10px] font-medium text-amber-700 dark:text-amber-300">{blocked}</p>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/app/remedial_attempts.php';
+require_once dirname(__DIR__) . '/app/grade_release_gates.php';
 require_once __DIR__ . '/FacultyController.php';
 
 function student_academic_verify_auth(PDO $pdo, array $config): array
@@ -105,6 +106,7 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
                 e.remedial_state_json, e.clinic_hours_completed,
                 cs.cs_name, cs.semester, cs.school_year, cs.year_level AS class_year_level,
                 cs.lec_room, cs.lab_room, cs.block, cs.meetings_recorded, cs.archive_reason, cs.grades_submitted_at,
+                cs.midterm_published_at, cs.midterm_published_snapshot,
                 u.display_name AS instructor_name,
                 c.course_id, c.course_code, COALESCE(cs.course_title, c.name) AS course_name, c.units, c.is_clinical,
                 gc.component_mode AS grading_component_mode
@@ -137,27 +139,32 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
     $progressions = remedial_attempts_load($pdo, $enrollmentIds, $legacyByEnrollment);
 
     $rows = [];
+    $readCache = [];
     foreach ($dbRows as $row) {
         $enrollmentId = (int) $row['enrollment_id'];
         $meetings = class_meetings_read($pdo, $row);
-        $readCache = null;
-        $midterm = faculty_watchlist_midterm($pdo, $row, $readCache, true);
+        $gradesSubmitted = $row['grades_submitted_at'] !== null;
+        $submittedGwa = $gradesSubmitted && $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null;
+        $submittedPercentage = $gradesSubmitted && $row['final_percentage'] !== null ? (float) $row['final_percentage'] : null;
+        $midterm = grade_release_midterm_entry_from_snapshot($row, $enrollmentId, $pdo, $readCache);
         $midtermEvaluation = [
+            'published' => (bool) ($midterm['published'] ?? false),
             'complete' => (bool) $midterm['complete'],
             'percentage' => $midterm['percentage'] !== null ? round((float) $midterm['percentage'], 2) : null,
             'rawPercentage' => $midterm['percentage'] !== null ? ($midterm['rawPercentage'] ?? null) : null,
             'grade' => $midterm['complete'] && $midterm['percentage'] !== null
-                ? faculty_percentage_to_gwa((float) $midterm['percentage'], 'Midterm') : null,
+                ? ($midterm['gwa'] !== null ? (float) $midterm['gwa'] : faculty_percentage_to_gwa((float) $midterm['percentage'], 'Midterm'))
+                : null,
             'gradedCount' => (int) ($midterm['gradedCount'] ?? 0),
             'totalCount' => (int) ($midterm['totalCount'] ?? 0),
             'isAtRisk' => academic_school_year_is_current($pdo, (string) $row['school_year'])
                 && faculty_midterm_at_risk(
                     $midterm,
-                    $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
+                    $submittedGwa,
                     $progressions[$enrollmentId] ?? []
                 ),
         ];
-        if (isset($midterm['components'])) {
+        if (!empty($midterm['components'])) {
             $midtermEvaluation['components'] = $midterm['components'];
         }
         $classRow = [
@@ -179,24 +186,29 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
             'schoolYear' => (string) $row['school_year'],
             'yearLevel' => $row['class_year_level'] !== null ? (int) $row['class_year_level'] : null,
             'dateEnrolled' => $row['date_enrolled'],
-            'grade' => $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
-            'percentage' => $row['final_percentage'] !== null ? (float) $row['final_percentage'] : null,
-            'gradeComponents' => $row['grade_components_json'] !== null
+            'grade' => $submittedGwa,
+            'percentage' => $submittedPercentage,
+            'gradeComponents' => $gradesSubmitted && $row['grade_components_json'] !== null
                 ? json_decode((string) $row['grade_components_json'], true)
                 : null,
             'midtermEvaluation' => $midtermEvaluation,
+            // GRD-004 Q1: Final grades, Retention Status, and remedial progression are hidden externally until Submit grades.
             // A passed remedial attempt or cost recovery clears the Student for
             // the course; the recorded grade itself is unchanged.
-            'retentionState' => retention_effective_state(
-                (string) $row['retention_state'],
-                $progressions[$enrollmentId] ?? [],
-                $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null
-            ),
-            'remedial' => remedial_state_json_legacy_payload($row['remedial_state_json']),
-            'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
+            'retentionState' => $gradesSubmitted
+                ? retention_effective_state(
+                    (string) $row['retention_state'],
+                    $progressions[$enrollmentId] ?? [],
+                    $submittedGwa
+                )
+                : 'active',
+            'remedial' => $gradesSubmitted ? remedial_state_json_legacy_payload($row['remedial_state_json']) : null,
+            'remedialProgression' => $gradesSubmitted
+                ? ($progressions[$enrollmentId] ?? remedial_attempts_empty_progression())
+                : remedial_attempts_empty_progression(),
             'clinicHoursCompleted' => (int) $row['clinic_hours_completed'],
             'isCurrent' => academic_school_year_is_current($pdo, (string) $row['school_year']),
-            'isPast' => $row['grades_submitted_at'] !== null && academic_school_year_is_past($pdo, (string) $row['school_year']),
+            'isPast' => $gradesSubmitted && academic_school_year_is_past($pdo, (string) $row['school_year']),
             'archiveReason' => $row['archive_reason'] === 'finished' ? 'finished' : null,
         ];
         if (in_array($row['grading_component_mode'] ?? 'combined', ['lecture_laboratory', 'lecture'], true)) {

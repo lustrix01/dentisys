@@ -42,3 +42,50 @@ test('GRD-004: chips carry a tone class so the states look different', () => {
   assert.notEqual(tone('draft', 'submitted'), tone(null, 'submitted'));
   assert.equal(tone(null, 'submitted'), tone(null, 'submitted_late'));
 });
+
+test('GRD-004 / 12.13: Midterm published chip appears when unsubmitted and midtermPublished, subordinate to higher states', () => {
+  const published = gradeStatusChip({
+    gradeChangeStatus: null,
+    gradeDeadlineStatus: 'not_submitted',
+    gradesSubmitted: false,
+    midtermPublished: true,
+  });
+  assert.equal(published.label, 'Midterm published');
+  assert.notEqual(published.tone, gradeStatusChip({ gradeDeadlineStatus: 'not_submitted', midtermPublished: false }).tone);
+  assert.notEqual(published.tone, gradeStatusChip({ gradeDeadlineStatus: 'submitted' }).tone);
+
+  assert.equal(
+    gradeStatusChip({ gradesSubmitted: null, midtermPublished: true }).label,
+    'Midterm published',
+  );
+  assert.equal(
+    gradeStatusChip({ gradesSubmitted: false, midtermPublished: false, gradeDeadlineStatus: 'not_submitted' }).label,
+    'Not submitted',
+  );
+  assert.equal(
+    gradeStatusChip({ gradesSubmitted: true, midtermPublished: true, gradeDeadlineStatus: 'not_submitted' }).label,
+    'Not submitted',
+  );
+
+  // Subordinate to draft, pending, submitted, submitted_late, and late.
+  assert.equal(
+    gradeStatusChip({ gradeChangeStatus: 'draft', gradeDeadlineStatus: 'not_submitted', gradesSubmitted: false, midtermPublished: true }).label,
+    'Grade change draft',
+  );
+  assert.equal(
+    gradeStatusChip({ gradeChangeStatus: 'pending', gradeDeadlineStatus: 'not_submitted', gradesSubmitted: false, midtermPublished: true }).label,
+    'Awaiting Dean approval',
+  );
+  assert.equal(
+    gradeStatusChip({ gradeDeadlineStatus: 'submitted', gradesSubmitted: false, midtermPublished: true }).label,
+    'Submitted',
+  );
+  assert.equal(
+    gradeStatusChip({ gradeDeadlineStatus: 'submitted_late', gradesSubmitted: false, midtermPublished: true }).label,
+    'Submitted late',
+  );
+  assert.equal(
+    gradeStatusChip({ gradeDeadlineStatus: 'late', gradesSubmitted: false, midtermPublished: true }).label,
+    'Late',
+  );
+});
