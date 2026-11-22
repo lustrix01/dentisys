@@ -3801,6 +3801,150 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
   });
 
+  test.describe('Grades page layout (9.29)', () => {
+    const layoutClasses = [
+      {
+        id: '1',
+        csId: 1,
+        csName: 'CLIN401-A',
+        courseId: 101,
+        courseCode: 'CLIN401',
+        courseName: 'Clinical Dentistry I',
+        courseTitle: 'Clinical Dentistry I',
+        units: 3,
+        schoolYear: '2026-2027',
+        semester: '1st Semester',
+        yearLevel: 4,
+        block: 'A',
+        schedule: 'Mon/Wed 8-11AM',
+        enrolledCount: 20,
+        instructorName: 'Prof. Jane Doe',
+        status: 'Active',
+      },
+    ];
+
+    test('iPhone 393: Grade Weights title and icon never overlap Reload button (Spot A)', async ({ page }) => {
+      await page.setViewportSize({ width: 393, height: 852 });
+      await page.route('**/api/faculty/classes', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: layoutClasses }),
+      }));
+      await page.route('**/api/faculty/grading-config?*', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok', configuration: null }),
+      }));
+
+      await page.goto('/grades?tab=components');
+      const heading = page.getByRole('heading', { name: 'Configure Grading Weights & Schema' });
+      const reloadBtn = page.getByRole('button', { name: 'Reload', exact: true });
+      await expect(heading).toBeVisible();
+      await expect(reloadBtn).toBeVisible();
+
+      const titleSpan = heading.locator('span');
+      const gearIcon = heading.locator('svg');
+      const titleBox = await titleSpan.boundingBox();
+      const iconBox = await gearIcon.boundingBox();
+      const reloadBox = await reloadBtn.boundingBox();
+      expect(titleBox).not.toBeNull();
+      expect(iconBox).not.toBeNull();
+      expect(reloadBox).not.toBeNull();
+
+      expect(titleBox!.x + titleBox!.width).toBeLessThanOrEqual(reloadBox!.x);
+      expect(iconBox!.width).toBeGreaterThanOrEqual(18);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+      expect(overflow).toBe(false);
+    });
+
+    test('Desktop 1920: switching to Assessments Manager after scrolling keeps S.Y. select clear of sticky header (Spot B)', async ({ page }) => {
+      await page.setViewportSize({ width: 1920, height: 947 });
+      const manyStudents = Array.from({ length: 20 }, (_, i) => ({
+        id: String(100 + i),
+        studentId: `2026-${String(i + 1).padStart(4, '0')}`,
+        name: `Student ${i + 1}`,
+        lastName: `Last${String(i + 1).padStart(2, '0')}`,
+        yearLevel: 4,
+        enrolledSubjects: [{ classId: '1', code: 'CLIN401', name: 'Clinical Dentistry I', status: 'Active' }],
+      }));
+      await page.route('**/api/faculty/classes', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: layoutClasses }),
+      }));
+      await page.route('**/api/faculty/students*', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok', students: manyStudents }),
+      }));
+      await page.route('**/api/faculty/grading-config?*', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          configuration: {
+            id: 'cfg-1',
+            course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+            semester: '1st Semester',
+            schoolYear: '2026-2027',
+            version: 1,
+            schemaMode: 'periods',
+            componentMode: 'combined',
+            termRatio: { midterm: 40, final: 60 },
+            midtermCategories: [{ id: 11, name: 'Quizzes', weight: '100', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment' }],
+            finalCategories: [{ id: 12, name: 'Final Exam', weight: '100', sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment' }],
+            categories: [
+              { id: 11, name: 'Quizzes', weight: '100', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment' },
+              { id: 12, name: 'Final Exam', weight: '100', sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment' },
+            ],
+          },
+        }),
+      }));
+      await page.route('**/api/faculty/assessments', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          { id: '1', title: 'Quiz 1', type: 'Quizzes', gradingCategoryId: 11, categoryId: 11, category: 'Quizzes', gradingPeriod: 'Midterm', maxScore: 50, csId: 1, classId: '1', subjectCode: 'CLIN401', date: '2026-09-01', transmutationEnabled: true },
+        ]),
+      }));
+
+      await page.goto('/grades');
+      const sySelect = page.getByRole('main').getByLabel('School year');
+      const assessmentsTab = page.getByRole('tab', { name: 'Assessments Manager' });
+      await expect(sySelect).toBeVisible();
+      await expect(assessmentsTab).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Assessment Spec:' })).toBeVisible();
+
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      const scrolledDown = await page.evaluate(() => window.scrollY > 0);
+      expect(scrolledDown).toBe(true);
+
+      await assessmentsTab.click();
+      await expect(page.getByRole('heading', { name: 'Active Course Assessments' })).toBeVisible();
+
+      const headerAndSelect = await page.evaluate(() => {
+        const header = Array.from(document.querySelectorAll('header')).find(h => getComputedStyle(h).display !== 'none');
+        const select = document.querySelector('select[aria-label="School year"]');
+        if (!header || !select) return null;
+        const hr = header.getBoundingClientRect();
+        const sr = select.getBoundingClientRect();
+        const cx = sr.left + sr.width / 2;
+        const cy = sr.top + sr.height / 2;
+        const topEl = document.elementFromPoint(cx, cy);
+        return {
+          scrollY: window.scrollY,
+          headerBottom: hr.bottom,
+          syTop: sr.top,
+          coveredByHeader: Boolean(topEl && header.contains(topEl)),
+        };
+      });
+
+      expect(headerAndSelect).not.toBeNull();
+      expect(headerAndSelect!.syTop).toBeGreaterThanOrEqual(headerAndSelect!.headerBottom);
+      expect(headerAndSelect!.coveredByHeader).toBe(false);
+    });
+  });
+
   test.describe('Faculty Assessment Manager stable grading categories', () => {
     const mockFacultyClasses = [
       {

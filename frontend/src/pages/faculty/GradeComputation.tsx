@@ -498,6 +498,16 @@ export const GradeComputation: React.FC = () => {
   };
 
   const [activeSubTab, setActiveSubTab] = useState(getInitialTab());
+  const prevSubTabRef = useRef(activeSubTab);
+
+  useEffect(() => {
+    if (prevSubTabRef.current !== activeSubTab) {
+      prevSubTabRef.current = activeSubTab;
+      if (window.scrollY > 0) {
+        window.scrollTo({ top: 0, behavior: 'auto' });
+      }
+    }
+  }, [activeSubTab]);
 
   useEffect(() => {
     setActiveSubTab(getInitialTab());
@@ -3378,7 +3388,7 @@ export const GradeComputation: React.FC = () => {
 
 
       {/* Unified Class and Course Selector Bar for All Tabs */}
-      <Card className="no-print p-4 flex flex-col xl:flex-row gap-4 xl:items-center scroll-mt-6">
+      <Card className="no-print p-4 flex flex-col xl:flex-row gap-4 xl:items-center">
         <div className="w-full xl:w-56 rounded-xl border dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-clinical-500">
           <CalendarDays className="w-4 h-4 shrink-0 text-clinical-600 dark:text-clinical-400" aria-hidden="true" />
           <select
@@ -4226,58 +4236,55 @@ export const GradeComputation: React.FC = () => {
       ---------------------------------------------------- */}
       {activeSubTab === 'components' && (
         <Card className="max-w-4xl mx-auto shadow-sm border border-slate-200/90 dark:border-slate-800 rounded-3xl overflow-hidden bg-white dark:bg-slate-900">
-          <CardHeader className="relative border-b border-slate-100 dark:border-slate-800/80 p-6 sm:p-7">
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-              <div className="space-y-1 pr-24 sm:pr-28">
-                <CardTitle className="text-lg sm:text-xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2.5">
-                  <Settings className="w-5 h-5 text-clinical-600 dark:text-clinical-400" />
+          <CardHeader className="flex-col items-stretch mb-0 border-b border-slate-100 dark:border-slate-800/80 p-6 sm:p-7">
+            <div className="space-y-1.5">
+              <div className="flex items-start justify-between gap-3">
+                <CardTitle className="min-w-0 text-lg sm:text-xl font-extrabold text-slate-800 dark:text-slate-100 flex items-start sm:items-center gap-2.5">
+                  <Settings className="w-5 h-5 shrink-0 mt-0.5 sm:mt-0 text-clinical-600 dark:text-clinical-400" />
                   <span>Configure Grading Weights & Schema</span>
                 </CardTitle>
                 {currentOffering && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                    Editing schema for: <span className="font-bold text-clinical-600 dark:text-clinical-400">{currentOffering.courseCode} — {currentOffering.courseName}</span>
-                  </p>
-                )}
-                {currentOffering && (
-                  <p className="text-[11px] text-slate-500 dark:text-slate-500" data-testid="weights-sections-note">
-                    These weights apply to all {currentOffering.sections.length === 1 ? 'sections' : `${currentOffering.sections.length} sections`} of this course ({currentOffering.sectionNames.join(', ')}). The section selector above does not change them.
-                  </p>
-                )}
-                {currentOffering && !configLoading && (
-                  <div className="pt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
-                    <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      {schemaMode === 'overall' ? 'Overall Grading (legacy)' : 'Period Grading'}
-                    </span>
-                    {loadedConfig ? (
-                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">
-                        Version {loadedConfig.version}
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">
-                        Suggested starting preset — unsaved
-                      </span>
-                    )}
-                    {isDirty && loadedConfig && (
-                      <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">
-                        Unsaved changes
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {currentOffering && (
-                <div className="absolute top-6 right-6 sm:top-7 sm:right-7 z-10">
                   <button
                     type="button"
                     onClick={handleReload}
                     disabled={configLoading || configSaving}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-2xs disabled:opacity-50 cursor-pointer transition-colors"
+                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-2xs disabled:opacity-50 cursor-pointer transition-colors"
                     title="Reload latest configuration from server"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${configLoading ? 'animate-spin' : ''}`} />
                     <span>Reload</span>
                   </button>
+                )}
+              </div>
+              {currentOffering && (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Editing schema for: <span className="font-bold text-clinical-600 dark:text-clinical-400">{currentOffering.courseCode} — {currentOffering.courseName}</span>
+                </p>
+              )}
+              {currentOffering && (
+                <p className="text-[11px] text-slate-500 dark:text-slate-500" data-testid="weights-sections-note">
+                  These weights apply to all {currentOffering.sections.length === 1 ? 'sections' : `${currentOffering.sections.length} sections`} of this course ({currentOffering.sectionNames.join(', ')}). The section selector above does not change them.
+                </p>
+              )}
+              {currentOffering && !configLoading && (
+                <div className="pt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
+                  <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                    {schemaMode === 'overall' ? 'Overall Grading (legacy)' : 'Period Grading'}
+                  </span>
+                  {loadedConfig ? (
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">
+                      Version {loadedConfig.version}
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">
+                      Suggested starting preset — unsaved
+                    </span>
+                  )}
+                  {isDirty && loadedConfig && (
+                    <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">
+                      Unsaved changes
+                    </span>
+                  )}
                 </div>
               )}
             </div>
