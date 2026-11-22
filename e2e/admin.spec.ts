@@ -378,6 +378,48 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(page.locator('h1', { hasText: 'System Audit Trail' })).toBeHidden();
   });
 
+  test('Revoke Biometric Enrollment modal validates 8-char reason inline without HTML5 tooltip', async ({ page }) => {
+    const posted: unknown[] = [];
+    await mockDeanReportSummary(page, [{ ...deanReportStudents[0], faceEnrolled: true }]);
+    await page.route('**/api/admin/biometrics/revoke**', async route => {
+      posted.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok', message: 'Face enrollment revoked.' }),
+      });
+    });
+
+    await page.goto('/admin/reports');
+    await openClassCard(page, 'CLINIC');
+    await page.getByRole('button', { name: 'Revoke biometric enrollment for Alex Example' }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', { name: 'Revoke Biometric Enrollment' })).toBeVisible();
+    const reasonField = dialog.getByLabel('Reason (8 to 240 characters)');
+    await expect(reasonField).toBeVisible();
+    const confirm = dialog.getByRole('button', { name: 'Revoke enrollment' });
+    await expect(confirm).toBeEnabled();
+
+    await confirm.click();
+    await expect(dialog.getByRole('alert')).toHaveText('Give a reason of at least 8 characters.');
+    expect(posted).toEqual([]);
+
+    await reasonField.fill('1234567');
+    await expect(dialog.getByRole('alert')).toHaveCount(0);
+    await confirm.click();
+    await expect(dialog.getByRole('alert')).toHaveText('Give a reason of at least 8 characters.');
+    expect(posted).toEqual([]);
+
+    await reasonField.fill('Student requested reset.');
+    await expect(dialog.getByRole('alert')).toHaveCount(0);
+    await confirm.click();
+
+    await expect(dialog).toHaveCount(0);
+    expect(posted).toEqual([{ studentId: '101', reason: 'Student requested reset.' }]);
+    await expect(page.getByText('Alex Example: Face enrollment revoked.').first()).toBeVisible();
+  });
+
 });
 
 // 13.9: Academic Terms and Rooms moved from the Dean to the Superadmin (D9).

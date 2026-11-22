@@ -65,6 +65,7 @@ export const GradeSubmissionBanner: React.FC<{ classItem: FacultyClassItem; onCh
   const [busy, setBusy] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [reason, setReason] = useState('');
+  const [reasonError, setReasonError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -101,6 +102,20 @@ export const GradeSubmissionBanner: React.FC<{ classItem: FacultyClassItem; onCh
     void act('open', { message: `Open a grade change for ${label}? Your edits stay a draft until the Dean approves them.`, title: 'Request Grade Change', confirmLabel: 'Open draft' });
   });
 
+  const send = () => {
+    const trimmed = reason.trim();
+    if (trimmed.length < 8) {
+      setReasonError('Give a reason of at least 8 characters.');
+      return;
+    }
+    void act('send', null, trimmed).then(ok => {
+      if (ok) {
+        setReasonError('');
+        setSendOpen(false);
+      }
+    });
+  };
+
   let tone: keyof typeof BOX_TONES;
   let text: string;
   let buttons: React.ReactNode;
@@ -110,7 +125,7 @@ export const GradeSubmissionBanner: React.FC<{ classItem: FacultyClassItem; onCh
     buttons = (
       <>
         {discard('amber')}
-        <button type="button" disabled={busy} onClick={() => { setReason(''); setSendOpen(true); }} className={PRIMARY}>Send for Dean approval</button>
+        <button type="button" disabled={busy} onClick={() => { setReason(''); setReasonError(''); setSendOpen(true); }} className={PRIMARY}>Send for Dean approval</button>
       </>
     );
   } else if (batch?.status === 'pending') {
@@ -153,25 +168,28 @@ export const GradeSubmissionBanner: React.FC<{ classItem: FacultyClassItem; onCh
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">{buttons}</div>
       </div>
-      <Modal isOpen={sendOpen} onClose={() => setSendOpen(false)} title="Send for Dean Approval" size="sm">
+      <Modal isOpen={sendOpen} onClose={() => { if (!busy) { setSendOpen(false); setReasonError(''); } }} title="Send for Dean Approval" size="sm">
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200">Reason</label>
+            <label htmlFor="grade-change-send-reason" className="block text-xs font-bold text-slate-700 dark:text-slate-200">Reason (at least 8 characters)</label>
             <textarea
+              id="grade-change-send-reason"
               value={reason}
-              onChange={event => setReason(event.target.value)}
+              onChange={event => { setReason(event.target.value); if (reasonError) setReasonError(''); }}
+              aria-invalid={reasonError ? true : undefined}
+              aria-describedby={reasonError ? 'err-grade-change-send-reason' : undefined}
               className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-100"
               rows={3}
               maxLength={500}
             />
-            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Give a reason of at least 8 characters.</p>
+            {reasonError && <p id="err-grade-change-send-reason" role="alert" className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-400">{reasonError}</p>}
           </div>
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setSendOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold dark:border-slate-700">Cancel</button>
+            <button type="button" disabled={busy} onClick={() => { setSendOpen(false); setReasonError(''); }} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold dark:border-slate-700">Cancel</button>
             <button
               type="button"
-              disabled={busy || reason.trim().length < 8}
-              onClick={() => { void act('send', null, reason.trim()).then(ok => { if (ok) setSendOpen(false); }); }}
+              disabled={busy}
+              onClick={send}
               className="rounded-lg px-4 py-2 text-sm font-bold text-white bg-emerald-600 disabled:opacity-50"
             >Send</button>
           </div>

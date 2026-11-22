@@ -54,6 +54,29 @@ test('Secretary reason and Admin revoke reason show the server field error inlin
   const audit = read('pages/admin/SystemAudit.tsx');
   assert.match(audit, /setRevokeError\(apiFieldErrors\(err\)\.reason \?\?/);
   assert.match(audit, /Reason \(8 to 240 characters\)/);
+  const revokeTextarea = audit.match(/<textarea value=\{revokeReason\}[\s\S]*?\/>/)?.[0] ?? '';
+  assert.ok(revokeTextarea && !/\brequired\b/.test(revokeTextarea), 'Revoke reason textarea must not use HTML5 required');
+  assert.match(audit, /disabled=\{revoking\}[^>]*>\{revoking \? 'Revoking…' : 'Revoke enrollment'\}/);
+});
+
+test('Grade change Send and Reject modals label the 8-character minimum, keep submit clickable, and validate inline', () => {
+  const banner = read('components/GradeSubmissionBanner.tsx');
+  assert.match(banner, /Reason \(at least 8 characters\)/);
+  const bannerTextarea = banner.match(/<textarea[\s\S]*?id="grade-change-send-reason"[\s\S]*?\/>/)?.[0] ?? '';
+  assert.ok(bannerTextarea && /maxLength=\{500\}/.test(bannerTextarea) && !/\brequired\b/.test(bannerTextarea));
+  assert.match(banner, /id="err-grade-change-send-reason" role="alert"/);
+  assert.match(banner, /if \(reasonError\) setReasonError\(''\)/);
+  assert.match(banner, /disabled=\{busy\}[\s\S]{0,160}?>Send<\/button>/);
+  assert.doesNotMatch(banner, /disabled=\{[^}]*reason\.trim\(\)\.length\s*<\s*8/);
+
+  const dean = read('pages/admin/GradeSubmissions.tsx');
+  assert.match(dean, /Reason \(at least 8 characters\)/);
+  const deanTextarea = dean.match(/<textarea[\s\S]*?id="grade-change-reject-reason"[\s\S]*?\/>/)?.[0] ?? '';
+  assert.ok(deanTextarea && /maxLength=\{500\}/.test(deanTextarea) && !/\brequired\b/.test(deanTextarea));
+  assert.match(dean, /id="err-grade-change-reject-reason" role="alert"/);
+  assert.match(dean, /if \(rejectReasonError\) setRejectReasonError\(''\)/);
+  assert.match(dean, /disabled=\{busy\}[\s\S]{0,160}?>Reject<\/button>/);
+  assert.doesNotMatch(dean, /disabled=\{[^}]*rejectReason\.trim\(\)\.length\s*<\s*8/);
 });
 
 test('Form inputs carry the server limits: auth, faculty invitation, roster import, edit class', () => {

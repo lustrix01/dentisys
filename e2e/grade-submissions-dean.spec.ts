@@ -69,19 +69,24 @@ test('Dean sees the pending badge, expands a request, rejects with a reason of 8
   await expect(page.getByText('Lab Practical 1: 60 → 85')).toBeVisible();
   await expect(page.getByText('Attendance 2026-11-03: Absent → Present')).toBeVisible();
 
-  // Reject needs a reason of at least 8 characters, shown before the button is pressed.
+  // Reject labels the 8-character minimum, keeps the button clickable, validates inline, and clears on edit.
   await page.getByRole('button', { name: 'Reject', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: 'Reject Grade Change' })).toBeVisible();
-  await expect(dialog.getByText('Give a reason of at least 8 characters.')).toBeVisible();
+  const reasonField = dialog.getByLabel('Reason (at least 8 characters)');
+  await expect(reasonField).toBeVisible();
   const confirm = dialog.getByRole('button', { name: 'Reject', exact: true });
-  await expect(confirm).toBeDisabled();
-  await dialog.getByLabel('Reason').fill('too sh');
-  await expect(confirm).toBeDisabled();
-  await dialog.getByLabel('Reason').fill('1234567');
-  await expect(confirm).toBeDisabled();
-  await dialog.getByLabel('Reason').fill('Scores need the lab sheet.');
   await expect(confirm).toBeEnabled();
+  await confirm.click();
+  await expect(dialog.getByRole('alert')).toHaveText('Give a reason of at least 8 characters.');
+  expect(calls).toEqual([]);
+  await reasonField.fill('1234567');
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  await confirm.click();
+  await expect(dialog.getByRole('alert')).toHaveText('Give a reason of at least 8 characters.');
+  expect(calls).toEqual([]);
+  await reasonField.fill('Scores need the lab sheet.');
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
   await confirm.click();
 
   await expect(page.getByText('Grade change rejected.')).toBeVisible();

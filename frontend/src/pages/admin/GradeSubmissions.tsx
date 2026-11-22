@@ -75,6 +75,7 @@ export const GradeSubmissions: React.FC = () => {
   const [details, setDetails] = useState<Record<number, DeanGradeChangeDetail>>({});
   const [rejecting, setRejecting] = useState<DeanGradeChangeRequest | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [rejectReasonError, setRejectReasonError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -130,11 +131,17 @@ export const GradeSubmissions: React.FC = () => {
 
   const reject = async () => {
     if (!rejecting) return;
+    const trimmed = rejectReason.trim();
+    if (trimmed.length < 8) {
+      setRejectReasonError('Give a reason of at least 8 characters.');
+      return;
+    }
     const target = rejecting;
     setBusy(true);
     setError(null);
+    setRejectReasonError('');
     try {
-      const response = await decideDeanGradeChangeApi('reject', target.batchId, rejectReason.trim());
+      const response = await decideDeanGradeChangeApi('reject', target.batchId, trimmed);
       setRejecting(null);
       setRejectReason('');
       finishDecision(response.message);
@@ -318,7 +325,7 @@ export const GradeSubmissions: React.FC = () => {
                     {request.status === 'pending' && !readOnly && (
                       <>
                         <button type="button" disabled={busy} onClick={() => void approve(request)} className={approveBtn}>Approve</button>
-                        <button type="button" disabled={busy} onClick={() => { setRejectReason(''); setRejecting(request); }} className={rejectBtn}>Reject</button>
+                        <button type="button" disabled={busy} onClick={() => { setRejectReason(''); setRejectReasonError(''); setRejecting(request); }} className={rejectBtn}>Reject</button>
                       </>
                     )}
                     {request.status !== 'pending' && (
@@ -349,25 +356,27 @@ export const GradeSubmissions: React.FC = () => {
         </Card>
       )}
 
-      <Modal isOpen={!!rejecting} onClose={() => setRejecting(null)} title="Reject Grade Change" size="sm">
+      <Modal isOpen={!!rejecting} onClose={() => { if (!busy) { setRejecting(null); setRejectReasonError(''); } }} title="Reject Grade Change" size="sm">
         <div className="space-y-4">
           <div>
-            <label htmlFor="grade-change-reject-reason" className="block text-xs font-bold text-slate-700 dark:text-slate-200">Reason</label>
+            <label htmlFor="grade-change-reject-reason" className="block text-xs font-bold text-slate-700 dark:text-slate-200">Reason (at least 8 characters)</label>
             <textarea
               id="grade-change-reject-reason"
               value={rejectReason}
-              onChange={event => setRejectReason(event.target.value)}
+              onChange={event => { setRejectReason(event.target.value); if (rejectReasonError) setRejectReasonError(''); }}
+              aria-invalid={rejectReasonError ? true : undefined}
+              aria-describedby={rejectReasonError ? 'err-grade-change-reject-reason' : undefined}
               rows={3}
               maxLength={500}
               className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-accent-500 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-100"
             />
-            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Give a reason of at least 8 characters.</p>
+            {rejectReasonError && <p id="err-grade-change-reject-reason" role="alert" className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-400">{rejectReasonError}</p>}
           </div>
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setRejecting(null)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold dark:border-slate-700">Cancel</button>
+            <button type="button" disabled={busy} onClick={() => { setRejecting(null); setRejectReasonError(''); }} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold dark:border-slate-700">Cancel</button>
             <button
               type="button"
-              disabled={busy || rejectReason.trim().length < 8}
+              disabled={busy}
               onClick={() => void reject()}
               className="rounded-lg px-4 py-2 text-sm font-bold text-white bg-rose-600 disabled:opacity-50"
             >Reject</button>

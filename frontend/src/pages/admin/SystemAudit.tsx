@@ -474,7 +474,7 @@ export const DeanReports: React.FC = () => {
           </p>
           <label className="block font-bold text-slate-700 dark:text-slate-300">
             Reason (8 to 240 characters)
-            <textarea value={revokeReason} onChange={(event) => { setRevokeReason(event.target.value); if (revokeError) setRevokeError(''); }} maxLength={240} rows={3} required aria-invalid={revokeError ? true : undefined}
+            <textarea value={revokeReason} onChange={(event) => { setRevokeReason(event.target.value); if (revokeError) setRevokeError(''); }} maxLength={240} rows={3} aria-invalid={revokeError ? true : undefined}
               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-normal dark:border-slate-700 dark:bg-slate-900" />
           </label>
           {revokeError && <p role="alert" className="text-rose-600">{revokeError}</p>}
