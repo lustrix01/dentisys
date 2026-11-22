@@ -178,6 +178,126 @@ function handle_faculty_grade_change_send(): void { grade_submission_faculty_han
 function handle_faculty_grade_change_pull_back(): void { grade_submission_faculty_handle('pull-back'); }
 function handle_faculty_grade_change_discard(): void { grade_submission_faculty_handle('discard'); }
 
+/**
+ * When academic_terms has no current-term row, pick the fallback term from class_sections:
+ * 1) Classes whose stored dates bracket $today (active over finished, currentYear over other, newest start).
+ * 2) Otherwise scope to $currentYear first, prefer active over finished, then started (<= $today, newest start),
+ *    then non-future (null start) before explicitly future-dated (earliest upcoming), then latest year/semester.
+ *
+ * @return array{year:string, semester:string, normSemester:?string, startDate:?string}
+ */
+function grade_submission_fallback_term(array $allClasses, array $terms, string $currentYear, string $today): array
+{
+    if ($allClasses === []) {
+        return ['year' => $currentYear, 'semester' => '1ST', 'normSemester' => '1ST', 'startDate' => null];
+    }
+    $semOrder = ['1ST' => 0, '2ND' => 1, 'Summer' => 2];
+    $semRank = static fn(array $c): int => $semOrder[academic_term_semester($c['semester'] ?? null) ?? ''] ?? -1;
+
+    $bracketing = array_values(array_filter(
+        $allClasses,
+        static fn(array $c): bool => $c['term_start_date'] !== null && $c['term_end_date'] !== null
+            && $c['term_start_date'] <= $today && $today <= $c['term_end_date']
+    ));
+    if ($bracketing !== []) {
+        usort($bracketing, static function (array $a, array $b) use ($currentYear, $semRank): int {
+            return (($b['archive_reason'] === null ? 1 : 0) <=> ($a['archive_reason'] === null ? 1 : 0))
+                ?: (($b['school_year'] === $currentYear ? 1 : 0) <=> ($a['school_year'] === $currentYear ? 1 : 0))
+                ?: strcmp((string) $b['term_start_date'], (string) $a['term_start_date'])
+                ?: strcmp((string) $b['school_year'], (string) $a['school_year'])
+                ?: ($semRank($b) <=> $semRank($a));
+        });
+        $chosen = $bracketing[0];
+    } else {
+        $currentClasses = array_values(array_filter($allClasses, static fn(array $c): bool => $c['school_year'] === $currentYear));
+        $yearPool = $currentClasses !== [] ? $currentClasses : $allClasses;
+        $activePool = array_values(array_filter($yearPool, static fn(array $c): bool => $c['archive_reason'] === null));
+        $candidates = $activePool !== [] ? $activePool : $yearPool;
+        usort($candidates, static function (array $a, array $b) use ($today, $semRank): int {
+            $yearCmp = strcmp((string) $b['school_year'], (string) $a['school_year']);
+            if ($yearCmp !== 0) {
+                return $yearCmp;
+            }
+            $startedA = $a['term_start_date'] !== null && $a['term_start_date'] <= $today ? 1 : 0;
+            $startedB = $b['term_start_date'] !== null && $b['term_start_date'] <= $today ? 1 : 0;
+            if ($startedA !== $startedB) {
+                return $startedB <=> $startedA;
+            }
+            if ($startedA === 1) {
+                $startCmp = strcmp((string) $b['term_start_date'], (string) $a['term_start_date']);
+                if ($startCmp !== 0) {
+                    return $startCmp;
+                }
+            } else {
+                $futureA = $a['term_start_date'] !== null ? 1 : 0;
+                $futureB = $b['term_start_date'] !== null ? 1 : 0;
+                if ($futureA !== $futureB) {
+                    return $futureA <=> $futureB;
+                }
+                if ($futureA === 1) {
+                    $futureCmp = strcmp((string) $a['term_start_date'], (string) $b['term_start_date']);
+                    if ($futureCmp !== 0) {
+                        return $futureCmp;
+                    }
+                }
+                $hasEndCmp = ($b['term_end_date'] !== null ? 1 : 0) <=> ($a['term_end_date'] !== null ? 1 : 0);
+                if ($hasEndCmp !== 0) {
+                    return $hasEndCmp;
+                }
+            }
+            return $semRank($b) <=> $semRank($a);
+        });
+        $chosen = $candidates[0];
+    }
+
+    $year = (string) $chosen['school_year'];
+    $norm = academic_term_semester($chosen['semester'] ?? null);
+    $semester = $norm ?? trim((string) ($chosen['semester'] ?? ''));
+    $startDate = null;
+    foreach ($allClasses as $c) {
+        if (!grade_submission_matches_fallback($c, $year, $semester, $norm)) {
+            continue;
+        }
+        $cTerm = grade_submission_term($terms, $c);
+        $start = $cTerm['start_date'] ?? $c['term_start_date'] ?? null;
+        if ($start !== null && ($startDate === null || $start < $startDate)) {
+            $startDate = $start;
+        }
+    }
+    return ['year' => $year, 'semester' => $semester, 'normSemester' => $norm, 'startDate' => $startDate];
+}
+
+function grade_submission_matches_fallback(array $class, string $year, string $semester, ?string $normSemester): bool
+{
+    if ($class['school_year'] !== $year) {
+        return false;
+    }
+    $classNorm = academic_term_semester($class['semester'] ?? null);
+    return $normSemester !== null
+        ? $classNorm === $normSemester
+        : ($classNorm === null && trim((string) ($class['semester'] ?? '')) === $semester);
+}
+
+function grade_submission_is_earlier(array $class, ?array $classTerm, ?array $term, ?array $fallback): bool
+{
+    $refStart = $term !== null ? $term['start_date'] : ($fallback['startDate'] ?? null);
+    $classStart = $classTerm['start_date'] ?? $class['term_start_date'] ?? null;
+    if ($refStart !== null && $classStart !== null) {
+        return $classStart < $refStart;
+    }
+    $refYear = $term !== null ? $term['school_year'] : ($fallback['year'] ?? '');
+    $refSem = $term !== null ? $term['semester'] : ($fallback['normSemester'] ?? null);
+    $yearCmp = strcmp((string) $class['school_year'], (string) $refYear);
+    if ($yearCmp !== 0) {
+        return $yearCmp < 0;
+    }
+    $semOrder = ['1ST' => 0, '2ND' => 1, 'Summer' => 2];
+    $classSem = academic_term_semester($class['semester'] ?? null);
+    return $classSem !== null && $refSem !== null
+        && isset($semOrder[$classSem], $semOrder[$refSem])
+        && $semOrder[$classSem] < $semOrder[$refSem];
+}
+
 /** Dean and Superadmin: the term's classes with their submission status. */
 function handle_admin_grade_submissions(): void
 {
@@ -189,6 +309,7 @@ function handle_admin_grade_submissions(): void
         $today = app_local_date($config, $now);
         $terms = academic_terms_read($pdo);
         $term = null;
+        $currentYear = null;
         if (isset($_GET['termId']) && $_GET['termId'] !== '') {
             foreach ($terms as $row) { if ((string) $row['id'] === (string) $_GET['termId']) { $term = $row; } }
             if ($term === null) { safe_error_response('Term not found.', 404); return; }
@@ -203,7 +324,7 @@ function handle_admin_grade_submissions(): void
         $courseId = isset($_GET['courseId']) && ctype_digit((string) $_GET['courseId']) ? (int) $_GET['courseId'] : null;
         $status = is_string($_GET['status'] ?? null) ? $_GET['status'] : '';
         $stmt = $pdo->query(
-            "SELECT cs.cs_id, cs.cs_name, cs.school_year, cs.semester, cs.term_end_date, cs.course_id, cs.grades_submitted_at,
+            "SELECT cs.cs_id, cs.cs_name, cs.school_year, cs.semester, cs.term_start_date, cs.term_end_date, cs.course_id, cs.grades_submitted_at,
                     cs.archive_reason, c.course_code, u.display_name AS faculty_name
                FROM class_sections cs JOIN courses c ON c.course_id = cs.course_id
                LEFT JOIN user_accounts u ON u.user_id = cs.instructor_user_id
@@ -211,41 +332,18 @@ function handle_admin_grade_submissions(): void
               ORDER BY c.course_code, cs.cs_name, cs.cs_id"
         );
         $allClasses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $fallback = $term === null ? grade_submission_fallback_term($allClasses, $terms, $currentYear, $today) : null;
 
-        $fallbackYear = null;
-        $fallbackSemester = null;
-        if ($term === null) {
-            $currentYear = academic_current_school_year($pdo);
-            $activeClasses = array_values(array_filter($allClasses, static fn(array $c): bool => $c['archive_reason'] === null));
-            $candidates = $activeClasses !== [] ? $activeClasses : $allClasses;
-            $currentCandidates = array_values(array_filter($candidates, static fn(array $c): bool => $c['school_year'] === $currentYear));
-            $source = $currentCandidates !== [] ? $currentCandidates : $candidates;
-            if ($source !== []) {
-                $semOrder = ['1ST' => 0, '2ND' => 1, 'Summer' => 2];
-                usort($source, static function (array $a, array $b) use ($semOrder): int {
-                    $yearCmp = strcmp($b['school_year'], $a['school_year']);
-                    if ($yearCmp !== 0) { return $yearCmp; }
-                    $semA = $semOrder[academic_term_semester($a['semester'] ?? null) ?? ''] ?? -1;
-                    $semB = $semOrder[academic_term_semester($b['semester'] ?? null) ?? ''] ?? -1;
-                    return $semB <=> $semA;
-                });
-                $fallbackYear = $source[0]['school_year'];
-                $fallbackSemester = academic_term_semester($source[0]['semester'] ?? null) ?? '1ST';
-            } else {
-                $fallbackYear = $currentYear;
-                $fallbackSemester = '1ST';
-            }
-        }
         foreach ($allClasses as $class) {
             $classTerm = grade_submission_term($terms, $class);
-            $deadline = grade_submission_deadline($term !== null ? $classTerm : null, $class);
+            $deadline = grade_submission_deadline($classTerm, $class);
             $deadlineStatus = grade_submission_deadline_status($deadline, $class['grades_submitted_at'], $now);
-            if ($term !== null && $classTerm !== null && $classTerm['start_date'] < $term['start_date'] && $deadlineStatus === 'late') {
-                $late++;
-            }
             $matchesTerm = $term !== null
                 ? ($classTerm !== null && (int) $classTerm['id'] === (int) $term['id'])
-                : ($class['school_year'] === $fallbackYear && academic_term_semester($class['semester'] ?? null) === $fallbackSemester);
+                : grade_submission_matches_fallback($class, $fallback['year'], $fallback['semester'], $fallback['normSemester']);
+            if (!$matchesTerm && $deadlineStatus === 'late' && grade_submission_is_earlier($class, $classTerm, $term, $fallback)) {
+                $late++;
+            }
             if (!$matchesTerm
                 || ($courseId !== null && (int) $class['course_id'] !== $courseId) || ($status !== '' && $status !== $deadlineStatus)) {
                 continue;
@@ -255,7 +353,7 @@ function handle_admin_grade_submissions(): void
                 'submittedAt' => grade_submission_time($class['grades_submitted_at'])];
         }
         json_response(['status' => 'ok', 'term' => $term !== null ? ['id' => (int) $term['id'], 'schoolYear' => $term['school_year'], 'semester' => $term['semester']]
-            : ['id' => 0, 'schoolYear' => $fallbackYear, 'semester' => $fallbackSemester],
+            : ['id' => 0, 'schoolYear' => $fallback['year'], 'semester' => $fallback['semester']],
             'classes' => $classes, 'lateFromEarlierTerms' => $late]);
     } catch (\Throwable $e) {
         error_log('Admin grade submissions error: ' . sanitize_for_log($e));
