@@ -154,27 +154,38 @@ biometric_expect_true(str_contains($migration, 'uq_attendance_records_enrollment
 $routes = file_get_contents(dirname(__DIR__, 2) . '/backend/routes/api.php');
 foreach ([
     ['GET', '/api/student/biometric/profile'],
+    ['GET', '/api/student/biometrics'],
     ['PUT', '/api/student/biometric/consent'],
     ['POST', '/api/student/biometric/liveness/challenge'],
     ['POST', '/api/student/biometric/liveness/guidance'],
     ['POST', '/api/student/biometric/enrollment'],
+    ['POST', '/api/student/biometrics/enrollment'],
     ['DELETE', '/api/student/biometric/profile'],
+    ['DELETE', '/api/student/biometrics'],
+    ['POST', '/api/student/biometric/revoke-request'],
+    ['POST', '/api/student/biometrics/revoke-request'],
+    ['DELETE', '/api/student/biometric/revoke-request'],
+    ['DELETE', '/api/student/biometrics/revoke-request'],
     ['GET', '/api/student/attendance/sessions/active'],
     ['GET', '/api/student/attendance/sessions/upcoming'],
     ['POST', '/api/student/attendance/biometric'],
     ['GET', '/api/student/attendance/logs'],
 ] as [$method, $path]) {
     biometric_expect_true(
-        str_contains($routes, "'method' => '{$method}'") && str_contains($routes, "'path' => '{$path}'"),
+        preg_match("/'method' => '" . preg_quote($method, '/') . "',\s*'path' => '" . preg_quote($path, '/') . "'/", $routes) === 1,
         "Frozen Student route {$method} {$path} is registered"
     );
 }
 $controller = file_get_contents(dirname(__DIR__, 2) . '/backend/controllers/StudentBiometricController.php');
 $biometricHelpers = file_get_contents(dirname(__DIR__, 2) . '/backend/app/student_biometrics.php');
 $biometricSource = $controller . $biometricHelpers;
-foreach (['consent_required', 'biometric_not_enrolled', 'enrollment_expired', 'session_not_active', 'challenge_expired', 'challenge_invalid', 'liveness_failed', 'biometric_verification_failed', 'geofence_failed', 'already_recorded', 'biometric_service_unavailable'] as $errorCode) {
+foreach (['consent_required', 'biometric_not_enrolled', 'enrollment_expired', 'session_not_active', 'challenge_expired', 'challenge_invalid', 'liveness_failed', 'biometric_verification_failed', 'geofence_failed', 'already_recorded', 'biometric_service_unavailable', 'revocation_approval_required', 'revoke_request_pending', 'no_pending_revoke_request', 'face_update_mismatch'] as $errorCode) {
     biometric_expect_true(str_contains($biometricSource, "'{$errorCode}'"), "Stable biometric error code {$errorCode} is represented");
 }
+biometric_expect_true(
+    array_key_exists('pendingRevokeRequest', $profileResponse) && array_key_exists('latestRejectedRevokeRequest', $profileResponse),
+    'Biometric profile response exposes pendingRevokeRequest and latestRejectedRevokeRequest'
+);
 biometric_expect_true(str_contains($controller, "status = 'revoked'") && str_contains($controller, "attendance_session_fetch_for_student"), 'Revocation blocks Student capture while preserving the session record path');
 biometric_expect_true(
     str_contains($controller, 'function handle_student_biometric_guidance')
@@ -190,7 +201,7 @@ biometric_expect_true(
     'Guidance challenge validation is non-consuming and rejects completed or invalid challenges'
 );
 biometric_expect_true(str_contains($controller, 'function handle_student_attendance_logs') && str_contains($controller, 'WHERE e.student_id = ?'), 'Student attendance logs are scoped to the authenticated Student identity');
-biometric_expect_true(str_contains($controller, "biometric_enrollment_succeeded") && str_contains($controller, "biometric_enrollment_revoked"), 'Biometric profile lifecycle actions are audited');
+biometric_expect_true(str_contains($controller, "biometric_enrollment_succeeded") && str_contains($controller, "biometric_revoke_requested") && str_contains($controller, "biometric_revoke_request_cancelled"), 'Biometric profile and revocation-request lifecycle actions are audited');
 $facultyController = file_get_contents(dirname(__DIR__, 2) . '/backend/controllers/FacultyController.php');
 $secretaryController = file_get_contents(dirname(__DIR__, 2) . '/backend/controllers/SecretaryController.php');
 biometric_expect_true(str_contains($facultyController, 'attendance_session_require_timing_for_biometric') && str_contains($secretaryController, 'attendance_session_require_timing_for_biometric'), 'Faculty and Secretary session creation enforce timing for biometric-required sessions');

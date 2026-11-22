@@ -298,7 +298,8 @@ function App() {
                   <Route path="/superadmin/course-catalog" element={<CourseCatalog />} />
                   <Route path="/superadmin/terms" element={<AcademicTerms />} />
                   <Route path="/superadmin/rooms" element={<Rooms />} />
-                  <Route path="/superadmin/face-flags" element={<FaceEnrolmentFlags />} />
+                  <Route path="/superadmin/face-enrolments" element={<FaceEnrolmentFlags />} />
+                  <Route path="/superadmin/face-flags" element={<Navigate to="/superadmin/face-enrolments" replace />} />
                   <Route path="/superadmin/audit-trail" element={<SuperadminAuditTrail />} />
                   <Route path="/superadmin/profile" element={<DeanProfile />} />
                   <Route path="/superadmin/settings" element={<DeanSettings />} />

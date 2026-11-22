@@ -42,6 +42,9 @@ return [
     ['method' => 'GET', 'path' => '/api/admin/overview', 'handler' => 'handle_admin_overview'],
     ['method' => 'GET', 'path' => '/api/admin/face-flags', 'handler' => 'handle_admin_face_flags'],
     ['method' => 'POST', 'path' => '/api/admin/face-flags/dismiss', 'handler' => 'handle_admin_face_flags'],
+    ['method' => 'GET', 'path' => '/api/admin/face-revoke-requests', 'handler' => 'handle_admin_face_revoke_requests'],
+    ['method' => 'POST', 'path' => '/api/admin/face-revoke-requests/approve', 'handler' => 'handle_admin_face_revoke_request_approve'],
+    ['method' => 'POST', 'path' => '/api/admin/face-revoke-requests/reject', 'handler' => 'handle_admin_face_revoke_request_reject'],
     ['method' => 'GET', 'path' => '/api/admin/people', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/deactivate', 'handler' => 'handle_admin_people'],
     ['method' => 'POST', 'path' => '/api/admin/people/reactivate', 'handler' => 'handle_admin_people'],
@@ -651,6 +654,12 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'GET',
+        'path' => '/api/student/biometrics',
+        'handler' => 'handle_student_biometric_profile_get',
+        'has_params' => false,
+    ],
+    [
         'method' => 'PUT',
         'path' => '/api/student/biometric/consent',
         'handler' => 'handle_student_biometric_consent',
@@ -675,9 +684,45 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'POST',
+        'path' => '/api/student/biometrics/enrollment',
+        'handler' => 'handle_student_biometric_enrollment',
+        'has_params' => false,
+    ],
+    [
         'method' => 'DELETE',
         'path' => '/api/student/biometric/profile',
         'handler' => 'handle_student_biometric_revoke',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'DELETE',
+        'path' => '/api/student/biometrics',
+        'handler' => 'handle_student_biometric_revoke',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/student/biometric/revoke-request',
+        'handler' => 'handle_student_biometric_revoke_request_create',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/student/biometrics/revoke-request',
+        'handler' => 'handle_student_biometric_revoke_request_create',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'DELETE',
+        'path' => '/api/student/biometric/revoke-request',
+        'handler' => 'handle_student_biometric_revoke_request_cancel',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'DELETE',
+        'path' => '/api/student/biometrics/revoke-request',
+        'handler' => 'handle_student_biometric_revoke_request_cancel',
         'has_params' => false,
     ],
     [

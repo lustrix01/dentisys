@@ -34,7 +34,7 @@ test('DS18 the Dean / Superadmin switcher and the Superadmin chip are gone', () 
   assert.doesNotMatch(read('../services/apiClient.ts'), /X-DentiSys-(View|Mode)|superadminMode/i);
 });
 
-test('DS16 the Superadmin sidebar: Overview, People & Accounts, Classes, Grade Submissions, Course Catalog, Academic Terms, Rooms, Face Enrolment Flags, Audit Trail', () => {
+test('DS16 the Superadmin sidebar: Overview, People & Accounts, Classes, Grade Submissions, Course Catalog, Academic Terms, Rooms, Face Enrolments, Audit Trail', () => {
   assert.deepEqual(sidebar.filter(([, p]) => p.startsWith('/superadmin/')), [
     ['Overview', '/superadmin/overview'],
     ['People & Accounts', '/superadmin/people'],
@@ -43,7 +43,7 @@ test('DS16 the Superadmin sidebar: Overview, People & Accounts, Classes, Grade S
     ['Course Catalog', '/superadmin/course-catalog'],
     ['Academic Terms', '/superadmin/terms'],
     ['Rooms', '/superadmin/rooms'],
-    ['Face Enrolment Flags', '/superadmin/face-flags'],
+    ['Face Enrolments', '/superadmin/face-enrolments'],
     ['Audit Trail', '/superadmin/audit-trail'],
   ]);
   // Profile and Settings of the Superadmin live in the account menu, under /superadmin/.
@@ -68,9 +68,10 @@ test('DS17 the Dean sidebar: Dashboard, Reports & Analytics, Grade Submissions, 
 
 test('DS19 /superadmin/* is Superadmin-only and every page of the sidebar has a route', () => {
   const block = between(app, "<ProtectedRoute allowedRoles={['superadmin']} />", '</Route>');
-  for (const p of ['overview', 'people', 'classes', 'grade-submissions', 'course-catalog', 'terms', 'rooms', 'face-flags', 'audit-trail', 'profile', 'settings']) {
+  for (const p of ['overview', 'people', 'classes', 'grade-submissions', 'course-catalog', 'terms', 'rooms', 'face-enrolments', 'audit-trail', 'profile', 'settings']) {
     assert.match(block, new RegExp(`path="/superadmin/${p}" element=\\{<(?!Navigate)`), `/superadmin/${p}`);
   }
+  assert.match(block, /path="\/superadmin\/face-flags" element=\{<Navigate to="\/superadmin\/face-enrolments" replace \/>\}/);
   assert.match(block, /path="\/superadmin" element=\{<Navigate to="\/superadmin\/overview" replace \/>\}/);
   // The Dean group no longer owns the moved pages, and the old /superadmin -> /admin redirects are gone.
   const dean = between(app, "<ProtectedRoute allowedRoles={['admin']} />", "<ProtectedRoute allowedRoles={['superadmin']} />");

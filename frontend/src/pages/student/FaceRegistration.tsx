@@ -9,6 +9,8 @@ import {
   AlertCircle,
   Trash2,
   Loader2,
+  Clock,
+  XCircle,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -16,14 +18,17 @@ import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { canAccessAuthoritativeStudentBiometrics } from './studentGates';
 import { StudentUnavailable } from './RealStudentSurfaces';
 import {
+  ApiError,
   getStudentBiometricProfile,
   updateStudentBiometricConsent,
   createBiometricLivenessChallenge,
   requestBiometricLivenessGuidance,
   submitBiometricEnrollment,
-  revokeStudentBiometricProfile,
+  submitStudentBiometricRevokeRequest,
+  cancelStudentBiometricRevokeRequest,
   isTransportOrBiometricUnavailable,
 } from '../../services/apiClient';
+import { formatManilaWhen } from '../../services/auditService';
 import {
   type StudentBiometricProfile,
   type LivenessChallengeResponse,
@@ -132,12 +137,18 @@ export const FaceRegistration: React.FC = () => {
   const [pendingPayload, setPendingPayload] = useState<PendingEnrollmentPayload | null>(null);
   const [canRetryUpload, setCanRetryUpload] = useState<boolean>(false);
 
-  // Revocation Modal
+  // Revocation Request, Cancel & Update-Confirmation Modals
   const [showRevokeModal, setShowRevokeModal] = useState(false);
+  const [revokeReason, setRevokeReason] = useState('');
+  const [revokeReasonError, setRevokeReasonError] = useState('');
+  const [isSubmittingRevoke, setIsSubmittingRevoke] = useState(false);
+  const [showCancelRevokeModal, setShowCancelRevokeModal] = useState(false);
+  const [isCancellingRevoke, setIsCancellingRevoke] = useState(false);
+  const [showUpdateCancelsRevokeModal, setShowUpdateCancelsRevokeModal] = useState(false);
+  const [isCancellingForUpdate, setIsCancellingForUpdate] = useState(false);
   // Update my face: capture again without the consent step (consent stands); the new face replaces the old one.
   const [isUpdating, setIsUpdating] = useState(false);
   const [updatedNotice, setUpdatedNotice] = useState(false);
-  const [isRevoking, setIsRevoking] = useState(false);
 
   // --- SIMULATION (MOCK) STATE ---
   const storageKey = `dentisys_face_registered_${currentStudent?.id || '1'}`;
@@ -416,11 +427,27 @@ export const FaceRegistration: React.FC = () => {
           ? `${UPLOAD_TIMEOUT_MESSAGE_PREFIX}select Retry Upload.`
           : `${msg} Your captured frames and server challenge are preserved. Click "Retry Upload" to resubmit with the same idempotency key, or seek manual attendance from your Secretary or Faculty.`);
       } else {
-        // Semantic failure or quality rejection: discard and request fresh challenge
-        setPendingPayload(null);
-        setCanRetryUpload(false);
-        setAuthError(enrollmentFailureMessage(err));
-        void startCameraAndChallenge(undefined, true);
+        const errCode = err && typeof err === 'object' ? (err as { code?: unknown }).code : undefined;
+        if (errCode === 'face_update_mismatch') {
+          setPendingPayload(null);
+          setCanRetryUpload(false);
+          stopCamera();
+          setIsUpdating(false);
+          setUpdatedNotice(false);
+          setAuthStep(3);
+          setScrollToStep3(true);
+          setAuthError(
+            err instanceof Error && err.message
+              ? err.message
+              : 'Your face could not be matched to your current registration. If this is you, please request a revocation instead.'
+          );
+        } else {
+          // Semantic failure or quality rejection: discard and request fresh challenge
+          setPendingPayload(null);
+          setCanRetryUpload(false);
+          setAuthError(enrollmentFailureMessage(err));
+          void startCameraAndChallenge(undefined, true);
+        }
       }
     } finally {
       uploadAbortRef.current = null;
@@ -593,8 +620,23 @@ export const FaceRegistration: React.FC = () => {
         return true;
       }
       setAuthError(result.message || 'The preserved enrollment operation did not complete. Retry the upload or start a fresh capture.');
-    } catch {
-      // Keep the operation payload so the user can retry with the same key.
+    } catch (err) {
+      const errCode = err && typeof err === 'object' ? (err as { code?: unknown }).code : undefined;
+      if (errCode === 'face_update_mismatch') {
+        setPendingPayload(null);
+        setCanRetryUpload(false);
+        stopCamera();
+        setIsUpdating(false);
+        setUpdatedNotice(false);
+        setAuthStep(3);
+        setScrollToStep3(true);
+        setAuthError(
+          err instanceof Error && err.message
+            ? err.message
+            : 'Your face could not be matched to your current registration. If this is you, please request a revocation instead.'
+        );
+      }
+      // Otherwise keep the operation payload so the user can retry with the same key.
     } finally {
       setIsProcessingEnrollment(false);
       setCapturePhase('idle');
@@ -621,38 +663,105 @@ export const FaceRegistration: React.FC = () => {
     void startCameraAndChallenge(undefined, true);
   };
 
-  // --- REVOCATION ---
-  const handleConfirmRevocation = async () => {
-    setIsRevoking(true);
+  // --- REVOCATION REQUEST & CANCELLATION ---
+  const validateRevokeReason = (value: string): string => {
+    const len = value.trim().length;
+    if (len < 8) return 'Enter a reason of 8 to 240 characters.';
+    if (len > 240) return 'Reason must be at most 240 characters.';
+    return '';
+  };
+
+  const openRevokeRequestModal = () => {
+    setRevokeReason('');
+    setRevokeReasonError('');
+    setShowRevokeModal(true);
+  };
+
+  const handleSubmitRevokeRequest = async () => {
+    const validationError = validateRevokeReason(revokeReason);
+    if (validationError) {
+      setRevokeReasonError(validationError);
+      return;
+    }
+    setIsSubmittingRevoke(true);
     setAuthError(null);
     try {
-      await revokeStudentBiometricProfile();
-      setShowRevokeModal(false);
-      setProfile(prev => prev ? {
-        ...prev,
-        enrollmentStatus: 'revoked',
-        enrolledAt: null,
-        expiresAt: null,
-      } : null);
-      setIsUpdating(false);
+      const res = await submitStudentBiometricRevokeRequest(revokeReason.trim());
+      setProfile(prev => res.biometric ?? (prev ? { ...prev, pendingRevokeRequest: res.request } : null));
       setUpdatedNotice(false);
-      setAuthStep(1);
-      setHasAgreed(false);
+      setShowRevokeModal(false);
+      setRevokeReason('');
+      setRevokeReasonError('');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to revoke biometric profile.';
-      setAuthError(msg);
+      const list = err instanceof ApiError && Array.isArray(err.errors)
+        ? (err.errors as Array<{ field?: string; message?: string }>)
+        : [];
+      if (err instanceof ApiError && err.status === 422 && list.length > 0 && list[0].message) {
+        setRevokeReasonError(list[0].message);
+      } else {
+        setShowRevokeModal(false);
+        setAuthError(err instanceof Error ? err.message : 'Failed to submit revocation request.');
+        if (err instanceof ApiError && err.status === 409) {
+          void loadAuthoritativeProfile();
+        }
+      }
     } finally {
-      setIsRevoking(false);
+      setIsSubmittingRevoke(false);
     }
   };
 
-  const handleStartUpdate = () => {
+  const handleConfirmCancelRevokeRequest = async () => {
+    setIsCancellingRevoke(true);
+    setAuthError(null);
+    try {
+      const res = await cancelStudentBiometricRevokeRequest();
+      setProfile(prev => res.biometric ?? (prev ? { ...prev, pendingRevokeRequest: null } : null));
+      setShowCancelRevokeModal(false);
+    } catch (err) {
+      setShowCancelRevokeModal(false);
+      setAuthError(err instanceof Error ? err.message : 'Failed to cancel revocation request.');
+      if (err instanceof ApiError && (err.status === 404 || err.status === 409)) {
+        void loadAuthoritativeProfile();
+      }
+    } finally {
+      setIsCancellingRevoke(false);
+    }
+  };
+
+  const beginFaceUpdateCapture = () => {
     setAuthError(null);
     setUpdatedNotice(false);
     setPendingPayload(null);
     setCanRetryUpload(false);
     setIsUpdating(true);
     setAuthStep(2);
+  };
+
+  const handleStartUpdate = () => {
+    if (isAuthoritative && profile?.pendingRevokeRequest) {
+      setShowUpdateCancelsRevokeModal(true);
+      return;
+    }
+    beginFaceUpdateCapture();
+  };
+
+  const handleConfirmUpdateCancellingRevoke = async () => {
+    setIsCancellingForUpdate(true);
+    setAuthError(null);
+    try {
+      const res = await cancelStudentBiometricRevokeRequest();
+      setProfile(prev => res.biometric ?? (prev ? { ...prev, pendingRevokeRequest: null } : null));
+      setShowUpdateCancelsRevokeModal(false);
+      beginFaceUpdateCapture();
+    } catch (err) {
+      setShowUpdateCancelsRevokeModal(false);
+      setAuthError(err instanceof Error ? err.message : 'Failed to cancel pending revocation request.');
+      if (err instanceof ApiError && (err.status === 404 || err.status === 409)) {
+        void loadAuthoritativeProfile();
+      }
+    } finally {
+      setIsCancellingForUpdate(false);
+    }
   };
 
   // --- MOCK PROTOTYPE HANDLERS ---
@@ -816,7 +925,7 @@ export const FaceRegistration: React.FC = () => {
                 <strong>Protected reference:</strong> An encrypted reference derived from your enrollment is kept so attendance can be checked. It expires every semester, and you must re-enroll to keep using face check-in.
               </li>
               <li>
-                <strong>Revocation and deletion:</strong> You may revoke at any time on this page. Your reference is deleted when you revoke, when the Superadmin revokes your enrollment, when you re-enroll (the old reference is replaced), when it expires at the end of the semester, when your Student account becomes inactive, or when your account is deleted.
+                <strong>Revocation and deletion:</strong> Enrolled Students submit a revocation request with a reason on this page for Superadmin review; approval permanently deletes your encrypted reference. Your reference is also deleted when the Superadmin directly revokes your enrollment, when you update your face (the old reference is replaced), when it expires at the end of the semester, when your Student account becomes inactive, or when your account is deleted.
               </li>
               <li>
                 <strong>Who can see your enrollment status:</strong> You, the Faculty of your classes, the Dean and the Superadmin can see whether you are enrolled. No one can see your reference or camera captures.
@@ -1152,6 +1261,55 @@ export const FaceRegistration: React.FC = () => {
             </div>
           </div>
 
+          {isAuthoritative && profile?.pendingRevokeRequest && (
+            <div role="status" className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 animate-fade-in">
+              <div className="flex items-start gap-3 min-w-0">
+                <Clock className="mt-0.5 h-4 w-4 shrink-0" />
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <strong className="font-bold">Revocation request pending</strong>
+                    <span className="text-[11px] text-amber-700 dark:text-amber-300">
+                      Submitted {formatManilaWhen(profile.pendingRevokeRequest.createdAt)}
+                    </span>
+                  </div>
+                  <p className="break-words leading-relaxed">
+                    <span className="font-semibold">Reason:</span> {profile.pendingRevokeRequest.reason}
+                  </p>
+                  <p className="leading-relaxed">
+                    Your face registration stays active for attendance check-in until the Superadmin approves this request.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCancelRevokeModal(true)}
+                className="shrink-0 self-start min-h-10 rounded-xl border border-amber-300 bg-white px-3.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100/70 dark:border-amber-800 dark:bg-slate-900 dark:text-amber-200 dark:hover:bg-amber-950/60 cursor-pointer"
+              >
+                Cancel request
+              </button>
+            </div>
+          )}
+
+          {isAuthoritative && !profile?.pendingRevokeRequest && profile?.latestRejectedRevokeRequest && (
+            <div role="status" className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200 animate-fade-in">
+              <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <strong className="font-bold">Previous revocation request rejected</strong>
+                  <span className="text-[11px] text-rose-700 dark:text-rose-300">
+                    Reviewed {formatManilaWhen(profile.latestRejectedRevokeRequest.reviewedAt)}
+                  </span>
+                </div>
+                <p className="break-words leading-relaxed">
+                  <span className="font-semibold">Superadmin reason:</span> {profile.latestRejectedRevokeRequest.reviewNote}
+                </p>
+                <p className="leading-relaxed text-rose-800 dark:text-rose-300">
+                  Your face registration stays active. You may submit a new revocation request below.
+                </p>
+              </div>
+            </div>
+          )}
+
           {updatedNotice && (
             <div role="status" className="flex items-start gap-3 text-left rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200 animate-fade-in">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
@@ -1181,13 +1339,15 @@ export const FaceRegistration: React.FC = () => {
                     <RefreshCw className="w-3.5 h-3.5" />
                     Update my face
                   </button>
-                  <button
-                    onClick={() => setShowRevokeModal(true)}
-                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 font-bold text-xs transition-all cursor-pointer flex-shrink-0"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Revoke registration
-                  </button>
+                  {!profile?.pendingRevokeRequest && (
+                    <button
+                      onClick={openRevokeRequestModal}
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 font-bold text-xs transition-all cursor-pointer flex-shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Request revocation
+                    </button>
+                  )}
                   <button
                     onClick={() => navigate('/student/attendance')}
                     className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all flex items-center gap-1.5 cursor-pointer flex-shrink-0"
@@ -1219,51 +1379,154 @@ export const FaceRegistration: React.FC = () => {
         </div>
       )}
 
-      {/* REVOCATION CONFIRMATION MODAL */}
+      {/* REQUEST REVOCATION MODAL */}
       <Modal
         isOpen={showRevokeModal}
-        onClose={() => { if (!isRevoking) setShowRevokeModal(false); }}
+        onClose={() => { if (!isSubmittingRevoke) setShowRevokeModal(false); }}
         size="sm"
         title={
           <span className="flex items-center gap-3">
             <span className="w-10 h-10 shrink-0 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 flex items-center justify-center">
               <Trash2 className="w-5 h-5" />
             </span>
-            Revoke face registration?
+            Request Face Revocation
           </span>
         }
       >
-        <div className="space-y-5">
+        <div className="space-y-4">
           <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-            Are you sure you want to revoke your facial biometric registration? Your encrypted reference model will be permanently deleted from biometric storage.
+            Submit a revocation request for Superadmin review. Your face registration stays active for attendance check-in until the Superadmin approves and permanently deletes your encrypted reference.
           </p>
 
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Past verified attendance records will remain preserved. After revoking you can register again from this page, or use Secretary/Faculty manual attendance for future sessions.
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Past verified attendance records remain preserved. After approval, you can use Secretary or Faculty manual attendance for future sessions or enroll again.
           </p>
 
-          <div className="flex justify-end gap-3 pt-2">
+          <label className="block text-xs font-bold text-slate-700 dark:text-slate-200">
+            Reason (at least 8 characters)
+            <textarea
+              rows={3}
+              maxLength={240}
+              value={revokeReason}
+              onChange={(e) => {
+                const next = e.target.value;
+                setRevokeReason(next);
+                setRevokeReasonError(validateRevokeReason(next));
+              }}
+              aria-invalid={revokeReasonError ? true : undefined}
+              placeholder="Explain why you need to revoke your face registration…"
+              className="mt-1.5 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-normal text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            />
+            <span className="mt-1 flex items-center justify-between gap-2 text-[11px] font-normal">
+              {revokeReasonError ? (
+                <span role="alert" className="font-semibold text-rose-600 dark:text-rose-400">{revokeReasonError}</span>
+              ) : (
+                <span className="text-slate-500 dark:text-slate-400">8 to 240 characters required.</span>
+              )}
+              <span className="shrink-0 text-slate-400">{revokeReason.trim().length}/240</span>
+            </span>
+          </label>
+
+          <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
             <button
               type="button"
               onClick={() => setShowRevokeModal(false)}
-              disabled={isRevoking}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+              disabled={isSubmittingRevoke}
+              className="min-h-11 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="button"
-              onClick={() => { void handleConfirmRevocation(); }}
-              disabled={isRevoking}
-              className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-all shadow-md shadow-rose-600/20 flex items-center gap-2 cursor-pointer"
+              onClick={() => { void handleSubmitRevokeRequest(); }}
+              disabled={isSubmittingRevoke}
+              className="min-h-11 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-all shadow-md shadow-rose-600/20 flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              {isRevoking ? (
+              {isSubmittingRevoke ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Revoking…</span>
+                  <span>Submitting…</span>
                 </>
               ) : (
-                <span>Yes, revoke registration</span>
+                <span>Submit revocation request</span>
+              )}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* CANCEL PENDING REVOCATION REQUEST MODAL */}
+      <Modal
+        isOpen={showCancelRevokeModal}
+        onClose={() => { if (!isCancellingRevoke) setShowCancelRevokeModal(false); }}
+        size="sm"
+        title="Cancel Revocation Request?"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+            Cancelling withdraws your pending revocation request from the Superadmin queue. Your current face registration stays active for attendance check-in.
+          </p>
+          <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setShowCancelRevokeModal(false)}
+              disabled={isCancellingRevoke}
+              className="min-h-11 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+            >
+              Keep request
+            </button>
+            <button
+              type="button"
+              onClick={() => { void handleConfirmCancelRevokeRequest(); }}
+              disabled={isCancellingRevoke}
+              className="min-h-11 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isCancellingRevoke ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Cancelling…</span>
+                </>
+              ) : (
+                <span>Cancel request</span>
+              )}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* UPDATE FACE CANCELS PENDING REVOCATION MODAL */}
+      <Modal
+        isOpen={showUpdateCancelsRevokeModal}
+        onClose={() => { if (!isCancellingForUpdate) setShowUpdateCancelsRevokeModal(false); }}
+        size="sm"
+        title="Cancel Pending Revocation Request?"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+            Updating your face will cancel your pending revocation request. Your current face stays registered until a matching update replaces it.
+          </p>
+          <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setShowUpdateCancelsRevokeModal(false)}
+              disabled={isCancellingForUpdate}
+              className="min-h-11 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => { void handleConfirmUpdateCancellingRevoke(); }}
+              disabled={isCancellingForUpdate}
+              className="min-h-11 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isCancellingForUpdate ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Starting update…</span>
+                </>
+              ) : (
+                <span>Continue to update</span>
               )}
             </button>
           </div>

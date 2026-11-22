@@ -137,7 +137,58 @@ function student_biometric_snapshot(?array $row): ?array
     ];
 }
 
-function student_biometric_payload(?array $row, array $config): array
+function student_biometric_revoke_request_state(PDO $pdo, int $studentId, ?array $profileRow): array
+{
+    $pendingStmt = $pdo->prepare(
+        "SELECT request_id, reason, status, created_at
+           FROM face_revoke_requests
+          WHERE student_id = ? AND status = 'pending'
+          ORDER BY request_id DESC
+          LIMIT 1"
+    );
+    $pendingStmt->execute([$studentId]);
+    $pending = $pendingStmt->fetch(PDO::FETCH_ASSOC);
+    if ($pending !== false) {
+        return [
+            'pendingRevokeRequest' => [
+                'requestId' => (int) $pending['request_id'],
+                'reason' => (string) $pending['reason'],
+                'status' => 'pending',
+                'createdAt' => attendance_session_timestamp((string) $pending['created_at']),
+            ],
+            'latestRejectedRevokeRequest' => null,
+        ];
+    }
+
+    $latestRejected = null;
+    if ($profileRow !== null && $profileRow['enrollment_status'] === 'active' && $profileRow['enrolled_at'] !== null) {
+        $latestStmt = $pdo->prepare(
+            "SELECT request_id, reason, status, review_note, reviewed_at
+               FROM face_revoke_requests
+              WHERE student_id = ?
+                AND created_at >= (?::timestamp AT TIME ZONE 'UTC')
+              ORDER BY request_id DESC
+              LIMIT 1"
+        );
+        $latestStmt->execute([$studentId, (string) $profileRow['enrolled_at']]);
+        $latest = $latestStmt->fetch(PDO::FETCH_ASSOC);
+        if ($latest !== false && $latest['status'] === 'rejected') {
+            $latestRejected = [
+                'requestId' => (int) $latest['request_id'],
+                'reason' => (string) $latest['reason'],
+                'reviewNote' => (string) ($latest['review_note'] ?? ''),
+                'reviewedAt' => $latest['reviewed_at'] !== null ? attendance_session_timestamp((string) $latest['reviewed_at']) : null,
+            ];
+        }
+    }
+
+    return [
+        'pendingRevokeRequest' => null,
+        'latestRejectedRevokeRequest' => $latestRejected,
+    ];
+}
+
+function student_biometric_payload(?array $row, array $config, ?array $revokeState = null): array
 {
     if ($row === null) {
         return [
@@ -148,6 +199,8 @@ function student_biometric_payload(?array $row, array $config): array
             'usableSampleCount' => null,
             'requiredUsableSamples' => 20,
             'manualFallbackAvailable' => true,
+            'pendingRevokeRequest' => $revokeState['pendingRevokeRequest'] ?? null,
+            'latestRejectedRevokeRequest' => $revokeState['latestRejectedRevokeRequest'] ?? null,
         ];
     }
 
@@ -160,12 +213,14 @@ function student_biometric_payload(?array $row, array $config): array
         'requiredUsableSamples' => 20,
         'manualFallbackAvailable' => true,
         'operationalTimezone' => $config['app']['operational_timezone'],
+        'pendingRevokeRequest' => $revokeState['pendingRevokeRequest'] ?? null,
+        'latestRejectedRevokeRequest' => $revokeState['latestRejectedRevokeRequest'] ?? null,
     ];
 }
 
-function student_biometric_profile_response(?array $row, array $config): array
+function student_biometric_profile_response(?array $row, array $config, ?array $revokeState = null): array
 {
-    $payload = student_biometric_payload($row, $config);
+    $payload = student_biometric_payload($row, $config, $revokeState);
     return [
         'status' => 'ok',
         'biometric' => $payload,
@@ -242,6 +297,103 @@ function student_attendance_logs_response(array $records, string $timezone): arr
     ];
 }
 
+function student_biometric_cancel_pending_revoke_request(
+    PDO $pdo,
+    array $config,
+    array $authCtx,
+    array $context,
+    int $studentId,
+    string $reason
+): bool {
+    $stmt = $pdo->prepare(
+        "SELECT request_id
+           FROM face_revoke_requests
+          WHERE student_id = ? AND status = 'pending'
+          FOR UPDATE"
+    );
+    $stmt->execute([$studentId]);
+    $requestId = $stmt->fetchColumn();
+    if ($requestId === false) {
+        return false;
+    }
+    $pdo->prepare(
+        "UPDATE face_revoke_requests
+            SET status = 'cancelled',
+                cancelled_at = CURRENT_TIMESTAMP,
+                review_note = ?,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE request_id = ?"
+    )->execute([$reason, (int) $requestId]);
+    student_biometric_record_audit(
+        $pdo,
+        $config,
+        $authCtx,
+        $context,
+        'biometric_revoke_request_cancelled',
+        $studentId,
+        'Pending face revocation request was cancelled automatically.',
+        $reason,
+        ['status' => 'pending', 'requestId' => (int) $requestId],
+        ['status' => 'cancelled', 'requestId' => (int) $requestId]
+    );
+    return true;
+}
+
+function student_biometric_resolve_revoke_term(PDO $pdo, int $studentId, ?array $profile, array $config): array
+{
+    if ($profile !== null && $profile['reference_term_id'] !== null) {
+        $stmt = $pdo->prepare('SELECT id, school_year, semester FROM academic_terms WHERE id = ? LIMIT 1');
+        $stmt->execute([(int) $profile['reference_term_id']]);
+        $term = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($term !== false) {
+            return [
+                'termId' => (int) $term['id'],
+                'schoolYear' => (string) $term['school_year'],
+                'semester' => (string) $term['semester'],
+            ];
+        }
+    }
+
+    $classes = academic_student_term_dates($pdo, $studentId);
+    $picked = academic_latest_term_end($classes) ?? ($classes[0] ?? null);
+    if ($picked !== null) {
+        $sem = academic_term_semester((string) ($picked['semester'] ?? '')) ?? trim((string) ($picked['semester'] ?? ''));
+        return [
+            'termId' => $picked['termId'] !== null ? (int) $picked['termId'] : null,
+            'schoolYear' => (string) $picked['school_year'],
+            'semester' => $sem !== '' ? $sem : '1ST',
+        ];
+    }
+
+    $curYear = academic_current_school_year($pdo);
+    $today = app_local_date($config, attendance_session_now_utc());
+    $terms = academic_terms_read($pdo);
+    foreach ($terms as $t) {
+        if ($t['start_date'] <= $today && $t['end_date'] >= $today) {
+            return [
+                'termId' => (int) $t['id'],
+                'schoolYear' => (string) $t['school_year'],
+                'semester' => (string) $t['semester'],
+            ];
+        }
+    }
+    foreach ($terms as $t) {
+        if ($t['school_year'] === $curYear) {
+            return [
+                'termId' => (int) $t['id'],
+                'schoolYear' => (string) $t['school_year'],
+                'semester' => (string) $t['semester'],
+            ];
+        }
+    }
+
+    return [
+        'termId' => null,
+        'schoolYear' => $curYear,
+        'semester' => '1ST',
+    ];
+}
+
 function student_biometric_expire_if_needed(
     PDO $pdo,
     array $config,
@@ -285,6 +437,9 @@ function student_biometric_expire_if_needed(
         $pdo, $config, $authCtx, $context, 'biometric_enrollment_expired', (int) $row['student_id'],
         'Biometric enrollment expired at the end of its academic validity period.', null,
         student_biometric_snapshot($row), student_biometric_snapshot($after)
+    );
+    student_biometric_cancel_pending_revoke_request(
+        $pdo, $config, $authCtx, $context, $studentId, 'Enrollment expired at end of term'
     );
     $row = student_biometric_profile($pdo, $studentId, true);
     return $row;
@@ -333,6 +488,9 @@ function student_biometric_invalidate(
     student_biometric_record_audit(
         $pdo, $config, $authCtx, $context, $actionCode, $studentId, $description, $reason,
         student_biometric_snapshot($row), student_biometric_snapshot(student_biometric_profile($pdo, $studentId, true))
+    );
+    student_biometric_cancel_pending_revoke_request(
+        $pdo, $config, $authCtx, $context, $studentId, $reason ?? $description
     );
     return true;
 }

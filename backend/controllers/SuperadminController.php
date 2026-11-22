@@ -849,8 +849,11 @@ function overview_data(PDO $pdo, array $config, int $superadminId): array
     // DS6 (look check 2026-11-18): the latest 10 rows of the Superadmin's audit view, the entry shape the Dean Dashboard had.
     $recent = audit_read_params([], 'superadmin');
     $recent['pageSize'] = 10;
+    $faceRevokeRequestsPending = face_revoke_requests_pending_count($pdo);
+    $attention['faceRevokeRequestsPending'] = $faceRevokeRequestsPending;
 
-    return ['faceFlagsOpen' => face_flags_open_count($pdo), 'recentAuditEvents' => audit_read_entries($pdo, ['user_id' => $superadminId, 'role' => 'superadmin'], $recent)['entries'],
+    return ['faceFlagsOpen' => face_flags_open_count($pdo), 'faceRevokeRequestsPending' => $faceRevokeRequestsPending,
+        'recentAuditEvents' => audit_read_entries($pdo, ['user_id' => $superadminId, 'role' => 'superadmin'], $recent)['entries'],
         'attention' => $attention, 'accounts' => $accounts, 'signIns' => array_values($weeks),
         'security' => ['twoFactor' => $twoFactor, 'failedSignIns' => array_values($days)],
         'yearLevels' => array_map(static fn(array $r): array => ['yearLevel' => (int) $r['year_level'], 'students' => (int) $r['n']], $yearLevels),
@@ -988,11 +991,11 @@ function handle_admin_face_flags(): void
             $q = trim((string) ($_GET['q'] ?? ''));
             $errors = [];
             $filters = ['status' => $status, 'q' => $q];
-            if (!in_array($status, ['open', 'dismissed', 'all'], true)) $errors['status'] = 'Status must be open, dismissed or all.';
+            if (!in_array($status, ['open', 'dismissed', 'revoked', 'all'], true)) $errors['status'] = 'Status must be open, dismissed, revoked or all.';
             if (preg_match('/^[1-9]\d{0,5}$/', $page) !== 1) $errors['page'] = 'Page must be a positive whole number.';
             if (mb_strlen($q) > 100) $errors['q'] = 'Search must be 100 characters or fewer.';
             if (isset($_GET['kind'])) {
-                if (!in_array((string) $_GET['kind'], ['F1', 'F2'], true)) $errors['kind'] = 'Kind must be F1 or F2.';
+                if (!in_array((string) $_GET['kind'], ['F1', 'F2', 'F3'], true)) $errors['kind'] = 'Kind must be F1, F2 or F3.';
                 else $filters['kind'] = (string) $_GET['kind'];
             }
             foreach (['courseId', 'classId'] as $key) {
@@ -1024,5 +1027,104 @@ function handle_admin_face_flags(): void
         if ($pdo instanceof PDO && $pdo->inTransaction()) $pdo->rollBack();
         error_log('Admin face flags error: ' . sanitize_for_log($e));
         safe_error_response('Unable to update the face enrolment flags.', 500);
+    }
+}
+
+// ---- 12.9: Face Revocation Requests (docs/contracts/face-revoke-approval.md section 3) ----
+
+function handle_admin_face_revoke_requests(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        superadmin_verify_auth($pdo, $config);
+        $status = (string) ($_GET['status'] ?? 'pending');
+        $page = (string) ($_GET['page'] ?? '1');
+        $q = trim((string) ($_GET['q'] ?? ''));
+        $errors = [];
+        $filters = ['status' => $status, 'q' => $q];
+        if (!in_array($status, ['pending', 'approved', 'rejected', 'cancelled', 'all'], true)) {
+            $errors['status'] = 'Status must be pending, approved, rejected, cancelled or all.';
+        }
+        if (preg_match('/^[1-9]\d{0,5}$/', $page) !== 1) {
+            $errors['page'] = 'Page must be a positive whole number.';
+        }
+        if (mb_strlen($q) > 100) {
+            $errors['q'] = 'Search must be 100 characters or fewer.';
+        }
+        foreach (['courseId', 'classId'] as $key) {
+            if (!isset($_GET[$key]) || $_GET[$key] === '') continue;
+            if (preg_match('/^[1-9]\d{0,8}$/', (string) $_GET[$key]) !== 1) {
+                $errors[$key] = "Invalid {$key} filter.";
+            } else {
+                $filters[$key] = (int) $_GET[$key];
+            }
+        }
+        if (isset($filters['classId'])) {
+            $known = $pdo->prepare('SELECT 1 FROM class_sections WHERE cs_id = ? AND school_year = ? AND archived_at IS NULL');
+            $known->execute([$filters['classId'], academic_current_school_year($pdo)]);
+            if ($known->fetchColumn() === false) {
+                $errors['classId'] = 'Choose a class of this school year.';
+            }
+        }
+        if ($errors !== []) {
+            throw new ValidationException($errors);
+        }
+        json_response(['status' => 'ok'] + face_revoke_requests_list($pdo, $filters, (int) $page), 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
+    } catch (Throwable $e) {
+        error_log('Admin face revoke requests error: ' . sanitize_for_log($e));
+        safe_error_response('Unable to load face revocation requests.', 500);
+    }
+}
+
+function handle_admin_face_revoke_request_approve(): void
+{
+    handle_admin_face_revoke_request_decision('approve');
+}
+
+function handle_admin_face_revoke_request_reject(): void
+{
+    handle_admin_face_revoke_request_decision('reject');
+}
+
+function handle_admin_face_revoke_request_decision(string $action): void
+{
+    $pdo = null;
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $actor = superadmin_verify_auth($pdo, $config);
+        $body = request_body();
+        if (!$body['has_body'] || !is_array($body['data'])) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+        $context = [
+            'request_id' => request_id(),
+            'ip_address' => request_ip(),
+            'user_agent' => request_user_agent(),
+            'http_method' => request_method(),
+            'endpoint' => request_path(),
+        ];
+        $pdo->beginTransaction();
+        $result = $action === 'approve'
+            ? face_revoke_request_approve($pdo, $config, $actor, $context, $body['data'])
+            : face_revoke_request_reject($pdo, $config, $actor, $context, $body['data']);
+        $pdo->commit();
+        json_response(['status' => 'ok'] + $result, 200);
+    } catch (ValidationException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) $pdo->rollBack();
+        validation_error_response($e->getErrors());
+    } catch (SuperadminConflict $e) {
+        superadmin_conflict_response($pdo, $e);
+    } catch (StudentBiometricException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) $pdo->rollBack();
+        json_response(['status' => 'error', 'code' => $e->errorCode, 'message' => $e->getMessage(), 'requestId' => request_id()], $e->statusCode);
+    } catch (Throwable $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) $pdo->rollBack();
+        error_log('Admin face revoke request decision error: ' . sanitize_for_log($e));
+        safe_error_response('Unable to update the face revocation request.', 500);
     }
 }

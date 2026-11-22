@@ -184,6 +184,10 @@ function audit_catalogue(): array
         'biometric_enrollment_revoked_inactive' => ['Face enrollment deleted', $B, true, false],
         'biometric_enrollment_expired' => ['Face enrollment deleted', $B, true, false],
         'biometric_verification_failed' => ['Face check failed', $B, false, false],
+        'biometric_revoke_requested' => ['Face revocation requested', $B, true, false],
+        'biometric_revoke_request_cancelled' => ['Face revocation request cancelled', $B, true, false],
+        'biometric_revoke_request_approved' => ['Face revocation request approved', $B, true, false],
+        'biometric_revoke_request_rejected' => ['Face revocation request rejected', $B, true, false],
         'face_flag_raised' => ['Face enrollment flagged', $B, true, false],
         'face_flag_dismissed' => ['Face enrollment flag dismissed', $B, true, false],
     ];

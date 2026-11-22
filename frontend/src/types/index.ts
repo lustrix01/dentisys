@@ -190,6 +190,20 @@ export interface PasswordChangeResponse {
 }
 export type LivenessAction = 'blink' | 'turn_left' | 'turn_right';
 
+export interface PendingBiometricRevokeRequest {
+  requestId: number;
+  reason: string;
+  status: 'pending';
+  createdAt: string;
+}
+
+export interface RejectedBiometricRevokeRequest {
+  requestId: number;
+  reason: string;
+  reviewNote: string;
+  reviewedAt: string;
+}
+
 export interface StudentBiometricProfile {
   consentGranted: boolean;
   enrollmentStatus: BiometricEnrollmentStatus;
@@ -199,6 +213,8 @@ export interface StudentBiometricProfile {
   requiredUsableSamples: number;
   manualFallbackAvailable: boolean;
   disclosureVersion?: string | null;
+  pendingRevokeRequest?: PendingBiometricRevokeRequest | null;
+  latestRejectedRevokeRequest?: RejectedBiometricRevokeRequest | null;
 }
 
 

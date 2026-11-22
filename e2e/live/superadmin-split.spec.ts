@@ -6,7 +6,7 @@ import { signInSuperadmin, SUPERADMIN_EMAIL } from './superadminSignIn';
 test.describe.configure({ timeout: 120_000 });
 test('Superadmin signs in with password and authenticator code, sees its own pages and no switcher', async ({ page }) => {
   await signInSuperadmin(page);
-  for (const p of ['/superadmin/overview', '/superadmin/people', '/superadmin/classes', '/superadmin/course-catalog', '/superadmin/terms', '/superadmin/rooms', '/superadmin/face-flags', '/superadmin/audit-trail']) {
+  for (const p of ['/superadmin/overview', '/superadmin/people', '/superadmin/classes', '/superadmin/course-catalog', '/superadmin/terms', '/superadmin/rooms', '/superadmin/face-enrolments', '/superadmin/audit-trail']) {
     await expect(page.locator(`a[href="${p}"]`).first()).toBeAttached();
   }
   await expect(page.locator('[aria-label="Account view"]')).toHaveCount(0);

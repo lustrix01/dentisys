@@ -1,7 +1,7 @@
 import { test, expect, signInAs } from './fixtures';
 
 // Backlog 13.9 (docs/contracts/dean-superadmin-split.md): the Superadmin is its own account; the Dean keeps four pages.
-const SUPERADMIN_PAGES = ['/superadmin/overview', '/superadmin/people', '/superadmin/classes', '/superadmin/course-catalog', '/superadmin/terms', '/superadmin/rooms', '/superadmin/face-flags', '/superadmin/audit-trail'];
+const SUPERADMIN_PAGES = ['/superadmin/overview', '/superadmin/people', '/superadmin/classes', '/superadmin/course-catalog', '/superadmin/terms', '/superadmin/rooms', '/superadmin/face-enrolments', '/superadmin/audit-trail'];
 
 test.describe('Superadmin account', () => {
   test.beforeEach(async ({ page }) => { await signInAs(page, 'superadmin'); });

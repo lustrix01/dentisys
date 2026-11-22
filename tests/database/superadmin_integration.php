@@ -389,7 +389,7 @@ foreach ([['Dean', $adminAccessToken, 403], ['Faculty', $seedFacultyAccessToken,
 [$saOvStatus, $saOv] = $saGet('/api/admin/overview');
 $saOvKeys = array_keys($saOv);
 sort($saOvKeys);
-expect_true($saOvStatus === 200 && ($saOv['status'] ?? '') === 'ok' && $saOvKeys === ['accounts', 'attention', 'faceFlagsOpen', 'recentAuditEvents', 'sectionsByCourse', 'security', 'setup', 'signIns', 'status', 'yearLevels'], 'The overview answers one flat object with every section plus recentAuditEvents (DS6); no separate academicTermReminder field');
+expect_true($saOvStatus === 200 && ($saOv['status'] ?? '') === 'ok' && $saOvKeys === ['accounts', 'attention', 'faceFlagsOpen', 'faceRevokeRequestsPending', 'recentAuditEvents', 'sectionsByCourse', 'security', 'setup', 'signIns', 'status', 'yearLevels'], 'The overview answers one flat object with every section plus recentAuditEvents (DS6); no separate academicTermReminder field');
 expect_true(is_array($saOv['recentAuditEvents'] ?? null) && count($saOv['recentAuditEvents']) <= 10, 'DS6: recentAuditEvents holds at most 10 entries');
 $saTotal = static fn(string $query): int => (int) ($saGet('/api/admin/people?' . $query)[1]['total'] ?? -1);
 foreach (['faculty' => 'faculty', 'student' => 'students'] as $saKind => $saKey) {

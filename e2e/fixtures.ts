@@ -34,7 +34,9 @@ export const MOCK_ROOMS = SEEDED_ROOMS.map(([name, group]) => ({ name, group, st
 export const roomsJson = (extra: Array<Record<string, unknown>> = []) => ({ status: 'ok', rooms: [...MOCK_ROOMS, ...extra] });
 
 const KNOWN_API_PATHS = new Set([
-  '/api/rooms', '/api/admin/people', '/api/admin/courses', '/api/admin/rooms', '/api/admin/overview', '/api/admin/face-flags', '/api/admin/people/filters', '/api/admin/classes', '/api/admin/classes/filters', '/api/admin/classes/detail',
+  '/api/rooms', '/api/admin/people', '/api/admin/courses', '/api/admin/rooms', '/api/admin/overview', '/api/admin/face-flags',
+  '/api/admin/face-revoke-requests', '/api/admin/face-revoke-requests/approve', '/api/admin/face-revoke-requests/reject',
+  '/api/admin/people/filters', '/api/admin/classes', '/api/admin/classes/filters', '/api/admin/classes/detail',
   '/api/admin/people/transfer-dean', '/api/admin/classes/change-faculty', '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/google', '/api/auth/google/link', '/api/auth/google/link/profile', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/faculty/activate', '/api/auth/mfa/enroll/start',
   '/api/auth/mfa/enroll/confirm', '/api/auth/mfa/verify', '/api/auth/mfa/recover', '/api/auth/mfa/settings',
   '/api/auth/mfa/settings/recovery-codes', '/api/auth/mfa/settings/revoke', '/api/auth/mfa/trusted-devices/forget', '/api/auth/me', '/api/auth/refresh', '/api/auth/theme',
@@ -55,14 +57,17 @@ const KNOWN_API_PATHS = new Set([
   '/api/faculty/classes/unenroll', '/api/faculty/grading-config',
   '/api/notifications', '/api/notifications/read-all', '/api/secretary/activity', '/api/faculty/activity', '/api/faculty/attendance-activity', '/api/faculty/excused-requests', '/api/secretary/excused-requests',
   '/api/student/dashboard', '/api/student/classes', '/api/student/retention',
-  '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/attendance/sessions/upcoming', '/api/student/biometric/profile',
+  '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/attendance/sessions/upcoming',
+  '/api/student/biometric/profile', '/api/student/biometrics', '/api/student/biometric/revoke-request', '/api/student/biometrics/revoke-request',
+  '/api/student/biometric/enrollment', '/api/student/biometrics/enrollment',
+  '/api/student/biometric/liveness/challenge', '/api/student/biometric/liveness/guidance',
   '/api/student/profile', '/api/student/join-requests',
   '/api/faculty/classes/join', '/api/faculty/classes/join/requests', '/api/faculty/classes/auto-sessions',
   '/api/faculty/classes/grade-submission', '/api/admin/grade-change-requests', '/api/admin/grade-submissions',
 ]);
 
 const GET_ONLY_API_PATHS = new Set([
-  '/api/rooms', '/api/admin/email-logs', '/api/admin/people', '/api/admin/courses', '/api/admin/rooms', '/api/admin/overview', '/api/admin/face-flags', '/api/admin/people/filters', '/api/admin/classes', '/api/admin/classes/filters', '/api/admin/classes/detail',
+  '/api/rooms', '/api/admin/email-logs', '/api/admin/people', '/api/admin/courses', '/api/admin/rooms', '/api/admin/overview', '/api/admin/face-flags', '/api/admin/face-revoke-requests', '/api/admin/people/filters', '/api/admin/classes', '/api/admin/classes/filters', '/api/admin/classes/detail',
   '/api/health', '/api/runtime-config', '/api/auth/me', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/student/invitation', '/api/auth/mfa/settings', '/api/admin/faculty-invitations',
   '/api/admin/dashboard/kpis', '/api/admin/audit-logs', '/api/admin/reports/summary', '/api/secretary/invitation', '/api/secretary/invitations',
   '/api/secretary/dashboard/kpis', '/api/secretary/attendance', '/api/secretary/attendance/session/active', '/api/secretary/profile', '/api/secretary/settings',
@@ -71,7 +76,8 @@ const GET_ONLY_API_PATHS = new Set([
   '/api/faculty/attendance', '/api/faculty/email-logs', '/api/faculty/reports/summary', '/api/faculty/courses', '/api/faculty/retention',
   '/api/faculty/classes/available-students',
   '/api/student/dashboard', '/api/student/classes', '/api/student/retention',
-  '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/attendance/sessions/upcoming', '/api/student/biometric/profile',
+  '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/attendance/sessions/upcoming',
+  '/api/student/biometric/profile', '/api/student/biometrics',
   '/api/student/profile', '/api/student/join-requests',
   '/api/faculty/classes/join', '/api/faculty/classes/join/requests', '/api/faculty/classes/auto-sessions',
   '/api/faculty/attendance/sheet', '/api/admin/reports/attendance-sheet',
@@ -97,6 +103,7 @@ function isKnownApiRequest(pathname: string, method: string): boolean {
   if (!isKnownApiPath(pathname)) return false;
   if (/^\/api\/notifications(\/|$)/.test(pathname)) return method === 'GET' || method === 'POST';
   if (pathname === '/api/faculty/grading-config') return method === 'GET' || method === 'PUT';
+  if (pathname === '/api/student/biometrics/revoke-request' || pathname === '/api/student/biometric/revoke-request') return method === 'POST' || method === 'DELETE';
   if (MULTI_METHOD_API_PATHS.has(pathname)) return method === 'GET' || method === 'POST';
   if (GET_ONLY_API_PATHS.has(pathname)) return method === 'GET';
   return method === 'POST';
@@ -110,7 +117,8 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname === '/api/admin/grade-submissions') return { status: 'ok', term: null, classes: [], lateFromEarlierTerms: 0 };
   // Superadmin Overview reads these lists for its tiles.
   if (pathname === '/api/admin/people') return { status: 'ok', people: [], total: 0, page: 1, pageSize: 50 };
-  if (pathname === '/api/admin/face-flags') return { status: 'ok', flags: [], total: 0, page: 1, pageSize: 50 };
+  if (pathname === '/api/admin/face-flags') return { status: 'ok', flags: [], total: 0, page: 1, pageSize: 50, openCount: 0 };
+  if (pathname === '/api/admin/face-revoke-requests') return { status: 'ok', requests: [], total: 0, page: 1, pageSize: 50, pendingCount: 0 };
   if (pathname === '/api/admin/people/filters') return { status: 'ok', courses: [], classes: [] };
   if (pathname === '/api/admin/courses') return { status: 'ok', courses: [] };
   if (pathname === '/api/admin/classes') return { classes: [], total: 0, page: 1, pageSize: 50, counts: { active: 0, archived: 0 } };
@@ -119,8 +127,9 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname === '/api/admin/rooms') return { status: 'ok', rooms: [], categories: [] };
   if (pathname === '/api/admin/overview') return {
     status: 'ok',
-    attention: { expiredInvitations: { faculty: 0, students: 0 }, facultyWithoutClasses: 0, inactive30: { faculty: 0, students: 0 }, nextTermMissing: false },
+    attention: { expiredInvitations: { faculty: 0, students: 0 }, facultyWithoutClasses: 0, inactive30: { faculty: 0, students: 0 }, nextTermMissing: false, faceRevokeRequestsPending: 0 },
     faceFlagsOpen: 0,
+    faceRevokeRequestsPending: 0,
     accounts: { faculty: { active: 0, invited: 0, deactivated: 0 }, students: { active: 0, invited: 0, deactivated: 0 } },
     signIns: [], security: { twoFactor: { faculty: { on: 0, total: 0 }, students: { on: 0, total: 0 } }, failedSignIns: [] },
     recentAuditEvents: [],
@@ -250,7 +259,7 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname === '/api/student/attendance/logs') return { status: 'ok', records: [], total: 0 };
   if (pathname === '/api/student/attendance/sessions/active') return { status: 'ok', activeSession: null };
   if (pathname === '/api/student/attendance/sessions/upcoming') return { status: 'ok', range: 'week', sessions: [], timezone: 'Asia/Manila', serverNow: '2026-10-10T00:00:00Z' };
-  if (pathname === '/api/student/biometric/profile') return { status: 'ok', consentGranted: false, enrollmentStatus: 'not_enrolled', enrolledAt: null, expiresAt: null, usableSampleCount: 0, requiredUsableSamples: 20, manualFallbackAvailable: true };
+  if (pathname === '/api/student/biometric/profile' || pathname === '/api/student/biometrics') return { status: 'ok', consentGranted: false, enrollmentStatus: 'not_enrolled', enrolledAt: null, expiresAt: null, usableSampleCount: 0, requiredUsableSamples: 20, manualFallbackAvailable: true, pendingRevokeRequest: null, latestRejectedRevokeRequest: null };
   if (pathname === '/api/student/profile') {
     return {
       status: 'ok',

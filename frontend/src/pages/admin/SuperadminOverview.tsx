@@ -26,7 +26,9 @@ const margin = { top: 10, right: 10, left: -25, bottom: 0 };
 
 /** One row per attention item with a count above zero; each links into the page already filtered. */
 export function attentionRows(a: AdminOverview['attention']): Array<{ count: number | null; text: string; to: string }> {
+  const pendingFaceRevokes = a.faceRevokeRequestsPending ?? 0;
   const rows = [
+    { count: pendingFaceRevokes, text: pendingFaceRevokes === 1 ? 'Face revocation request awaiting review' : 'Face revocation requests awaiting review', to: '/superadmin/face-enrolments' },
     { count: a.expiredInvitations.faculty, text: a.expiredInvitations.faculty === 1 ? 'Faculty invitation has expired' : 'Faculty invitations have expired', to: '/superadmin/people?kind=faculty&status=invited&invitation=expired' },
     { count: a.expiredInvitations.students, text: a.expiredInvitations.students === 1 ? 'Student invitation has expired' : 'Student invitations have expired', to: '/superadmin/people?kind=student&status=invited&invitation=expired' },
     { count: a.facultyWithoutClasses, text: a.facultyWithoutClasses === 1 ? 'Faculty account has no classes this school year' : 'Faculty accounts have no classes this school year', to: '/superadmin/people?kind=faculty&classes=none' },
@@ -89,7 +91,7 @@ export const SuperadminOverview: React.FC = () => {
     { label: 'Current Term', value: term ? semesterLabel(term.semester) : 'No current term', sub: term ? `${schoolYearText(term.schoolYear)}${term.endDate ? ` · ends ${shortDate(term.endDate)}` : ''}` : 'Add the term dates', to: '/superadmin/terms' },
     { label: 'Courses', value: String(data.setup.courses.active), sub: `${data.setup.courses.retired} retired`, to: '/superadmin/course-catalog' },
     { label: 'Rooms', value: String(data.setup.rooms.active), sub: `${data.setup.rooms.retired} retired`, to: '/superadmin/rooms' },
-    { label: 'Face enrolment flags', value: String(data.faceFlagsOpen ?? 0), sub: 'open', to: '/superadmin/face-flags' },
+    { label: 'Face Enrolments', value: String((data.faceRevokeRequestsPending ?? 0) + (data.faceFlagsOpen ?? 0)), sub: `${data.faceRevokeRequestsPending ?? 0} pending · ${data.faceFlagsOpen ?? 0} flags`, to: '/superadmin/face-enrolments' },
   ];
 
   return (

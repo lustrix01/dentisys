@@ -249,7 +249,7 @@ test.describe('P03 Student identity and authentication', () => {
     }
   });
 
-  test('an enrolled Student sees a Registered screen that offers updating the face or revoking', async ({ page }) => {
+  test('an enrolled Student sees a Registered screen that offers updating the face or requesting revocation', async ({ page }) => {
     const student = {
       user_id: 27,
       login_email: 'enrolled.student@bicol-u.edu.ph',
@@ -259,7 +259,19 @@ test.describe('P03 Student identity and authentication', () => {
       authentication_source: 'password',
       student: { student_id: 27, student_number: 'P03-ENROLLED', status: 'active' },
     };
-    let revoked = false;
+    let pendingRequest: { requestId: number; reason: string; status: 'pending'; createdAt: string } | null = null;
+    const baseBiometric = () => ({
+      status: 'ok',
+      consentGranted: true,
+      enrollmentStatus: 'active',
+      enrolledAt: '2026-09-27T08:00:00+08:00',
+      expiresAt: '2026-12-20',
+      usableSampleCount: 28,
+      requiredUsableSamples: 20,
+      manualFallbackAvailable: true,
+      pendingRevokeRequest: pendingRequest,
+      latestRejectedRevokeRequest: null,
+    });
     await page.route('**/api/runtime-config', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
         ...ENABLED_RUNTIME_CONFIG,
@@ -273,21 +285,17 @@ test.describe('P03 Student identity and authentication', () => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(student) });
     });
     await page.route('**/api/student/biometric/profile', async route => {
-      if (route.request().method() === 'DELETE') {
-        revoked = true;
-        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', enrollmentStatus: 'revoked' }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(baseBiometric()) });
+    });
+    await page.route('**/api/student/biometrics/revoke-request', async route => {
+      if (route.request().method() === 'POST') {
+        const body = route.request().postDataJSON() as { reason?: string };
+        pendingRequest = { requestId: 501, reason: body.reason ?? '', status: 'pending', createdAt: '2026-10-12T09:00:00+08:00' };
+        await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', request: pendingRequest, biometric: baseBiometric() }) });
         return;
       }
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
-        status: 'ok',
-        consentGranted: true,
-        enrollmentStatus: 'active',
-        enrolledAt: '2026-09-27T08:00:00+08:00',
-        expiresAt: '2026-12-20',
-        usableSampleCount: 28,
-        requiredUsableSamples: 20,
-        manualFallbackAvailable: true,
-      }) });
+      pendingRequest = null;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', biometric: baseBiometric(), ...baseBiometric() }) });
     });
 
     await page.goto('/student/face-registration');
@@ -296,13 +304,15 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(main.getByText('Privacy Agreement')).toHaveCount(0);
     await expect(main.getByRole('button', { name: 'Update my face' })).toBeVisible();
     await expect(main.getByText('Semester Expiration')).toBeVisible();
-    await expect(main.getByRole('button', { name: /Re-Enroll|Re-Register|Continue to camera scan/i })).toHaveCount(0);
+    await expect(main.getByRole('button', { name: /Re-Enroll|Re-Register|Continue to camera scan|Revoke registration/i })).toHaveCount(0);
 
-    await main.getByRole('button', { name: 'Revoke registration' }).click();
-    await page.getByRole('button', { name: 'Yes, revoke registration' }).click();
-    await expect.poll(() => revoked).toBe(true);
-    await expect(main.getByText('Data Privacy & Facial Biometrics Consent')).toBeVisible();
-    await expect(main.getByText('Your face is registered for attendance')).toHaveCount(0);
+    await main.getByRole('button', { name: 'Request revocation' }).click();
+    const dialog = page.locator('body > div.fixed.inset-0');
+    await dialog.getByLabel(/Reason/).fill('Got a new phone and need to re-enroll');
+    await dialog.getByRole('button', { name: 'Submit revocation request' }).click();
+    await expect(main.getByText('Revocation request pending')).toBeVisible();
+    await expect(main.getByText('Your face is registered for attendance')).toBeVisible();
+    await expect(main.getByRole('button', { name: 'Request revocation' })).toHaveCount(0);
   });
 
   test('Daily Attendance lists upcoming sessions and requests all on demand', async ({ page }) => {

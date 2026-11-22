@@ -89,7 +89,8 @@ function handle_student_biometric_profile_get(): void
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
         }
-        json_response(student_biometric_profile_response($row, $config), 200);
+        $revokeState = student_biometric_revoke_request_state($pdo, $identity['student_id'], $row);
+        json_response(student_biometric_profile_response($row, $config, $revokeState), 200);
     } catch (Throwable $e) {
         student_biometric_emit_exception($e);
     }
@@ -184,7 +185,8 @@ function handle_student_biometric_consent(): void
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
         }
-        json_response(student_biometric_profile_response($row, $config), 200);
+        $revokeState = student_biometric_revoke_request_state($pdo, $identity['student_id'], $row);
+        json_response(student_biometric_profile_response($row, $config, $revokeState), 200);
     } catch (Throwable $e) {
         student_biometric_emit_exception($e);
     }
@@ -370,7 +372,8 @@ function handle_student_biometric_enrollment(): void
                     && $replayedProfile['enrollment_status'] === 'active'
                     && $replayedProfile['protected_object_reference'] !== null) {
                     $pdo->commit();
-                    json_response(student_biometric_profile_response($replayedProfile, $config), 200);
+                    $revokeState = student_biometric_revoke_request_state($pdo, $studentId, $replayedProfile);
+                    json_response(student_biometric_profile_response($replayedProfile, $config, $revokeState), 200);
                     return;
                 }
                 throw new StudentBiometricException(
@@ -406,6 +409,20 @@ function handle_student_biometric_enrollment(): void
         if ($reference === '' || $usable < 20 || $usable > 30) {
             throw new StudentBiometricException('Biometric enrollment did not produce a valid protected reference.', 503, 'biometric_service_unavailable');
         }
+        $matches = $sidecar['matchesPrevious'] ?? null;
+        if ($previous['protected_object_reference'] !== null && $matches === false) {
+            try {
+                student_biometric_sidecar_revoke($config, $reference);
+            } catch (Throwable $cleanupError) {
+                error_log('Mismatched biometric enrollment reference cleanup skipped: ' . sanitize_for_log($cleanupError));
+            }
+            $reference = null;
+            throw new StudentBiometricException(
+                'Your face could not be matched to your current registration. If this is you, please request a revocation instead.',
+                409,
+                'face_update_mismatch'
+            );
+        }
         $nowSql = attendance_session_now_utc()->format('Y-m-d H:i:s.u');
         $pdo->beginTransaction();
         try {
@@ -429,13 +446,13 @@ function handle_student_biometric_enrollment(): void
                 $pdo, $config, $authCtx, $context, 'biometric_enrollment_succeeded', $studentId,
                 'Student biometric enrollment succeeded.', null, $before, student_biometric_snapshot($row)
             );
-            $matches = $sidecar['matchesPrevious'] ?? null;
             face_flags_after_enrolment($pdo, $config, $context, $studentId, $previous, is_bool($matches) ? $matches : null, attendance_session_now_utc());
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             if ($reference !== null) {
                 try { student_biometric_sidecar_revoke($config, $reference); } catch (Throwable) { }
+                $reference = null;
             }
             throw $e;
         }
@@ -448,7 +465,8 @@ function handle_student_biometric_enrollment(): void
                 error_log('Previous biometric reference cleanup deferred: ' . sanitize_for_log($cleanupError));
             }
         }
-        json_response(student_biometric_profile_response($row, $config), 201);
+        $revokeState = student_biometric_revoke_request_state($pdo, $studentId, $row);
+        json_response(student_biometric_profile_response($row, $config, $revokeState), 201);
     } catch (Throwable $e) {
         if ($reference !== null) {
             try {
@@ -462,6 +480,9 @@ function handle_student_biometric_enrollment(): void
                 $restorePdo = create_pdo($config);
                 $restorePdo->beginTransaction();
                 academic_terms_lock($restorePdo);
+                $hadPreviousRef = $previous['protected_object_reference'] !== null;
+                $previousRefValue = $previous['protected_object_reference'];
+                $previousEnrolledAt = $previous['enrolled_at'];
                 // A Dean edit may have propagated the previous reference while
                 // the sidecar request was running; retain that current validity.
                 $currentProfile = student_biometric_profile($restorePdo, $studentId, true);
@@ -485,12 +506,23 @@ function handle_student_biometric_enrollment(): void
                 ]);
                 if ($challengeTokenId !== null && $idempotencyKey !== null) {
                     $terminalChallengeFailure = $e instanceof StudentBiometricException
-                        && in_array($e->errorCode, ['liveness_failed', 'quality_failed', 'biometric_verification_failed'], true);
+                        && in_array($e->errorCode, ['liveness_failed', 'quality_failed', 'biometric_verification_failed', 'face_update_mismatch'], true);
                     if ($terminalChallengeFailure) {
                         student_biometric_fail_challenge($restorePdo, $challengeTokenId, $idempotencyKey);
                     } else {
                         student_biometric_reset_challenge_for_retry($restorePdo, $challengeTokenId, $idempotencyKey);
                     }
+                }
+                if ($e instanceof StudentBiometricException && $e->errorCode === 'face_update_mismatch') {
+                    face_flags_after_enrolment(
+                        $restorePdo,
+                        $config,
+                        $context,
+                        $studentId,
+                        ['protected_object_reference' => $hadPreviousRef ? $previousRefValue : null, 'enrolled_at' => $previousEnrolledAt],
+                        false,
+                        attendance_session_now_utc()
+                    );
                 }
                 student_biometric_record_audit(
                     $restorePdo, $config, $authCtx, $context, 'biometric_enrollment_failed', $studentId,
@@ -508,43 +540,153 @@ function handle_student_biometric_enrollment(): void
 
 function handle_student_biometric_revoke(): void
 {
+    try {
+        student_biometric_controller_context();
+        // Direct student deletion ('biometric_enrollment_revoked') is superseded by Superadmin-approved revocation requests (12.9).
+        throw new StudentBiometricException(
+            'Face revocation requires Superadmin approval. Submit a revocation request with a reason.',
+            409,
+            'revocation_approval_required'
+        );
+    } catch (Throwable $e) {
+        student_biometric_emit_exception($e);
+    }
+}
+
+function handle_student_biometric_revoke_request_create(): void
+{
     $context = student_biometric_http_context();
+    $pdo = null;
     try {
         [$config, $pdo, $authCtx, $identity] = student_biometric_controller_context();
-        $row = student_biometric_profile($pdo, $identity['student_id']);
-        if ($row !== null && $row['protected_object_reference'] !== null) {
-            student_biometric_sidecar_revoke($config, (string) $row['protected_object_reference']);
+        $body = request_body();
+        if (!$body['has_body'] || !is_array($body['data'])) {
+            throw new StudentBiometricException('Request body required.', 400, 'BAD_REQUEST');
         }
-        $now = attendance_session_now_utc()->format('Y-m-d H:i:s.u');
+        $reason = validate_required_string($body['data'], 'reason', 8, 240);
+        $studentId = $identity['student_id'];
+
         $pdo->beginTransaction();
         try {
-            $row = student_biometric_profile($pdo, $identity['student_id'], true);
-            if ($row === null) {
-                $pdo->commit();
-                json_response(student_biometric_profile_response(null, $config), 200);
-                return;
+            $row = student_biometric_profile($pdo, $studentId, true);
+            $row = student_biometric_expire_if_needed($pdo, $config, $authCtx, $context, $studentId, $row);
+            if ($row === null || $row['enrollment_status'] !== 'active' || $row['protected_object_reference'] === null) {
+                throw new StudentBiometricException('You do not have an active face registration to revoke.', 409, 'no_active_enrollment');
             }
-            $before = student_biometric_snapshot($row);
-            $update = $pdo->prepare(
-                "UPDATE biometric_profiles
-                    SET consent_status = 'declined', enrollment_status = 'revoked', face_enrolled = 0,
-                        template_reference = NULL, image_references = NULL, protected_object_reference = NULL,
-                        reference_expires_on = NULL, usable_sample_count = NULL, revoked_at = ?,
-                        revoked_by_user_id = ?, consent_responded_at = ?, updated_at = ?
-                  WHERE profile_id = ?"
-            );
-            $update->execute([$now, $authCtx['user_id'], $now, $now, (int) $row['profile_id']]);
-            $row = student_biometric_profile($pdo, $identity['student_id'], true);
+            $pendingStmt = $pdo->prepare("SELECT request_id FROM face_revoke_requests WHERE student_id = ? AND status = 'pending' LIMIT 1 FOR UPDATE");
+            $pendingStmt->execute([$studentId]);
+            if ($pendingStmt->fetchColumn() !== false) {
+                throw new StudentBiometricException('A revocation request is already pending Superadmin review.', 409, 'revoke_request_pending');
+            }
+            $term = student_biometric_resolve_revoke_term($pdo, $studentId, $row, $config);
+            try {
+                $insert = $pdo->prepare(
+                    "INSERT INTO face_revoke_requests
+                        (student_id, term_id, school_year, semester, reason, status, requested_by_user_id)
+                     VALUES (?, ?, ?, ?, ?, 'pending', ?)
+                     RETURNING request_id, status, reason, school_year, semester, created_at"
+                );
+                $insert->execute([
+                    $studentId,
+                    $term['termId'],
+                    $term['schoolYear'],
+                    $term['semester'],
+                    $reason,
+                    (int) $authCtx['user_id'],
+                ]);
+                $created = $insert->fetch(PDO::FETCH_ASSOC);
+            } catch (PDOException $e) {
+                if ($e->getCode() === '23505') {
+                    throw new StudentBiometricException('A revocation request is already pending Superadmin review.', 409, 'revoke_request_pending', [], $e);
+                }
+                throw $e;
+            }
             student_biometric_record_audit(
-                $pdo, $config, $authCtx, $context, 'biometric_enrollment_revoked', $identity['student_id'],
-                'Student biometric enrollment was revoked and deleted.', null, $before, student_biometric_snapshot($row)
+                $pdo,
+                $config,
+                $authCtx,
+                $context,
+                'biometric_revoke_requested',
+                $studentId,
+                'Student requested face revocation.',
+                $reason,
+                null,
+                [
+                    'status' => 'pending',
+                    'requestId' => (int) $created['request_id'],
+                    'schoolYear' => (string) $created['school_year'],
+                    'semester' => (string) $created['semester'],
+                ]
             );
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
         }
-        json_response(student_biometric_profile_response($row, $config), 200);
+
+        $revokeState = student_biometric_revoke_request_state($pdo, $studentId, $row);
+        $biometric = student_biometric_payload($row, $config, $revokeState);
+        json_response([
+            'status' => 'ok',
+            'request' => [
+                'requestId' => (int) $created['request_id'],
+                'status' => 'pending',
+                'reason' => (string) $created['reason'],
+                'schoolYear' => (string) $created['school_year'],
+                'semester' => (string) $created['semester'],
+                'createdAt' => attendance_session_timestamp((string) $created['created_at']),
+            ],
+            'biometric' => $biometric,
+        ] + $biometric, 201);
+    } catch (Throwable $e) {
+        student_biometric_emit_exception($e);
+    }
+}
+
+function handle_student_biometric_revoke_request_cancel(): void
+{
+    $context = student_biometric_http_context();
+    $pdo = null;
+    try {
+        [$config, $pdo, $authCtx, $identity] = student_biometric_controller_context();
+        $studentId = $identity['student_id'];
+
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("SELECT request_id FROM face_revoke_requests WHERE student_id = ? AND status = 'pending' FOR UPDATE");
+            $stmt->execute([$studentId]);
+            $requestId = $stmt->fetchColumn();
+            if ($requestId === false) {
+                throw new StudentBiometricException('No pending revocation request was found.', 404, 'no_pending_revoke_request');
+            }
+            $pdo->prepare(
+                "UPDATE face_revoke_requests
+                    SET status = 'cancelled',
+                        cancelled_at = CURRENT_TIMESTAMP,
+                        updated_at = CURRENT_TIMESTAMP
+                  WHERE request_id = ?"
+            )->execute([(int) $requestId]);
+            student_biometric_record_audit(
+                $pdo,
+                $config,
+                $authCtx,
+                $context,
+                'biometric_revoke_request_cancelled',
+                $studentId,
+                'Student cancelled their pending face revocation request.',
+                null,
+                ['status' => 'pending', 'requestId' => (int) $requestId],
+                ['status' => 'cancelled', 'requestId' => (int) $requestId]
+            );
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+
+        $row = student_biometric_profile($pdo, $studentId);
+        $revokeState = student_biometric_revoke_request_state($pdo, $studentId, $row);
+        json_response(student_biometric_profile_response($row, $config, $revokeState), 200);
     } catch (Throwable $e) {
         student_biometric_emit_exception($e);
     }

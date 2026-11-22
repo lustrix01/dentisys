@@ -61,10 +61,16 @@ assert_split($routeHandler('POST', '/api/admin/people/transfer-dean') === 'handl
 $superOnly = [['GET', '/api/admin/academic-terms'], ['POST', '/api/admin/academic-terms'], ['POST', '/api/admin/academic-terms/preview'], ['POST', '/api/admin/academic-terms/delete'], ['POST', '/api/admin/academic-terms/copy'],
     ['GET', '/api/admin/courses'], ['POST', '/api/admin/courses/update'], ['POST', '/api/admin/courses/retire'], ['POST', '/api/admin/courses/restore'],
     ['GET', '/api/admin/rooms'], ['POST', '/api/admin/rooms'], ['GET', '/api/admin/overview'], ['GET', '/api/admin/people'], ['POST', '/api/admin/people/transfer-dean'],
-    ['POST', '/api/admin/people/deactivate'], ['POST', '/api/admin/people/move-email'], ['GET', '/api/admin/face-flags'], ['POST', '/api/admin/face-flags/dismiss']];
+    ['POST', '/api/admin/people/deactivate'], ['POST', '/api/admin/people/move-email'], ['GET', '/api/admin/face-flags'], ['POST', '/api/admin/face-flags/dismiss'],
+    ['GET', '/api/admin/face-revoke-requests'], ['POST', '/api/admin/face-revoke-requests/approve'], ['POST', '/api/admin/face-revoke-requests/reject']];
 foreach ($superOnly as [$method, $path]) {
     $handler = $routeHandler($method, $path);
     $body = $handler === null ? null : $handlerBody($handler);
+    if ($body !== null && preg_match('/^\s*return\s+([a-z0-9_]+)\(|^\s*([a-z0-9_]+)\(/m', substr($body, (int) strpos($body, '{') + 1), $dm)) {
+        $delegate = $dm[1] !== '' ? $dm[1] : $dm[2];
+        $delegateBody = $handlerBody($delegate);
+        if ($delegateBody !== null) $body .= "\n" . $delegateBody;
+    }
     assert_split($body !== null && str_contains($body, 'superadmin_verify_auth(') && !preg_match('/(?<!super)admin_verify_auth\(/', $body), "4.1: {$method} {$path} checks the Superadmin role only");
 }
 $deanOnly = [['GET', '/api/admin/dashboard/kpis'], ['GET', '/api/admin/reports/summary'], ['GET', '/api/admin/faculty-invitations'], ['POST', '/api/admin/faculty-invitations'], ['GET', '/api/admin/email-logs']];

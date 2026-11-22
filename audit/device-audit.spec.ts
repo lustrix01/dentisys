@@ -14,7 +14,7 @@ const ROUTES: Record<Role, string[]> = {
   // they only land on pages already listed here.
   // Superadmin nav (Layout.tsx superadminView); the Dean's old /admin setup links only redirect here.
   superadmin: ['/superadmin/overview', '/superadmin/people', '/superadmin/classes', '/superadmin/grade-submissions', '/superadmin/course-catalog',
-    '/superadmin/terms', '/superadmin/rooms', '/superadmin/face-flags', '/superadmin/audit-trail',
+    '/superadmin/terms', '/superadmin/rooms', '/superadmin/face-enrolments', '/superadmin/audit-trail',
     '/superadmin/profile', '/superadmin/settings'],
   admin: ['/', '/admin/reports', '/admin/grade-submissions', '/admin/grade-submissions?tab=changes', '/admin/faculty-invite', '/admin/audit-trail', '/admin/profile', '/admin/settings'],
   faculty: ['/', '/classes', '/students', '/grades', '/retention', '/attendance', '/reports', '/email-management',

@@ -326,6 +326,7 @@ $expectedMigrations = [
     '069_mfa_trusted_devices.sql',
     '070_auth_session_remember.sql',
     '071_grade_submission.sql',
+    '072_face_revoke_requests.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
