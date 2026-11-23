@@ -598,6 +598,20 @@ When authorized Faculty creates or reactivates a class enrollment, DentiSYS crea
 
 ---
 
+## NTF-002 - In-app notices per role
+
+**Status: APPROVED**
+
+Owner decision (2026-11-23). DentiSYS sends an in-app notice only when the recipient must act, or when someone else changed something about them; never for the recipient's own action. Each notice is created with the change that causes it, at most once per event, and only for an active linked account. Each role receives these notices:
+
+- **Student:** enrolled in a class; class cancelled; class restored; join request not approved; midterm advisory; midterm advisory cleared; remedial required; remedial no longer required; remedial update; cost recovery result; face revocation request approved; face revocation request rejected; face check-in enrolment revoked; appointed Class Secretary; final grades released; grade changed after an approved grade change; class Faculty changed.
+- **Class Secretary:** the Student notices, plus appointment removed; attendance request approved; attendance request rejected.
+- **Faculty:** attendance change requested by the Class Secretary; room booking overlap; a room their class uses was changed; grade change approved or rejected; class moved to another Faculty member; class assigned to them; join request waiting.
+- **Dean:** grade change awaiting approval.
+- **Superadmin:** face revocation request waiting; face enrolment flagged.
+
+---
+
 The following capabilities are currently part of DentiSYS and MUST NOT be removed as incidental scope.
 
 | Capability                              | Status   |

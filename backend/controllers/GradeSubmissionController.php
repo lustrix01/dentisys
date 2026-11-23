@@ -198,6 +198,20 @@ function grade_submission_faculty_handle(string $action): void
             $graceUntil = $now->modify('+24 hours');
             $pdo->prepare('UPDATE class_sections SET grades_submitted_at = ?, grades_grace_until = ?, grades_submitted_by = ? WHERE cs_id = ?')
                 ->execute([$now->format('Y-m-d H:i:sO'), $graceUntil->format('Y-m-d H:i:sO'), (int) $authCtx['user_id'], $csId]);
+            $classMetaStmt = $pdo->prepare('SELECT c.course_code, cs.cs_name FROM class_sections cs JOIN courses c ON c.course_id = cs.course_id WHERE cs.cs_id = ?');
+            $classMetaStmt->execute([$csId]);
+            $classMeta = $classMetaStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            $courseCode = trim((string) ($classMeta['course_code'] ?? ''));
+            $csName = trim((string) ($classMeta['cs_name'] ?? ''));
+            $classLabel = $courseCode !== '' && $csName !== '' ? "{$courseCode} ({$csName})" : ($courseCode !== '' ? $courseCode : ($csName !== '' ? $csName : $label));
+            $releaseTitle = $courseCode !== '' ? "Final grades released for {$courseCode}" : 'Final grades released';
+            $releaseBody = "Your final grades for {$classLabel} have been released. Open My Grades to view them.";
+            foreach (faculty_class_student_user_ids($pdo, $csId) as $uid) {
+                if ($uid <= 0 || $uid === (int) $authCtx['user_id']) {
+                    continue;
+                }
+                notification_create_idempotent($pdo, $uid, 'grades_released', $releaseTitle, $releaseBody, 'class_section', (string) $csId, "final-grades-released:{$csId}:{$uid}");
+            }
             $enrStmt = $pdo->prepare(
                 "SELECT e.enrollment_id,
                         COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
@@ -784,29 +798,62 @@ function grade_change_admin_handle(string $action): void
         $approve = $action === 'approve';
         if ($approve) {
             $draftResults = json_decode((string) $row['draft_results'], true) ?: [];
+            $draftEnrollmentIds = array_values(array_filter(array_map('intval', array_keys($draftResults)), static fn(int $id): bool => $id > 0));
+            $preApprovalGrades = [];
+            if ($draftEnrollmentIds !== []) {
+                $ph = implode(',', array_fill(0, count($draftEnrollmentIds), '?'));
+                $preStmt = $pdo->prepare("SELECT enrollment_id, final_percentage, final_gwa FROM enrollments WHERE enrollment_id IN ({$ph})");
+                $preStmt->execute($draftEnrollmentIds);
+                foreach ($preStmt->fetchAll(PDO::FETCH_ASSOC) as $preRow) {
+                    $preApprovalGrades[(int) $preRow['enrollment_id']] = $preRow;
+                }
+            }
             foreach ($draftResults as $enrollmentId => $result) {
                 faculty_save_computed_grade($pdo, (float) $result['percentage'], (float) $result['gwa'], (string) $result['retention'], (array) $result['components'], (int) $enrollmentId, false, true);
             }
             $pdo->prepare('UPDATE class_sections SET grades_grace_until = NULL WHERE cs_id = ?')->execute([$csId]);
-            if ($draftResults !== []) {
-                $draftEnrollmentIds = array_values(array_filter(array_map('intval', array_keys($draftResults)), static fn(int $id): bool => $id > 0));
-                if ($draftEnrollmentIds !== []) {
-                    $ph = implode(',', array_fill(0, count($draftEnrollmentIds), '?'));
-                    $legStmt = $pdo->prepare("SELECT enrollment_id, remedial_state_json FROM enrollments WHERE enrollment_id IN ({$ph})");
-                    $legStmt->execute($draftEnrollmentIds);
-                    $legacyByEnrollment = [];
-                    foreach ($legStmt->fetchAll(PDO::FETCH_ASSOC) as $legRow) {
-                        $legacyByEnrollment[(int) $legRow['enrollment_id']] = remedial_state_json_is_legacy($legRow['remedial_state_json']);
+            if ($draftResults !== [] && $draftEnrollmentIds !== []) {
+                $ph = implode(',', array_fill(0, count($draftEnrollmentIds), '?'));
+                $legStmt = $pdo->prepare("SELECT enrollment_id, remedial_state_json FROM enrollments WHERE enrollment_id IN ({$ph})");
+                $legStmt->execute($draftEnrollmentIds);
+                $legacyByEnrollment = [];
+                foreach ($legStmt->fetchAll(PDO::FETCH_ASSOC) as $legRow) {
+                    $legacyByEnrollment[(int) $legRow['enrollment_id']] = remedial_state_json_is_legacy($legRow['remedial_state_json']);
+                }
+                $progressions = remedial_attempts_load($pdo, $draftEnrollmentIds, $legacyByEnrollment);
+                $recipientStmt = $pdo->prepare(
+                    "SELECT DISTINCT u.user_id
+                       FROM enrollments e
+                       JOIN students s ON s.student_id = e.student_id
+                       JOIN user_accounts u ON ((s.student_account_user_id = u.user_id AND u.role IN ('student', 'secretary'))
+                                             OR (s.user_id = u.user_id AND u.role = 'secretary'))
+                      WHERE e.enrollment_id = ? AND LOWER(e.status) = 'active' AND LOWER(u.status) = 'active'"
+                );
+                $courseCode = trim((string) ($row['course_code'] ?? ''));
+                $gradeChangedTitle = $courseCode !== '' ? "Grade changed in {$courseCode}" : 'Grade changed';
+                foreach ($draftResults as $enrollmentId => $result) {
+                    $eid = (int) $enrollmentId;
+                    if ($eid <= 0 || !is_array($result)) {
+                        continue;
                     }
-                    $progressions = remedial_attempts_load($pdo, $draftEnrollmentIds, $legacyByEnrollment);
-                    foreach ($draftResults as $enrollmentId => $result) {
-                        $eid = (int) $enrollmentId;
-                        if ($eid <= 0) {
-                            continue;
+                    $gwa = isset($result['gwa']) && is_numeric($result['gwa']) ? (float) $result['gwa'] : null;
+                    $effectiveState = retention_effective_state((string) ($result['retention'] ?? 'active'), $progressions[$eid] ?? [], $gwa);
+                    grade_release_notify_remedial_transition($pdo, $eid, $gwa, $effectiveState);
+                    $old = $preApprovalGrades[$eid] ?? [];
+                    $gradeMoved = grade_change_text($old['final_gwa'] ?? null) !== grade_change_text($result['gwa'] ?? null)
+                        || grade_change_text($old['final_percentage'] ?? null) !== grade_change_text($result['percentage'] ?? null);
+                    if ($gradeMoved) {
+                        $recipientStmt->execute([$eid]);
+                        $gradeChangedBody = $gwa !== null && is_finite($gwa)
+                            ? "Your grade in {$label} was updated to " . grade_release_format_gwa($gwa) . ' after an approved grade change. Open My Grades to view it.'
+                            : "Your grade in {$label} was updated after an approved grade change. Open My Grades to view it.";
+                        foreach ($recipientStmt->fetchAll(PDO::FETCH_COLUMN) as $rawUid) {
+                            $uid = (int) $rawUid;
+                            if ($uid <= 0 || $uid === (int) $authCtx['user_id'] || $uid === (int) $row['faculty_user_id']) {
+                                continue;
+                            }
+                            notification_create_idempotent($pdo, $uid, 'grade_changed', $gradeChangedTitle, $gradeChangedBody, 'class_section', (string) $csId, "grade-changed:{$batchId}:{$uid}");
                         }
-                        $gwa = isset($result['gwa']) && is_numeric($result['gwa']) ? (float) $result['gwa'] : null;
-                        $effectiveState = retention_effective_state((string) ($result['retention'] ?? 'active'), $progressions[$eid] ?? [], $gwa);
-                        grade_release_notify_remedial_transition($pdo, $eid, $gwa, $effectiveState);
                     }
                 }
             }

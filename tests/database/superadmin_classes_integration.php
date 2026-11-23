@@ -337,6 +337,7 @@ foreach ([$scS1, $scS2] as $scWho) {
     $scBeforeResults[$scWho['enrollmentId']] = [$scResult['status'] ?? null, $scResult['percentage'] ?? null, $scResult['periods']['midterm']['percentage'] ?? null, $scResult['periods']['final']['percentage'] ?? null];
 }
 expect_true(($scBeforeResults[$scS1['enrollmentId']][0] ?? '') === 'computed' && $scBeforeResults[$scS1['enrollmentId']][1] !== null, 'Setup: FA computes a grade for Student One before the move');
+$pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status, date_enrolled) SELECT student_id, ?, 'Active', CURRENT_DATE FROM students WHERE student_account_user_id = ?")->execute([$scK1, $scStudentAccount]);
 $scKeepBefore = $scKeep([$scK1]); // after FA's own compute: computing writes the stored grades, and Change Faculty must not
 $scStoredBefore = $scRows('SELECT enrollment_id, final_percentage, final_gwa FROM enrollments WHERE cs_id = ? ORDER BY enrollment_id', [$scK1]);
 expect_true(str_contains(json_encode(integration_http_get_json('/api/faculty/classes', $scTokenFa)[1]), "SC-K1-{$scTag}"), 'Setup: the class is in FA\'s classes before the move');
@@ -406,15 +407,16 @@ expect_same($scAuditTotalBefore + 1, $scAuditTotalAfter, 'Audit: the whole chang
 [, $scTrail] = $scGet('/api/admin/audit-logs?q=' . rawurlencode($scTag));
 $scTrailRow = array_values(array_filter($scTrail['entries'] ?? [], static fn(array $e): bool => ($e['details']['technical']['actionCode'] ?? '') === 'class_faculty_changed'));
 expect_true(count($scTrailRow) >= 1 && str_contains(json_encode($scTrailRow[0]), "Sc Alpha {$scLetters}") && str_contains(json_encode($scTrailRow[0]), "Sc Bravo {$scLetters}"), 'Audit: the Superadmin Audit Trail lists the row with both Faculty names');
-// Notices: in-app to old Faculty, new Faculty and the Class Secretary; nothing to Students.
+// Notices: in-app to old Faculty, new Faculty, the Class Secretary, and active enrolled Students with active accounts (NTF-002).
 $scNote = static fn(int $user): array => $scRows("SELECT title, body, entity_id FROM notifications WHERE recipient_user_id = ? AND notification_type = 'class_assignment' AND entity_id = ? ORDER BY notification_id", [$user, (string) $scK1]);
 $scLabel = "SCA{$scTag} (SC-K1-{$scTag})";
 expect_same([['title' => 'Class moved', 'body' => "{$scLabel} was moved to Sc Bravo {$scLetters} by the Superadmin. Reason: {$scReason}. It no longer appears in your classes.", 'entity_id' => (string) $scK1]], $scNote($scFa), 'Notice: the previous Faculty member is told the class moved');
 expect_same([['title' => 'Class assigned to you', 'body' => "{$scLabel} is now yours. Its students, grades, attendance and sessions came with it. Reason: {$scReason}.", 'entity_id' => (string) $scK1]], $scNote($scFb), 'Notice: the new Faculty member is told the class is theirs');
 $scSecretaryNote = $scNote($scSecretary);
 expect_true(count($scSecretaryNote) === 1 && $scSecretaryNote[0]['body'] === "Your class {$scLabel} now has Sc Bravo {$scLetters} as its Faculty member.", 'Notice: the Class Secretary is told who the Faculty member is now');
-expect_same(0, (int) $scOne("SELECT count(*) FROM notifications WHERE recipient_user_id = ? AND notification_type = 'class_assignment'", [$scStudentAccount]), 'Notice: Students get nothing (D14)');
-expect_same((int) $scNotesBefore + 3, (int) $scWorld()['notifications'], 'Notice: exactly three in-app notices were written');
+$scStudentNote = $scNote($scStudentAccount);
+expect_true(count($scStudentNote) === 1 && $scStudentNote[0]['title'] === 'Class Faculty changed' && str_contains($scStudentNote[0]['body'], $scLabel) && str_contains($scStudentNote[0]['body'], "Sc Bravo {$scLetters}"), 'Notice: the enrolled Student with an active account receives Class Faculty changed (NTF-002)');
+expect_same((int) $scNotesBefore + 4, (int) $scWorld()['notifications'], 'Notice: exactly four in-app notices were written');
 // Email: two outbox rows, both Faculty members, with the contract subjects.
 $scMail = $scRows("SELECT recipient_email, subject, email_type, sender_user_id, status FROM email_outbox WHERE recipient_email IN (?, ?) ORDER BY email_id", [$scEmail($scFa), $scEmail($scFb)]);
 expect_same($scOutboxBefore + 2, (int) $scWorld()['outbox'], 'Email: exactly two outbox rows (both Faculty members), none for the Secretary or Students');
