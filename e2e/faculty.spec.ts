@@ -5352,6 +5352,108 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.keyboard.press('Escape');
       await expect(trigger).toBeFocused();
     });
+
+    test('Retention & Remedials tab lists only retention/remedial students on screen, in PDF print, and in Retention_Report.xlsx (14.4)', async ({ page }) => {
+      await mockEmptyAttendanceSheet(page);
+      await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [
+        { id: '1', csId: 1, csName: 'CLIN401-A', courseId: 101, courseCode: 'CLIN401', courseName: 'Clinical Dentistry I', semester: '1st Semester', schoolYear: '2026-2027', block: 'A' },
+      ] }) }));
+      await page.route('**/api/faculty/reports/summary', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', reports: {
+        currentSchoolYear: '2026-2027',
+        students: [
+          { id: '701', studentId: 'DENT-007', name: 'Alice Reyes', firstName: 'Alice', lastName: 'Reyes', yearLevel: 4, status: 'remedial', classId: '1', schoolYear: '2026-2027', gwaBySchoolYear: { '2026-2027': 3 }, enrolledSubjects: [
+            { code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, classId: '1', schoolYear: '2026-2027', grade: 3 },
+          ] },
+          { id: '702', studentId: 'DENT-008', name: 'Bea Santos', firstName: 'Bea', lastName: 'Santos', yearLevel: 4, status: 'cleared', classId: '1', schoolYear: '2026-2027', gwaBySchoolYear: { '2026-2027': 2.5 }, enrolledSubjects: [
+            { code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, classId: '1', schoolYear: '2026-2027', grade: 2.5 },
+          ] },
+          { id: '703', studentId: 'DENT-009', name: 'Cara Lim', firstName: 'Cara', lastName: 'Lim', yearLevel: 4, status: 'active', classId: '1', schoolYear: '2026-2027', gwaBySchoolYear: { '2026-2027': 1.5 }, enrolledSubjects: [
+            { code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, classId: '1', schoolYear: '2026-2027', grade: 1.5 },
+          ] },
+        ],
+        summary: { totalStudents: 3, averageGWA: 2.33, atRiskCount: 1, retentionPassRate: 50 },
+      } }) }));
+      await page.route('**/api/faculty/retention', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', retentionThreshold: 2.5, retention: [
+        { enrollmentId: '801', studentId: '701', studentNumber: 'DENT-007', studentName: 'Alice Reyes', classId: '1', className: 'CLIN401-A', subjectCode: 'CLIN401', schoolYear: '2026-2027',
+          percentage: 70, gwa: 3, state: 'remedial', remedial: null, remedialProgression: {
+            stage: 'attempt_1_pending', passedAttempt: null, legacyUnclassified: false, costRecovery: null,
+            attempts: [{ attemptNumber: 1, scheduledDate: '2026-11-20', percentage: null, outcome: 'pending', actorUserId: null, createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z' }],
+          } },
+        { enrollmentId: '802', studentId: '702', studentNumber: 'DENT-008', studentName: 'Bea Santos', classId: '1', className: 'CLIN401-A', subjectCode: 'CLIN401', schoolYear: '2026-2027',
+          percentage: 80, gwa: 2.5, state: 'cleared', remedial: null, remedialProgression: {
+            stage: 'passed', passedAttempt: 1, legacyUnclassified: false, costRecovery: null, cleared: true,
+            attempts: [{ attemptNumber: 1, scheduledDate: '2026-11-10', percentage: 80, outcome: 'passed', actorUserId: null, createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-10T00:00:00Z' }],
+          } },
+        { enrollmentId: '803', studentId: '703', studentNumber: 'DENT-009', studentName: 'Cara Lim', classId: '1', className: 'CLIN401-A', subjectCode: 'CLIN401', schoolYear: '2026-2027',
+          percentage: 92, gwa: 1.5, state: 'active', remedial: null, remedialProgression: {
+            stage: 'none', passedAttempt: null, legacyUnclassified: false, costRecovery: null, attempts: [],
+          } },
+      ] }) }));
+
+      await page.goto('/reports');
+      await page.getByRole('tab', { name: 'Retention & Remedials' }).click();
+
+      const screenRows = page.locator('.no-print tbody tr');
+      await expect(screenRows.filter({ hasText: 'Alice Reyes' })).toContainText('Remedial exam scheduled');
+      await expect(screenRows).toHaveCount(2);
+      await expect(screenRows.filter({ hasText: 'Alice Reyes' })).toContainText('DENT-007');
+      await expect(screenRows.filter({ hasText: 'Bea Santos' })).toContainText('DENT-008');
+      await expect(screenRows.filter({ hasText: 'Bea Santos' })).toContainText('Cleared');
+      await expect(screenRows.filter({ hasText: 'Cara Lim' })).toHaveCount(0);
+      await expect(page.locator('.no-print table')).not.toContainText('DENT-009');
+
+      const printSheet = page.locator('.print-only').first();
+      await expect(printSheet.locator('dt', { hasText: /^Students$/ }).locator('xpath=following-sibling::dd[1]')).toHaveText('2');
+      const printRows = printSheet.locator('table tbody tr');
+      await expect(printRows).toHaveCount(2);
+      await expect(printRows.filter({ hasText: 'REYES, Alice' })).toContainText('Remedial exam scheduled');
+      await expect(printRows.filter({ hasText: 'SANTOS, Bea' })).toContainText('Cleared');
+      await expect(printRows.filter({ hasText: 'LIM, Cara' })).toHaveCount(0);
+      await expect(printSheet).not.toContainText('DENT-009');
+
+      const downloadPromise = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Export Excel' }).click();
+      await page.getByRole('menuitem', { name: 'Retention list' }).click();
+      const download = await downloadPromise;
+      expect(download.suggestedFilename()).toBe('Retention_Report.xlsx');
+      const xlsx = await readDownloadedXlsxText(download);
+      for (const text of ['RETENTION REPORT', 'DENT-007', 'REYES, Alice', 'Remedial exam scheduled', 'DENT-008', 'SANTOS, Bea', 'Cleared']) {
+        expect(xlsx).toContain(text);
+      }
+      expect(xlsx).not.toContain('DENT-009');
+      expect(xlsx).not.toContain('LIM, Cara');
+    });
+
+    test('Retention & Remedials tab shows empty state when no student has retention or remedial history (14.4)', async ({ page }) => {
+      await mockEmptyAttendanceSheet(page);
+      await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [
+        { id: '1', csId: 1, csName: 'CLIN401-A', courseId: 101, courseCode: 'CLIN401', courseName: 'Clinical Dentistry I', semester: '1st Semester', schoolYear: '2026-2027', block: 'A' },
+      ] }) }));
+      await page.route('**/api/faculty/reports/summary', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', reports: {
+        currentSchoolYear: '2026-2027',
+        students: [
+          { id: '703', studentId: 'DENT-009', name: 'Cara Lim', firstName: 'Cara', lastName: 'Lim', yearLevel: 4, status: 'active', classId: '1', schoolYear: '2026-2027', gwaBySchoolYear: { '2026-2027': 1.5 }, enrolledSubjects: [
+            { code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, classId: '1', schoolYear: '2026-2027', grade: 1.5 },
+          ] },
+        ],
+        summary: { totalStudents: 1, averageGWA: 1.5, atRiskCount: 0, retentionPassRate: 100 },
+      } }) }));
+      await page.route('**/api/faculty/retention', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', retentionThreshold: 2.5, retention: [
+        { enrollmentId: '803', studentId: '703', studentNumber: 'DENT-009', studentName: 'Cara Lim', classId: '1', className: 'CLIN401-A', subjectCode: 'CLIN401', schoolYear: '2026-2027',
+          percentage: 92, gwa: 1.5, state: 'active', remedial: null, remedialProgression: {
+            stage: 'none', passedAttempt: null, legacyUnclassified: false, costRecovery: null, attempts: [],
+          } },
+      ] }) }));
+
+      await page.goto('/reports');
+      await page.getByRole('tab', { name: 'Retention & Remedials' }).click();
+
+      await expect(page.getByText('No students in retention or remedial for the selected school year.')).toBeVisible();
+      await expect(page.locator('.no-print tbody tr').filter({ hasText: 'Cara Lim' })).toHaveCount(0);
+      const printSheet = page.locator('.print-only').first();
+      await expect(printSheet.locator('dt', { hasText: /^Students$/ }).locator('xpath=following-sibling::dd[1]')).toHaveText('0');
+      await expect(printSheet.locator('table tbody tr')).toHaveCount(0);
+    });
   });
 });
 
