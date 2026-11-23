@@ -12,7 +12,7 @@ Item numbers are permanent; a built item waits in [On the demo, awaiting promoti
 
 Owner, 2026-11-23. Full text of each item is in its section below; P1–P3 (2026-11-19) are in Done.
 
-**Highest** (agreed with the users and the Owner on 2026-11-23): 14.1 to 14.10, all on the demo, awaiting promotion.
+**Highest** (agreed with the users and the Owner on 2026-11-23): 14.1 to 14.10, all on production (2026-11-24).
 
 **Not yet prioritised** (the Owner ranks these next): 9.19, 9.20, 9.21, 9.27, 9.28, 12.6, 12.7, 12.11, 12.14, 13.4, 13.10, 13.11.
 
@@ -72,7 +72,7 @@ The full report text, what DentiSYS did at the time, the gaps, open questions an
 
 Reported by users on production, reviewed by them and the Owner on 2026-11-23. Check whether each is still open before starting it.
 
-Nothing open: every item is on the demo, awaiting promotion.
+Nothing open: every item is on production (see Done).
 
 ---
 
@@ -80,7 +80,13 @@ Nothing open: every item is on the demo, awaiting promotion.
 
 Built and running on the demo, not yet on production. Each moves to [Done](#done) after the Owner promotes it.
 
-Built on `lighthal9-responsive-polish` (14.1, 14.2, 14.6, 14.7, 14.8 merged in 358964c; 14.4, 14.9 merged in a50cd9c, [merge record](archive/polish-merge-2026-11.md); 14.3, 14.5, 14.10 up to 9f7dc12): [full text of these items](archive/backlog-built-2026-11-24.md).
+Nothing at the moment.
+
+---
+
+# Done
+
+Full text and Owner decisions of these items: [backlog items closed before 2026-11-14](archive/backlog-done-2026-11.md). Promoted to production on 2026-11-21 (sha c17ad942): [items built on 2026-11-20](archive/backlog-built-2026-11-20.md) [items from the Owhie merge](archive/backlog-built-2026-11-20-owhie.md) and [13.8](archive/backlog-built-2026-11-21.md). Promoted to production on 2026-11-23 (sha 37cf7379): [items from the emergency branch](archive/backlog-built-2026-11-23.md). Promoted to production on 2026-11-24 (sha 1bb190c1): [items from the polish branch](archive/backlog-built-2026-11-24.md), [changelog](archive/changelog-2026-11-24.md).
 
 - **14.1** Faculty main action buttons use #338037 (`clinical-600`) at rest (06bb1a1).
 - **14.2** Secretary requests: Approve selected and Reject selected in each group header; the page-wide select-all and Approve selected are gone (06bb1a1).
@@ -92,13 +98,6 @@ Built on `lighthal9-responsive-polish` (14.1, 14.2, 14.6, 14.7, 14.8 merged in 3
 - **14.8** The sign-in page explains a class join link (06bb1a1).
 - **14.9** Six new in-app notices per role, NTF-002 (351c0b0).
 - **14.10** A school year, course or class chosen in one page's filter carries to the user's other pages with that filter, every role, until sign-out (9f7dc12).
-
----
-
-# Done
-
-Full text and Owner decisions of these items: [backlog items closed before 2026-11-14](archive/backlog-done-2026-11.md). Promoted to production on 2026-11-21 (sha c17ad942): [items built on 2026-11-20](archive/backlog-built-2026-11-20.md) [items from the Owhie merge](archive/backlog-built-2026-11-20-owhie.md) and [13.8](archive/backlog-built-2026-11-21.md). Promoted to production on 2026-11-23 (sha 37cf7379): [items from the emergency branch](archive/backlog-built-2026-11-23.md).
-
 - **9.25** The remaining reason dialogs (Superadmin Audit Trail revoke, grade change Send for Dean approval, Dean Reject Grade Change) show the 8-character minimum and check it on click.
 - **9.29** Grade Weights title no longer runs under Reload on phones; the Assessments sticky header no longer covers the class picker.
 - **9.30** Dean Grade Submissions falls back to the classes' own term dates when Academic Terms has no matching row.

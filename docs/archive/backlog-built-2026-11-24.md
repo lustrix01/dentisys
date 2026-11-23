@@ -1,6 +1,6 @@
 # Backlog items built on 2026-11-24 (polish branch)
 
-Full text of 14.1 to 14.10 as they stood in the [product backlog](../PRODUCT_BACKLOG.md) when they were built on `lighthal9-responsive-polish` (merges 358964c and a50cd9c, then fd41be4, 1fe64d0, 9f7dc12). Implemented behaviour: [features.md](../features.md) and [spec.md](../../spec.md).
+Full text of 14.1 to 14.10 as they stood in the [product backlog](../PRODUCT_BACKLOG.md) when they were built on `lighthal9-responsive-polish` (merges 358964c and a50cd9c, then fd41be4, 1fe64d0, 9f7dc12), promoted to production on 2026-11-24 (1bb190c1). Implemented behaviour: [features.md](../features.md) and [spec.md](../../spec.md).
 
 - **14.1** Faculty main action colour: each Faculty page's one main action button (Manage classes on the Dashboard, Create class, Submit grades, View attendance, and the like) uses #338037 (`clinical-600`) at rest. Today they use `bg-clinical-500` (#43A047) and show #338037 only on hover. Other buttons (Preview email, Import class and roster, and the like) keep their colours. Also check that each other role (Student, Admin, Superadmin) uses one colour for its main action button on every page. `ui-fix-demo`.
 - **14.2** Attendance Monitoring, Secretary requests: "Select all shown", the select-all checkbox and the per-group "Approve all" duplicate each other. Keep the select-all checkbox and one Approve selected button; remove the other two. User suggestion, Owner decides on the demo: Clear buttons become a clear (×) icon. `ui-fix-demo`.
