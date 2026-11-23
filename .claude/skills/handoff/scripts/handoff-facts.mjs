@@ -62,7 +62,15 @@ for (const line of readFileSync(chosen.path, 'utf8').split('\n')) {
   if (!line) continue;
   let e;
   try { e = JSON.parse(line); } catch { continue; }
-  if (e.isSidechain || !e.message) continue;
+  if (e.isSidechain) continue;
+  // Messages the Owner sent while Claude was mid-turn are stored as queued_command attachments, not user turns.
+  const a = e.attachment;
+  if (e.type === 'attachment' && a?.type === 'queued_command' && a.origin?.kind === 'human' && a.commandMode === 'prompt') {
+    const p = typeof a.prompt === 'string' ? a.prompt : (a.prompt || []).filter((b) => b?.type === 'text').map((b) => b.text).join('\n');
+    if (p.trim()) messages.push({ at: e.timestamp, text: cut(`[sent mid-turn] ${p.trim()}`) });
+    continue;
+  }
+  if (!e.message) continue;
   const c = e.message.content;
   if (e.type === 'assistant' && Array.isArray(c)) {
     for (const b of c) if (b?.type === 'tool_use' && b.name === 'AskUserQuestion') questionIds.add(b.id);
