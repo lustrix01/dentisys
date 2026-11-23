@@ -504,7 +504,7 @@ Grade displays and exports must distinguish authoritative Midterm, Finals, and o
 
 Students see their own period and final grades, not individual assessment scores.
 
-Grade sheets, class lists and report exports are Excel (.xlsx) files in the Dean's official layouts; see docs/contracts/official-exports.md. Class lists also offer a styled PDF with the same class header details and roster columns; Faculty save the PDF from the browser print dialog.
+Grade sheets, class lists and report exports are Excel (.xlsx) files in the Dean's official layouts; see docs/contracts/official-exports.md. Class lists also offer a styled PDF with the same class header details and roster columns; Faculty save the PDF from the browser print dialog. Students can export their Attendance Logs, as shown after search, filters and sort, to Excel and PDF.
 Grade Computation's Export Excel uses one combined Comprehensive Grade Sheet matrix. Its PDF prints two landscape pages, one for Midterm and one for Finals, keeping Lecture and Laboratory together on each page. To keep the PDF readable, assessment groups show earned Score with the maximum in the heading; each category ends with Average % and Weighted results; period and overall grade equivalents are shown with the relevant results. The PDF omits assessment-level % and Transmuted columns; Excel retains the complete matrix. The workbook has one `Grade Sheet` worksheet with no separate LEC, LAB, TFG, or DATA sheets. See docs/contracts/official-exports.md X2–X13 and X33.
 
 The Grade Computation tab for this workbook is labeled **Grade Sheet**, with the page heading **Comprehensive Grade Sheet**.

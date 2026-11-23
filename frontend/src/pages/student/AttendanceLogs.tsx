@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import {
   Search,
   Clock,
@@ -11,6 +12,8 @@ import {
   RefreshCw,
   History,
   X,
+  FileSpreadsheet,
+  FileText,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -22,21 +25,17 @@ import type { StudentAttendanceLogRecord, AttendanceVerificationMethod, Attendan
 import { formatVisibleTime } from '../../utils/timeDisplay';
 import { formatShortDate } from '../../utils/sessionDate';
 import { SortableHeader, ariaSort, compareValues, type SortState } from '../../components/SortableHeader';
-
-// Non-authoritative records have no verification method of their own; the prototype
-// sets verificationType only on simulated check-ins. Anything else must stay blank.
-function formatMockVerificationMethod(record: AttendanceRecord): string | null {
-  switch (record.verificationType) {
-    case 'facial_geofence':
-      return 'Facial & geofence verified';
-    case 'manual_override':
-      return 'Manual override';
-    case 'standard':
-      return 'Standard verification';
-    default:
-      return null;
-  }
-}
+import { PrintStyle, PrintHeader, PrintCaption, formatPrintedAt } from '../../components/PrintSheet';
+import { downloadXlsx } from '../../utils/xlsxDownload';
+import { buildReportSheet } from '../../utils/reportWorkbook';
+import {
+  ATTENDANCE_LOG_EXPORT_HEADER,
+  attendanceLogExportRow,
+  attendanceLogFileName,
+  attendanceLogFilterLabel,
+  mockVerificationMethodLabel as formatMockVerificationMethod,
+  verificationMethodLabel,
+} from './attendanceLogExport';
 
 function StatusPill({ status }: { status: string }) {
   const tone = status === 'present'
@@ -56,21 +55,18 @@ function StatusPill({ status }: { status: string }) {
 }
 
 function formatVerificationMethod(method: AttendanceVerificationMethod): { label: string; icon: React.ComponentType<{ className?: string }> } {
+  const label = verificationMethodLabel(method);
   switch (method) {
     case 'biometric':
-      return { label: 'Biometric 1:1 Verification', icon: ShieldCheck };
-    case 'faculty_manual':
-      return { label: 'Faculty Manual Entry', icon: UserCheck };
+      return { label, icon: ShieldCheck };
     case 'secretary_manual':
-      return { label: 'Secretary Manual Entry', icon: ClipboardCheck };
     case 'secretary_approved':
-      return { label: 'Secretary (approved by Faculty)', icon: ClipboardCheck };
+      return { label, icon: ClipboardCheck };
     case 'system_resolution':
-      return { label: 'Automatic System Resolution', icon: AlertCircle };
     case 'unknown':
-      return { label: 'Verification Method Unavailable', icon: AlertCircle };
+      return { label, icon: AlertCircle };
     default:
-      return { label: 'Manual Entry', icon: UserCheck };
+      return { label, icon: UserCheck };
   }
 }
 
@@ -98,6 +94,7 @@ export const AttendanceLogs: React.FC = () => {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [printedAt, setPrintedAt] = useState<Date | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [logSort, setLogSort] = useState<SortState<'none' | 'date' | 'subject' | 'status'>>({ key: 'none', dir: 'desc' });
@@ -158,6 +155,27 @@ export const AttendanceLogs: React.FC = () => {
   const displayRecords = (logSort.key === 'none' ? filteredRecords
     : [...filteredRecords].sort((a, b) => compareValues(sortValue(a), sortValue(b), logSort.dir))) as typeof filteredRecords;
 
+  // Export (14.5): exactly the rows shown, in the order shown.
+  const exportRows = displayRecords.map(attendanceLogExportRow);
+  const exportFilterLabel = attendanceLogFilterLabel(searchQuery, selectedSubject, selectedStatus);
+  const exportStudentLine = `${studentName} (${studentIdNum})`;
+  const exportExcel = async () => {
+    try {
+      await downloadXlsx(attendanceLogFileName(studentIdNum), [buildReportSheet({
+        sheet: 'Attendance Log', title: 'ATTENDANCE LOG', filter: `Student: ${exportStudentLine} · Filters: ${exportFilterLabel}`,
+        term: `Rows: ${exportRows.length}`, by: studentName,
+        columns: ATTENDANCE_LOG_EXPORT_HEADER.map((header, i) => ({ header, width: [16, 36, 14, 34, 20, 18][i] })),
+        rows: exportRows,
+      })]);
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Export failed.');
+    }
+  };
+  const exportPdf = () => {
+    flushSync(() => setPrintedAt(new Date()));
+    window.print();
+  };
+
   // Metrics
   const totalCount = isAuthoritative ? logs.length : mockStudentRecords.length;
   const presentCount = isAuthoritative
@@ -182,7 +200,8 @@ export const AttendanceLogs: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-12 animate-fade-in">
+    <>
+    <div className="no-print space-y-6 max-w-6xl mx-auto pb-12 animate-fade-in">
 
       {/* Error Banner */}
       {authError && (
@@ -272,15 +291,42 @@ export const AttendanceLogs: React.FC = () => {
             <option value="unresolved">Pending resolution</option>
           </select>
 
-          {isAuthoritative && (
-            <button
-              onClick={() => { void loadAuthoritativeLogs(); }}
-              className="col-span-2 justify-self-end p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer lg:col-span-1"
-              title="Refresh logs"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <div className="col-span-2 flex items-center justify-between gap-2 lg:contents">
+            <div className="flex shrink-0 items-center bg-white p-0.5 rounded-xl border border-slate-200/90 shadow-2xs dark:bg-slate-900 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => { void exportExcel(); }}
+                disabled={displayRecords.length === 0}
+                aria-label="Export attendance logs as Excel"
+                className="flex items-center gap-1.5 whitespace-nowrap px-3 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                title={displayRecords.length === 0 ? 'No attendance logs to export' : 'Download the logs shown as an Excel workbook'}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <span>Export Excel</span>
+              </button>
+              <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
+              <button
+                type="button"
+                onClick={exportPdf}
+                disabled={displayRecords.length === 0}
+                aria-label="Export attendance logs as PDF"
+                className="flex items-center gap-1.5 whitespace-nowrap px-3 max-[359px]:px-2 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                title={displayRecords.length === 0 ? 'No attendance logs to export' : 'Open the logs shown for printing or saving as PDF'}
+              >
+                <FileText className="w-3.5 h-3.5 shrink-0 text-rose-600 dark:text-rose-400" />
+                <span>Export PDF</span>
+              </button>
+            </div>
+            {isAuthoritative && (
+              <button
+                onClick={() => { void loadAuthoritativeLogs(); }}
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
+                title="Refresh logs"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -456,5 +502,32 @@ export const AttendanceLogs: React.FC = () => {
       </div>
 
     </div>
+
+    {/* Export PDF (14.5): the rows shown, saved from the browser print dialog. */}
+    <div className="print-only hidden bg-white text-slate-900 font-sans ps">
+      <PrintStyle title="Attendance Log" running={`Attendance Log · ${exportStudentLine}`} generated={formatPrintedAt(printedAt ?? new Date())} />
+      <PrintHeader
+        title="Attendance Log"
+        sub={exportStudentLine}
+        rows={[
+          ['Filters', exportFilterLabel],
+          ['Rows', String(exportRows.length)],
+          ['Date', formatPrintedAt(printedAt ?? new Date())],
+        ]}
+      />
+      <PrintCaption>Attendance log entries</PrintCaption>
+      <table>
+        <colgroup>{[14, 26, 12, 22, 14, 12].map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}</colgroup>
+        <thead>
+          <tr>{ATTENDANCE_LOG_EXPORT_HEADER.map((header, i) => <th key={header} className={i < 5 ? 'l' : ''}>{header}</th>)}</tr>
+        </thead>
+        <tbody>
+          {exportRows.map((row, i) => (
+            <tr key={i}>{row.map((cell, j) => <td key={j} className={j < 5 ? 'l' : ''}>{cell}</td>)}</tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    </>
   );
 };
