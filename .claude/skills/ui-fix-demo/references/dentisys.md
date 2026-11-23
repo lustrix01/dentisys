@@ -38,6 +38,7 @@ Repo `C:\Users\decha\Desktop\Github\dentisys`. Rules in `AGENTS.md` and `CLAUDE.
 - Open menus and popovers never print: their panel carries `no-print` (2026-11-18).
 - A status in a table with a pinned first column may wrap on phones when one line cannot fit beside the pinned column even after swiping (2026-11-19, Faculty Retention "Remedial exam scheduled": one line from 480 px up, phones wrap). Readable beats one line; measure the room before forcing `nowrap`.
 - No dropdown to pick one student or record where the page already has a search bar (2026-11-20, 13.6): the search box narrows the rows instead. A dropdown filter of students was counter-productive before.
+- Bulk actions on grouped lists sit in each group's header, not in a bar above the list (2026-11-23, 14.2 Secretary requests): "Approve selected" / "Reject selected" greyed out until a row is ticked, "Approve all" / "Reject all" once every row in the group is ticked, each behind a confirmation dialog.
 - Time entry is the clock-style wheel (`components/TimePicker.tsx`), never a grid of tap buttons.
 - Demo shots keep the page's existing toolbar in frame, or the Owner reads the toolbar as removed.
 - A demo shows each device's whole screen (2026-11-20, iPad Pro 13 looked cut): only print and full-page shots are trimmed to their top; `build-demo.py` never crops a viewport shot.
