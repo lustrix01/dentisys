@@ -58,7 +58,8 @@ test('commit-msg rules', () => {
       [0, ['backend/a.php'], "merge: Owhie's work into the line"],
       [0, ['backend/a.php'], 'About page help line links to Contact'],
       [0, ['backend/a.php'], 'chore(workflow): x'],
-      [0, ['spec.md'], 'docs(spec): x'],
+      [1, ['spec.md'], 'docs(spec): x'],
+      [0, ['spec.md'], 'docs(spec): x\n\nSpec-approved: 2026-11-23'],
       [0, ['README'], 'docs: explain the rule\n\nWe refuse lines like Generated with Claude Code in messages.'],
       [1, ['README'], 'docs: x\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)'],
       [0, [], 'fix(api): better wording'], // message-only amend: nothing staged
@@ -91,14 +92,14 @@ test('a merge in progress skips all but the trailer rule', () => {
   }
 });
 
-test('spec.md without Spec-approved prints a reminder only', () => {
+test('spec.md without Spec-approved is refused', () => {
   const { repo, git, check } = tempRepo();
   try {
     writeFileSync(join(repo, 'spec.md'), 'x\n');
     git('add', 'spec.md');
     let run = check('docs(spec): x');
-    assert.equal(run.status, 0);
-    assert.match(run.stderr, /reminder/);
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /Spec-approved/);
     run = check('docs(spec): x\n\nSpec-approved: 2026-11-18');
     assert.equal(run.status, 0);
     assert.doesNotMatch(run.stderr, /reminder/);

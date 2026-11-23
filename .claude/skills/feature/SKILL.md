@@ -23,6 +23,11 @@ The Owner decides what DentiSys does; Claude makes it real without surprises. Ev
 
 - Who writes what: `CLAUDE.local.md` "Working with subagents". Subagents get disjoint file lists, the contract verbatim, and for UI the exact classes to copy.
 - Tests at the layer that holds the logic: unit tests for frontend logic, `tests/backend` for server rules, `tests/database` for queries and migrations, the mocked `e2e/*.spec.ts` for screens, `e2e/live/` for flows that need the real backend. Tests that assert old behaviour are updated to the agreed behaviour, never weakened.
+- Before running new or changed tests (and in every test-writer brief):
+  - When visibility, permissions or grading/retention rules change, search all `tests/backend/*_test.php`, `tests/database/` and `e2e/live/*.spec.ts` for the affected endpoints and update every test that asserts the old rule.
+  - Check raw SQL in tests against the migrations: column names, NOT NULL and CHECK constraints.
+  - PHP: assert a null value with `array_key_exists`, never `$a['k'] ?? 'x'`; scope `notifications` queries by title or dedup prefix when a type is shared.
+  - Live E2E: names are stored in Title Case (`AtRisk` becomes `Atrisk`); assert the stored form.
 - Update the current-reference docs the change affects (`AGENTS.md` "Documentation") in the same commit, and `spec.md` only with the Owner's approval.
 - Review every diff against the contract; look for shared callers and the second copy of student pages (`frontend/src/pages/student/RealStudentSurfaces.tsx`).
 

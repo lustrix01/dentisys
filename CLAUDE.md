@@ -30,10 +30,10 @@ A `commit-msg` hook in `.githooks/` (rules in `check-commit-msg.mjs`) refuses:
 - a `feat:` commit with no backlog or spec id in the subject (`(13.3)`, `(GRA-03)`) and
   no `Contract: <where>` line;
 - a commit that changes `frontend/src` .tsx/.css files outside tests without a
-  `Demo: <artifact link>` or `Demo: none - <reason>` line.
+  `Demo: <artifact link>` or `Demo: none - <reason>` line;
+- a commit that stages `spec.md` without a `Spec-approved: <date>` line.
 
-Merge, revert, fixup and squash commits skip all but the trailer rule. A commit that
-stages `spec.md` without a `Spec-approved: <date>` line gets a reminder, not a refusal.
+Merge, revert, fixup and squash commits skip all but the trailer rule.
 A message-only amend (nothing staged) skips the `fix:` test check; an amend that adds
 files to a `fix:` commit whose test is already in it needs `Test: none - test is in the
 amended commit`. `npm ci` turns the

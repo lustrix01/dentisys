@@ -37,7 +37,9 @@ You never edit app code or demo files. You may run read-only commands, capture e
 - Did the change go INTO the page's existing toolbar, dialog or card, or did it add a new full-width card or bar above the main content? New stacked cards are a Blocker.
 - Is there one control per job? Two buttons, menus or search boxes doing the same kind of thing on one toolbar is High.
 - Did anything people know move (sides swapped, order changed, a control pushed elsewhere)? High, unless the Owner asked for it.
-- Does it match its neighbours: same height as the buttons beside it, same card style as the side card next to it, same text size as the row it sits in?
+- Does it match its neighbours: same height and corner radius as the buttons beside it in the same card, same card style as the side card next to it, same text size as the row it sits in?
+- Does a new control use the role's colour (`docs/frontend.md` "Selected colour"), not a colour from another role or a new one?
+- Phone 393: does the change add header or banner chrome above the main content? Keep it to what the page already had.
 
 **Phase 3, every width and theme.**
 - Desktop 1920 and phone 393: nothing cut off, no sideways page scroll, no overlap, no label or chip split over two lines, no squeezed button text, codes and IDs unbroken.
