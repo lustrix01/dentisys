@@ -14,7 +14,7 @@ Owner, 2026-11-23. Full text of each item is in its section below; P1–P3 (2026
 
 **Highest** (agreed with the users and the Owner on 2026-11-23): 14.1 to 14.10, all on production (2026-11-24).
 
-**Not yet prioritised** (the Owner ranks these next): 9.19, 9.20, 9.21, 9.27, 9.28, 12.6, 12.7, 12.11, 12.14, 13.4, 13.10, 13.11.
+**Not yet prioritised** (the Owner ranks these next): 9.19, 9.20, 9.21, 9.27, 9.28, 9.31, 12.6, 12.7, 12.11, 12.14, 13.4, 13.10, 13.11.
 
 ---
 
@@ -38,6 +38,7 @@ Owner, 2026-11-23. Full text of each item is in its section below; P1–P3 (2026
 - **9.21** Flaky mocked browser tests (2026-11-17): with 8 workers and one local retry, a test that passes only on retry is reported as "flaky" and does not fail `check.ps1`. Each one hides a timing bug in the app or the test (the TimePicker re-sync race was a real app bug; the Secretary Excused test recorded the page's GET refresh as the request). Fix one, then remove it here; add any new flaky test the run reports.
 - **9.27** Breadcrumb navigation (Owner, 2026-11-20): every part of the trail above the page title takes you to that page, e.g. Home goes to the Dashboard. Since the Owhie merge (2026-11-20) the page you are on is a link too (Owhie's change, kept for now; reason not recorded). Check every crumb for every role goes where its name says, and ask Owhie why the current page links to itself before deciding whether it stays.
 - **9.28** Capitals (Owner ruling 2026-11-20, `ui-fix-demo/references/dentisys.md`): CSS capitals stay only on table column headers, the printed class list and the emphasised red action button of a dialog that needs it (Cancel · RETIRE, DELETE, CONFIRM). The Owhie merge removed them from 44 small labels; about 260 places still use them (small labels above a value, form labels, chips, headings) and the emphasised dialog buttons do not have them yet. One `ui-fix-demo` batch with its own demo; update `docs/frontend.md` "Page patterns" with the rule.
+- **9.31** Grade Computation leaving the page (found 2026-11-24 in the real app; there before 14.10): after Faculty switch class in Grade Computation, a sidebar link click stays on `/grades`, and a "leave page?" (beforeunload) prompt appears when leaving. Bug routine: reproduce with a failing test first.
 
 ---
 
