@@ -12,7 +12,7 @@ Two people work at once, in two lanes that never edit the same screen or backend
 4. Superadmin sign-in page (12.8): on production (2026-11-21).
 5. Grade submission and Dean approval (13.8): on production (2026-11-21).
 6. Attendance review (13.6, review part, Past Sessions tab): on production (2026-11-21). Moving past sessions to their own page is 13.11, not yet scheduled.
-7. Emergency branch (9.29, 9.30, 12.9, 12.10, 12.12, 12.13): on the demo, awaiting promotion.
+7. Emergency branch (9.29, 9.30, 12.9, 12.10, 12.12, 12.13): on production (2026-11-23).
 8. Face enrolment and check-in speed (13.4), after the Owner's real-phone timing session.
 9. UI formality pass (12.6), after both lanes are done.
 
@@ -20,7 +20,7 @@ Two people work at once, in two lanes that never edit the same screen or backend
 
 How to work, files, tests and "done when" per item: [colleague plan](archive/colleague-plan-2026-11.md).
 
-1. Secretary change-request reason minimum (9.25): Secretary part on production (2026-11-21); the other reason fields on the demo, awaiting promotion.
+1. Secretary change-request reason minimum (9.25): Secretary part on production (2026-11-21); the other reason fields on production (2026-11-23).
 2. Retention Monitoring grades first and batch send (13.5): on production (2026-11-21).
 3. Start session hint (13.6, hint part only): on production (2026-11-21).
 4. Layout batch (9.22 with 13.3's 320 px column), after 13.5 because both touch Retention Monitoring: on production (2026-11-21).

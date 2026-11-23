@@ -1,6 +1,6 @@
 # Backlog items built on 2026-11-22 and 2026-11-23 (emergency branch)
 
-Full text of 9.25, 9.29, 9.30, 12.9, 12.10, 12.12 and 12.13 as they stood in the [product backlog](../PRODUCT_BACKLOG.md) when they were built on `lighthal9-responsive-emergency` and merged into `lighthal9-responsive` (1fbab4a). What was built and what changed at the merge: [emergency merge record](emergency-merge-2026-11.md). Implemented behaviour: [features.md](../features.md).
+Full text of 9.25, 9.29, 9.30, 12.9, 12.10, 12.12 and 12.13 as they stood in the [product backlog](../PRODUCT_BACKLOG.md) when they were built on `lighthal9-responsive-emergency` and merged into `lighthal9-responsive` (1fbab4a), promoted to production on 2026-11-23 (37cf7379). What was built and what changed at the merge: [emergency merge record](emergency-merge-2026-11.md). Implemented behaviour: [features.md](../features.md).
 
 - **9.25** Other reason fields that require 8 characters (People & Accounts, Face Enrolment Flags, Audit Trail revoke): check each tells the user the minimum before they press the button, as the Secretary attendance change request now does (built 2026-11-20, on production 2026-11-21, see "Done").
 - **9.29** Grades page layout (device audit during 13.8, 2026-11-21; not caused by 13.8): on Assessments Manager at Desktop 1920 the sticky page header covers the S.Y. select of the class picker; on the iPhone 393 Grade Weights Editor tab the card title "Configure Grading Weights & Schema" overlaps the Reload button. One `ui-fix-demo` Route B batch.

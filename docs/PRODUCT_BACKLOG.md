@@ -70,7 +70,13 @@ The full report text, what DentiSYS did at the time, the gaps, open questions an
 
 Built and running on the demo, not yet on production. Each moves to [Done](#done) after the Owner promotes it.
 
-Merged 2026-11-23 (1fbab4a): [full text of these items](archive/backlog-built-2026-11-23.md), [merge record](archive/emergency-merge-2026-11.md).
+Nothing at the moment.
+
+---
+
+# Done
+
+Full text and Owner decisions of these items: [backlog items closed before 2026-11-14](archive/backlog-done-2026-11.md). Promoted to production on 2026-11-21 (sha c17ad942): [items built on 2026-11-20](archive/backlog-built-2026-11-20.md) [items from the Owhie merge](archive/backlog-built-2026-11-20-owhie.md) and [13.8](archive/backlog-built-2026-11-21.md). Promoted to production on 2026-11-23 (sha 37cf7379): [items from the emergency branch](archive/backlog-built-2026-11-23.md).
 
 - **9.25** The remaining reason dialogs (Superadmin Audit Trail revoke, grade change Send for Dean approval, Dean Reject Grade Change) show the 8-character minimum and check it on click.
 - **9.29** Grade Weights title no longer runs under Reload on phones; the Assessments sticky header no longer covers the class picker.
@@ -78,14 +84,7 @@ Merged 2026-11-23 (1fbab4a): [full text of these items](archive/backlog-built-20
 - **12.9** Face revocation needs a reason and Superadmin approval; non-matching face updates are blocked (F2); repeat revocations are flagged (F3); Superadmin Face Enrolments page (migration 072).
 - **12.10** Withdrawing biometric consent can no longer delete an enrolled face without approval.
 - **12.12** Final grades and Retention Status appear outside Grade Computation only after Submit grades (migration 073).
-- **12.13** Midterm advisory publish, update and unpublish from a `Midterm advisory` menu next to Submit grades (c0468c3).
-
----
-
-# Done
-
-Full text and Owner decisions of these items: [backlog items closed before 2026-11-14](archive/backlog-done-2026-11.md). Promoted to production on 2026-11-21 (sha c17ad942): [items built on 2026-11-20](archive/backlog-built-2026-11-20.md) [items from the Owhie merge](archive/backlog-built-2026-11-20-owhie.md) and [13.8](archive/backlog-built-2026-11-21.md).
-
+- **12.13** Midterm advisory publish, update and unpublish from a `Midterm advisory` menu next to Submit grades. Commit c0468c3.
 - **9.23** A malformed recovery code on the 2FA sign-in page fails as a wrong code ("Invalid recovery code.", 400) instead of a server error. Commit bb2bdbe.
 - **9.24** 2FA "Remember this device for 30 days" at sign-in (migration 069), with "Forget my trusted devices" in Profile. Commit 112b338.
 - **9.26** "Remember me for 7 days" on `/login` (migration 070); unticked sessions end when the browser closes; never for the Superadmin. Commit c410bc6.
