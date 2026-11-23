@@ -25,6 +25,8 @@ import { LocationPicker } from '../../components/LocationPicker';
 import { RoomSelector, RetiredRoomWarning, retiredRoomError, useRooms } from '../../components/RoomSelector';
 import { OverlapConfirmModal, overlapsFrom, type BookingOverlap } from '../../components/OverlapConfirmModal';
 import { useSearchParams } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { readSharedFilters, sharedYearForPage, writeSharedClass, writeSharedCourse, writeSharedSchoolYear } from '../../utils/sharedFilters';
 import { FacultyExcusedRequestsPanel, PendingRequestsBadge, openSecretaryRequest, openRequestsForClass } from '../../components/FacultyExcusedRequestsPanel';
 import { Modal } from '../../components/Modal';
 import Tabs from '../../components/Tabs';
@@ -138,6 +140,8 @@ const semesterLabel = (s: string | undefined | null) => {
 };
 
 export const AttendanceMonitoring: React.FC = () => {
+  const { user } = useAuth();
+  const sharedUserId = user?.user_id;
   // Assigned classes from API
   const [classes, setClasses] = useState<FacultyClassItem[]>([]);
   const [loadingClasses, setLoadingClasses] = useState<boolean>(true);
@@ -148,13 +152,24 @@ export const AttendanceMonitoring: React.FC = () => {
   // Hierarchy Selection States
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState('');
+  // 14.10: starts on the class chosen on any page (the last specific one; "All" never replaces it).
   const [selectedCsId, setSelectedCsId] = useState<string>(() => {
-    try {
-      return localStorage.getItem('faculty_attendance_selected_cs_id') || '';
-    } catch {
-      return '';
-    }
+    const shared = readSharedFilters(sharedUserId);
+    return shared.classId && shared.classId !== 'all' ? shared.classId : shared.lastClassId ?? '';
   });
+  const sharedAppliedRef = useRef(false);
+  // The class is chosen here only by a user action; this keeps the shared choice in step.
+  const rememberClass = (classItem: FacultyClassItem | null | undefined) => writeSharedClass(
+    sharedUserId,
+    classItem ? { id: String(classItem.csId), courseCode: classItem.courseCode, schoolYear: classItem.schoolYear } : null,
+  );
+  const rememberCourse = (courseIdValue: string, courseList: Array<{ id: number; code: string }>) => {
+    writeSharedCourse(sharedUserId, courseList.find(course => String(course.id) === courseIdValue)?.code ?? 'all');
+  };
+  // The old per-page key is no longer used.
+  useEffect(() => {
+    try { localStorage.removeItem('faculty_attendance_selected_cs_id'); } catch { /* storage unavailable */ }
+  }, []);
   // Attendance dates are Asia/Manila calendar days, as on the server.
   const [selectedDate, setSelectedDate] = useState<string>(() => manilaDateToday());
   const dateChosen = useRef(false); // true once the Faculty picks a date; stops the overnight-session default
@@ -272,9 +287,7 @@ export const AttendanceMonitoring: React.FC = () => {
   const handleOpenClassSessionModal = (classItem: FacultyClassItem) => {
     setSelectedCourseId(classItem.courseId);
     setSelectedCsId(String(classItem.csId));
-    try {
-      localStorage.setItem('faculty_attendance_selected_cs_id', String(classItem.csId));
-    } catch {}
+    rememberClass(classItem);
     const pastOnly = Boolean(currentSchoolYear && classItem.schoolYear !== currentSchoolYear) || isViewOnlyClass(classItem);
     setSessionModalTab(pastOnly ? 'past' : 'current');
     setIsSessionModalOpen(true);
@@ -411,15 +424,38 @@ export const AttendanceMonitoring: React.FC = () => {
     setClassesError(null);
     try {
       const res = await getFacultyClassesApi();
-      setClasses(res.classes || []);
+      const loadedClasses = res.classes || [];
+      setClasses(loadedClasses);
       setCurrentSchoolYear(res.currentSchoolYear || '');
+      if (!sharedAppliedRef.current) {
+        // 14.10: start on the school year chosen on another page; keep the carried class only if it fits that year.
+        sharedAppliedRef.current = true;
+        const shared = readSharedFilters(sharedUserId);
+        const year = sharedYearForPage(shared, {
+          years: loadedClasses.map(item => item.schoolYear || '').filter(Boolean),
+          currentYear: res.currentSchoolYear,
+          allowAll: true,
+          currentToken: true,
+        });
+        if (year) setSelectedSchoolYear(year);
+        const yearValue = (year ?? 'current') === 'current' ? res.currentSchoolYear || '' : year ?? '';
+        setSelectedCsId(previous => {
+          if (!previous) return previous;
+          const match = loadedClasses.find(item => String(item.csId) === previous);
+          return match && (yearValue === 'all' || match.schoolYear === yearValue) ? previous : '';
+        });
+        const sharedCourse = shared.courseCode && shared.courseCode !== 'all'
+          ? loadedClasses.find(item => item.courseCode === shared.courseCode && (yearValue === 'all' || item.schoolYear === yearValue))
+          : undefined;
+        if (sharedCourse) setSelectedCourseId(sharedCourse.courseId);
+      }
     } catch (err) {
       setClasses([]);
       setClassesError(err instanceof Error ? err.message : 'Failed to load assigned classes.');
     } finally {
       setLoadingClasses(false);
     }
-  }, []);
+  }, [sharedUserId]);
 
   useEffect(() => {
     void loadClasses();
@@ -465,9 +501,6 @@ export const AttendanceMonitoring: React.FC = () => {
     }
     setSelectedCsId('');
     setSelectedSessionId('');
-    try {
-      localStorage.removeItem('faculty_attendance_selected_cs_id');
-    } catch {}
     setWorksheet(null);
     setWorksheetError(null);
   };
@@ -498,9 +531,7 @@ export const AttendanceMonitoring: React.FC = () => {
     setSelectedCsId(String(classItem.csId));
     setSelectedSessionId('');
     if (!dateChosen.current) setSelectedDate(manilaDateToday()); // drop another class's overnight date
-    try {
-      localStorage.setItem('faculty_attendance_selected_cs_id', String(classItem.csId));
-    } catch {}
+    rememberClass(classItem);
     setViewMode('worksheet');
   };
 
@@ -1133,6 +1164,7 @@ export const AttendanceMonitoring: React.FC = () => {
               disabled={attendanceWritePending}
               onChange={event => {
                 setSelectedSchoolYear(event.target.value);
+                writeSharedSchoolYear(sharedUserId, event.target.value, currentSchoolYear);
                 handleCourseChange('');
                 setIsStartSessionOpen(false);
               }}
@@ -1450,7 +1482,7 @@ export const AttendanceMonitoring: React.FC = () => {
             <select
               aria-label="Assigned course"
               value={selectedCourseId !== null ? String(selectedCourseId) : ''}
-              onChange={(e) => handleCourseChange(e.target.value)}
+              onChange={(e) => { handleCourseChange(e.target.value); rememberCourse(e.target.value, assignedCourses); }}
             >
               <option value="">-- Select assigned course --</option>
               {assignedCourses.map(c => (
@@ -1466,6 +1498,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 setWorksheet(null);
                 setSelectedCsId(e.target.value);
                 setSelectedSessionId('');
+                rememberClass(availableSections.find(section => String(section.csId) === e.target.value));
               }}
               disabled={selectedCourseId === null || availableSections.length === 0}
             >
@@ -2688,7 +2721,7 @@ export const AttendanceMonitoring: React.FC = () => {
         <select
           aria-label="Assigned course"
           value={selectedCourseId !== null ? String(selectedCourseId) : ''}
-          onChange={(e) => handleCourseChange(e.target.value)}
+          onChange={(e) => { handleCourseChange(e.target.value); rememberCourse(e.target.value, assignedCourses); }}
         >
           <option value="">-- Select assigned course --</option>
           {assignedCourses.map(c => (
@@ -2704,6 +2737,7 @@ export const AttendanceMonitoring: React.FC = () => {
             setWorksheet(null);
             setSelectedCsId(e.target.value);
             setSelectedSessionId('');
+            rememberClass(availableSections.find(section => String(section.csId) === e.target.value));
             if (e.target.value) setViewMode('worksheet');
           }}
           disabled={selectedCourseId === null || availableSections.length === 0}

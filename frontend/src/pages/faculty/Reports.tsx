@@ -38,6 +38,7 @@ import { flushSync } from 'react-dom';
 import { PrintStyle, PrintHeader, PrintCaption, PrintLegend, PrintSignatures, PrintExportTable, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { pickSharedClass, readSharedFilters, sharedYearForPage, writeSharedClass, writeSharedSchoolYear } from '../../utils/sharedFilters';
 import { Student, AttendanceRecord, Assessment, AssessmentScore } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { SortableHeader, ariaSort, compareValues, type SortState } from '../../components/SortableHeader';
@@ -157,7 +158,12 @@ export const Reports: React.FC = () => {
         if (curSy) {
           setCurrentSchoolYear(curSy);
           if (!syInitializedRef.current) {
-            setSelectedSchoolYear(curSy);
+            // 14.10: start on the school year chosen on another page, when this page has it.
+            setSelectedSchoolYear(sharedYearForPage(readSharedFilters(user?.user_id), {
+              years: (clsRes?.classes ?? []).map((c: any) => c.schoolYear as string).filter(Boolean),
+              currentYear: curSy,
+              allowAll: true,
+            }) ?? curSy);
             syInitializedRef.current = true;
           }
         } else if (!syInitializedRef.current && clsRes?.classes && clsRes.classes.length > 0) {
@@ -252,7 +258,11 @@ export const Reports: React.FC = () => {
 
   useEffect(() => {
     if (classesForSchoolYear.length > 0 && !classesForSchoolYear.some(c => String(c.csId || c.id) === selectedClassId)) {
-      const first = classesForSchoolYear[0];
+      const first = pickSharedClass(
+        classesForSchoolYear.map(c => ({ id: String(c.csId || c.id), courseCode: c.courseCode, schoolYear: c.schoolYear, item: c })),
+        readSharedFilters(user?.user_id),
+        { schoolYear: selectedSchoolYear === 'all' ? undefined : selectedSchoolYear },
+      )?.item ?? classesForSchoolYear[0];
       setSelectedClassId(String(first.csId || first.id));
       if (first.courseCode) {
         setSelectedSubjectCode(first.courseCode);
@@ -876,7 +886,10 @@ export const Reports: React.FC = () => {
           <CalendarDays className="w-4 h-4 shrink-0 text-clinical-600 dark:text-clinical-400" aria-hidden="true" />
           <select
             value={selectedSchoolYear}
-            onChange={(e) => setSelectedSchoolYear(e.target.value)}
+            onChange={(e) => {
+              setSelectedSchoolYear(e.target.value);
+              writeSharedSchoolYear(user?.user_id, e.target.value);
+            }}
             aria-label="School year"
             className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
           >
@@ -898,6 +911,7 @@ export const Reports: React.FC = () => {
               const newClassId = e.target.value;
               setSelectedClassId(newClassId);
               const found = classesForSchoolYear.find(c => String(c.csId || c.id) === newClassId);
+              writeSharedClass(user?.user_id, found ? { id: newClassId, courseCode: found.courseCode, schoolYear: found.schoolYear } : null);
               if (found?.courseCode) {
                 setSelectedSubjectCode(found.courseCode);
               }

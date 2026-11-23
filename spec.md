@@ -1125,9 +1125,11 @@ Interface casing. Text that names a place or a field uses Title Case: page title
 
 Interface wording rules. Owner decision (2026-11-15): the product name is written DentiSYS everywhere. On screens a school year is "S.Y. 2026–2027" ("AY" only in the official iBU exports). Spelling is US English ("enrollment"). Table headers say "Student No."; form labels and detail fields say "Student Number". A filter's "all" option reads "All <plural noun>" in sentence case (All statuses, All courses), never "Any …". Errors and notices are formal: no "Please" and no contractions; they say what happened and what to do ("Could not load accounts. Select Retry."). Names put a comma before academic degrees ("Roberto Lim Santos, DMD"), not before Jr., Sr. or II–V. The own-activity page of Faculty and Secretaries is "My Activity". On-screen dates use the short month ("Nov 15, 2026 · 10:48 AM"); native date pickers follow the browser.
 
+Filters carry across pages. Within one sign-in and browser tab, a school year, course or class section chosen in a page's filter carries to the same user's other pages that have that filter, Dashboards included. Search, sort, status filters and tabs stay on their page. "All" never replaces the class chosen on a page that always shows one class. A page that does not have the carried value applies what fits (school year, then course) and uses its own default for the rest. Clear clears the choice on every page. Signing out or closing the browser tab forgets it.
+
 The source branch defines the interface, not automatic approval of its backend semantics. Explicit requirements below govern PDF/source differences. Unaffected authentication, permissions, privacy, history preservation, Docker/PostgreSQL, and authoritative-data rules remain in force. Unresolved behavior remains OPEN. Visual parity is not functional completion or proof of persistence.
 
-History: 2026-10-13 never merged below 1280 px; 2026-11-03 phone blocks below 768 px and wording rules; 2026-11-06 casing; 2026-11-15 wording rules; 2026-11-11 all Student and Secretary tables; 2026-11-13 Retention Monitoring lists. Records: docs/archive/.
+History: 2026-10-13 never merged below 1280 px; 2026-11-03 phone blocks below 768 px and wording rules; 2026-11-06 casing; 2026-11-15 wording rules; 2026-11-11 all Student and Secretary tables; 2026-11-13 Retention Monitoring lists; 2026-11-24 filters carry across pages. Records: docs/archive/.
 
 ## UI-002 - Score entry, deadlines, and weights (PDF pages 1-3)
 

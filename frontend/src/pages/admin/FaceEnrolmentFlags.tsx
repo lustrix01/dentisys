@@ -18,6 +18,7 @@ import type { LucideIcon } from 'lucide-react';
 import { ListToolbar, SearchField } from '../../components/FilterBars';
 import { Modal } from '../../components/Modal';
 import Tabs from '../../components/Tabs';
+import { useAuth } from '../../context/AuthContext';
 import { showFeedback } from '../../components/FeedbackCenter';
 import {
   ApiError,
@@ -33,6 +34,7 @@ import type { FaceFlag, FaceRevokeRequest, FaceRevokeRequestStatus, PeopleFilter
 import { formatManilaWhen } from '../../services/auditService';
 import { semesterLabel } from '../../utils/academicTermDefaults';
 import { formatSchoolYear } from '../../utils/schoolYear';
+import { clearSharedFilters, readSharedFilters, writeSharedClass, writeSharedCourse, writeSharedFilters } from '../../utils/sharedFilters';
 import { REVOKE_FACE_BULLETS } from './peopleHelpers';
 import {
   FLAG_KIND_LABEL,
@@ -77,11 +79,26 @@ const REQUEST_ACTIONS: Record<RevokeRequestAction, RequestActionInfo> = {
 
 export const FaceEnrolmentFlags: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab: PageTab = searchParams.get('tab') === 'flags' ? 'flags' : 'requests';
 
   const [options, setOptions] = useState<PeopleFilterOptions>({ courses: [], classes: [] });
-  useEffect(() => { getAdminPeopleFiltersApi().then(setOptions).catch(() => undefined); }, []);
+  useEffect(() => {
+    getAdminPeopleFiltersApi().then(loaded => {
+      setOptions(loaded);
+      // 14.10: both filter sets start on the course and class chosen on another page, when this page has them.
+      const shared = readSharedFilters(user?.user_id);
+      const sharedClass = shared.classId && shared.classId !== 'all'
+        ? loaded.classes.find(c => String(c.csId) === shared.classId)
+        : undefined;
+      const sharedCourse = sharedClass
+        ? loaded.courses.find(c => c.id === sharedClass.courseId)
+        : shared.courseCode && shared.courseCode !== 'all' ? loaded.courses.find(c => c.courseCode === shared.courseCode) : undefined;
+      if (sharedCourse) { setReqCourseId(sharedCourse.id); setFlagCourseId(sharedCourse.id); }
+      if (sharedClass) { setReqClassId(sharedClass.csId); setFlagClassId(sharedClass.csId); }
+    }).catch(() => undefined);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Shared badge counts across both tabs
   const [pendingCount, setPendingCount] = useState(0);
@@ -222,9 +239,17 @@ export const FaceEnrolmentFlags: React.FC = () => {
     setSearchParams(params, { replace: true });
   };
 
+  // 14.10: a class chosen in either filter set is the shared choice (0 = all class sections).
+  const rememberClass = (csId: number) => {
+    const chosen = options.classes.find(c => c.csId === csId);
+    if (!chosen) { writeSharedFilters(user?.user_id, { classId: 'all' }); return; }
+    writeSharedClass(user?.user_id, { id: String(chosen.csId), courseCode: options.courses.find(c => c.id === chosen.courseId)?.courseCode ?? '' });
+  };
+
   // --- REVOKE REQUEST HANDLERS ---
   const clearRequestFilters = () => {
     setReqSearch(''); setReqQ(''); setReqStatus('pending'); setReqCourseId(0); setReqClassId(0); setReqPage(1);
+    clearSharedFilters();
   };
   const reqTotalPages = Math.max(1, Math.ceil(reqTotal / PAGE_SIZE));
   const reqClassOptions = options.classes.filter(c => !reqCourseId || c.courseId === reqCourseId);
@@ -288,6 +313,7 @@ export const FaceEnrolmentFlags: React.FC = () => {
   // --- FLAGS HANDLERS ---
   const clearFlagFilters = () => {
     setFlagSearch(''); setFlagQ(''); setFlagStatus('open'); setFlagKind('all'); setFlagCourseId(0); setFlagClassId(0); setFlagPage(1);
+    clearSharedFilters();
   };
   const flagTotalPages = Math.max(1, Math.ceil(flagTotal / PAGE_SIZE));
   const flagClassOptions = options.classes.filter(c => !flagCourseId || c.courseId === flagCourseId);
@@ -381,6 +407,7 @@ export const FaceEnrolmentFlags: React.FC = () => {
                   <select aria-label="Course" value={reqCourseId} onChange={event => {
                     const next = Number(event.target.value);
                     setReqCourseId(next);
+                    writeSharedCourse(user?.user_id, options.courses.find(c => c.id === next)?.courseCode ?? 'all');
                     if (next && reqClassId && !options.classes.some(c => c.csId === reqClassId && c.courseId === next)) setReqClassId(0);
                     setReqPage(1);
                   }} className={filterClass}>
@@ -389,7 +416,7 @@ export const FaceEnrolmentFlags: React.FC = () => {
                   </select>
                 </label>
                 <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Class section</span>
-                  <select aria-label="Class section" value={reqClassId} onChange={event => { setReqClassId(Number(event.target.value)); setReqPage(1); }} className={filterClass}>
+                  <select aria-label="Class section" value={reqClassId} onChange={event => { setReqClassId(Number(event.target.value)); rememberClass(Number(event.target.value)); setReqPage(1); }} className={filterClass}>
                     <option value={0}>All class sections</option>
                     {reqClassOptions.map(c => <option key={c.csId} value={c.csId}>{c.label}</option>)}
                   </select>
@@ -542,6 +569,7 @@ export const FaceEnrolmentFlags: React.FC = () => {
                   <select aria-label="Course" value={flagCourseId} onChange={event => {
                     const next = Number(event.target.value);
                     setFlagCourseId(next);
+                    writeSharedCourse(user?.user_id, options.courses.find(c => c.id === next)?.courseCode ?? 'all');
                     if (next && flagClassId && !options.classes.some(c => c.csId === flagClassId && c.courseId === next)) setFlagClassId(0);
                     setFlagPage(1);
                   }} className={filterClass}>
@@ -550,7 +578,7 @@ export const FaceEnrolmentFlags: React.FC = () => {
                   </select>
                 </label>
                 <label className="min-w-0 flex-1 sm:flex-none"><span className="sr-only">Class section</span>
-                  <select aria-label="Class section" value={flagClassId} onChange={event => { setFlagClassId(Number(event.target.value)); setFlagPage(1); }} className={filterClass}>
+                  <select aria-label="Class section" value={flagClassId} onChange={event => { setFlagClassId(Number(event.target.value)); rememberClass(Number(event.target.value)); setFlagPage(1); }} className={filterClass}>
                     <option value={0}>All class sections</option>
                     {flagClassOptions.map(c => <option key={c.csId} value={c.csId}>{c.label}</option>)}
                   </select>

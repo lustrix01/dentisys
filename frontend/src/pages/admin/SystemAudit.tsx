@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Printer,
   Download,
@@ -35,6 +35,7 @@ import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import GradeValue from '../../components/GradeValue';
 import { flushSync } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
+import { readSharedFilters, sharedYearForPage, writeSharedSchoolYear } from '../../utils/sharedFilters';
 import { apiFieldErrors } from '../../utils/apiFieldErrors';
 import { PrintStyle, PrintHeader, PrintCaption, PrintSignatures, PrintExportTable, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
 import { buildAttendanceSheetTable, type AttendanceSheetTable } from '../../utils/attendanceSheet';
@@ -68,6 +69,7 @@ export const DeanReports: React.FC = () => {
   const [currentSchoolYear, setCurrentSchoolYear] = useState<string | null>(null);
   const [availableSchoolYears, setAvailableSchoolYears] = useState<string[]>([]);
 
+  const sharedYearAppliedRef = useRef(false);
   const fetchReportData = () => {
     setLoading(true);
     setError('');
@@ -77,6 +79,17 @@ export const DeanReports: React.FC = () => {
         setDbAttendance(res.reports?.attendance ?? []);
         setCurrentSchoolYear(res.currentSchoolYear ?? null);
         setAvailableSchoolYears(res.availableSchoolYears ?? []);
+        if (!sharedYearAppliedRef.current) {
+          // 14.10: start on the school year chosen on another page, when this page has it.
+          sharedYearAppliedRef.current = true;
+          const year = sharedYearForPage(readSharedFilters(user?.user_id), {
+            years: res.availableSchoolYears ?? [],
+            currentYear: res.currentSchoolYear,
+            allowAll: true,
+            currentToken: true,
+          });
+          if (year && year !== schoolYear) setSchoolYear(year);
+        }
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Failed to fetch report summary from server.');
@@ -522,7 +535,7 @@ export const DeanReports: React.FC = () => {
                     value={schoolYear}
                     currentSchoolYear={currentSchoolYear}
                     availableSchoolYears={availableSchoolYears}
-                    onChange={value => { setSchoolYear(value); setSelectedClassId(null); setClassFilter('all'); }}
+                    onChange={value => { setSchoolYear(value); writeSharedSchoolYear(user?.user_id, value, currentSchoolYear); setSelectedClassId(null); setClassFilter('all'); }}
                   />
                 </div>
                 <div className="hidden 2xl:block h-5 w-px bg-slate-200 dark:bg-slate-800" />
@@ -858,7 +871,7 @@ export const DeanReports: React.FC = () => {
                     value={schoolYear}
                     currentSchoolYear={currentSchoolYear}
                     availableSchoolYears={availableSchoolYears}
-                    onChange={value => { setSchoolYear(value); setSelectedClassId(null); setClassFilter('all'); }}
+                    onChange={value => { setSchoolYear(value); writeSharedSchoolYear(user?.user_id, value, currentSchoolYear); setSelectedClassId(null); setClassFilter('all'); }}
                   />
                 </div>
                 <div className="hidden sm:block h-5 w-px bg-slate-200 dark:bg-slate-800" />
@@ -1186,7 +1199,7 @@ export const DeanReports: React.FC = () => {
                     value={schoolYear}
                     currentSchoolYear={currentSchoolYear}
                     availableSchoolYears={availableSchoolYears}
-                    onChange={value => { setSchoolYear(value); setSelectedClassId(null); setClassFilter('all'); }}
+                    onChange={value => { setSchoolYear(value); writeSharedSchoolYear(user?.user_id, value, currentSchoolYear); setSelectedClassId(null); setClassFilter('all'); }}
                   />
                 </div>
                 <div className="hidden sm:block h-5 w-px bg-slate-200 dark:bg-slate-800" />

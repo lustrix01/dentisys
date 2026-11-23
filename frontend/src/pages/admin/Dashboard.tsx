@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import { getAdminDashboardKpisApi } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
+import { readSharedFilters, sharedYearForPage, writeSharedSchoolYear } from '../../utils/sharedFilters';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -31,6 +32,20 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     loadKpis();
   }, [schoolYear]);
+
+  // 14.10: the first time the scope is known, start on the school year chosen on another page.
+  const sharedYearAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!apiData || sharedYearAppliedRef.current) return;
+    sharedYearAppliedRef.current = true;
+    const year = sharedYearForPage(readSharedFilters(user?.user_id), {
+      years: apiData.availableSchoolYears ?? [],
+      currentYear: apiData.currentSchoolYear,
+      allowAll: true,
+      currentToken: true,
+    });
+    if (year && year !== schoolYear) setSchoolYear(year);
+  }, [apiData, schoolYear, user?.user_id]);
 
   const totalStudents = apiData?.kpis?.totalStudents ?? 0;
   const totalFaculty = apiData?.kpis?.totalFaculty ?? 0;
@@ -91,7 +106,10 @@ export const Dashboard: React.FC = () => {
           value={schoolYear}
           currentSchoolYear={apiData?.currentSchoolYear}
           availableSchoolYears={apiData?.availableSchoolYears}
-          onChange={setSchoolYear}
+          onChange={value => {
+            setSchoolYear(value);
+            writeSharedSchoolYear(user?.user_id, value, apiData?.currentSchoolYear);
+          }}
         />
       </div>
 

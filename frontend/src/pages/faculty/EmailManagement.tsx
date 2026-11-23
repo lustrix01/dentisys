@@ -22,6 +22,7 @@ import Tabs from '../../components/Tabs';
 import { showFeedback, requestConfirmation } from '../../components/FeedbackCenter';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { readSharedFilters, sharedClassForPage, sharedCourseForPage, sharedYearForPage, writeSharedClass, writeSharedCourse, writeSharedFilters, writeSharedSchoolYear } from '../../utils/sharedFilters';
 import { EmailHistoryTable } from '../../components/email/EmailHistoryTable';
 import type { EmailAction } from '../../components/email/emailHistory';
 import { EmailPreviewModal, EmailPreviewType } from '../../components/email/EmailPreviewModal';
@@ -87,7 +88,25 @@ export const EmailManagement: React.FC = () => {
       if (curSy) {
         setCurrentSchoolYear(curSy);
         if (!syInitializedRef.current) {
-          setSelectedSchoolYear(curSy);
+          // 14.10: start on the school year, course and class chosen on another page, when this page has them.
+          const shared = readSharedFilters(user?.user_id);
+          const visible: any[] = (Array.isArray(clsRes?.classes) ? clsRes.classes : [])
+            .filter((c: any) => c.archiveReason !== 'cancelled' && c.archiveReason !== 'mistake');
+          const year = sharedYearForPage(shared, {
+            years: visible.map((c: any) => c.schoolYear as string).filter(Boolean),
+            currentYear: curSy,
+            allowAll: true,
+          }) ?? curSy;
+          setSelectedSchoolYear(year);
+          const inYear = visible.filter((c: any) => year === 'all' || c.schoolYear === year);
+          const course = sharedCourseForPage(shared, { codes: inYear.map((c: any) => c.courseCode as string), allowAll: true });
+          if (course) setSelectedCourse(course);
+          const classId = sharedClassForPage(shared, {
+            ids: inYear
+              .filter((c: any) => !course || course === 'all' || c.courseCode === course)
+              .map((c: any) => String(c.csId || c.id || '')),
+          });
+          if (classId) setSelectedClassId(classId);
           syInitializedRef.current = true;
         }
       } else if (!syInitializedRef.current && clsRes?.classes && clsRes.classes.length > 0) {
@@ -651,7 +670,7 @@ export const EmailManagement: React.FC = () => {
             <BookMarked className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
             <select
               value={selectedCourse}
-              onChange={(e) => { setSelectedCourse(e.target.value); setSelectedClassId('all'); }}
+              onChange={(e) => { setSelectedCourse(e.target.value); setSelectedClassId('all'); writeSharedCourse(user?.user_id, e.target.value); }}
               aria-label="Course"
               className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
@@ -664,7 +683,12 @@ export const EmailManagement: React.FC = () => {
             <Filter className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
             <select
               value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
+              onChange={(e) => {
+                setSelectedClassId(e.target.value);
+                const chosen = sectionChoices.find((classItem: any) => classIdOf(classItem) === e.target.value);
+                if (chosen) writeSharedClass(user?.user_id, { id: e.target.value, courseCode: chosen.courseCode, schoolYear: chosen.schoolYear });
+                else writeSharedFilters(user?.user_id, { classId: 'all' });
+              }}
               aria-label="Class: course code, section, and course title"
               className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
@@ -684,7 +708,10 @@ export const EmailManagement: React.FC = () => {
             <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
             <select
               value={selectedSchoolYear}
-              onChange={(e) => setSelectedSchoolYear(e.target.value)}
+              onChange={(e) => {
+                setSelectedSchoolYear(e.target.value);
+                writeSharedSchoolYear(user?.user_id, e.target.value);
+              }}
               aria-label="School year"
               className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >

@@ -7,7 +7,9 @@ import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { ApiError, changeClassFacultyApi, getAdminClassDetailApi, getAdminClassFiltersApi, getAdminClassesApi } from '../../services/apiClient';
 import type { AdminClassFilters, AdminClassRosterStudent, AdminClassRow } from '../../services/apiClient';
+import { useAuth } from '../../context/AuthContext';
 import { formatSchoolYear as schoolYearText } from '../../utils/schoolYear';
+import { clearSharedFilters, readSharedFilters, sharedCourseForPage, sharedYearForPage, writeSharedCourse, writeSharedSchoolYear } from '../../utils/sharedFilters';
 import { displayMeetingTime } from '../../utils/scheduleHelper';
 
 // Superadmin Classes (docs/contracts/superadmin-classes.md): every Faculty member's classes, read-only, plus Change Faculty.
@@ -24,6 +26,7 @@ const studentsText = (n: number) => `${n} ${n === 1 ? 'student' : 'students'}`;
 
 export const Classes: React.FC = () => {
   const [params] = useSearchParams(); // read once: People & Accounts links here with ?facultyId=
+  const { user } = useAuth();
   const [classes, setClasses] = useState<AdminClassRow[]>([]);
   const [total, setTotal] = useState(0);
   const [counts, setCounts] = useState({ active: 0, archived: 0 });
@@ -52,7 +55,18 @@ export const Classes: React.FC = () => {
     const t = setTimeout(() => { setQ(search.trim()); setPage(1); }, 300);
     return () => clearTimeout(t);
   }, [search]);
-  useEffect(() => { getAdminClassFiltersApi().then(setFilters).catch(() => undefined); }, []);
+  useEffect(() => {
+    getAdminClassFiltersApi().then(loaded => {
+      setFilters(loaded);
+      // 14.10: start on the school year and course chosen on another page, when this page has them.
+      const shared = readSharedFilters(user?.user_id);
+      const year = sharedYearForPage(shared, { years: loaded.schoolYears, currentYear: loaded.currentSchoolYear, allowAll: true });
+      if (year) setSchoolYear(year);
+      const code = sharedCourseForPage(shared, { codes: loaded.courses.map(course => course.courseCode), allowAll: true });
+      const course = code && code !== 'all' ? loaded.courses.find(item => item.courseCode === code) : undefined;
+      if (course) setCourseId(course.courseId);
+    }).catch(() => undefined);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = () => {
     const ticket = ++latest.current;
@@ -66,7 +80,7 @@ export const Classes: React.FC = () => {
   useEffect(load, [view, q, page, schoolYear, semester, courseId, facultyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const clearFilters = () => { setSchoolYear('all'); setSemester('all'); setCourseId(0); setFacultyId(0); setSearch(''); setQ(''); setPage(1); };
+  const clearFilters = () => { clearSharedFilters(); setSchoolYear('all'); setSemester('all'); setCourseId(0); setFacultyId(0); setSearch(''); setQ(''); setPage(1); };
 
   const openRoster = (item: AdminClassRow) => {
     setRosterClass(item);
@@ -111,9 +125,9 @@ export const Classes: React.FC = () => {
         below={(
           <>
             <SearchField value={search} onChange={setSearch} placeholder="Search course, section or Faculty…" color="accent" />
-            <label className="w-full min-w-0 sm:w-auto sm:flex-none"><span className="sr-only">School Year</span><select aria-label="School Year" value={schoolYear} onChange={event => { setSchoolYear(event.target.value); setPage(1); }} className={filterClass}><option value="all">All school years</option>{filters.schoolYears.map(year => <option key={year} value={year}>{schoolYearText(year)}{year === filters.currentSchoolYear ? ' (Current)' : ''}</option>)}</select></label>
+            <label className="w-full min-w-0 sm:w-auto sm:flex-none"><span className="sr-only">School Year</span><select aria-label="School Year" value={schoolYear} onChange={event => { setSchoolYear(event.target.value); writeSharedSchoolYear(user?.user_id, event.target.value); setPage(1); }} className={filterClass}><option value="all">All school years</option>{filters.schoolYears.map(year => <option key={year} value={year}>{schoolYearText(year)}{year === filters.currentSchoolYear ? ' (Current)' : ''}</option>)}</select></label>
             <label className="w-full min-w-0 sm:w-auto sm:flex-none"><span className="sr-only">Semester</span><select aria-label="Semester" value={semester} onChange={event => { setSemester(event.target.value); setPage(1); }} className={filterClass}><option value="all">All semesters</option><option value="1ST">1st Semester</option><option value="2ND">2nd Semester</option><option value="Summer">Summer</option></select></label>
-            <label className="w-full min-w-0 sm:w-auto sm:max-w-56 sm:flex-none"><span className="sr-only">Course</span><select aria-label="Course" value={courseId} onChange={event => { setCourseId(Number(event.target.value)); setPage(1); }} className={filterClass}><option value={0}>All courses</option>{filters.courses.map(course => <option key={course.courseId} value={course.courseId}>{course.courseCode} · {course.title}</option>)}</select></label>
+            <label className="w-full min-w-0 sm:w-auto sm:max-w-56 sm:flex-none"><span className="sr-only">Course</span><select aria-label="Course" value={courseId} onChange={event => { setCourseId(Number(event.target.value)); writeSharedCourse(user?.user_id, filters.courses.find(course => course.courseId === Number(event.target.value))?.courseCode ?? 'all'); setPage(1); }} className={filterClass}><option value={0}>All courses</option>{filters.courses.map(course => <option key={course.courseId} value={course.courseId}>{course.courseCode} · {course.title}</option>)}</select></label>
             <label className="w-full min-w-0 sm:w-auto sm:max-w-56 sm:flex-none"><span className="sr-only">Faculty</span><select aria-label="Faculty" value={facultyId} onChange={event => { setFacultyId(Number(event.target.value)); setPage(1); }} className={filterClass}><option value={0}>All Faculty</option>{filters.faculty.map(member => <option key={member.userId} value={member.userId}>{member.name}{member.status === 'deactivated' ? ' (deactivated)' : ''}</option>)}</select></label>
             <button type="button" onClick={clearFilters} className="min-h-10 rounded-lg px-3 text-xs font-bold text-accent-700 hover:bg-accent-50 dark:text-accent-300 dark:hover:bg-accent-950/40">Clear filters</button>
           </>

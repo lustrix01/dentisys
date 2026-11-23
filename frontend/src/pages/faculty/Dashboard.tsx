@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ArrowRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -22,6 +22,7 @@ import type { AuditEntry } from '../../services/auditService';
 import { AuditCompactList } from '../../components/AuditTrailPage';
 import { formatShortDate } from '../../utils/sessionDate';
 import { isViewOnlyClass } from '../../utils/classArchiving';
+import { pickSharedClass, readSharedFilters, sharedYearForPage, writeSharedSchoolYear } from '../../utils/sharedFilters';
 
 export const Dashboard: React.FC = () => {
   const { students } = useApp();
@@ -124,9 +125,24 @@ export const Dashboard: React.FC = () => {
 
   useEffect(() => {
     if (!selectedClassId && assignedClasses[0]) {
-      setSelectedClassId(assignedClasses[0]);
+      const shared = pickSharedClass((dashboardKpis?.classes ?? []).map(c => ({ id: c.id, courseCode: c.courseCode })), readSharedFilters(user?.user_id));
+      setSelectedClassId(shared?.id ?? assignedClasses[0]);
     }
-  }, [assignedClasses, selectedClassId]);
+  }, [assignedClasses, selectedClassId, dashboardKpis, user?.user_id]);
+
+  // 14.10: the first time the scope is known, start on the school year chosen on another page.
+  const sharedYearAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!dashboardKpis || sharedYearAppliedRef.current) return;
+    sharedYearAppliedRef.current = true;
+    const year = sharedYearForPage(readSharedFilters(user?.user_id), {
+      years: dashboardKpis.availableSchoolYears ?? [],
+      currentYear: dashboardKpis.currentSchoolYear,
+      allowAll: true,
+      currentToken: true,
+    });
+    if (year && year !== schoolYear) setSchoolYear(year);
+  }, [dashboardKpis, schoolYear, user?.user_id]);
 
   useEffect(() => {
     if (!selectedSubjectCode && activeSubjects[0]) {
@@ -345,7 +361,10 @@ export const Dashboard: React.FC = () => {
           value={schoolYear}
           currentSchoolYear={dashboardKpis?.currentSchoolYear}
           availableSchoolYears={dashboardKpis?.availableSchoolYears}
-          onChange={setSchoolYear}
+          onChange={value => {
+            setSchoolYear(value);
+            writeSharedSchoolYear(user?.user_id, value, dashboardKpis?.currentSchoolYear);
+          }}
         />
       </div>
 

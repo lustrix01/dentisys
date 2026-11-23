@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarDays, CheckCircle2, ChevronRight, Info, Plus, Search, Calculator, Filter, Send } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card';
+import { useAuth } from '../../context/AuthContext';
+import { readSharedFilters, sharedYearForPage, writeSharedClass, writeSharedCourse, writeSharedSchoolYear } from '../../utils/sharedFilters';
 import { Modal } from '../../components/Modal';
 import Tabs from '../../components/Tabs';
 import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
@@ -296,6 +298,8 @@ const statusBadgeClasses = (state: FacultyRetentionState): string => {
 
 export const RetentionMonitoring: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const sharedUserId = user?.user_id;
   const [retentionRecords, setRetentionRecords] = useState<FacultyRetentionRecord[]>([]);
   const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
   const [serverUnpublishedMidtermCount, setServerUnpublishedMidtermCount] = useState<number | undefined>(undefined);
@@ -353,13 +357,31 @@ export const RetentionMonitoring: React.FC = () => {
       const curSy = response.currentSchoolYear || '';
       setCurrentSchoolYear(curSy);
       if (!syInitializedRef.current) {
-        if (curSy) {
+        // 14.10: start on the school year and class or course chosen on another page, when this page has them.
+        const shared = readSharedFilters(sharedUserId);
+        const sharedYear = sharedYearForPage(shared, {
+          years: records.map(r => r.schoolYear).filter(Boolean) as string[],
+          currentYear: curSy,
+          allowAll: true,
+        });
+        let startYear: string | null = sharedYear;
+        if (sharedYear) {
+          setSelectedSchoolYear(sharedYear);
+        } else if (curSy) {
           setSelectedSchoolYear(curSy);
+          startYear = curSy;
         } else if (records.length > 0) {
           const syOptions = Array.from(new Set(records.map(r => r.schoolYear).filter(Boolean))).sort().reverse();
           if (syOptions.length > 0) {
             setSelectedSchoolYear(syOptions[0] as string);
+            startYear = syOptions[0] as string;
           }
+        }
+        const inYear = (r: FacultyRetentionRecord) => !startYear || startYear === 'all' || r.schoolYear === startYear;
+        if (shared.classId && shared.classId !== 'all' && records.some(r => inYear(r) && r.classId === shared.classId)) {
+          setSelectedClassId(shared.classId);
+        } else if (shared.courseCode && shared.courseCode !== 'all' && records.some(r => inYear(r) && r.subjectCode === shared.courseCode)) {
+          setSelectedSubjectCode(shared.courseCode);
         }
         syInitializedRef.current = true;
       }
@@ -372,7 +394,7 @@ export const RetentionMonitoring: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [sharedUserId]);
 
   useEffect(() => {
     void refreshRetention();
@@ -504,13 +526,17 @@ export const RetentionMonitoring: React.FC = () => {
     if (val === 'all') {
       setSelectedSubjectCode('all');
       setSelectedClassId('all');
+      writeSharedCourse(sharedUserId, 'all');
     } else if (val.startsWith('subject:')) {
       setSelectedSubjectCode(val.replace('subject:', ''));
       setSelectedClassId('all');
+      writeSharedCourse(sharedUserId, val.replace('subject:', ''));
     } else if (val.startsWith('class:')) {
       const cid = val.replace('class:', '');
       setSelectedClassId(cid);
       setSelectedSubjectCode('all');
+      const record = retentionRecords.find(r => r.classId === cid);
+      writeSharedClass(sharedUserId, { id: cid, courseCode: record?.subjectCode ?? '', schoolYear: record?.schoolYear });
     }
   };
 
@@ -956,7 +982,10 @@ export const RetentionMonitoring: React.FC = () => {
             <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
             <select
               value={selectedSchoolYear}
-              onChange={(event) => setSelectedSchoolYear(event.target.value)}
+              onChange={(event) => {
+                setSelectedSchoolYear(event.target.value);
+                writeSharedSchoolYear(sharedUserId, event.target.value);
+              }}
               aria-label="School year"
               className="min-w-0 flex-1 pr-6 bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             >

@@ -5,6 +5,7 @@ import * as apiClient from '../services/apiClient';
 import * as auditService from '../services/auditService';
 import { clearCurrentSecretaryUser } from '../pages/secretary/utils';
 import { clearAllMatrixDrafts } from '../utils/matrixDraft';
+import { clearSharedFilters } from '../utils/sharedFilters';
 
 const LEGACY_CREDENTIAL_KEYS = [
   'dentisys_user',
@@ -220,6 +221,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     apiClient.clearAccessToken();
     auditService.clearAuditIdentity();
     clearCurrentSecretaryUser();
+    clearSharedFilters();
     setState({ ...initialState, phase: 'unauthenticated' });
   }, []);
 
@@ -234,6 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     apiClient.clearAccessToken();
     auditService.clearAuditIdentity();
     clearCurrentSecretaryUser();
+    clearSharedFilters();
     setState({ ...initialState, phase: 'unauthenticated' });
     try {
       await logoutRequest;

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, ClipboardCheck, FileClock, Filter as FilterIcon, Inbox, Search } from 'lucide-react';
 import { Card } from '../../components/Card';
@@ -10,6 +10,7 @@ import { formatManilaWhen } from '../../services/auditService';
 import { formatShortDate } from '../../utils/sessionDate';
 import { semesterLabel } from '../../utils/academicTermDefaults';
 import { formatSchoolYear } from '../../utils/schoolYear';
+import { clearSharedFilters, readSharedFilters, writeSharedCourse } from '../../utils/sharedFilters';
 import {
   DeanGradeChangeDetail,
   DeanGradeChangeRequest,
@@ -59,6 +60,7 @@ export const GradeSubmissions: React.FC = () => {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const sharedCourseAppliedRef = useRef(false);
 
   const [term, setTerm] = useState<Term>(null);
   const [classes, setClasses] = useState<DeanGradeSubmissionRow[]>([]);
@@ -84,6 +86,12 @@ export const GradeSubmissions: React.FC = () => {
         if (!active) return;
         setTerm(submissions.term);
         setClasses(submissions.classes ?? []);
+        if (!sharedCourseAppliedRef.current) {
+          // 14.10: start on the course chosen on another page, when this page has it.
+          sharedCourseAppliedRef.current = true;
+          const sharedCourse = readSharedFilters(user?.user_id).courseCode;
+          if (sharedCourse && sharedCourse !== 'all' && (submissions.classes ?? []).some(row => row.courseCode === sharedCourse)) setCourseCode(sharedCourse);
+        }
         setLateFromEarlierTerms(submissions.lateFromEarlierTerms ?? 0);
         setRequests(changes.requests ?? []);
         setPendingCount(changes.pendingCount ?? 0);
@@ -160,7 +168,7 @@ export const GradeSubmissions: React.FC = () => {
     && (!status || row.deadlineStatus === status)
     && (!needle || `${row.courseCode} ${row.section} ${row.faculty}`.toLowerCase().includes(needle)));
   const filtersSet = Boolean(query || courseCode || status);
-  const clearFilters = () => { setQuery(''); setCourseCode(''); setStatus(''); };
+  const clearFilters = () => { setQuery(''); setCourseCode(''); setStatus(''); clearSharedFilters(); };
 
   const requestNeedle = requestQuery.trim().toLowerCase();
   const shownRequests = requests.filter(request =>
@@ -212,7 +220,7 @@ export const GradeSubmissions: React.FC = () => {
               <FilterIcon className="w-3.5 h-3.5 text-accent-600 dark:text-accent-400 shrink-0" aria-hidden="true" />
               <select
                 value={courseCode}
-                onChange={event => setCourseCode(event.target.value)}
+                onChange={event => { setCourseCode(event.target.value); writeSharedCourse(user?.user_id, event.target.value); }}
                 aria-label="Course"
                 className="min-w-0 flex-1 pr-6 bg-transparent text-xs leading-4 font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
               >

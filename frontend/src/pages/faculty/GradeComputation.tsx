@@ -37,6 +37,7 @@ import { flushSync } from 'react-dom';
 import { PrintStyle, PrintHeader, PrintCaption, PrintLegend, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { pickSharedClass, readSharedFilters, sharedYearForPage, writeSharedClass, writeSharedSchoolYear } from '../../utils/sharedFilters';
 import { SortableHeader, ariaSort, type SortState } from '../../components/SortableHeader';
 import { formatShortDate } from '../../utils/sessionDate';
 import { formatSchoolYear } from '../../utils/schoolYear';
@@ -305,6 +306,7 @@ export const GradeComputation: React.FC = () => {
 
   const location = useLocation();
 
+  const sharedUserId = user?.user_id;
   const [currentSchoolYear, setCurrentSchoolYear] = useState<string>('');
   const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('');
   const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>('');
@@ -409,14 +411,31 @@ export const GradeComputation: React.FC = () => {
           const classesResponse = classesResult.value;
           const loadedClasses = Array.isArray(classesResponse.classes) ? classesResponse.classes : [];
           if (initial) {
-            setCurrentSchoolYear(classesResponse.currentSchoolYear || '');
-            setSelectedSchoolYear(classesResponse.currentSchoolYear || '');
+            const current = classesResponse.currentSchoolYear || '';
+            setCurrentSchoolYear(current);
+            // 14.10: start on the school year and class chosen on another page, when this page has them.
+            const shared = readSharedFilters(sharedUserId);
+            const year = sharedYearForPage(shared, {
+              years: loadedClasses.map(classItem => classItem.schoolYear || '').filter(Boolean),
+              currentYear: current,
+              allowAll: false,
+            }) ?? current;
+            setSelectedSchoolYear(year);
+            const sharedClass = pickSharedClass(
+              loadedClasses.map(classItem => ({ id: classItem.id, courseCode: classItem.courseCode, schoolYear: classItem.schoolYear })),
+              shared,
+              { schoolYear: year },
+            );
+            if (sharedClass) {
+              setSelectedSubjectCode(sharedClass.courseCode);
+              setSelectedClassId(sharedClass.id);
+            }
           }
           setFacultyClasses(loadedClasses);
         }
         if (initial) setLoading(false);
       });
-  }, []);
+  }, [sharedUserId]);
   const reloadClasses = useCallback(() => { void loadClasses(false); }, [loadClasses]);
 
   useEffect(() => {
@@ -3419,6 +3438,7 @@ export const GradeComputation: React.FC = () => {
                 if (!switched) return;
               }
               setSelectedSchoolYear(nextSchoolYear);
+              writeSharedSchoolYear(sharedUserId, nextSchoolYear);
               setSelectedSubjectCode(nextClass?.courseCode || '');
               setSelectedClassId(nextClass?.id || '');
               if (nextOffering) {
@@ -3452,6 +3472,7 @@ export const GradeComputation: React.FC = () => {
               }
               setSelectedSubjectCode(classItem.courseCode || '');
               setSelectedClassId(classItem.id);
+              writeSharedClass(sharedUserId, { id: classItem.id, courseCode: classItem.courseCode || '', schoolYear: classItem.schoolYear });
               if (matchOffering) {
                 setSelectedOfferingKey(matchOffering.key);
                 setSelectedAssessmentOfferingKey(matchOffering.key);

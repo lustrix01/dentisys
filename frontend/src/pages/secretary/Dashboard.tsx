@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Play, AlertCircle } from 'lucide-react';
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import { getSecretaryActiveAttendanceSessionApi, getSecretaryDashboardKpisApi, getSecretaryExcusedRequestsApi, type SecretaryAttendanceSession } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
+import { readSharedFilters, sharedYearForPage, writeSharedSchoolYear } from '../../utils/sharedFilters';
 import { meetingVenueLines } from '../../utils/scheduleHelper';
 
 type DashboardData = Awaited<ReturnType<typeof getSecretaryDashboardKpisApi>>;
@@ -53,6 +54,20 @@ export const Dashboard: React.FC = () => {
     load().catch(() => {});
   }, [schoolYear]);
 
+  // 14.10: the first time the scope is known, start on the school year chosen on another page.
+  const sharedYearAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!data || sharedYearAppliedRef.current) return;
+    sharedYearAppliedRef.current = true;
+    const year = sharedYearForPage(readSharedFilters(user?.user_id), {
+      years: data.availableSchoolYears ?? [],
+      currentYear: data.currentSchoolYear,
+      allowAll: true,
+      currentToken: true,
+    });
+    if (year && year !== schoolYear) setSchoolYear(year);
+  }, [data, schoolYear, user?.user_id]);
+
   const assignedStudentsCount = data?.kpis.assignedStudents ?? 0;
   const attendanceRateVal = data?.kpis.attendanceRate;
   const todayRecordsVal = data?.kpis.todayRecords ?? 0;
@@ -86,7 +101,10 @@ export const Dashboard: React.FC = () => {
           value={schoolYear}
           currentSchoolYear={data?.currentSchoolYear}
           availableSchoolYears={data?.availableSchoolYears}
-          onChange={setSchoolYear}
+          onChange={value => {
+            setSchoolYear(value);
+            writeSharedSchoolYear(user?.user_id, value, data?.currentSchoolYear);
+          }}
         />
 
         {/* Highlighted Primary CTA Button */}
