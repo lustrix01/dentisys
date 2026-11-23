@@ -1,0 +1,102 @@
+.\" dentisys-toolkit.8 - man page for the dentisys scripts. first pass.
+.\" view with: man ./dentisys-toolkit.8
+.TH DENTISYS-TOOLKIT 8 "2026" "Group 07" "DentiSYS Administration"
+.nh
+.SH NAME
+dentisys-toolkit \- scripts for installing and running dentisys
+.SH SYNOPSIS
+.B dentisys-install.sh
+[\-\-port PORT] [\-\-mail\-port PORT] BUNDLE
+.br
+.B dentisys-service.sh
+start | stop | restart
+.br
+.B dentisys-status.sh
+.br
+.B dentisys-update.sh
+BUNDLE
+.PP
+More commands are planned, see the NOTES section at the end.
+.SH DESCRIPTION
+DentiSYS is our capstone system for grades, attendance and accounts. On the
+server it runs as five docker containers: db (postgres), mailpit (test mail),
+biometric (face recognition), web (php backend) and frontend (nginx).
+.PP
+The scripts only need root and the paths are in one shared file,
+.BR dentisys-lib.sh .
+.SH COMMANDS
+.TP
+.B dentisys-install.sh \fR[\fIOPTIONS\fR] \fIBUNDLE
+Installs from a bundle made by dentisys-bundle.sh. Installs docker with apt,
+makes the dentisys service user, unpacks the files to /opt/dentisys, loads the
+images, writes /etc/dentisys/dentisys.env with random passwords, then starts
+the stack and checks that the page answers.
+.PP
+Options:
+.B \-\-port
+(app port, default 8080),
+.B \-\-mail\-port
+(mailpit port, default 8025).
+.TP
+.B dentisys-service.sh start\fR|\fBstop\fR|\fBrestart
+.B start
+brings the containers up one at a time in the order db, mailpit, biometric, web,
+frontend, because web dies if the db is not ready.
+.B stop
+is the same list backwards.
+.B restart
+is stop then start.
+.TP
+.B dentisys-status.sh
+One report: version, container states, the port, whether the page answers, and
+docker stats. Changes nothing.
+.TP
+.B dentisys-update.sh \fIBUNDLE
+Dumps the db, tars the app into /var/backups/dentisys, unpacks the new bundle,
+loads its images, copies the files, restarts and checks. If it comes up broken
+it prints where the backup is and stops; restoring is still by hand.
+.SH EXAMPLES
+Install from a bundle:
+.PP
+.B sudo ./dentisys-install.sh /root/dentisys-1.0.tar.gz
+.PP
+Restart the stack:
+.PP
+.B sudo ./dentisys-service.sh restart
+.PP
+Update:
+.PP
+.B sudo ./dentisys-update.sh /root/dentisys-1.1.tar.gz
+.SH FILES
+.TP
+.I /opt/dentisys/
+App files and release.env.
+.TP
+.I /etc/dentisys/dentisys.env
+Passwords and keys. 600, root.
+.TP
+.I /var/backups/dentisys/
+Backups from dentisys-update.sh.
+.SH EXIT STATUS
+.TP
+.B 0
+fine
+.TP
+.B 1
+something went wrong, the message says what
+.SH NOTES
+.TP
+.B still to write
+pause (freeze the app without stopping it), the maintenance page, proper exit
+codes, and a checksum check on install and update. Also the bundle is missing
+the model files check and the migrations, see the comments in the scripts.
+.SH AUTHORS
+IT 123 Group 07, BSIT 4-B, Bicol University: Alvarez, Micaiah Devin N.,
+Castillo, Angela Marielle R., Dechavez, Mickole R., Lumbang, Owhie S.,
+Nator, Jazmin Erika M.
+.SH SEE ALSO
+.BR docker (1),
+.BR docker-compose (1),
+.BR ss (8),
+.BR tar (1),
+.BR pg_dump (1)

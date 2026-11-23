@@ -1,0 +1,54 @@
+working notes, first pass
+
+what works and what is still missing. keep this next to the scripts.
+
+works now
+- lib: paths, compose wrapper, app_port, app_healthy (it is a fake check, see below)
+- bundle: builds the tar.gz with the images, files and checksums
+- install: docker, service user, unpack, env file with random passwords, start
+- service: start/stop/restart in the right order
+- status: one report, no options
+- update: dump db, tar app, unload/pack/restart, tell you where the backup is
+
+not written yet
+- pause (kill -STOP, freeze without stopping)
+- maintenance page (503 on the app port)
+- nothing reads the SHA256SUMS yet, install and update just unpack and hope
+- no migrations on update. the bundle only carries init.sql for now, and that
+  only runs on an empty db, so a real update will not migrate anything. this is
+  the scary one, ask the group
+- proper exit codes. everything is 1 right now, the guide wants different ones
+  for wrong state, missing command, etc.
+- no lock. two scripts can run at the same time and fight over the containers
+- no logs written to a file, only stdout
+
+known problems
+- app_healthy greps for "dentisys" in the root page. it will say healthy if the
+  page half renders. there is a healthcheck.php in the repo, use that once we
+  know what it returns
+- install does chmod -R 755 on /opt/dentisys. too loose, tighten later
+- update does compose down + up, so there is downtime. service.sh is smarter,
+  reuse that
+- update never checks the tar it wrote, so a corrupt backup is only found when
+  we need it
+- maintenance page is a static html, no message and no return time
+- bundle takes the model files from ../dentisys-biometric-assets and fails with
+  a confusing cp error if they are not there
+- bundle has no --broken switch, we need a deliberately broken build for the
+  update demo in the defense
+
+files
+  dentisys-lib.sh           shared paths + helpers
+  dentisys-bundle.sh        build the offline tar.gz (dev PC)
+  dentisys-install.sh       clean install
+  dentisys-service.sh       start / stop / restart
+  dentisys-status.sh        one report
+  dentisys-pause.sh         kill -STOP / -CONT (rough)
+  dentisys-maintenance.sh   503 page (rough)
+  dentisys-update.sh        backup + update
+  maintenance.conf          nginx config for the page
+  index.html                the page itself
+  dentisys-toolkit.8        man page, half done
+
+to check syntax on windows (git bash):
+  for f in *.sh; do bash -n "$f" && echo "$f ok"; done
