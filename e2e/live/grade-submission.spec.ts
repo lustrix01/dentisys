@@ -256,19 +256,23 @@ test('Faculty publish Midterm advisory, update after score edits, and submit wit
   const scoreRes1 = await page.request.post('/api/faculty/scores', { headers, data: { batches: initialBatches } });
   expect(scoreRes1.ok(), await scoreRes1.text()).toBeTruthy();
 
-  // 1. Pre-publish banner & Publish Midterm advisory confirmation.
+  // 1. Pre-publish: Midterm advisory menu in the class picker & Publish Midterm advisory confirmation.
   await page.goto('/grades?tab=scores');
   await main.getByLabel(/^Class:/).selectOption(csId);
-  const midtermBanner = main.getByRole('status');
-  await expect(midtermBanner).toContainText('Midterm advisory not published (1 At-Risk ready).');
-  await main.getByRole('button', { name: 'Publish Midterm advisory' }).click();
+  const advisory = main.getByRole('button', { name: /^Midterm advisory/ });
+  const menu = page.getByRole('menu');
+  await expect(advisory.getByLabel('1 At-Risk, not published')).toBeVisible();
+  await advisory.click();
+  await expect(menu).toContainText(/Not published · 1\sAt.Risk ready/);
+  await menu.getByRole('menuitem', { name: 'Publish Midterm advisory' }).click();
   await expect(dialog.getByRole('heading', { name: 'Publish Midterm Advisory' })).toBeVisible();
   await expect(dialog).toContainText('Atrisk, Live');
   await expect(dialog).toContainText('2.6');
   await dialog.getByRole('button', { name: 'Publish Midterm advisory', exact: true }).click();
-  await expect(midtermBanner).toContainText('Midterm advisory published');
-  await expect(midtermBanner).toContainText('1 At-Risk.');
-  await expect(main.getByRole('button', { name: 'Unpublish' })).toBeVisible();
+  await advisory.click();
+  await expect(menu).toContainText(/Published on .* · 1\sAt.Risk/);
+  await expect(menu.getByRole('menuitem', { name: 'Unpublish' })).toBeVisible();
+  await page.keyboard.press('Escape');
 
   // Class card chip reads Midterm published.
   await page.goto('/classes');
@@ -288,17 +292,20 @@ test('Faculty publish Midterm advisory, update after score edits, and submit wit
 
   await page.goto('/grades?tab=scores');
   await main.getByLabel(/^Class:/).selectOption(csId);
-  await expect(midtermBanner).toContainText('Midterm scores changed since published (+1 At-Risk, 1 cleared).');
-  await expect(midtermBanner).toHaveClass(/amber/);
-  await main.getByRole('button', { name: 'Update advisory' }).click();
+  await expect(advisory.getByLabel('Scores changed since published')).toBeVisible();
+  await advisory.click();
+  await expect(menu).toContainText(/Scores changed since published \(\+1\sAt.Risk, 1 cleared\)/);
+  await menu.getByRole('menuitem', { name: 'Update advisory' }).click();
   await expect(dialog.getByRole('heading', { name: 'Update Midterm Advisory' })).toBeVisible();
   await expect(dialog).toContainText('Newly added to At Risk (1)');
   await expect(dialog).toContainText('Clear, Live');
   await expect(dialog).toContainText('Cleared from At Risk (1)');
   await expect(dialog).toContainText('Atrisk, Live');
   await dialog.getByRole('button', { name: 'Update advisory', exact: true }).click();
-  await expect(midtermBanner).toContainText('Midterm advisory published');
-  await expect(midtermBanner).not.toHaveClass(/amber/);
+  await expect(advisory.getByLabel('Scores changed since published')).toHaveCount(0);
+  await advisory.click();
+  await expect(menu).toContainText(/Published on /);
+  await page.keyboard.press('Escape');
 
   // 3. Final Submit confirmation shows retentionImpact for Clear (2.6 Remedial) and retires Midterm banner.
   await main.getByRole('button', { name: 'Submit grades' }).click();
@@ -310,5 +317,5 @@ test('Faculty publish Midterm advisory, update after score edits, and submit wit
 
   const submittedBanner = main.getByRole('status').filter({ hasText: 'Submitted. You can withdraw until' });
   await expect(submittedBanner).toBeVisible();
-  await expect(main.getByRole('button', { name: 'Unpublish' })).toHaveCount(0);
+  await expect(advisory).toHaveCount(0);
 });

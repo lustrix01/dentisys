@@ -228,22 +228,26 @@ test.describe('Grade release gates (Backlog 12.12 + 12.13)', () => {
     await signInFaculty(page);
     await page.goto('/grades');
 
-    // Class-picker bar keeps only Submit grades (no duplicate Publish button).
+    // Class-picker bar holds the Midterm advisory menu next to Submit grades; no separate Midterm bar (Owner 2026-11-23).
     const classSelect = page.getByLabel(/Class: course code, section, and course title/);
     const pickerCard = classSelect.locator('xpath=ancestor::div[contains(@class,"rounded-2xl") or contains(@class,"rounded-xl")][2]');
     await expect(pickerCard.getByRole('button', { name: 'Submit grades' })).toBeVisible();
-    await expect(pickerCard.getByRole('button', { name: /Publish Midterm|Update advisory|Unpublish/ })).toHaveCount(0);
+    const advisoryTrigger = pickerCard.getByRole('button', { name: /^Midterm advisory/ });
+    await expect(advisoryTrigger).toBeVisible();
+    await expect(page.locator('.no-print[role="status"]').filter({ hasText: /Midterm/ })).toHaveCount(0);
+    const openAdvisory = async () => { await advisoryTrigger.click(); return page.getByRole('menu'); };
 
-    // 1. Not published banner + Publish modal
-    const banner = page.locator('.no-print[role="status"]').filter({ hasText: 'Midterm advisory not published' });
-    await expect(banner).toContainText('Midterm advisory not published (1 At-Risk ready).');
+    // 1. Not published: amber count on the trigger, status line in the menu, Publish modal
+    await expect(advisoryTrigger.getByLabel('1 At-Risk, not published')).toBeVisible();
     await expectNoHorizontalOverflow(page);
-
     await page.setViewportSize({ width: 393, height: 852 });
     await expectNoHorizontalOverflow(page);
     await page.setViewportSize({ width: 1280, height: 800 });
 
-    await banner.getByRole('button', { name: 'Publish Midterm advisory' }).click();
+    let menu = await openAdvisory();
+    await expect(menu).toContainText('Not published · 1 At‑Risk ready');
+    await expect(menu.getByRole('menuitem', { name: /Update advisory|Unpublish/ })).toHaveCount(0);
+    await menu.getByRole('menuitem', { name: 'Publish Midterm advisory' }).click();
     const publishDialog = page.getByRole('dialog');
     await expect(publishDialog.getByRole('heading', { name: 'Publish Midterm Advisory' })).toBeVisible();
     await expect(publishDialog).toContainText('At-Risk students (1):');
@@ -255,26 +259,28 @@ test.describe('Grade release gates (Backlog 12.12 + 12.13)', () => {
     await expect.poll(() => publishCalls.length).toBe(1);
     expect(publishCalls[0]).toEqual({ csId: 41 });
 
-    // 2. Clean published banner
-    const publishedBanner = page.locator('.no-print[role="status"]').filter({ hasText: 'Midterm advisory published' });
-    await expect(publishedBanner).toContainText('1 At-Risk.');
-    await expect(publishedBanner.getByRole('button', { name: 'Unpublish' })).toBeVisible();
+    // 2. Clean published: status says published; Update advisory is disabled with its reason
+    menu = await openAdvisory();
+    await expect(menu).toContainText('1 At‑Risk');
+    await expect(menu).toContainText('Published');
+    await expect(menu.getByRole('menuitem', { name: /Update advisory/ })).toHaveAttribute('aria-disabled', 'true');
+    await expect(menu).toContainText('No Midterm changes since published');
+    await expect(menu.getByRole('menuitem', { name: 'Unpublish' })).toBeVisible();
+    await page.keyboard.press('Escape');
     await expectNoHorizontalOverflow(page);
 
-    // 3. Dirty state -> amber banner + Update advisory modal showing added & cleared diff
+    // 3. Dirty state -> amber dot + status line with the diff, Update advisory modal showing added & cleared
     phase = 'published_dirty';
     await page.reload();
-    const dirtyBanner = page.locator('.no-print[role="status"]').filter({ hasText: 'Midterm scores changed since published' });
-    await expect(dirtyBanner).toContainText('Midterm scores changed since published (+1 At-Risk, 1 cleared).');
-    await expect(dirtyBanner.getByRole('button', { name: 'Unpublish' })).toBeVisible();
-    await expect(dirtyBanner.getByRole('button', { name: 'Update advisory' })).toBeVisible();
+    await expect(advisoryTrigger.getByLabel('Scores changed since published')).toBeVisible();
     await expectNoHorizontalOverflow(page);
-
     await page.setViewportSize({ width: 393, height: 852 });
     await expectNoHorizontalOverflow(page);
     await page.setViewportSize({ width: 1280, height: 800 });
 
-    await dirtyBanner.getByRole('button', { name: 'Update advisory' }).click();
+    menu = await openAdvisory();
+    await expect(menu).toContainText('Scores changed since published (+1 At‑Risk, 1 cleared)');
+    await menu.getByRole('menuitem', { name: 'Update advisory' }).click();
     const updateDialog = page.getByRole('dialog');
     await expect(updateDialog.getByRole('heading', { name: 'Update Midterm Advisory' })).toBeVisible();
     await expect(updateDialog).toContainText('Newly added to At Risk (1):');
@@ -285,13 +291,14 @@ test.describe('Grade release gates (Backlog 12.12 + 12.13)', () => {
     await expect.poll(() => publishCalls.length).toBe(2);
 
     // 4. Unpublish flow
-    await page.locator('.no-print[role="status"]').filter({ hasText: 'Midterm advisory published' }).getByRole('button', { name: 'Unpublish' }).click();
+    menu = await openAdvisory();
+    await menu.getByRole('menuitem', { name: 'Unpublish' }).click();
     const unpublishDialog = page.getByRole('dialog');
     await expect(unpublishDialog.getByRole('heading', { name: 'Unpublish Midterm Advisory' })).toBeVisible();
     await unpublishDialog.getByRole('button', { name: 'Unpublish' }).click();
     await expect.poll(() => unpublishCalls.length).toBe(1);
     expect(unpublishCalls[0]).toEqual({ csId: 41 });
-    await expect(page.locator('.no-print[role="status"]').filter({ hasText: 'Midterm advisory not published' })).toBeVisible();
+    await expect(advisoryTrigger.getByLabel('1 At-Risk, not published')).toBeVisible();
   });
 
   test('Submit grades confirmation modal displays both missing scores and retentionImpact students', async ({ page }) => {

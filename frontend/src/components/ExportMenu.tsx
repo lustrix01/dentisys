@@ -1,21 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, FileSpreadsheet, FileText, type LucideIcon } from 'lucide-react';
+import { ChevronDown, ClipboardCheck, FileSpreadsheet, FileText, type LucideIcon } from 'lucide-react';
 
 export interface ExportMenuItem {
   label: string;
   onSelect: () => void;
   /** When set, the item stays visible but cannot be used; the reason is shown under the label. */
   disabledReason?: string;
+  /** Overrides the menu's icon for this item. */
+  icon?: LucideIcon;
 }
 
 // Panel and item classes copied from ActionsMenu/RowMenu in pages/admin/PeopleAndAccounts.tsx.
 const menuItemClass = 'w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors cursor-pointer';
 const PANEL_WIDTH = 224; // w-56
 
-type ExportKind = 'excel' | 'pdf';
+type ExportKind = 'excel' | 'pdf' | 'clinical';
 const kindStyle = {
   excel: { Icon: FileSpreadsheet, iconClass: 'text-emerald-600 dark:text-emerald-400', hover: 'hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300' },
+  clinical: { Icon: ClipboardCheck, iconClass: 'text-clinical-600 dark:text-clinical-400', hover: 'hover:bg-clinical-50 dark:hover:bg-clinical-950/40 hover:text-clinical-700 dark:hover:text-clinical-300' },
   pdf: { Icon: FileText, iconClass: 'text-rose-600 dark:text-rose-400', hover: 'hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300' },
 } as const;
 
@@ -33,7 +36,14 @@ export function ExportPair({ excelItems, pdfItems, excelLabel = 'Export Excel', 
 }
 
 /** One export dropdown; its trigger keeps the look of the plain export buttons. */
-export function ExportMenu({ kind, label, items, icon }: { kind: ExportKind; label: string; items: ExportMenuItem[]; icon?: LucideIcon }) {
+export function ExportMenu({ kind, label, items, icon, badge, header, fill }: {
+  kind: ExportKind; label: string; items: ExportMenuItem[]; icon?: LucideIcon;
+  /** Shown after the label on the trigger (a count or a dot). */
+  badge?: React.ReactNode;
+  /** One status line at the top of the panel, above the items. */
+  header?: string;
+  fill?: boolean;
+}) {
   const { Icon: defaultIcon, iconClass, hover } = kindStyle[kind];
   const Icon = icon ?? defaultIcon;
   const [open, setOpen] = useState(false);
@@ -90,12 +100,13 @@ export function ExportMenu({ kind, label, items, icon }: { kind: ExportKind; lab
         }}
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${open
+        className={`flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${fill ? 'w-full justify-center py-2' : ''} ${open
           ? 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white'
           : `text-slate-700 dark:text-slate-200 ${hover}`}`}
       >
         <Icon className={`h-3.5 w-3.5 ${iconClass}`} />
         <span>{label}</span>
+        {badge}
         <ChevronDown className={`h-3.5 w-3.5 text-slate-500 transition-transform dark:text-slate-400 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && pos && createPortal(
@@ -107,8 +118,12 @@ export function ExportMenu({ kind, label, items, icon }: { kind: ExportKind; lab
           onKeyDown={onPanelKeyDown}
           className="no-print fixed w-56 max-w-[calc(100vw-1rem)] rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-900/10 py-1.5 z-[60] text-xs text-left"
         >
+          {header && (
+            <p className="mb-1 border-b border-slate-100 px-3 pb-2 pt-1 text-[11px] font-semibold text-slate-500 dark:border-slate-800 dark:text-slate-400">{header}</p>
+          )}
           {items.map(item => {
             const disabled = Boolean(item.disabledReason);
+            const ItemIcon = item.icon ?? Icon;
             return (
               <button
                 key={item.label}
@@ -119,7 +134,7 @@ export function ExportMenu({ kind, label, items, icon }: { kind: ExportKind; lab
                 onClick={() => { if (disabled) return; closeAndRefocus(); item.onSelect(); }}
                 className={disabled ? menuItemClass.replace('cursor-pointer', 'cursor-not-allowed').replace('hover:bg-slate-50 dark:hover:bg-slate-800 ', '') + ' opacity-60' : menuItemClass}
               >
-                <Icon className={`h-3.5 w-3.5 shrink-0 ${iconClass}`} />
+                <ItemIcon className={`h-3.5 w-3.5 shrink-0 ${iconClass}`} />
                 <span className="min-w-0">
                   <span className="block">{item.label}</span>
                   {disabled && <span className="block text-[10px] font-normal text-slate-500 dark:text-slate-400">{item.disabledReason}</span>}

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, Clock, Edit, Info, Send } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Edit, EyeOff, Megaphone, RefreshCw, Send } from 'lucide-react';
 import {
   getGradeSubmissionApi,
   gradeSubmissionActionApi,
@@ -14,6 +14,7 @@ import { formatManilaWhen } from '../services/auditService';
 import { formatShortDate } from '../utils/sessionDate';
 import { requestConfirmation, showFeedback } from './FeedbackCenter';
 import { Modal } from './Modal';
+import { ExportMenu } from './ExportMenu';
 
 const SECONDARY = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-white dark:bg-slate-900 font-bold text-xs whitespace-nowrap transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
 const SECONDARY_TONES = {
@@ -140,42 +141,6 @@ export const GradeSubmissionBanner: React.FC<{
     return next !== null;
   }, [csId, onChanged]);
 
-  const actMidterm = useCallback(async (kind: 'publish' | 'unpublish', midterm: GradeSubmissionMidtermState, classLabel: string) => {
-    const isUpdate = kind === 'publish' && midterm.published;
-    const confirmation = kind === 'publish'
-      ? {
-          title: isUpdate ? 'Update Midterm Advisory' : 'Publish Midterm Advisory',
-          confirmLabel: isUpdate ? 'Update advisory' : 'Publish Midterm advisory',
-          message: formatMidtermConfirmMessage(classLabel, midterm, isUpdate),
-        }
-      : {
-          title: 'Unpublish Midterm Advisory',
-          confirmLabel: 'Unpublish',
-          message: `Unpublish the Midterm advisory for ${classLabel}? Published Midterm grades and Midterm Advisory will be hidden from Students until published again. Entered scores stay saved.`,
-        };
-    if (!(await requestConfirmation(confirmation.message, confirmation.title, confirmation.confirmLabel))) return;
-    setBusy(true);
-    try {
-      const next = kind === 'publish'
-        ? await publishMidtermAdvisoryApi(csId)
-        : await unpublishMidtermAdvisoryApi(csId);
-      setState(next);
-      onChanged();
-      showFeedback(
-        kind === 'unpublish'
-          ? 'Midterm advisory unpublished.'
-          : isUpdate
-            ? 'Midterm advisory updated.'
-            : 'Midterm advisory published.',
-        'success',
-      );
-    } catch (err) {
-      showFeedback(errorText(err), 'error');
-    } finally {
-      setBusy(false);
-    }
-  }, [csId, onChanged]);
-
   if (!state) return null;
   const label = `${courseCode} ${csName}`;
   const batch = state.batch;
@@ -206,7 +171,6 @@ export const GradeSubmissionBanner: React.FC<{
   let tone: keyof typeof BOX_TONES;
   let text: string;
   let buttons: React.ReactNode;
-  let useInfoIcon = false;
   if (batch?.status === 'draft') {
     tone = 'amber';
     text = 'Grade change draft.';
@@ -242,53 +206,11 @@ export const GradeSubmissionBanner: React.FC<{
       text = `Grades submitted on ${state.submittedAt ? formatShortDate(state.submittedAt.slice(0, 10)) : ''}.`;
       buttons = requestChange('emerald');
     }
-  } else if (!classItem.isArchived && state.midterm?.schemaMode === 'periods') {
-    const midterm = state.midterm;
-    if (!midterm.published && midterm.readyCount > 0) {
-      tone = 'information';
-      useInfoIcon = true;
-      text = midterm.atRisk.length > 0
-        ? `Midterm advisory not published (${midterm.atRisk.length} At-Risk ready).`
-        : `Midterm advisory not published (Midterm grades ready for ${midterm.readyCount} ${midterm.readyCount === 1 ? 'student' : 'students'}).`;
-      buttons = (
-        <button type="button" disabled={busy} onClick={() => { void actMidterm('publish', midterm, label); }} className={PRIMARY}>
-          Publish Midterm advisory
-        </button>
-      );
-    } else if (midterm.published && !midterm.dirty) {
-      tone = 'information';
-      useInfoIcon = true;
-      const publishedDate = midterm.publishedAt ? formatShortDate(midterm.publishedAt.slice(0, 10)) : '';
-      text = publishedDate
-        ? `Midterm advisory published on ${publishedDate} · ${midterm.atRisk.length} At-Risk.`
-        : `Midterm advisory published · ${midterm.atRisk.length} At-Risk.`;
-      buttons = secondary('slate', 'Unpublish', () => { void actMidterm('unpublish', midterm, label); });
-    } else if (midterm.published && midterm.dirty) {
-      tone = 'amber';
-      const addedCount = midterm.diff?.added?.length ?? 0;
-      const removedCount = midterm.diff?.removed?.length ?? 0;
-      const diffParts: string[] = [];
-      if (addedCount > 0) diffParts.push(`+${addedCount} At-Risk`);
-      if (removedCount > 0) diffParts.push(`${removedCount} cleared`);
-      const diffSummary = diffParts.length > 0 ? ` (${diffParts.join(', ')})` : '';
-      text = `Midterm scores changed since published${diffSummary}.`;
-      buttons = (
-        <>
-          {secondary('amber', 'Unpublish', () => { void actMidterm('unpublish', midterm, label); })}
-          <button type="button" disabled={busy} onClick={() => { void actMidterm('publish', midterm, label); }} className={PRIMARY}>
-            Update advisory
-          </button>
-        </>
-      );
-    } else {
-      return null;
-    }
   } else {
     return null;
   }
 
-  const { box, icon, Icon } = BOX_TONES[tone];
-  const BannerIcon = useInfoIcon ? Info : Icon;
+  const { box, icon, Icon: BannerIcon } = BOX_TONES[tone];
   return (
     <>
       <div role="status" className={`no-print rounded-xl border p-3 text-xs ${box} flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
@@ -373,5 +295,93 @@ export const SubmitGradesButton: React.FC<{ classItem: FacultyClassItem; onChang
       <Send className="w-4 h-4" aria-hidden="true" />
       Submit grades
     </button>
+  );
+};
+
+/** Midterm advisory state for one unsubmitted class (null when submitted, not periods mode, or not loaded). */
+function useMidtermAdvisory(classItem: ClassRef, onChanged: () => void, refreshToken?: string | number) {
+  const { csId } = classItem;
+  const [midterm, setMidterm] = useState<GradeSubmissionMidtermState | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMidterm(null);
+    getGradeSubmissionApi(csId)
+      .then(next => { if (!cancelled) setMidterm(next.status !== 'submitted' && next.midterm?.schemaMode === 'periods' ? next.midterm : null); })
+      .catch(() => { if (!cancelled) setMidterm(null); });
+    return () => { cancelled = true; };
+  }, [csId, refreshToken]);
+
+  const actMidterm = useCallback(async (kind: 'publish' | 'unpublish', current: GradeSubmissionMidtermState, classLabel: string) => {
+    const isUpdate = kind === 'publish' && current.published;
+    const confirmation = kind === 'publish'
+      ? {
+          title: isUpdate ? 'Update Midterm Advisory' : 'Publish Midterm Advisory',
+          confirmLabel: isUpdate ? 'Update advisory' : 'Publish Midterm advisory',
+          message: formatMidtermConfirmMessage(classLabel, current, isUpdate),
+        }
+      : {
+          title: 'Unpublish Midterm Advisory',
+          confirmLabel: 'Unpublish',
+          message: `Unpublish the Midterm advisory for ${classLabel}? Published Midterm grades and Midterm Advisory will be hidden from Students until published again. Entered scores stay saved.`,
+        };
+    if (!(await requestConfirmation(confirmation.message, confirmation.title, confirmation.confirmLabel))) return;
+    setBusy(true);
+    try {
+      const next = kind === 'publish' ? await publishMidtermAdvisoryApi(csId) : await unpublishMidtermAdvisoryApi(csId);
+      setMidterm(next.midterm?.schemaMode === 'periods' ? next.midterm : null);
+      onChanged();
+      showFeedback(kind === 'unpublish' ? 'Midterm advisory unpublished.' : isUpdate ? 'Midterm advisory updated.' : 'Midterm advisory published.', 'success');
+    } catch (err) {
+      showFeedback(errorText(err), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }, [csId, onChanged]);
+
+  return { midterm, busy, actMidterm };
+}
+
+/** One-line summary of a class's Midterm advisory, used as the button tooltip and (option B) the status line. */
+function midtermAdvisoryStatus(midterm: GradeSubmissionMidtermState): string {
+  if (!midterm.published) {
+    return midterm.atRisk.length > 0
+      ? `Not published · ${midterm.atRisk.length} At-Risk ready`
+      : `Not published · Midterm grades ready for ${midterm.readyCount} ${midterm.readyCount === 1 ? 'student' : 'students'}`;
+  }
+  const publishedDate = midterm.publishedAt ? formatShortDate(midterm.publishedAt.slice(0, 10)) : '';
+  if (midterm.dirty) {
+    const parts: string[] = [];
+    if ((midterm.diff?.added?.length ?? 0) > 0) parts.push(`+${midterm.diff!.added.length} At-Risk`);
+    if ((midterm.diff?.removed?.length ?? 0) > 0) parts.push(`${midterm.diff!.removed.length} cleared`);
+    return `Scores changed since published${parts.length ? ` (${parts.join(', ')})` : ''}`;
+  }
+  return `Published${publishedDate ? ` on ${publishedDate}` : ''} · ${midterm.atRisk.length} At-Risk`;
+}
+
+/** Toolbar control next to Submit grades: a Midterm advisory menu whose first line says where things stand. */
+export const MidtermAdvisoryButton: React.FC<{ classItem: FacultyClassItem; onChanged: () => void; refreshToken?: string | number }> = ({ classItem, onChanged, refreshToken }) => {
+  const { midterm, actMidterm } = useMidtermAdvisory(classItem, onChanged, refreshToken);
+  if (!midterm || (!midterm.published && midterm.readyCount === 0)) return null;
+  const label = `${classItem.courseCode} ${classItem.csName}`;
+  const status = midtermAdvisoryStatus(midterm);
+  const n = midterm.atRisk.length;
+  const badge = !midterm.published
+    ? (n > 0 ? <span className="rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200" aria-label={`${n} At-Risk, not published`}>{n}</span> : null)
+    : midterm.dirty
+      ? <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-label="Scores changed since published" />
+      : null;
+  const items = midterm.published
+    ? [
+        { label: 'Update advisory', icon: RefreshCw, onSelect: () => { void actMidterm('publish', midterm, label); }, disabledReason: midterm.dirty ? undefined : 'No Midterm changes since published' },
+        { label: 'Unpublish', icon: EyeOff, onSelect: () => { void actMidterm('unpublish', midterm, label); } },
+      ]
+    : [{ label: 'Publish Midterm advisory', icon: Megaphone, onSelect: () => { void actMidterm('publish', midterm, label); } }];
+
+  return (
+    <div className="no-print flex shrink-0 items-center justify-center rounded-xl border border-clinical-300 bg-white p-0.5 shadow-sm dark:border-clinical-800 dark:bg-slate-900">
+      <ExportMenu kind="clinical" label="Midterm advisory" icon={midterm.published && !midterm.dirty ? CheckCircle2 : undefined} badge={badge} header={status.replace(/(\d+) At-Risk/g, '$1 At‑Risk')} fill items={items} />
+    </div>
   );
 };

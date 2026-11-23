@@ -43,19 +43,24 @@ test('5.2 no prompt on tab or view switch; leaving the page asks only when unsav
   assert.match(page, /if \(!weightsDirtyRef\.current && !singleDirtyRef\.current/);
 });
 
-test('12.12 + 12.13: class-picker bar keeps only Submit grades while GradeSubmissionBanner manages Midterm advisory and retentionImpact preview', () => {
+test('12.12 + 12.13: Midterm advisory is a menu in the class-picker bar (no separate bar) and Submit keeps the retentionImpact preview', () => {
   const banner = fs.readFileSync(path.join(here, '../components/GradeSubmissionBanner.tsx'), 'utf8');
 
-  // Class-picker bar only renders SubmitGradesButton (no duplicate Publish button).
+  // Class-picker bar: the Midterm advisory menu sits next to Submit grades (Owner 2026-11-23: no card of its own).
   const pickerCard = page.slice(page.indexOf('aria-label={`Class:'), page.indexOf('<GradeSubmissionBanner'));
-  assert.match(pickerCard, /!selectedClass\.gradesSubmitted && \(\s*<SubmitGradesButton/);
-  assert.doesNotMatch(pickerCard, /Publish Midterm|Update advisory|Unpublish/);
+  assert.match(pickerCard, /!selectedClass\.isArchived && \(\s*<MidtermAdvisoryButton/);
+  assert.match(pickerCard, /<SubmitGradesButton/);
 
-  // GradeSubmissionBanner pre-submit Midterm lifecycle states & confirmations.
-  assert.match(banner, /!classItem\.isArchived && state\.midterm\?\.schemaMode === 'periods'/);
-  assert.match(banner, /!midterm\.published && midterm\.readyCount > 0/);
-  assert.match(banner, /midterm\.published && !midterm\.dirty/);
-  assert.match(banner, /midterm\.published && midterm\.dirty/);
+  // GradeSubmissionBanner keeps only the submission states; Midterm states live in MidtermAdvisoryButton.
+  const bannerFn = banner.slice(banner.indexOf('export const GradeSubmissionBanner'), banner.indexOf('export const SubmitGradesButton'));
+  assert.doesNotMatch(bannerFn, /midterm|Publish Midterm|Update advisory|Unpublish/i);
+  const advisory = banner.slice(banner.indexOf('export const MidtermAdvisoryButton'));
+  assert.match(advisory, /!midterm\.published && midterm\.readyCount === 0\)\) return null/);
+  assert.match(advisory, /header=\{status/);
+  assert.match(banner, /schemaMode === 'periods'/);
+  assert.match(banner, /Not published · \$\{midterm\.atRisk\.length\} At-Risk ready/);
+  assert.match(banner, /Scores changed since published/);
+  assert.match(banner, /No Midterm changes since published/);
   assert.match(banner, /Publish Midterm advisory/);
   assert.match(banner, /Update advisory/);
   assert.match(banner, /Unpublish/);

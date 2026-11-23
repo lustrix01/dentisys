@@ -45,7 +45,7 @@ import { Student, EnrolledSubject, GradeComponents, Assessment, AssessmentScore 
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { GradebookMatrix } from '../../components/GradebookMatrix';
 import { Modal } from '../../components/Modal';
-import { GradeSubmissionBanner, SubmitGradesButton } from '../../components/GradeSubmissionBanner';
+import { GradeSubmissionBanner, MidtermAdvisoryButton, SubmitGradesButton } from '../../components/GradeSubmissionBanner';
 import Tabs from '../../components/Tabs';
 import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
 import { recordAudit } from '../../services/auditService';
@@ -3475,7 +3475,17 @@ export const GradeComputation: React.FC = () => {
           </select>
         </div>
         {selectedClass && selectedClassIsCurrentActive && !selectedClass.gradesSubmitted && (
-          <SubmitGradesButton classItem={selectedClass} onChanged={reloadClasses} />
+          <div className="flex flex-wrap gap-2 [&>*]:flex-1 xl:[&>*]:flex-none">
+            {!selectedClass.isArchived && (
+              <MidtermAdvisoryButton
+                key={selectedClass.csId}
+                classItem={selectedClass}
+                onChanged={reloadClasses}
+                refreshToken={`${selectedClass.midtermPublished}-${selectedClass.midtermAdvisoryDirty}-${submissionRefreshKey}`}
+              />
+            )}
+            <SubmitGradesButton classItem={selectedClass} onChanged={reloadClasses} />
+          </div>
         )}
       </Card>
 

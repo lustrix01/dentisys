@@ -155,12 +155,11 @@ Area `grading`:
 ## UI screens & `docs/frontend.md` Page patterns
 
 - **Grade Computation** (`frontend/src/pages/faculty/GradeComputation.tsx` & `frontend/src/components/GradeSubmissionBanner.tsx`):
-  - Class-picker bar stays untouched (only `S.Y.`, `Class`, `Submit grades`).
-  - `GradeSubmissionBanner` adds the pre-submit Midterm lifecycle states using the existing `NoticeBanner` standard:
-    - Not published (when `readyCount > 0` and `schemaMode === 'periods'`): `information` banner (`"Midterm advisory not published (N At-Risk ready)."` + **`Publish Midterm advisory`**).
-    - Published, clean: `information` banner (`"Midterm advisory published on <date> · N At-Risk."` + **`Unpublish`**).
-    - Published, dirty: `warning` (amber) banner (`"Midterm scores changed since published."` + **`Update advisory`** + **`Unpublish`**).
-    - Submitted: existing 13.8 banners (Midterm banner hidden).
+  - The class-picker bar holds `S.Y.`, `Class`, a **`Midterm advisory ▾`** menu (`MidtermAdvisoryButton`, shown while unsubmitted when `schemaMode === 'periods'` and the advisory is published or `readyCount > 0`) and `Submit grades`. No separate bar or card for Midterm states (Owner 2026-11-23). The menu's first line is the status; the trigger carries a quick signal:
+    - Not published: amber At-Risk count on the trigger; status `"Not published · N At-Risk ready"` (or `"Not published · Midterm grades ready for N students"`); item **`Publish Midterm advisory`**.
+    - Published, clean: check icon on the trigger; status `"Published on <date> · N At-Risk"`; items **`Update advisory`** (disabled: "No Midterm changes since published") and **`Unpublish`**.
+    - Published, dirty: amber dot on the trigger; status `"Scores changed since published (+N At-Risk, N cleared)"`; items **`Update advisory`** and **`Unpublish`**.
+    - Submitted: the menu is hidden; `GradeSubmissionBanner` shows the existing 13.8 states only.
   - Confirmation modals reuse the existing `ConfirmDialog` (`requestConfirmation`) pattern:
     - **Publish / Update Midterm advisory**: lists At-Risk students (with Midterm grade) or `"No students are At Risk"`, lists any students with missing Midterm scores, and states that flagged students will appear on At-Risk Students / Midterm Advisory and receive an in-app notice (emails stay manual in Email Management).
     - **Submit grades**: existing missing-scores list + new section listing students entering **Remedial** or **Irregular reenrollment** who will be placed in Retention Status and notified.
