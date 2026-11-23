@@ -78,9 +78,23 @@ $tdPlainUser = static function (string $label) use ($pdo, $tdTag, $tdPassword): 
     $stmt->execute([$email, password_hash($tdPassword, PASSWORD_DEFAULT)]);
     return ['user_id' => (int) $stmt->fetchColumn(), 'email' => $email];
 };
-$tdLogin = static fn(string $email, ?string $cookieValue = null, ?string $password = null) => $tdHttp(
-    'POST', '/api/auth/login', '', ['email' => $email, 'password' => $password ?? $tdPassword], $tdCookieHeader($cookieValue)
-);
+// The server allows 100 sign-ins a minute per address (auth_runtime.php), and every sign-in of the whole suite
+// comes from 127.0.0.1. This file tests remembered devices, not that limit, so each sign-in here starts it again;
+// otherwise a late sign-in was sometimes refused with 429 depending on how fast the suite ran.
+$tdLimiterDir = (string) getenv('RATE_LIMIT_STORAGE_DIR');
+$tdLimiterScope = bin2hex(hash('sha256', 'ip:127.0.0.1', true));
+$tdAtLimit = new ArrayObject([0]); // sign-ins that would have been refused: printed at the end
+$tdLogin = static function (string $email, ?string $cookieValue = null, ?string $password = null) use ($tdHttp, $tdCookieHeader, $tdPassword, $tdLimiterDir, $tdLimiterScope, $tdAtLimit): array {
+    if ($tdLimiterDir !== '') {
+        $path = rate_limit_storage_path(['dir' => $tdLimiterDir], $tdLimiterScope, 'post_auth_login');
+        $state = is_file($path) ? json_decode((string) file_get_contents($path), true) : null;
+        if (is_array($state) && (($state['count'] ?? 0) >= 100 || ($state['blocked_until'] ?? 0) > time())) {
+            $tdAtLimit[0]++;
+        }
+        rate_limit_clear(['dir' => $tdLimiterDir], $tdLimiterScope, 'post_auth_login');
+    }
+    return $tdHttp('POST', '/api/auth/login', '', ['email' => $email, 'password' => $password ?? $tdPassword], $tdCookieHeader($cookieValue));
+};
 $tdVerify = static fn(array $login, string $code, mixed $remember = 'omit', ?string $cookieValue = null, string $userAgent = 'Trusted Device Integration Test') => $tdHttp(
     'POST', '/api/auth/mfa/verify', (string) ($login['json']['two_factor_challenge_token'] ?? ''),
     ['code' => $code] + ($remember === 'omit' ? [] : ['remember_device' => $remember]), $tdCookieHeader($cookieValue), $userAgent
@@ -428,3 +442,6 @@ expect_same(401, $tdHttp('GET', '/api/auth/mfa/settings')['status'], 'The settin
 // ---- Audit catalogue ----
 $tdCatalogue = audit_catalogue();
 expect_true(isset($tdCatalogue['trusted_device_remembered']) && isset($tdCatalogue['trusted_devices_forgotten']), 'The audit catalogue has trusted_device_remembered and trusted_devices_forgotten');
+
+expect_true($tdLimiterDir !== '', 'Sanity: RATE_LIMIT_STORAGE_DIR is set, so this file resets the per-address sign-in limit');
+echo "Trusted devices: {$tdAtLimit[0]} sign-in(s) here found the per-address sign-in limit already reached (reset before sending).\n";
