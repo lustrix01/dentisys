@@ -6,7 +6,7 @@
  *  - fix: stages a test file, or carries "Test: none - <reason>" (a message-only amend, with nothing staged, is skipped).
  *  - feat: names its backlog id in the subject, e.g. "(13.3)", "(backlog 12.3, 12.4)" or a spec id "(GRA-03)", or carries "Contract: <link or id>".
  *  - Staged frontend/src .tsx/.css files (outside frontend/src/tests/) need a "Demo:" line.
- *  - Staged spec.md without a "Spec-approved: <date>" line prints a reminder (does not block).
+ *  - Staged spec.md needs a "Spec-approved: <date>" line.
  * usage: node check-commit-msg.mjs <message-file>
  */
 import { readFileSync, existsSync } from 'node:fs';
@@ -58,8 +58,8 @@ if (!exempt) {
   }
 
   if (staged.includes('spec.md') && !has(/^Spec-approved: \S/)) {
-    console.error('commit-msg reminder: spec.md changes only with the Owner\'s explicit approval. ' +
-      'Add "Spec-approved: <date the Owner approved>" to record it.');
+    errors.push('It changes spec.md without a Spec-approved line. spec.md changes only with the Owner\'s explicit approval: ' +
+      'add a line\n  Spec-approved: <date the Owner approved>');
   }
 }
 
