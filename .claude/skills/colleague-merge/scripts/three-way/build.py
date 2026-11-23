@@ -15,7 +15,7 @@ rows.json:
 Run contact3.py first (and read its sheets); this script refuses to build without its fresh stamp.
 Up to 12 MB of images are embedded in the page (publish the page alone). Above that the images stay in
 <outDir>/img/ and files.json holds the Artifact `files` list (publish with root = outDir)."""
-import base64, html, json, os, sys
+import base64, html, json, os, re, sys
 from PIL import Image
 
 if len(sys.argv) < 3:
@@ -88,7 +88,7 @@ for a, b in (('__TITLE__', E(cfg['title'])), ('__LEDE__', E(cfg['lede'])), ('__L
              ('__L_THEIRS__', E(cfg['labels']['theirs'])), ('__L_MERGED__', E(cfg['labels']['merged'])),
              ('<!--SUMMARY-->', chips), ('<!--ROWS-->', rows), ('<!--ITEMS-->', ''.join(items))):
     page = page.replace(a, b)
-name = cfg['title'].lower().replace(' ', '-') + '.html'
+name = re.sub(r'[^a-z0-9]+', '-', cfg['title'].lower()).strip('-') + '.html'  # a ':' in the title made a Windows stream, not a file
 files = sorted(set(files))
 size = sum(os.path.getsize(os.path.join(out, f)) for f in files) / 1e6
 inline = size <= 12  # data URIs grow ~4/3; 12 MB of JPEG stays under the 16 MB page limit
