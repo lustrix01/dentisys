@@ -59,6 +59,8 @@ for (const [k, list] of groups) {
   const ctx = await browser.newContext({ ...opts, baseURL: APP.baseURL, colorScheme: 'light' });
   await ctx.addInitScript(() => { window.print = () => {}; }); // print views stay rendered for print: true targets
   const page = await ctx.newPage();
+  // A page with an unsaved-work guard (Grade Computation) asks before the next target's goto; leave it, as a user would.
+  page.on('dialog', d => (d.type() === 'beforeunload' ? d.accept() : d.dismiss()).catch(() => {}));
   let pageErrors = [];
   page.on('pageerror', e => pageErrors.push(e.message)); // a crashed page screenshots as blank: fail the target instead
   if (role !== 'public') {
