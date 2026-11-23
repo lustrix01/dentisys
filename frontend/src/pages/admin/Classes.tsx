@@ -80,7 +80,7 @@ export const Classes: React.FC = () => {
   const confirmChange = async () => {
     if (!changeClass) return;
     const note = reason.trim();
-    if (note.length < 5) { setReasonError('Enter a reason.'); return; }
+    if (note.length < 8) { setReasonError('Enter a reason of 8 to 240 characters.'); return; }
     if (!toUserId) { setFormError('Choose an active Faculty member.'); return; }
     setBusy(true);
     try {
@@ -165,7 +165,7 @@ export const Classes: React.FC = () => {
                 {filters.faculty.filter(member => member.status === 'active' && member.userId !== changeClass.faculty.userId).map(member => <option key={member.userId} value={member.userId}>{member.name}</option>)}
               </select>
             </label>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Reason
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Reason (8 to 240 characters)
               <input maxLength={240} value={reason} onChange={event => { setReason(event.target.value); setReasonError(''); }} className={inputClass} />
               {reasonError && <span role="alert" className="mt-1 block text-xs font-semibold text-rose-600 dark:text-rose-400">{reasonError}</span>}
             </label>

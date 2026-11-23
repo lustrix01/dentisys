@@ -452,7 +452,8 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   // 8. Test navigation away and back
   await page.click('a[href="/"]');
   await expect(page).toHaveURL('/');
-  await page.getByRole('link', { name: 'Attendance Monitoring', exact: true }).click();
+  // The sidebar link: the header breadcrumb has the same name once / redirects here.
+  await page.getByRole('complementary').getByRole('link', { name: 'Attendance Monitoring', exact: true }).click();
   await page.goto('/secretary/start-session');
   await expect(page).toHaveURL('/secretary/attendance');
   await expect(page.getByRole('heading', { name: 'Start Session' })).toBeVisible();

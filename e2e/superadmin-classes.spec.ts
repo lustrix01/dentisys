@@ -130,12 +130,12 @@ test.describe('Superadmin Classes', () => {
     expect(options).not.toContain('Dr. Reyes'); // the current owner is not a choice
     expect(options.join('|')).not.toContain('Dr. Gone'); // a deactivated member is not a choice (D6)
     await dialog.getByRole('button', { name: 'Change Faculty' }).click();
-    await expect(dialog.getByText('Enter a reason.')).toBeVisible();
+    await expect(dialog.getByText('Enter a reason of 8 to 240 characters.')).toBeVisible();
     expect(posted).toHaveLength(0);
     await dialog.getByLabel('New Faculty').selectOption({ label: 'Dr. Ana Cruz' });
-    await dialog.getByLabel('Reason').fill('abc');
+    await dialog.getByLabel('Reason').fill('abcdefg');
     await dialog.getByRole('button', { name: 'Change Faculty' }).click();
-    await expect(dialog.getByText('Enter a reason.')).toBeVisible(); // under 5 characters (D8)
+    await expect(dialog.getByText('Enter a reason of 8 to 240 characters.')).toBeVisible(); // under 8 characters (D8)
     expect(posted).toHaveLength(0);
     await dialog.getByLabel('Reason').fill('Dr. Reyes is on leave for the rest of the semester.');
     await dialog.getByRole('button', { name: 'Change Faculty' }).click();

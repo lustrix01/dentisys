@@ -74,7 +74,7 @@ $controller = $read('backend/controllers/SuperadminClassesController.php');
 foreach (['validation', 'class_not_found', 'class_not_current', 'same_faculty', 'faculty_not_eligible', 'grading_weights_clash', 'session_open'] as $code) {
     assert_sc(str_contains($controller, "'{$code}'"), "Refusal code {$code} exists");
 }
-foreach (['Enter a reason.', 'Class not found.', 'Past and archived classes are view-only.', 'This class already belongs to that Faculty member.', 'Choose an active Faculty member.', 'Choose another Faculty member.', 'End the open attendance session first'] as $message) {
+foreach (['Enter a reason of 8 to 240 characters.', 'Class not found.', 'Past and archived classes are view-only.', 'This class already belongs to that Faculty member.', 'Choose an active Faculty member.', 'Choose another Faculty member.', 'End the open attendance session first'] as $message) {
     assert_sc(str_contains($controller, $message), "Refusal message: {$message}");
 }
 assert_sc(preg_match('/const SUPERADMIN_CLASSES_PAGE_SIZE\s*=\s*50;/', $controller) === 1, 'Paging is 50 per page');

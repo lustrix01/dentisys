@@ -1622,10 +1622,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await cara.getByRole('button', { name: 'Reject' }).click();
     await page.getByRole('dialog', { name: 'Reject attendance request' }).getByRole('button', { name: 'Reject', exact: true }).click();
     await expect.poll(() => decisions).toEqual([{ requestId: '33', decision: 'reject', note: 'Student was absent' }]);
-    // Bulk approve two.
+    // Bulk approve two (Cara is decided, so ticking both ticks the whole group: "Approve all").
     await panel.getByLabel('Select Alice Green').check();
     await panel.getByLabel('Select Bob White').check();
-    await panel.getByRole('button', { name: 'Approve selected' }).click();
+    await panel.getByRole('button', { name: 'Approve all' }).click();
     await page.getByRole('dialog', { name: 'Approve all 2 requests?' }).getByRole('button', { name: 'Approve 2' }).click();
     await expect.poll(() => decisions[1]).toEqual({ requestIds: ['31', '32'], decision: 'approve' });
     // History filter shows decided rows the GET returns.
@@ -1633,7 +1633,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(panel).toContainText('Old Decided');
   });
 
-  test('Secretary requests: group Approve all asks first and sends the group ids', async ({ page }) => {
+  test('Secretary requests: each group\'s buttons are greyed out until a row is ticked, say "selected" or "all", ask first and send only that group\'s ticked ids (14.2)', async ({ page }) => {
     const decisions: Record<string, unknown>[] = [];
     const base = {
       status: 'pending', studentNumber: '2024-0001', classId: '1', className: 'Section A', courseCode: 'CLIN401',
@@ -1654,20 +1654,34 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     const panel = page.getByRole('region', { name: 'Secretary requests' });
     await expect(panel).toContainText('Secretary Requests · 3 waiting');
     await expect(panel).toContainText('2 requests');
-    // Cancel changes nothing.
-    await panel.getByRole('button', { name: 'Approve all' }).first().click();
+    // No "Select all shown" and no top "Approve selected": each group has its own pair, greyed out while nothing is ticked.
+    await expect(panel.getByText('Select all shown')).toHaveCount(0);
+    const group = panel.locator('div.rounded-xl').filter({ has: page.getByRole('checkbox', { name: /^Select all in CLIN401 Section A · Sep 20/ }) });
+    const other = panel.locator('div.rounded-xl').filter({ has: page.getByRole('checkbox', { name: /^Select all in CLIN401 Section A · Sep 21/ }) });
+    await expect(group.getByRole('button', { name: 'Approve selected' })).toBeDisabled();
+    await expect(group.getByRole('button', { name: 'Reject selected' })).toBeDisabled();
+    // One ticked row: "selected", and the dialog names one request.
+    await panel.getByLabel('Select Alice Green').check();
+    await expect(other.getByRole('button', { name: 'Approve selected' })).toBeDisabled();
+    await group.getByRole('button', { name: 'Reject selected' }).click();
+    const one = page.getByRole('dialog', { name: 'Reject 1 request?' });
+    await expect(one).toBeVisible();
+    await one.getByRole('button', { name: 'Cancel' }).click();
+    // Every row ticked (group checkbox): "all". Cancel changes nothing.
+    await panel.getByRole('checkbox', { name: /^Select all in CLIN401 Section A · Sep 20/ }).check();
+    await group.getByRole('button', { name: 'Approve all' }).click();
     const dialog = page.getByRole('dialog', { name: 'Approve all 2 requests?' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toBeHidden();
     expect(decisions).toEqual([]);
     // Confirm sends the group's ids only.
-    await panel.getByRole('button', { name: 'Approve all' }).first().click();
+    await group.getByRole('button', { name: 'Approve all' }).click();
     await page.getByRole('dialog', { name: 'Approve all 2 requests?' }).getByRole('button', { name: 'Approve 2' }).click();
     await expect.poll(() => decisions).toEqual([{ requestIds: ['41', '42'], decision: 'approve' }]);
   });
 
-  test('Secretary requests: group Reject all sends one single-request reject per id and shows one message', async ({ page }) => {
+  test('Secretary requests: ticking the group then Reject all sends one single-request reject per id and shows one message', async ({ page }) => {
     const decisions: Record<string, unknown>[] = [];
     const base = {
       status: 'pending', studentNumber: '2024-0001', classId: '1', className: 'Section A', courseCode: 'CLIN401',
@@ -1685,6 +1699,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
     await page.goto('/attendance?tab=requests');
     const panel = page.getByRole('region', { name: 'Secretary requests' });
+    await panel.getByRole('checkbox', { name: /^Select all in / }).check();
     await panel.getByRole('button', { name: 'Reject all' }).click();
     await page.getByRole('dialog', { name: 'Reject all 2 requests?' }).getByRole('button', { name: 'Reject 2' }).click();
     await expect(panel.getByRole('status')).toHaveText('Rejected 2 requests.');

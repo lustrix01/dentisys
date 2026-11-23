@@ -4566,7 +4566,7 @@ export const GradeComputation: React.FC = () => {
                     <button
                       type="submit"
                       disabled={configSaving || !weightCalculation.isExact100 || categoryRows.length === 0 || weightsLocked}
-                      className="flex items-center gap-1.5 whitespace-nowrap px-5 py-2.5 rounded-2xl bg-clinical-500 hover:bg-clinical-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md transition-all"
+                      className="flex items-center gap-1.5 whitespace-nowrap px-5 py-2.5 rounded-2xl bg-clinical-600 hover:bg-clinical-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md transition-all"
                     >
                       <Save className="w-4 h-4" />
                       <span>{configSaving ? 'Saving...' : 'Save grade weights'}</span>
@@ -6224,7 +6224,7 @@ export const GradeComputation: React.FC = () => {
                 modalConfigStatus === 'loading' ||
                 modalConfigStatus === 'error'
               }
-              className="px-4 py-2.5 rounded-xl bg-clinical-500 hover:bg-clinical-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md"
+              className="px-4 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md"
             >
               Confirm assessment
             </button>

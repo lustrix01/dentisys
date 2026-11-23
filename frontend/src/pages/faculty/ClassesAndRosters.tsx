@@ -1540,15 +1540,15 @@ const handleSendAllStudentInvites = async () => {
                 return (
                 <Card key={cls.id} className={`p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4 ${historicalClass ? 'border-slate-300/80 dark:border-slate-700' : ''}`}>
                   <div className="space-y-2">
-                    <div className="flex max-sm:flex-wrap lg:max-[1535px]:flex-wrap items-center justify-between max-sm:gap-y-2 lg:max-[1535px]:gap-y-2">
-                      <span className="max-sm:whitespace-nowrap lg:max-[1535px]:whitespace-nowrap px-2.5 py-1 rounded-lg bg-clinical-50 dark:bg-clinical-950/40 text-clinical-700 dark:text-clinical-300 text-[10px] font-extrabold uppercase tracking-wider">
+                    <div className="flex flex-wrap items-center justify-between gap-y-2">
+                      <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-clinical-50 dark:bg-clinical-950/40 text-clinical-700 dark:text-clinical-300 text-[10px] font-extrabold uppercase tracking-wider">
                         {cls.courseCode} &bull; Year {cls.yearLevel}
                       </span>
                       <div className={`flex flex-wrap items-center gap-1.5 max-sm:gap-1 lg:max-[1535px]:gap-1 min-w-0 ${historicalClass ? 'ml-auto max-sm:ml-0 max-sm:order-3 max-sm:basis-full lg:max-[1535px]:ml-0 lg:max-[1535px]:order-3 lg:max-[1535px]:basis-full' : ''}`}>
                         {archivedClass && (reason === 'cancelled' || reason === 'mistake'
                           ? <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900 text-[9px] font-extrabold uppercase tracking-wider">{reasonLabel}</span>
                           : <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 text-[9px] font-extrabold uppercase tracking-wider">Completed</span>)}
-                        <span className="max-sm:whitespace-nowrap lg:max-[1535px]:whitespace-nowrap text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mr-1 max-sm:mr-0 lg:max-[1535px]:mr-0">
+                        <span className="whitespace-nowrap text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mr-1 max-sm:mr-0 lg:max-[1535px]:mr-0">
                           {cls.csName || cls.block}
                         </span>
                         {!historicalClass && editButton}
@@ -1802,7 +1802,7 @@ const handleSendAllStudentInvites = async () => {
               <button
                 onClick={handleOpenCreateClassModal}
                 disabled={!newSchoolYear}
-                className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-700 active:scale-[0.99] cursor-pointer whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0"
+                className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-clinical-600 px-3.5 py-2 text-xs font-bold text-white shadow-md shadow-clinical-600/20 transition-all hover:bg-clinical-700 active:scale-[0.99] cursor-pointer whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0"
               >
                 <Plus className="w-4 h-4 shrink-0" />
                 <span>Create class</span>

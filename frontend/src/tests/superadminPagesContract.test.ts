@@ -64,7 +64,7 @@ test('Superadmin Classes (superadmin-classes.md): the page is live; read-only ex
   assert.match(classes, /Class Secretary/); // Class Details shows the Secretary row
   assert.match(classes, /useSearchParams/); // D16: ?facultyId= filters the page
   assert.match(classes, /\(deactivated\)/); // D15
-  assert.match(classes, /Enter a reason\./);
+  assert.match(classes, /Enter a reason of 8 to 240 characters\./); // 14.6
   assert.match(classes, /Active Classes/);
   assert.match(classes, /Archived Classes/);
   assert.match(classes, /Clear filters/);

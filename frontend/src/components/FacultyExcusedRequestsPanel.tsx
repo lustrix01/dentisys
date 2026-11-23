@@ -58,7 +58,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
   const [filter, setFilter] = useState<Filter>('pending');
   const [reloadKey, setReloadKey] = useState(0);
   const [noteOpen, setNoteOpen] = useState<Record<string, boolean>>({});
-  const [confirm, setConfirm] = useState<{ ids: string[]; decision: 'approve' | 'reject'; label: string } | null>(null);
+  const [confirm, setConfirm] = useState<{ ids: string[]; decision: 'approve' | 'reject'; label: string; all: boolean } | null>(null);
   const [target, setTarget] = useState<string | null>(initial?.requestId ?? null);
   // Filters are not remembered between visits.
   const [query, setQuery] = useState('');
@@ -109,7 +109,6 @@ export const FacultyExcusedRequestsPanel: React.FC<{
     && (!needle || request.studentName.toLowerCase().includes(needle) || (request.studentNumber ?? '').toLowerCase().includes(needle)));
   const countOf = (status: Filter) => matching.filter(request => request.status === status).length;
   const shown = matching.filter(request => request.status === filter);
-  const pendingShown = filter === 'pending' ? shown : [];
 
   // withNote: only a single-row Reject sends its optional note; bulk calls never do.
   const decide = async (ids: string[], decision: 'approve' | 'reject', withNote = false) => {
@@ -153,7 +152,6 @@ export const FacultyExcusedRequestsPanel: React.FC<{
     }
   };
 
-  const chosen = selected.filter(id => pendingShown.some(request => request.id === id));
   const groups: { key: string; rows: AttendanceExcusedRequest[] }[] = [];
   for (const request of shown) {
     const key = request.sessionId ?? `${request.classId}:${request.sessionDate}`;
@@ -226,24 +224,6 @@ export const FacultyExcusedRequestsPanel: React.FC<{
               <button type="button" onClick={() => { setQuery(''); setClassId(''); setChange(''); }} className={plainBtn}>Clear filters</button>
             )}
           </div>
-          {pendingShown.length > 0 && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <label className="flex items-center gap-1.5 whitespace-nowrap text-xs font-bold text-slate-700 dark:text-slate-200">
-                <input
-                  type="checkbox"
-                  checked={pendingShown.every(request => selected.includes(request.id))}
-                  onChange={event => setSelected(event.target.checked ? [...new Set([...selected, ...pendingShown.map(request => request.id)])] : selected.filter(id => !pendingShown.some(request => request.id === id)))}
-                />
-                Select all shown ({pendingShown.length})
-              </label>
-              <button
-                type="button"
-                disabled={busy || chosen.length === 0}
-                onClick={() => chosen.length > 1 ? setConfirm({ ids: chosen, decision: 'approve', label: 'Selected requests' }) : void decide(chosen, 'approve')}
-                className={approveBtn}
-              >Approve selected</button>
-            </div>
-          )}
           {filter === 'pending' && shown.length === 0 && <div className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{pending.length === 0 ? 'Nothing waiting for you.' : 'No pending requests match the filters.'}</h3></div>}
           {filter !== 'pending' && !hasHistory && <div className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">History not available.</h3></div>}
           {filter !== 'pending' && hasHistory && shown.length === 0 && <div className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No {filter} requests.</h3></div>}
@@ -252,6 +232,10 @@ export const FacultyExcusedRequestsPanel: React.FC<{
               const first = rows[0];
               const label = `${first.courseCode} ${first.className} · ${formatShortDate(first.sessionDate)}`;
               const ids = rows.map(row => row.id);
+              // 14.2: the group's buttons act on its ticked rows; "all" once every row is ticked, greyed out while none is.
+              const picked = ids.filter(id => selected.includes(id));
+              const all = picked.length === ids.length;
+              const which = all ? 'all' : 'selected';
               return (
                 <div key={key} className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
                   <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5 bg-slate-50 px-3 py-2 sm:flex sm:flex-wrap sm:gap-2 dark:bg-slate-800/60">
@@ -267,10 +251,10 @@ export const FacultyExcusedRequestsPanel: React.FC<{
                     <span className={`text-xs text-slate-500 ${filter === 'pending' ? 'hidden sm:inline' : 'col-span-2 sm:col-span-1'}`}><span className="hidden sm:inline">· </span>{count(rows.length)}</span>
                     <span className="hidden flex-1 sm:block" />
                     {filter === 'pending' && (
-                      <div className="col-start-2 flex flex-wrap items-center gap-1.5 sm:contents">
-                        <span className="mr-auto text-xs text-slate-500 sm:hidden">{count(rows.length)}</span>
-                        <button type="button" disabled={busy} onClick={() => setConfirm({ ids, decision: 'approve', label })} className={approveBtn}>Approve all</button>
-                        <button type="button" disabled={busy} onClick={() => setConfirm({ ids, decision: 'reject', label })} className={rejectBtn}>Reject all</button>
+                      <div className="col-span-2 flex flex-wrap items-center gap-1.5 sm:contents">
+                        <span className="basis-full text-xs text-slate-500 sm:hidden">{count(rows.length)}</span>
+                        <button type="button" disabled={busy || picked.length === 0} onClick={() => setConfirm({ ids: picked, decision: 'approve', label, all })} className={approveBtn}>Approve {which}</button>
+                        <button type="button" disabled={busy || picked.length === 0} onClick={() => setConfirm({ ids: picked, decision: 'reject', label, all })} className={rejectBtn}>Reject {which}</button>
                       </div>
                     )}
                   </div>
@@ -327,7 +311,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
           </div>
       </>
     </Card>
-    <Modal isOpen={!!confirm} onClose={() => setConfirm(null)} title={confirm ? `${confirm.decision === 'approve' ? 'Approve' : 'Reject'} all ${count(confirm.ids.length)}?` : ''} size="sm">
+    <Modal isOpen={!!confirm} onClose={() => setConfirm(null)} title={confirm ? `${confirm.decision === 'approve' ? 'Approve' : 'Reject'} ${confirm.all ? 'all ' : ''}${count(confirm.ids.length)}?` : ''} size="sm">
       {confirm && (
         <div className="space-y-4">
           <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">

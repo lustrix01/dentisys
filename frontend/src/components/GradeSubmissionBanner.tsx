@@ -23,7 +23,7 @@ const SECONDARY_TONES = {
   rose: 'border-rose-300 dark:border-rose-700 text-rose-800 dark:text-rose-200 hover:bg-rose-100/50',
   slate: 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800',
 } as const;
-const PRIMARY = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-clinical-500 hover:bg-clinical-600 text-white font-bold text-xs whitespace-nowrap shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
+const PRIMARY = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs whitespace-nowrap shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
 
 const BOX_TONES = {
   amber: { box: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200', icon: 'text-amber-600 dark:text-amber-400', Icon: Edit },
@@ -290,7 +290,7 @@ export const SubmitGradesButton: React.FC<{ classItem: FacultyClassItem; onChang
       type="button"
       disabled={busy}
       onClick={() => { void submit(); }}
-      className="inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-4 py-2.5 rounded-xl bg-clinical-500 hover:bg-clinical-600 text-white font-bold text-xs shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+      className="inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-4 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
     >
       <Send className="w-4 h-4" aria-hidden="true" />
       Submit grades
