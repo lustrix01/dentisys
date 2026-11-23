@@ -160,7 +160,10 @@ test('12.12 + 12.13: Retention Monitoring & Email Management show signpost banne
   // Retention Monitoring disables remedial actions when gradesSubmitted === false or hasOpenGradeChange === true.
   assert.match(retentionPage, /record\.gradesSubmitted === false \|\| cls\?\.gradesSubmitted === false/);
   assert.match(retentionPage, /record\.hasOpenGradeChange === true \|\| cls\?\.gradeChangeStatus === 'draft' \|\| cls\?\.gradeChangeStatus === 'pending'/);
-  assert.match(retentionPage, /remedialWriteBlockedReason\(row\.record\) === null/);
+  // 14.3: no row selection in Retention; the Send buttons only open the Email Management tab.
+  assert.doesNotMatch(retentionPage, /type="checkbox"/);
+  assert.match(retentionPage, /<Link\s+to="\/email-management\?tab=midterm_advisory"/);
+  assert.match(retentionPage, /<Link\s+to="\/email-management\?tab=remedial"/);
   assert.match(retentionPage, /const blocked = remedialWriteBlockedReason\(record\);\s*const disabled = !canScheduleRecord\(record\) \|\| Boolean\(blocked\);/);
   assert.match(retentionPage, /disabled=\{Boolean\(blocked\)\}/);
 

@@ -456,13 +456,16 @@ test.describe('Grade release gates (Backlog 12.12 + 12.13)', () => {
     const midtermSignpost = page.locator('[role="status"]').filter({ hasText: 'Some active classes do not have a published Midterm advisory yet. Publish in Grade Computation to list At-Risk students.' });
     await expect(midtermSignpost).toBeVisible();
     await expect(midtermSignpost.getByRole('link', { name: 'Open Grade Computation' })).toHaveAttribute('href', '/grades');
+    // 14.3: Send advisory only opens the Email Management tab; nothing is selected here
+    await expect(page.getByRole('link', { name: 'Send advisory' })).toHaveAttribute('href', '/email-management?tab=midterm_advisory');
 
-    // Remedials tab signpost + disabled Schedule / Grade / checkbox controls
+    // Remedials tab signpost + disabled Schedule / Grade controls; no row checkboxes (14.3)
     await page.getByRole('tab', { name: /^Remedials/ }).click();
     await expect(page.locator('[role="status"]').filter({ hasText: 'Final grades and Retention Status appear after grades are submitted in Grade Computation.' })).toBeVisible();
     const row901 = page.getByRole('row').filter({ hasText: 'Unsubmitted Remedial' });
     await expect(row901.getByRole('button', { name: 'Grade attempt 1' })).toBeDisabled();
-    await expect(row901.getByLabel('Select Unsubmitted Remedial for a remedial notice')).toBeDisabled();
+    await expect(row901.getByRole('checkbox')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Send remedial notices' })).toHaveAttribute('href', '/email-management?tab=remedial');
     const row902 = page.getByRole('row').filter({ hasText: 'Open Change Remedial' });
     await expect(row902.getByRole('button', { name: 'Schedule attempt 2' })).toBeDisabled();
 

@@ -296,8 +296,6 @@ const statusBadgeClasses = (state: FacultyRetentionState): string => {
 
 export const RetentionMonitoring: React.FC = () => {
   const navigate = useNavigate();
-  const [selectedAdvisoryEnrollments, setSelectedAdvisoryEnrollments] = useState<string[]>([]);
-  const [selectedRemedialEnrollments, setSelectedRemedialEnrollments] = useState<string[]>([]);
   const [retentionRecords, setRetentionRecords] = useState<FacultyRetentionRecord[]>([]);
   const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
   const [serverUnpublishedMidtermCount, setServerUnpublishedMidtermCount] = useState<number | undefined>(undefined);
@@ -590,16 +588,6 @@ export const RetentionMonitoring: React.FC = () => {
   const sortedWatchlist = sortRowsBy(watchlistRecords, watchSort, { student: r => r.studentName, grade: r => r.gwa, state: r => r.state });
   const sortedRemedials = sortRowsBy(remedialRows, remSort, { student: r => r.record.studentName, stage: r => r.progression.stage });
 
-  const openEmailManagement = (tab: 'midterm_advisory' | 'remedial', enrollments: string[]) => {
-    const params = new URLSearchParams({ tab });
-    enrollments.forEach(enrollmentId => params.append('enrollment', enrollmentId));
-    navigate(`/email-management?${params.toString()}`);
-  };
-  const canSelectRemedialNotice = (row: RetentionRemedialRow) => (
-    row.record.schoolYear === currentSchoolYear
-    && remedialWriteBlockedReason(row.record) === null
-    && row.progression.attempts.some(attempt => attempt.status === 'pending' && Boolean(attempt.scheduledDate))
-  );
 
   const selectedScheduleRecord = useMemo(
     () => usableRecords.find(record => record.enrollmentId === selectedScheduleEnrollmentId) ?? null,
@@ -1046,14 +1034,12 @@ export const RetentionMonitoring: React.FC = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                disabled={selectedAdvisoryEnrollments.length === 0}
-                onClick={() => openEmailManagement('midterm_advisory', selectedAdvisoryEnrollments)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              <Link
+                to="/email-management?tab=midterm_advisory"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-700"
               >
                 <Send className="h-3.5 w-3.5" /> Send advisory
-              </button>
+              </Link>
               <button
                 type="button"
                 onClick={() => setShowAtRiskOnly(prev => !prev)}
@@ -1105,21 +1091,9 @@ export const RetentionMonitoring: React.FC = () => {
                   return (
                     <tr key={record.enrollmentId} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
                       <td className="p-3 font-bold max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm">
-                        <div className="flex items-start gap-2">
-                          <input
-                            type="checkbox"
-                            checked={selectedAdvisoryEnrollments.includes(record.enrollmentId)}
-                            disabled={!isMidtermAtRisk(record) || record.schoolYear !== currentSchoolYear}
-                            aria-label={`Select ${record.studentName || 'student'} for Midterm Advisory`}
-                            onChange={() => setSelectedAdvisoryEnrollments(previous => previous.includes(record.enrollmentId)
-                              ? previous.filter(id => id !== record.enrollmentId)
-                              : [...previous, record.enrollmentId])}
-                            className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-600 disabled:opacity-40"
-                          />
-                          <div className="min-w-0">
-                            <span className="sr-only md:hidden">Student: </span>{record.studentName}
-                            <span className="block text-[10px] font-normal text-slate-500 dark:text-slate-400 max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{record.studentNumber}</span>
-                          </div>
+                        <div className="min-w-0">
+                          <span className="sr-only md:hidden">Student: </span>{record.studentName}
+                          <span className="block text-[10px] font-normal text-slate-500 dark:text-slate-400 max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{record.studentNumber}</span>
                         </div>
                       </td>
                       <td className="p-3 max-md:order-2 max-md:p-0">
@@ -1234,14 +1208,12 @@ export const RetentionMonitoring: React.FC = () => {
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Remedial Progression ({remedialRows.length})</h2><p className="text-xs text-slate-500 dark:text-slate-400">Attempt stages, scores and outcomes are read from the authoritative retention API. Removal is unavailable because no approved authoritative delete contract exists.</p></div>
-            <button
-              type="button"
-              disabled={selectedRemedialEnrollments.length === 0}
-              onClick={() => openEmailManagement('remedial', selectedRemedialEnrollments)}
-              className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            <Link
+              to="/email-management?tab=remedial"
+              className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-700"
             >
               <Send className="h-3.5 w-3.5" /> Send remedial notices
-            </button>
+            </Link>
           </div>
           {!isLoading && isCurrentOrAllSchoolYear && unsubmittedFinalClassCount > 0 && (
             <div role="status" className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
@@ -1266,22 +1238,9 @@ export const RetentionMonitoring: React.FC = () => {
                 {sortedRemedials.map(row => (
                   <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
                     <td className="py-3.5 px-3 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm">
-                      <div className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedRemedialEnrollments.includes(row.record.enrollmentId)}
-                          disabled={!canSelectRemedialNotice(row)}
-                          aria-label={`Select ${row.record.studentName || 'student'} for a remedial notice`}
-                          title={!canSelectRemedialNotice(row) ? 'Only current-year remedial attempts with a scheduled date can receive a notice.' : undefined}
-                          onChange={() => setSelectedRemedialEnrollments(previous => previous.includes(row.record.enrollmentId)
-                            ? previous.filter(id => id !== row.record.enrollmentId)
-                            : [...previous, row.record.enrollmentId])}
-                          className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-600 disabled:opacity-40"
-                        />
-                        <div className="min-w-0">
-                          <span className="sr-only md:hidden">Student: </span>{textOrUnavailable(row.record.studentName, 'Student name unavailable')}
-                          <span className="block text-[10px] text-slate-500 dark:text-slate-400 font-mono max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span>
-                        </div>
+                      <div className="min-w-0">
+                        <span className="sr-only md:hidden">Student: </span>{textOrUnavailable(row.record.studentName, 'Student name unavailable')}
+                        <span className="block text-[10px] text-slate-500 dark:text-slate-400 font-mono max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span>
                       </div>
                     </td>
                     <td className="py-3.5 px-3 text-center font-bold text-slate-800 dark:text-slate-100 max-md:order-2 max-md:p-0 max-md:text-left"><span className="md:hidden font-normal text-slate-500 dark:text-slate-400">Original grade </span>{isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage} grade={row.record.gwa}>{formatGrade(row.record.gwa)}</GradeValue> : <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Grade unavailable</span>}</td>
