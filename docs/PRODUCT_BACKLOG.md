@@ -77,6 +77,7 @@ Reported by users on production, reviewed by them and the Owner on 2026-11-23. C
 - **14.5** Student Attendance Logs: add Export, with the same file types as the Faculty Reports & Export page. Needs a contract.
 - **14.6** Superadmin Classes, Change Faculty dialog: show the Reason field's limit ("Max 240 characters").
 - **14.7** Faculty My Classes cards: a long course label ("DNUTRI 222 • YEAR 2") wraps onto two lines, which pushes Edit and Archive onto separate lines and moves the title down (Nutrition in Dentistry, Prosthodontics I). The card header keeps one row with long labels. `ui-fix-demo`.
+- **14.8** Class join link (CLS-004), Owner 2026-11-23: a signed-in Student who opens the link lands straight on the Join a class dialog with the code filled in; a signed-out visitor goes to sign-in with a notice that they must sign in to join the class, and that a Student without an account must first accept the invitation email from their Faculty, then returns to the dialog after sign-in. The code already opens the dialog and returns after sign-in (`ProtectedRoute.tsx`, `student/Classes.tsx`); check both paths on the demo first. The sign-in notice is missing. `ui-fix-demo` for the notice wording.
 
 ---
 
