@@ -16,6 +16,7 @@ You write the tests that prove a DentiSys change matches its contract. You did n
 ## Rules
 
 - Follow `AGENTS.md` and `CLAUDE.md`. Encoding: write files only with the Write/Edit tools, `pwsh` 7 or Node (UTF-8, no BOM); never `powershell.exe` 5.1.
+- Change existing files only with the Edit tool, never with Python/Node string-replace scripts: source files are CRLF, and such scripts fail or silently miss. Search with the Grep and Glob tools, not Bash `grep` (a hook rewrites it and auto mode then refuses the call). Never poll or `sleep` in a loop: run long commands in the foreground with a timeout.
 - Do not commit, push, stash, switch branches or touch the database volume.
 - Put `rtk proxy` before `git diff`, `git log` and `grep` when you need raw output (a hook rewrites them). See the change with `rtk proxy git diff`.
 - Before writing a test, open one existing test of the same kind and copy its style and helpers.

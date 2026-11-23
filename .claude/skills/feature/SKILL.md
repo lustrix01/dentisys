@@ -28,7 +28,8 @@ The Owner decides what DentiSys does; Claude makes it real without surprises. Ev
   - Check raw SQL in tests against the migrations: column names, NOT NULL and CHECK constraints.
   - PHP: assert a null value with `array_key_exists`, never `$a['k'] ?? 'x'`; scope `notifications` queries by title or dedup prefix when a type is shared.
   - Live E2E: names are stored in Title Case (`AtRisk` becomes `Atrisk`); assert the stored form.
-- Update the current-reference docs the change affects (`AGENTS.md` "Documentation") in the same commit, and `spec.md` only with the Owner's approval.
+- Update the current-reference docs the change affects (`AGENTS.md` "Documentation") in the same commit, and `spec.md` only with the Owner's approval. Each backlog id gets a `docs/features.md` line ending `— backlog <id>`; a look-only item gets none and its commit says so (`scripts/release-items.ps1 -LookOnly` at release).
+- Work handed to the Owner's Gemini (Antigravity) orchestrator: write the brief from [references/gemini-swarm-brief.md](references/gemini-swarm-brief.md).
 - Review every diff against the contract; look for shared callers and the second copy of student pages (`frontend/src/pages/student/RealStudentSurfaces.tsx`).
 
 ## 4. Real-app review

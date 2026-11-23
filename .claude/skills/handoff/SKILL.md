@@ -21,6 +21,8 @@ node .claude/skills/handoff/scripts/handoff-facts.mjs HFMARK-XXXX <short-slug>
 
 It writes `.claude/handoffs/<slug>/owner-messages.md` (everything the Owner typed, verbatim) and `facts.md` (branch, HEAD, uncommitted files, recent commits, recorded gate passes), and prints the old session's CLI id. If it warns that the marker was not found, stop and check the id with the Owner. `.claude/handoffs/` is git-ignored.
 
+When the handoff names built backlog items, take the list from `pwsh -NoProfile -File scripts/release-items.ps1` (ids from git since the last promote), not from this session's memory: a handoff that listed 3 of 10 built items once made a release miss 7.
+
 ## 3. Write `.claude/handoffs/<slug>/handoff.md`
 
 Use these sections, in this order. Keep it under 80 lines; point to files instead of copying them.

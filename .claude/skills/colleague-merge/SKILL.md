@@ -28,13 +28,14 @@ Project rules (`AGENTS.md`, `CLAUDE.local.md`) win. Screenshots use the `ui-fix-
 
 - **Docker:** run `docker compose ps`. `web` must be healthy on 8080, because screenshots log in against the real backend and `check-postgres` needs Docker. If it isn't, start Docker Desktop, run `docker compose up -d` and wait. Mocked screenshots are a last resort, never a time saver.
 - **Tree:** ours must be clean (and ideally pushed).
+- **New agent files:** if theirs adds or changes `.claude/agents/*.md`, they load only when a session starts. After merging them, tell the Owner to restart the session before any step calls them.
 - **Tools:**
   - The rtk hook summarizes `git diff`/`show`, `ls` and `grep` output. For review diffs use `rtk proxy git …`, and use the Grep tool for searches (never through `node_modules`).
   - Git Bash mangles `/route` args, so use `MSYS_NO_PATHCONV=1` and `C:/` paths.
 - **Commands that work here** (PowerShell tool, background, never piped):
   - Mocked browser suite: `powershell -NoProfile -ExecutionPolicy Bypass -File <repo>/scripts/test-e2e.ps1 --reporter=line [specs] *> "<log>"`. Always run it as a child `-File` process: `& script … *> log` in the same process, or inside `-Command`, dies on Node's stderr warning.
   - `scripts/check.ps1` and `scripts/check-postgres.ps1`: run them with PowerShell 7 (`pwsh -NoProfile -File <script> *> "<log>"`), never `powershell.exe`: Windows PowerShell 5.1 runs every check and then fails at the end writing the pass stamp (`-Encoding utf8NoBOM`), so publish-images never sees the pass. Read the logs as UTF-8.
-- **Sides:** `S/setup-side.ps1 -Name <base|theirs|ours|merged> -Ref <ref|main> -Port <5181-5183> -Root R`. It frees the port, makes or reuses a detached worktree with `node_modules` junctions (`main` = the main checkout), starts Vite (proxying to 8080), and writes `R/app-<Name>.json` for `shots.mjs`.
+- **Sides:** `S/setup-side.ps1 -Name <base|theirs|ours|merged> -Ref <ref|main> -Port <5181-5183> -Root R`. It frees the port, makes or reuses a detached worktree with `node_modules` junctions (`main` = the main checkout), starts Vite (proxying to 8080), and writes `R/app-<Name>.json` for `shots.mjs`. Always run it in the background: Vite keeps its output pipe open, so in the foreground it never returns (it blocked a session for 5 minutes).
   - Review: base on 5181, theirs on 5182.
   - Three-way: ours on 5181, theirs on 5182, merged on 5183.
 - **End:** `S/cleanup.ps1 -Root R` stops the servers and removes every `wt-*` worktree (junctions first).
@@ -66,6 +67,7 @@ Project rules (`AGENTS.md`, `CLAUDE.local.md`) win. Screenshots use the `ui-fix-
   - Dead Tailwind classes, light grey text.
 - **Spec and contract edits:** every hunk of theirs in `spec.md` or `docs/contracts/` is **Needs your OK** by default, even if it says "(Owner <date>)". Quote the claim; only the Owner approves spec changes.
 - Check every finding against `spec.md` before calling it a regression.
+- **Docs per item:** each backlog id in theirs has a `docs/features.md` line ending `— backlog <id>`, or is look-only and says so. A missing line is a merge finding, fixed in the merge commit (`scripts/release-items.ps1 -Since <base> -Until theirs` lists them).
 - **Their gates**, on a theirs worktree:
   1. `npx tsc -b` and `npm test` in `frontend/`.
   2. The full mocked browser suite. Colleagues often run unit tests only.
