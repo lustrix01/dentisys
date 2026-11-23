@@ -66,6 +66,20 @@ The full report text, what DentiSYS did at the time, the gaps, open questions an
 
 ---
 
+# 14. User reports (2026-11-23)
+
+Reported by users on production, reviewed by them and the Owner on 2026-11-23. Check whether each is still open before starting it.
+
+- **14.1** Faculty main action colour: each Faculty page's one main action button (Manage classes on the Dashboard, Create class, Submit grades, View attendance, and the like) uses #338037 (`clinical-600`) at rest. Today they use `bg-clinical-500` (#43A047) and show #338037 only on hover. Other buttons (Preview email, Import class and roster, and the like) keep their colours. Also check that each other role (Student, Admin, Superadmin) uses one colour for its main action button on every page. `ui-fix-demo`.
+- **14.2** Attendance Monitoring, Secretary requests: "Select all shown", the select-all checkbox and the per-group "Approve all" duplicate each other. Keep the select-all checkbox and one Approve selected button; remove the other two. User suggestion, Owner decides on the demo: Clear buttons become a clear (×) icon. `ui-fix-demo`.
+- **14.3** Retention Monitoring At-Risk Students and Remedials (13.5): ticking rows there is wasted, because Email Management asks for the selection again. Remove the row checkboxes; Send advisory and Send remedial notices become plain links to the matching Email Management tab. Changes 13.5's behaviour, so it follows the `feature` skill.
+- **14.4** Reports & Export, Retention & Remedials tab lists every student. List only students who were in retention or remedial this school year, with their outcome (passed, failed, pending).
+- **14.5** Student Attendance Logs: add Export, with the same file types as the Faculty Reports & Export page. Needs a contract.
+- **14.6** Superadmin Classes, Change Faculty dialog: show the Reason field's limit ("Max 240 characters").
+- **14.7** Faculty My Classes cards: a long course label ("DNUTRI 222 • YEAR 2") wraps onto two lines, which pushes Edit and Archive onto separate lines and moves the title down (Nutrition in Dentistry, Prosthodontics I). The card header keeps one row with long labels. `ui-fix-demo`.
+
+---
+
 # On the demo, awaiting promotion
 
 Built and running on the demo, not yet on production. Each moves to [Done](#done) after the Owner promotes it.
