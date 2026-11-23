@@ -744,7 +744,7 @@ export const EmailManagement: React.FC = () => {
                 type="button"
                 disabled={isSending || selected.length === 0}
                 onClick={handleSendEmails}
-                className="inline-flex whitespace-nowrap items-center gap-2 px-5 max-sm:px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
+                className="inline-flex whitespace-nowrap items-center gap-2 px-5 max-sm:px-3 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-clinical-600/20 transition-all cursor-pointer disabled:opacity-50"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>{isSending ? 'Sending emails...' : `Send invitations (${selected.length})`}</span>
@@ -880,7 +880,7 @@ export const EmailManagement: React.FC = () => {
               type="button"
               disabled={isSending || selected.length === 0}
               onClick={handleSendEmails}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-clinical-600/20 transition-all cursor-pointer disabled:opacity-50"
             >
               <Briefcase className="w-3.5 h-3.5" />
               <span>{isSending ? 'Issuing...' : `Appoint Secretary (${selected.length})`}</span>

@@ -278,9 +278,10 @@ expect_same(["SCA{$scTag}", "Sc Course One {$scTag}"], [$scCourseOptions[$scCour
 // ---- 3. Refusals (each leaves the database unchanged) ----
 $scRefused('Missing csId', ['toUserId' => $scFb, 'reason' => $scReason], 422, 'validation', null);
 $scRefused('Missing toUserId', ['csId' => $scK1, 'reason' => $scReason], 422, 'validation', null);
-$scRefused('Missing reason', ['csId' => $scK1, 'toUserId' => $scFb], 422, 'validation', 'Enter a reason.');
-$scRefused('Reason under 5 characters', ['csId' => $scK1, 'toUserId' => $scFb, 'reason' => 'abcd'], 422, 'validation', 'Enter a reason.');
-$scRefused('Blank reason', ['csId' => $scK1, 'toUserId' => $scFb, 'reason' => '     '], 422, 'validation', 'Enter a reason.');
+$scRefused('Missing reason', ['csId' => $scK1, 'toUserId' => $scFb], 422, 'validation', 'Enter a reason of 8 to 240 characters.');
+$scRefused('Reason under 8 characters', ['csId' => $scK1, 'toUserId' => $scFb, 'reason' => 'abcdefg'], 422, 'validation', 'Enter a reason of 8 to 240 characters.');
+$scRefused('Reason over 240 characters', ['csId' => $scK1, 'toUserId' => $scFb, 'reason' => str_repeat('a', 241)], 422, 'validation', 'Enter a reason of 8 to 240 characters.');
+$scRefused('Blank reason', ['csId' => $scK1, 'toUserId' => $scFb, 'reason' => '     '], 422, 'validation', 'Enter a reason of 8 to 240 characters.');
 $scRefused('Unknown class', ['csId' => 999999999, 'toUserId' => $scFb, 'reason' => $scReason], 404, 'class_not_found', 'Class not found.');
 $scRefused('Past school year', ['csId' => $scPast, 'toUserId' => $scFb, 'reason' => $scReason], 409, 'class_not_current', 'Past and archived classes are view-only.');
 $scRefused('Archived (finished)', ['csId' => $scDone, 'toUserId' => $scFb, 'reason' => $scReason], 409, 'class_not_current', 'Past and archived classes are view-only.');

@@ -194,8 +194,7 @@ function superadmin_class_change_faculty(PDO $pdo, array $config, array $actor, 
     $toUserId = (int) ($data['toUserId'] ?? 0);
     $reason = is_string($data['reason'] ?? null) ? trim($data['reason']) : '';
     if ($csId <= 0 || $toUserId <= 0) throw new SuperadminConflict('validation', 'Choose a class and a Faculty member.', [], 422);
-    if (mb_strlen($reason) < 5) throw new SuperadminConflict('validation', 'Enter a reason.', [], 422);
-    if (mb_strlen($reason) > 500) throw new SuperadminConflict('validation', 'Reason is too long.', [], 422);
+    if (mb_strlen($reason) < 8 || mb_strlen($reason) > 240) throw new SuperadminConflict('validation', 'Enter a reason of 8 to 240 characters.', [], 422);
 
     $stmt = $pdo->prepare('SELECT cs.cs_name, cs.course_id, cs.semester, cs.school_year, cs.archive_reason, cs.instructor_user_id, cs.secretary_user_id, c.course_code
         FROM class_sections cs LEFT JOIN courses c ON c.course_id = cs.course_id WHERE cs.cs_id = ? FOR UPDATE OF cs');

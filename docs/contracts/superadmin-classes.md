@@ -44,7 +44,7 @@ POST /api/admin/classes/change-faculty
 
 | Code | HTTP | When | Message |
 |---|---|---|---|
-| `validation` | 422 | missing `csId` or `toUserId` ("Choose a class and a Faculty member."), or a reason under 5 characters ("Enter a reason.") | as listed |
+| `validation` | 422 | missing `csId` or `toUserId` ("Choose a class and a Faculty member."), or a reason under 8 or over 240 characters ("Enter a reason of 8 to 240 characters.") | as listed |
 | `class_not_found` | 404 | no such class | "Class not found." |
 | `class_not_current` | 409 | past school year or archived | "Past and archived classes are view-only." |
 | `same_faculty` | 409 | `toUserId` already teaches it | "This class already belongs to that Faculty member." |
@@ -110,7 +110,7 @@ ADM-001's Superadmin list (line 1199) already names Classes; no change there.
 | D5 | Refused while a session is open; the message gives the session's end time. |
 | D6 | Target: an active Faculty account only (not the Dean, invited, deactivated or the current owner). |
 | D7 | Scheduled sessions and the auto-session setting stay with the class. |
-| D8 | Reason required, at least 5 characters. |
+| D8 | Reason required, 8 to 240 characters (Owner 2026-11-23, 14.6: same as the other reason fields). |
 | D9 | One class at a time; no bulk move. |
 | D10 | Cancelled and Created-by-mistake classes show in Archived, apart from Completed. |
 | D11 | A failed email does not undo the change. |

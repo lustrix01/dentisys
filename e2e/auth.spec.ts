@@ -70,6 +70,17 @@ test.describe('Auth Module E2E Tests', () => {
     }
   });
 
+  test('a class join link opened while signed out shows the join notice on sign-in; a plain visit does not (14.8)', async ({ page }) => {
+    await page.route('**/api/auth/refresh', route => route.fulfill({ status: 401, json: { status: 'error', message: 'Not signed in.' } }));
+    await page.goto('/login');
+    await expect(page.locator('h1')).toHaveText('Login');
+    await expect(page.getByText('Sign in to join the class.', { exact: false })).toHaveCount(0);
+    await page.goto('/student/classes?join=K7M4QX');
+    await expect(page).toHaveURL('/login');
+    await expect(page.getByRole('status').filter({ hasText: 'Sign in to join the class.' }))
+      .toHaveText('Sign in to join the class. No account yet? Accept the invitation email from your Faculty first, then open the join link again.');
+  });
+
   test('Faculty invitation acceptance inspects identity, scrubs the token, and activates with a password', async ({ page }) => {
     let acceptedPayload: Record<string, unknown> | null = null;
     await page.route('**/api/auth/faculty/invitation**', async route => {

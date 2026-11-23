@@ -14,6 +14,7 @@ import {
   ApiError,
 } from '../../services/apiClient';
 import { rememberSignInPage } from '../../utils/signInPage';
+import { peekJoinReturn } from '../../utils/classJoinCode';
 
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
 const emailDomainError = (value: string): string => value.includes('@')
@@ -52,6 +53,7 @@ export function SsoLogin({ superadmin = false }: { superadmin?: boolean }) {
     && Boolean(runtimeConfig.providers.identity.google.client_id);
   const activated = searchParams.get('activated') === '1';
   const invitationRequired = !superadmin && searchParams.get('invitationRequired') === '1';
+  const joiningClass = !superadmin && peekJoinReturn() !== null; // CLS-004: a join link sent this visitor here (14.8)
 
   // The Superadmin page is linked from nowhere: keep it out of search engines (12.8).
   useEffect(() => { rememberSignInPage(superadmin); }, [superadmin]);
@@ -324,6 +326,12 @@ export function SsoLogin({ superadmin = false }: { superadmin?: boolean }) {
           {invitationRequired && (
             <div className="rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs font-semibold text-blue-800">
               DentiSYS accounts are created through invitations. Open the invitation link sent to your university email.
+            </div>
+          )}
+
+          {joiningClass && (
+            <div role="status" className="rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs font-semibold text-blue-800">
+              Sign in to join the class. No account yet? Accept the invitation email from your Faculty first, then open the join link again.
             </div>
           )}
 
