@@ -33,7 +33,7 @@ What DentiSYS does today. Behaviour is defined by [spec.md](../spec.md); open an
 - Email Management filters recipient rows by Course and Class Section, alongside school year and search, on the Students, Secretary, Midterm and Remedial tabs. Faculty select recipients from the rows; there is no individual-student dropdown — backlog 5.7.
 - The Email History table (Faculty Email Management History tab, Dean Faculty Invitations card and Invitation Details dialog) stacks into one card per action below 768 px so Date Sent never splits across lines; desktop is unchanged — backlog 9.11 — implemented, tests passing. The Invitation Details dialog matches history by invitation id (falling back to email for rows without one) — backlog 4.8 — implemented: each Dean invitation email stores the invitation id (migration 059) and Email History returns it as `invitationId`; older rows have none and fall back to email.
 - Remedial notices are sent only from Email Management Remedial (select, preview, send); saving a remedial date never emails, and sending requires the class grades to be submitted with no open grade change. Faculty can select eligible scheduled pending attempts in Retention Monitoring and open Email Management with those students preselected.
-- Faculty send Midterm Advisory notices to selected, eligible Students in Email Management once the class's Midterm advisory is published (and before Final submission); Retention Monitoring can preselect students from At-Risk Students. At-Risk and Privacy Consent notices are not offered. In custom email mode, non-allowlisted recipients are recorded as Suppressed (test mode).
+- Faculty send Midterm Advisory notices to selected, eligible Students in Email Management once the class's Midterm advisory is published (and before Final submission). Retention Monitoring's Send advisory and Send remedial notices open the matching Email Management tab with nothing preselected (the notice link after scheduling a remedial still preselects that one student) — backlog 14.3. At-Risk and Privacy Consent notices are not offered. In custom email mode, non-allowlisted recipients are recorded as Suppressed (test mode).
 - With `EMAIL_PROVIDER=mailpit`, all mail goes to Mailpit with no login and `SMTP_*` settings are ignored — EML-001 — implemented in code.
 - A Secretary keeps their own Student context and switches between Secretary and Student views with the sidebar toggle only — BIO-010, UI-005 — implemented, tests passing.
 
@@ -90,6 +90,8 @@ What DentiSYS does today. Behaviour is defined by [spec.md](../spec.md); open an
 
 - The Student dashboard shows a "Register your face to check in" card until the face is enrolled, and "No grade yet" before a final grade — BIO-001 — implemented in code.
 - Student dashboard, classes and retention pages read server data; prototype paths that have no server data yet stay switched off — ACA-001 — implemented, tests passing.
+- Students export their Attendance Logs to Excel and PDF, with the rows shown after search, filters and sort, in that order; the PDF is saved from the print dialog — backlog 14.5.
+- Filters carry across pages: within one sign-in and browser tab, a school year, course or class chosen in one page's filter carries to the user's other pages with that filter, for every role; "All" never replaces a single-class page's class; signing out forgets it — backlog 14.10.
 - Schema changes are ordered, additive migrations — DATA-001 — implemented, tests passing.
 
 ## Superadmin and Dean

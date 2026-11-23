@@ -12,7 +12,7 @@ Item numbers are permanent; a built item waits in [On the demo, awaiting promoti
 
 Owner, 2026-11-23. Full text of each item is in its section below; P1–P3 (2026-11-19) are in Done.
 
-**Highest** (agreed with the users and the Owner on 2026-11-23): 14.1, 14.2, 14.3, 14.4, 14.5, 14.6, 14.7, 14.8, 14.9 (section [14](#14-user-reports-2026-11-23)).
+**Highest** (agreed with the users and the Owner on 2026-11-23): 14.1, 14.2, 14.4, 14.6, 14.7, 14.8, 14.9 (section [14](#14-user-reports-2026-11-23)).
 
 **Not yet prioritised** (the Owner ranks these next): 9.19, 9.20, 9.21, 9.27, 9.28, 12.6, 12.7, 12.11, 12.14, 13.4, 13.10, 13.11.
 
@@ -74,14 +74,11 @@ Reported by users on production, reviewed by them and the Owner on 2026-11-23. C
 
 - **14.1** Faculty main action colour: each Faculty page's one main action button (Manage classes on the Dashboard, Create class, Submit grades, View attendance, and the like) uses #338037 (`clinical-600`) at rest. Today they use `bg-clinical-500` (#43A047) and show #338037 only on hover. Other buttons (Preview email, Import class and roster, and the like) keep their colours. Also check that each other role (Student, Admin, Superadmin) uses one colour for its main action button on every page. `ui-fix-demo`.
 - **14.2** Attendance Monitoring, Secretary requests: "Select all shown", the select-all checkbox and the per-group "Approve all" duplicate each other. Keep the select-all checkbox and one Approve selected button; remove the other two. User suggestion, Owner decides on the demo: Clear buttons become a clear (×) icon. `ui-fix-demo`.
-- **14.3** Retention Monitoring At-Risk Students and Remedials (13.5): ticking rows there is wasted, because Email Management asks for the selection again. Remove the row checkboxes; Send advisory and Send remedial notices become plain links to the matching Email Management tab. Changes 13.5's behaviour, so it follows the `feature` skill.
 - **14.4** Reports & Export, Retention & Remedials tab lists every student. List only students who were in retention or remedial this school year, with their outcome (passed, failed, pending).
-- **14.5** Student Attendance Logs: add Export, with the same file types as the Faculty Reports & Export page. Needs a contract.
 - **14.6** Superadmin Classes, Change Faculty dialog: show the Reason field's limit ("Max 240 characters").
 - **14.7** Faculty My Classes cards: a long course label ("DNUTRI 222 • YEAR 2") wraps onto two lines, which pushes Edit and Archive onto separate lines and moves the title down (Nutrition in Dentistry, Prosthodontics I). The card header keeps one row with long labels. `ui-fix-demo`.
 - **14.8** Class join link (CLS-004), Owner 2026-11-23: a signed-in Student who opens the link lands straight on the Join a class dialog with the code filled in; a signed-out visitor goes to sign-in with a notice that they must sign in to join the class, and that a Student without an account must first accept the invitation email from their Faculty, then returns to the dialog after sign-in. The code already opens the dialog and returns after sign-in (`ProtectedRoute.tsx`, `student/Classes.tsx`); check both paths on the demo first. The sign-in notice is missing. `ui-fix-demo` for the notice wording.
 - **14.9** Notifications per role, Owner 2026-11-23. Today Superadmin gets no notices (the bell is always empty) and the Dean gets one. Agreed rule: a notice only when the person must act, or someone else changed something about them. Add 6 notices: Student: final grades released; grade changed (after the Dean approves a grade change); class Faculty changed (today only the Class Secretary gets it). Faculty: join request waiting. Superadmin: face revocation request waiting (12.9); face enrolment flagged (12.2). Everything else stays as today. Resulting list: **Student** (17): enrolled in a class; class cancelled; class restored; join request not approved; midterm advisory; midterm advisory cleared; remedial required; remedial no longer required; remedial update; cost recovery result; face revocation approved; face revocation rejected; face check-in enrolment revoked; appointed Class Secretary; final grades released; grade changed; class Faculty changed. **Class Secretary** (Student's plus 3): appointment removed; attendance request approved; attendance request rejected. **Faculty** (7): attendance change requested; room booking overlap; room changed; grade change approved or rejected; class moved away; class assigned; join request waiting. **Dean** (1): grade change awaiting approval. **Superadmin** (2): face revocation request waiting; face enrolment flagged. Needs a spec rule extending NTF-001 with this list (Owner's OK on the exact text), then the `feature` skill; new notices use `notification_create_idempotent` (`backend/app/notifications.php`).
-- **14.10** Filters carry across pages, reported by a Faculty user 2026-11-24, every role per the Owner: a class chosen in one page's top filter (for example Faculty Grade Computation) is lost when the user opens another page with the same kind of filter (for example Retention Monitoring opens unfiltered). The choice should carry over. Today each page keeps its own filter. Faculty: Dashboard, My Classes & Rosters, Grade Computation, Retention Monitoring, Attendance Monitoring (its own `localStorage` key `faculty_attendance_selected_cs_id`), Reports & Export, Email Management. Dean: Dashboard, Reports & Analytics, Grade Submissions. Superadmin: Classes, Grade Submissions, Face Enrolments. Secretary: Dashboard, Attendance Monitoring. Student: Attendance Logs only. Needs a contract, then the `feature` skill.
 
 ---
 
@@ -89,7 +86,11 @@ Reported by users on production, reviewed by them and the Owner on 2026-11-23. C
 
 Built and running on the demo, not yet on production. Each moves to [Done](#done) after the Owner promotes it.
 
-Nothing at the moment.
+Built on `lighthal9-responsive-polish` (9f7dc12): [full text of these items](archive/backlog-built-2026-11-24.md).
+
+- **14.3** Retention Monitoring Send advisory and Send remedial notices are links to the matching Email Management tab; the row checkboxes are gone (fd41be4).
+- **14.5** Student Attendance Logs export to Excel and PDF, with the rows as shown (1fe64d0).
+- **14.10** A school year, course or class chosen in one page's filter carries to the user's other pages with that filter, every role, until sign-out (9f7dc12).
 
 ---
 
