@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/notifications.php';
+
 // Backlog 12.2 / BIO-009: face enrolment flags (docs/contracts/face-reenrolment.md). A flag only informs the Dean; nothing here blocks anyone.
 // detail holds dates only. The sidecar's cosine score never reaches PHP, only matched yes/no.
 
@@ -10,16 +12,19 @@ const FACE_FLAG_WITHDRAWAL_DAYS = 30;
 const FACE_FLAG_SYSTEM_ACTOR = ['user_id' => null, 'login_email' => null, 'role' => 'system', 'display_name' => 'System', 'session_id' => null];
 
 /** Raises F1, F2, or F3, or refreshes the Student's open flag of that kind. Needs the caller's transaction. */
-function face_flag_raise(PDO $pdo, array $config, array $context, int $studentId, string $kind, array $detail): void
+function face_flag_raise(PDO $pdo, array $config, array $context, int $studentId, string $kind, array $detail, ?int $actorUserId = null): void
 {
     $stmt = $pdo->prepare("SELECT flag_id FROM face_enrolment_flags WHERE student_id = ? AND kind = ? AND status = 'open' ORDER BY flag_id DESC LIMIT 1 FOR UPDATE");
     $stmt->execute([$studentId, $kind]);
     $flagId = $stmt->fetchColumn();
     $json = json_encode($detail, JSON_UNESCAPED_SLASHES);
     if ($flagId === false) {
-        $pdo->prepare('INSERT INTO face_enrolment_flags (student_id, kind, detail) VALUES (?, ?, CAST(? AS JSONB))')->execute([$studentId, $kind, $json]);
+        $ins = $pdo->prepare('INSERT INTO face_enrolment_flags (student_id, kind, detail) VALUES (?, ?, CAST(? AS JSONB)) RETURNING flag_id');
+        $ins->execute([$studentId, $kind, $json]);
+        $flagId = (int) $ins->fetchColumn();
     } else {
-        $pdo->prepare('UPDATE face_enrolment_flags SET detail = CAST(? AS JSONB), updated_at = CURRENT_TIMESTAMP WHERE flag_id = ?')->execute([$json, (int) $flagId]);
+        $flagId = (int) $flagId;
+        $pdo->prepare('UPDATE face_enrolment_flags SET detail = CAST(? AS JSONB), updated_at = CURRENT_TIMESTAMP WHERE flag_id = ?')->execute([$json, $flagId]);
     }
     $description = match ($kind) {
         'F1' => 'Face enrolled again within 30 days after the Student withdrew consent.',
@@ -32,6 +37,31 @@ function face_flag_raise(PDO $pdo, array $config, array $context, int $studentId
         $description,
         null, null, ['kind' => $kind] + $detail
     );
+
+    $flagReason = match ($kind) {
+        'F1' => 're-enrolled face within 30 days of consent withdrawal',
+        'F2' => 'had a face update attempt that did not match the current registered face',
+        'F3' => 'reached 3 or more approved face revocation requests in the same term',
+        default => 'triggered a face enrolment flag',
+    };
+    $studentLabel = audit_student_label($pdo, $studentId);
+    $superadminStmt = $pdo->query("SELECT user_id FROM user_accounts WHERE role = 'superadmin' AND LOWER(status) = 'active' ORDER BY user_id");
+    foreach ($superadminStmt->fetchAll(PDO::FETCH_COLUMN) as $rawUid) {
+        $uid = (int) $rawUid;
+        if ($uid <= 0 || ($actorUserId !== null && $uid === $actorUserId)) {
+            continue;
+        }
+        notification_create_idempotent(
+            $pdo,
+            $uid,
+            'biometric_enrollment',
+            'Face enrolment flagged',
+            "{$studentLabel} {$flagReason} ({$kind}). Review in Face Enrolments.",
+            'student',
+            (string) $studentId,
+            "face-flag-raised:{$flagId}:{$uid}"
+        );
+    }
 }
 
 /**
@@ -343,7 +373,7 @@ function face_revoke_request_approve(PDO $pdo, array $config, array $actor, arra
             'schoolYear' => (string) $req['school_year'],
             'semester' => (string) $req['semester'],
             'latestApprovedAt' => audit_manila_iso($reviewedAt),
-        ]);
+        ], (int) ($actor['user_id'] ?? 0) ?: null);
         $flagged = true;
     }
 

@@ -1,6 +1,6 @@
 // Remedial summary (contract docs/contracts/official-exports.md, X32): every enrollment that entered remedial, one row each.
 // Pure builder over per-enrollment rows; the Faculty and Dean pages each adapt their own data to RemedialSummaryRow.
-import type { FacultyRemedialProgression } from '../services/apiClient.ts';
+import type { FacultyRemedialProgression, FacultyRetentionRecord } from '../services/apiClient.ts';
 import { dayToDate } from './reportWorkbook.ts';
 import type { ReportColumn, ReportValue } from './reportWorkbook.ts';
 
@@ -29,6 +29,36 @@ export interface RemedialSummaryTable {
 export const enteredRemedial = (row: RemedialSummaryRow): boolean =>
   row.state === 'remedial' || row.state === 'irregular_reenrollment'
   || (row.progression?.attempts.length ?? 0) > 0 || Boolean(row.progression?.costRecovery);
+
+/** True when a faculty retention record represents current or historical retention/remedial involvement. */
+export const hasRetentionOrRemedialHistory = (record: FacultyRetentionRecord): boolean =>
+  record.state === 'remedial'
+  || record.state === 'irregular_reenrollment'
+  || record.state === 'cleared'
+  || (record.remedialProgression?.attempts?.length ?? 0) > 0
+  || Boolean(record.remedialProgression?.costRecovery)
+  || Boolean(record.remedialProgression?.cleared)
+  || (Boolean(record.remedialProgression?.stage) && record.remedialProgression?.stage !== 'none')
+  || Boolean(record.remedial && Object.keys(record.remedial).length > 0);
+
+/** Filters a student list to students with a matching retention or remedial record for the selected school year and class. */
+export function filterRetentionListStudents<T extends { id: string | number }>(
+  students: T[],
+  retentionRecords: FacultyRetentionRecord[],
+  selectedSchoolYear: string,
+  selectedClassId?: string,
+): T[] {
+  const qualifyingIds = new Set<string>(
+    retentionRecords
+      .filter(record =>
+        (selectedSchoolYear === 'all' || !record.schoolYear || record.schoolYear === selectedSchoolYear)
+        && (!selectedClassId || String(record.classId) === selectedClassId)
+        && hasRetentionOrRemedialHistory(record),
+      )
+      .map(record => String(record.studentId)),
+  );
+  return students.filter(student => qualifyingIds.has(String(student.id)));
+}
 
 /** Same wording as the Faculty Remedial Record. */
 export function remedialStatusText(row: RemedialSummaryRow): string {

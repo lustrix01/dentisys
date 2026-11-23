@@ -14,7 +14,7 @@ A class's scores stay working drafts inside Grade Computation until Faculty expl
 | Dean | Grade Submissions page: Submissions tab and Change Requests tab; approves or rejects a whole batch (reject needs a reason). Teaches no class. |
 | Superadmin | Sets the submission deadline on Academic Terms; sees Grade Submissions read-only in Superadmin mode (Q19). Approves nothing. |
 | Class Secretary | Attendance change requests on a submitted class are refused; during a draft sees the submitted copy (Q20). |
-| Student | No change: sees grades and attendance as submitted, never draft changes, no notice on approval (Q2, Q7). Join requests to a submitted class are refused (Q13). |
+| Student | No change: sees grades and attendance as submitted, never draft changes (Q2, Q7). On approval, a "Grade changed" notice when their grade changed (NTF-002). Join requests to a submitted class are refused (Q13). |
 
 ## States of a class
 

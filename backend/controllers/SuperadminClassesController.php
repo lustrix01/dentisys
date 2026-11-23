@@ -235,9 +235,32 @@ function superadmin_class_change_faculty(PDO $pdo, array $config, array $actor, 
     $key = $csId . ':' . (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('YmdHisu');
     notification_create_idempotent($pdo, (int) $from['user_id'], 'class_assignment', 'Class moved', $movedBody, 'class_section', (string) $csId, 'class-moved:' . $key . ':' . $from['user_id']);
     notification_create_idempotent($pdo, $toUserId, 'class_assignment', 'Class assigned to you', $assignedBody, 'class_section', (string) $csId, 'class-assigned:' . $key . ':' . $toUserId);
+    $recipientStmt = $pdo->prepare(
+        "SELECT DISTINCT u.user_id
+           FROM enrollments e
+           JOIN students s ON s.student_id = e.student_id
+           JOIN user_accounts u ON ((s.student_account_user_id = u.user_id AND u.role IN ('student', 'secretary'))
+                                 OR (s.user_id = u.user_id AND u.role = 'secretary'))
+          WHERE e.cs_id = ? AND LOWER(e.status) = 'active' AND LOWER(u.status) = 'active'"
+    );
+    $recipientStmt->execute([$csId]);
+    $recipientIds = array_map('intval', $recipientStmt->fetchAll(PDO::FETCH_COLUMN));
     if ($class['secretary_user_id'] !== null) {
-        notification_create_idempotent($pdo, (int) $class['secretary_user_id'], 'class_assignment', 'Class Faculty changed',
-            "Your class {$label} now has {$toName} as its Faculty member.", 'class_section', (string) $csId, 'class-secretary:' . $key . ':' . $class['secretary_user_id']);
+        $secStmt = $pdo->prepare("SELECT user_id FROM user_accounts WHERE user_id = ? AND LOWER(status) = 'active' LIMIT 1");
+        $secStmt->execute([(int) $class['secretary_user_id']]);
+        $secId = $secStmt->fetchColumn();
+        if ($secId !== false) {
+            $recipientIds[] = (int) $secId;
+        }
+    }
+    $recipientIds = array_values(array_unique($recipientIds));
+    $actorUserId = (int) ($actor['user_id'] ?? 0);
+    foreach ($recipientIds as $recipientId) {
+        if ($recipientId <= 0 || $recipientId === (int) $from['user_id'] || $recipientId === $toUserId || ($actorUserId > 0 && $recipientId === $actorUserId)) {
+            continue;
+        }
+        notification_create_idempotent($pdo, $recipientId, 'class_assignment', 'Class Faculty changed',
+            "Your class {$label} now has {$toName} as its Faculty member.", 'class_section', (string) $csId, 'class-faculty-changed:' . $key . ':' . $recipientId);
     }
 
     audit_record_action($pdo, $config, $actor, 'class_management', 'class_faculty_changed', 'class_section', (string) $csId,

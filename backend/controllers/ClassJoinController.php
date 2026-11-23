@@ -294,6 +294,24 @@ function handle_class_join_student_join(): void
             $joined = (bool) $class['join_auto_approve'];
             if ($joined) {
                 class_join_decide($pdo, $config, CLASS_JOIN_SYSTEM_ACTOR, (int) $requestId, $csId, true);
+            } else {
+                $facultyUserId = (int) ($class['instructor_user_id'] ?? 0);
+                if ($facultyUserId > 0 && $facultyUserId !== (int) $authCtx['user_id']) {
+                    $facultyStmt = $pdo->prepare("SELECT user_id FROM user_accounts WHERE user_id = ? AND LOWER(status) = 'active' LIMIT 1");
+                    $facultyStmt->execute([$facultyUserId]);
+                    if ($facultyStmt->fetchColumn() !== false) {
+                        notification_create_idempotent(
+                            $pdo,
+                            $facultyUserId,
+                            'class_enrollment',
+                            'Join request waiting',
+                            audit_student_label($pdo, $studentId) . ' requested to join ' . class_join_label($class) . '.',
+                            'class_section',
+                            (string) $csId,
+                            "class-join-request:{$requestId}:{$facultyUserId}"
+                        );
+                    }
+                }
             }
             $pdo->commit();
         } catch (\Throwable $e) {

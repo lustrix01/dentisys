@@ -68,7 +68,7 @@ import { assessmentMatrixCells, assessmentMatrixGroups, buildAssessmentScoresShe
 import { IBU_SUMMARY_COLUMNS, ibuGradeSummaryRow, savedGradeResult, sheetName } from '../../utils/officialGradeSheetExport';
 import { buildAttendanceSheetTable, type AttendanceSheetTable } from '../../utils/attendanceSheet';
 import { ExportPair } from '../../components/ExportMenu';
-import { buildRemedialSummaryTable, type RemedialSummaryTable } from '../../utils/remedialSummary';
+import { buildRemedialSummaryTable, filterRetentionListStudents, type RemedialSummaryTable } from '../../utils/remedialSummary';
 import { buildFacultyAcademicSummarySheet, buildFacultyAcademicSummaryTable, type FacultyAcademicSummaryValues } from '../../utils/facultyAcademicSummaryExport';
 
 
@@ -601,9 +601,14 @@ export const Reports: React.FC = () => {
     return { ...table, courseLabel, section: selectedClass.csName, term };
   };
 
-  const sortedFacultyStudents = retentionSort.key === 'default'
-    ? facultyStudents
-    : [...facultyStudents].sort((a, b) => compareValues(retentionSort.key === 'name' ? a.name : standingGwa(a), retentionSort.key === 'name' ? b.name : standingGwa(b), retentionSort.dir));
+  const retentionStudents = useMemo(
+    () => retentionUnavailable ? [] : filterRetentionListStudents(facultyStudents, retentionRecords, selectedSchoolYear, selectedClassId),
+    [facultyStudents, retentionRecords, selectedSchoolYear, selectedClassId, retentionUnavailable],
+  );
+
+  const sortedRetentionStudents = retentionSort.key === 'default'
+    ? retentionStudents
+    : [...retentionStudents].sort((a, b) => compareValues(retentionSort.key === 'name' ? a.name : standingGwa(a), retentionSort.key === 'name' ? b.name : standingGwa(b), retentionSort.dir));
 
   const paginatedStudentsInSubject = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -655,7 +660,7 @@ export const Reports: React.FC = () => {
     const by = user?.display_name ?? '';
     const term = selectedClass?.semester && selectedClass.schoolYear ? termLine(String(selectedClass.semester), String(selectedClass.schoolYear)) : '';
     if (type === 'retention') {
-      const rows = byLastName(facultyStudents).map((student: any) => {
+      const rows = byLastName(retentionStudents).map((student: any) => {
         const atRiskCourses = retentionUnavailable ? null : (student.enrolledSubjects || []).filter((sub: any) =>
           assignedSubjects.includes(sub.code)
           && retentionIsAtRisk(retentionForStudentSubject(student, sub))
@@ -1127,7 +1132,9 @@ export const Reports: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium max-md:block">
-                {sortedFacultyStudents.map((student: any) => {
+                {sortedRetentionStudents.length === 0 ? (
+                  <tr className="max-md:block"><td colSpan={4} className="px-6 py-14 text-center max-md:block"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{retentionLoading ? 'Loading retention records…' : retentionLoadError ? 'Retention records could not be loaded.' : 'No students in retention or remedial for the selected school year.'}</h3></td></tr>
+                ) : sortedRetentionStudents.map((student: any) => {
                   const warnings = retentionUnavailable ? [] : (student.enrolledSubjects || []).filter((sub: any) =>
                     assignedSubjects.includes(sub.code)
                     && retentionIsAtRisk(retentionForStudentSubject(student, sub))
@@ -1473,7 +1480,7 @@ export const Reports: React.FC = () => {
           ? `${selectedClass.semester}, S.Y. ${schoolYear}`
           : schoolYear ? `S.Y. ${schoolYear}` : 'School Year';
         const generated = formatPrintedAt(printedAt ?? new Date());
-        const rowCount = reportTab === 'academic' ? studentsInSelectedSubject.length : reportTab === 'retention' ? facultyStudents.length : attendanceRecords.length;
+        const rowCount = reportTab === 'academic' ? studentsInSelectedSubject.length : reportTab === 'retention' ? retentionStudents.length : attendanceRecords.length;
         const academicRows = reportTab === 'academic' ? byLastName(studentsInSelectedSubject).map((student: any) => {
           const subj = subjectForSelection(student);
           const evaluation = courseEvaluation(subj);
@@ -1575,7 +1582,7 @@ export const Reports: React.FC = () => {
                 <td className={`l ${printCellClass(r.remark)}`}>{r.remark}</td>
               </tr>
             ))}
-            {reportTab === 'retention' && byLastName(facultyStudents).map((student: any) => {
+            {reportTab === 'retention' && byLastName(retentionStudents).map((student: any) => {
               const gwa = standingGwa(student);
               const gwaText = gwa !== null ? gwa.toFixed(2) : '—';
               const status = retentionUnavailable ? 'Unavailable'

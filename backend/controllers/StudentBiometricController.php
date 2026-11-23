@@ -643,6 +643,25 @@ function handle_student_biometric_revoke_request_create(): void
                     'semester' => (string) $created['semester'],
                 ]
             );
+            $superadminStmt = $pdo->query("SELECT user_id FROM user_accounts WHERE role = 'superadmin' AND LOWER(status) = 'active' ORDER BY user_id");
+            $studentLabel = audit_student_label($pdo, $studentId);
+            $revokeRequestId = (int) $created['request_id'];
+            foreach ($superadminStmt->fetchAll(PDO::FETCH_COLUMN) as $rawUid) {
+                $uid = (int) $rawUid;
+                if ($uid <= 0 || $uid === (int) $authCtx['user_id']) {
+                    continue;
+                }
+                notification_create_idempotent(
+                    $pdo,
+                    $uid,
+                    'biometric_enrollment',
+                    'Face revocation request waiting',
+                    $studentLabel . ' submitted a face revocation request for review.',
+                    'student',
+                    (string) $studentId,
+                    'face-revoke-requested:' . $revokeRequestId . ':' . $uid
+                );
+            }
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }

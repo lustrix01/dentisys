@@ -8131,5 +8131,6 @@ require __DIR__ . '/grade_release_gates_integration.php';
 require __DIR__ . '/face_flags_integration.php';
 require __DIR__ . '/audit_chain_integration.php';
 require __DIR__ . '/trusted_devices_integration.php';
+require __DIR__ . '/notifications_per_role_integration.php';
 
 echo "ALL POSTGRESQL INTEGRATION TESTS PASSED.\n";

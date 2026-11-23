@@ -62,6 +62,7 @@ These documents are kept for history. They describe past plans, handoffs, and ev
 - Owhie merges: [UI changes (October)](owhie-merge-2026-10.md), [responsive (October)](owhie-responsive-merge-2026-10.md), [roster import (October)](owhie-roster-import-merge-2026-10.md), [landing pages, reports and import (November)](owhie-landing-reports-merge-2026-11.md), [responsive workflow (November)](owhie-responsive-workflow-merge-2026-11.md), [session timeout and phone views (November)](owhie-session-timeout-merge-2026-11.md), [landing and Faculty accents (November)](owhie-accents-merge-2026-11.md), [exports, confirmations and session scheduling (November, P3)](owhie-exports-sessions-merge-2026-11.md), [layout fixes, retention tick-and-send and confirmations (November)](owhie-layout-confirmations-merge-2026-11.md)
 - [Rooms and session times audit and merge, November 2026](rooms-times-merge-2026-11.md)
 - [Emergency branch merge, November 2026](emergency-merge-2026-11.md); handoffs [2026-11-22](HANDOFF_2026-11-22_EMERGENCY.md) and [2026-11-23](HANDOFF_2026-11-23_EMERGENCY_TO_CLAUDE.md)
+- [Polish merge (polish1 + polish2), November 2026](polish-merge-2026-11.md); polish2 [brief](brief-polish2-2026-11-23.md) and [report](report-polish2-2026-11-23.md)
 
 ## Specification amendment records (applied to spec.md)
 

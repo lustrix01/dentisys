@@ -269,6 +269,7 @@ test('Faculty publish Midterm advisory, update after score edits, and submit wit
   await expect(dialog).toContainText('Atrisk, Live');
   await expect(dialog).toContainText('2.6');
   await dialog.getByRole('button', { name: 'Publish Midterm advisory', exact: true }).click();
+  await expect(advisory.getByLabel('1 At-Risk, not published')).toHaveCount(0);
   await advisory.click();
   await expect(menu).toContainText(/Published on .* · 1\sAt.Risk/);
   await expect(menu.getByRole('menuitem', { name: 'Unpublish' })).toBeVisible();

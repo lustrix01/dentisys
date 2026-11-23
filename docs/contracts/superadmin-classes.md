@@ -59,7 +59,7 @@ Runs in one transaction with `FOR UPDATE` on the class row, like `faculty_class_
 - In-app notification (`notification_create_idempotent`, type `class_assignment`) **and** email to both Faculty members (template like `email_dean_transferred_html`, recorded in Email History). A failed email does not undo the change; it shows as failed in Email History (D1, D11).
   - Previous Faculty member, subject "Class moved": "DENT 101 (CDM-1A) was moved to Dr. Ana Cruz by the Superadmin. Reason: <reason>. It no longer appears in your classes."
   - New Faculty member, subject "Class assigned to you": "DENT 101 (CDM-1A) is now yours. Its students, grades, attendance and sessions came with it. Reason: <reason>." (D12)
-- Class Secretary, if any: in-app notice "Your class DENT 101 (CDM-1A) now has Dr. Ana Cruz as its Faculty member." Students: nothing (D14).
+- Class Secretary, if any: in-app notice "Your class DENT 101 (CDM-1A) now has Dr. Ana Cruz as its Faculty member." Each active enrolled Student with an active linked account: the same "Class Faculty changed" notice, at most one per account (D14, NTF-002).
 - Audit `class_faculty_changed`, actor Superadmin, scope the class, reason, before `{instructor_user_id, name}` and after the same. Registered like `class_archive` (People area, on the Superadmin Overview and Audit Trail); the trail shows "Faculty: Old → New". The copied grade configuration is part of the same row's details, not a separate grading event.
 
 ## Screen (copies the current preview page, which already follows "Page patterns")
@@ -116,7 +116,7 @@ ADM-001's Superadmin list (line 1199) already names Classes; no change there.
 | D11 | A failed email does not undo the change. |
 | D12 | Notice and email wording as in "Notices and audit". |
 | D13 | The class leaves the previous Faculty member's classes and reports; their audit rows stay. |
-| D14 | The Class Secretary gets an in-app notice; Students get nothing. |
+| D14 | The Class Secretary and each active enrolled Student get an in-app notice (NTF-002). |
 | D15 | The Faculty filter lists deactivated members, marked "(deactivated)". |
 | D16 | People & Accounts deactivate refusal links each class to Classes. |
 | D17 | The Change Faculty button is hidden on past and archived classes. |
