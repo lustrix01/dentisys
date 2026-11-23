@@ -31,6 +31,7 @@ Repo `C:\Users\decha\Desktop\Github\dentisys`. Rules in `AGENTS.md` and `CLAUDE.
 - Desktop 1920 stays pixel-identical unless it is broken there.
 - No hand-made imitation demos of DentiSys screens (2026-11-18): every demo uses real screenshots of the running app, because a copy does not prove how screens look.
 - New features fit into the page as if they were always there (2026-11-16): a toolbar button that opens a dialog (with a count badge when something waits), settings inside the existing Edit dialog, a side card that copies the neighbouring side card exactly. Never a new full-width card or bar stacked above a page's main table or list.
+- A status that stays on screen for most of the term (e.g. "Midterm advisory not published") goes into its toolbar button (label, count badge, ▾ menu), never into a card or bar of its own between the toolbar and the tabs (2026-11-23, 12.13 Midterm advisory bar: "awkward and cluttering"). Bars stay for short-lived states that need action (submitted with Withdraw, grade change draft).
 - Improve inside today's layout (2026-11-07). Restructuring pages for consistency's sake was rejected ("before was easier on the eyes").
 - One control per job on a toolbar (2026-11-17): Reports keep one Excel and one PDF control; a tab with several reports turns each into a ▾ menu instead of adding buttons.
 - Open menus and popovers never print: their panel carries `no-print` (2026-11-18).
