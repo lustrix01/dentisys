@@ -9,6 +9,7 @@
 // target fields: id, device (a name from audit/devices.json, a tier "quick"|"core"|"full" = every device in it,
 //   a Playwright profile or "Desktop 1440 900"), role, route, mock?, tab?, fill?, upload?, click?, steps?, sel?, text? (regex),
 //   select? ([selector, option label]), stepsAfter? (steps run after select), closest? (CSS selector to frame), up? (parent hops), theme? ("light"|"dark"), full?, expect? ("same"),
+//   sameIn? (versions that leave this spot alone on purpose, e.g. ["B"]; verify.py then checks it matches Before),
 //   noScroll? (no scrolling, viewport shot: open menus/popovers that close on scroll), print? (print view: window.print stubbed, print media, full page)
 import { createRequire } from 'node:module';
 import { createHmac } from 'node:crypto';

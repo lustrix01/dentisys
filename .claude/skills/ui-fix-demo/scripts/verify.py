@@ -8,7 +8,9 @@ usage: python verify.py <shotsDir> [--fixes demo.json]
 Checks per shot name (id-Device-theme) and version:
   FAIL  missing on one side, the page redirected away from the route, the locator matched nothing,
         the matched text does not match the target's text regex, or Before and the version look the same
-        (unless the target says "expect": "same", e.g. a "desktop unchanged" proof).
+        (unless the target says "expect": "same", e.g. a "desktop unchanged" proof). A target with
+        "sameIn": ["B"] is a spot that version leaves alone on purpose (options that change different
+        spots, or a link that lands on the page the old flow opened): it must match Before within 0.1%.
   WARN  the locator matched more than one element (the shot may frame the wrong one), the close-up is
         nearly the whole viewport (no real close-up), the change is tiny (< 0.3% of pixels), or pixels
         changed on the full screen outside the close-up (something else moved: look at that screen).
@@ -76,6 +78,10 @@ for n in names:
         cb, ca = img('before', 'crop', n), img(mode, 'crop', n)
         same = b.get('expect') == 'same'
         share = changed(cb, ca)
+        if mode in a.get('sameIn', []):  # spot this version leaves alone on purpose; the animated page background may move a few pixels
+            if share > 0.001:
+                fails.append(f'{n} [{mode}]: listed in sameIn, but {share:.2%} of pixels differ')
+            continue
         if same and share > 0:
             fails.append(f'{n} [{mode}]: expected unchanged, but {share:.2%} of pixels differ')
         elif not same and share == 0 and cb.size == ca.size and ImageChops.difference(cb, ca).convert('L').point(lambda v: 255 if v > 4 else 0).getbbox():
