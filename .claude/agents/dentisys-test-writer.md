@@ -1,6 +1,6 @@
 ---
 name: dentisys-test-writer
-description: Writes and runs the tests for a DentiSys backlog item after its code change is already in the working tree: PHP backend tests, PostgreSQL integration cases, Playwright e2e (mocked and live) and frontend unit tests. Use when the contract is agreed and the code is built; the brief gives the contract and the list of test files. It never edits product code.
+description: "Writes and runs the tests for a DentiSys backlog item after its code change is already in the working tree: PHP backend tests, PostgreSQL integration cases, Playwright e2e (mocked and live) and frontend unit tests. Use when the contract is agreed and the code is built; the brief gives the contract and the list of test files. It never edits product code."
 tools: Read, Grep, Glob, Bash, Write, Edit
 model: sonnet
 ---

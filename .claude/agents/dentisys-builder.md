@@ -1,6 +1,6 @@
 ---
 name: dentisys-builder
-description: Implements an agreed DentiSys contract in application code: PHP backend, PostgreSQL migrations, and React/Vite frontend. Use after the Owner approved the contract and, for visible changes, the demo. The brief gives the contract, the files in scope and the focused checks. It writes no new tests (dentisys-test-writer does) and chooses no layout, colour or wording.
+description: "Implements an agreed DentiSys contract in application code: PHP backend, PostgreSQL migrations, and React/Vite frontend. Use after the Owner approved the contract and, for visible changes, the demo. The brief gives the contract, the files in scope and the focused checks. It writes no new tests (dentisys-test-writer does) and chooses no layout, colour or wording."
 tools: Read, Grep, Glob, Bash, Write, Edit
 model: sonnet
 ---
