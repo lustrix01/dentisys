@@ -13,7 +13,7 @@ Two people work at once, in two lanes that never edit the same screen or backend
 5. Grade submission and Dean approval (13.8): on production (2026-11-21).
 6. Attendance review (13.6, review part, Past Sessions tab): on production (2026-11-21). Moving past sessions to their own page is 13.11, not yet scheduled.
 7. Emergency branch (9.29, 9.30, 12.9, 12.10, 12.12, 12.13): on production (2026-11-23).
-8. User reports 14.3, 14.5 and 14.10 (polish branch): on the demo, awaiting promotion.
+8. User reports 14.1 to 14.10 (polish branch): on the demo, awaiting promotion.
 9. Face enrolment and check-in speed (13.4), after the Owner's real-phone timing session.
 10. UI formality pass (12.6), after both lanes are done.
 
