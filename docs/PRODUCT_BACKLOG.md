@@ -10,9 +10,11 @@ Item numbers are permanent; a built item waits in [On the demo, awaiting promoti
 
 # Priority (above the backlog)
 
-Owner, 2026-11-19: these come before every backlog item, in this order.
+Owner, 2026-11-23. Full text of each item is in its section below; P1–P3 (2026-11-19) are in Done.
 
-- None open (P1–P3 are in Done).
+**Highest** (agreed with the users and the Owner on 2026-11-23): 14.1, 14.2, 14.3, 14.4, 14.5, 14.6, 14.7, 14.8 (section [14](#14-user-reports-2026-11-23)).
+
+**Not yet prioritised** (the Owner ranks these next): 9.19, 9.20, 9.21, 9.27, 9.28, 12.6, 12.7, 12.11, 12.14, 13.4, 13.10, 13.11.
 
 ---
 
