@@ -941,8 +941,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
               {breadcrumbs.map((crumb, idx) => (
                 <React.Fragment key={crumb.path + idx}>
                   {idx > 0 && <span className="text-slate-300 dark:text-slate-700">/</span>}
-                  {idx === breadcrumbs.length - 1 && location.pathname === '/' ? (
-                    <span className="text-slate-500 dark:text-slate-400 font-semibold">{crumb.name}</span>
+                  {idx === breadcrumbs.length - 1 ? (
+                    <span className="text-slate-500 dark:text-slate-400 font-semibold" aria-current="page">{crumb.name}</span>
                   ) : (
                     <Link to={crumb.path} className={`inline-flex min-h-11 items-center rounded-lg px-2 -mx-2 ${colors.crumbHover} transition-colors`}>
                       {crumb.name}
