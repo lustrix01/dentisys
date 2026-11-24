@@ -14,7 +14,7 @@ Owner, 2026-11-23. Full text of each item is in its section below; P1–P3 (2026
 
 **Highest** (agreed with the users and the Owner on 2026-11-23): 14.1 to 14.10, all on production (2026-11-24).
 
-**Not yet prioritised** (the Owner ranks these next): 9.19, 9.20, 9.21, 9.28, 9.32, 12.6, 12.7, 12.11, 12.14, 13.4, 13.10, 13.11.
+**Not yet prioritised** (the Owner ranks these next): 9.19, 9.20, 9.21, 9.28, 9.32, 9.33, 9.34, 9.35, 12.6, 12.7, 12.11, 12.14, 13.4, 13.10, 13.11.
 
 ---
 
@@ -38,6 +38,9 @@ Owner, 2026-11-23. Full text of each item is in its section below; P1–P3 (2026
 - **9.21** Flaky mocked browser tests (2026-11-17): with 8 workers and one local retry, a test that passes only on retry is reported as "flaky" and does not fail `check.ps1`. Each one hides a timing bug in the app or the test (the TimePicker re-sync race was a real app bug; the Secretary Excused test recorded the page's GET refresh as the request). Fix one, then remove it here; add any new flaky test the run reports. Open: `e2e/dfd_verification.spec.ts:43` (did not fail in 130 runs on 2026-11-24); `e2e/faculty.spec.ts:2754` (Grade Weights "Version 2" not visible within 5 s once in a full run on 2026-11-24, then 0 of 10 alone).
 - **9.28** Capitals (Owner ruling 2026-11-20, `ui-fix-demo/references/dentisys.md`): CSS capitals stay only on table column headers, the printed class list and the emphasised red action button of a dialog that needs it (Cancel · RETIRE, DELETE, CONFIRM). The Owhie merge removed them from 44 small labels; about 260 places still use them (small labels above a value, form labels, chips, headings) and the emphasised dialog buttons do not have them yet. One `ui-fix-demo` batch with its own demo; update `docs/frontend.md` "Page patterns" with the rule.
 - **9.32** Midterm advisory menu after Publish (found 2026-11-24; fails on the demo, same code as production): `e2e/live/grade-submission.spec.ts:154` fails because after Publish the class refresh unmounts the `Midterm advisory` menu while it is being reopened (`frontend/src/components/GradeSubmissionBanner.tsx` around line 309, `setMidterm(null)` on `refreshToken`). It blocks the `check-postgres` pass. Bug routine: the live test already reproduces it.
+- **9.33** Faculty Reports school-year select cuts off "(Current)" (found 2026-11-25 by `responsive-check`; screenshots on the [proof page](https://claude.ai/artifact/So5Cm2XgXaYnCGGdBTWEHu)): it reads "S.Y. 2026–2027 (Current" at Desktop 1920 and "(Curr" at 1440, light and dark. Cause: the box is `xl:w-56` (`frontend/src/pages/faculty/Reports.tsx:885`), leaving about 148 px for a label of about 160 px. Fix: widen it (for example `xl:w-60`); 1920 changes because it is broken there. `SchoolYearFilter` is not the fix: it is the dashboard control with its own label and values. `ui-fix-demo` Route C; about 15 minutes.
+- **9.34** Faculty Reports class select cuts the course title mid-word on phones (found 2026-11-25; [proof page](https://claude.ai/artifact/So5Cm2XgXaYnCGGdBTWEHu)): at iPhone 393 it reads "DNUTRI 222 · DNUTRI 222-2A · Nutritio" with no ellipsis, light and dark (`Reports.tsx:908–921`). Fix to pick on a `ui-fix-demo`: an ellipsis on the closed select, or code and section only when closed.
+- **9.35** Faculty Reports remark and attendance pills stay light-pastel in dark mode (found 2026-11-25 by `ui-review`, captured on class CLINIC-4A; [proof page](https://claude.ai/artifact/So5Cm2XgXaYnCGGdBTWEHu)): `Reports.tsx:864–872` (remarks) and `1305–1309` (attendance status) set `bg-*-100 text-*-700` with no `dark:` pair, and no global style overrides them. Fix: the `dark:` pairs the Retention Monitoring status chips use; check light and dark. About 20 minutes.
 
 ---
 
