@@ -2237,18 +2237,25 @@ export const GradeComputation: React.FC = () => {
             mDraft = lectureDefaults('Midterm', mRows);
             fDraft = lectureDefaults('Final', fRows);
             setTermRatio({ midterm: '50', final: '50' });
+            setSavedTermRatio({ midterm: '50', final: '50' });
             setComponentWeights({ lecture: '60', laboratory: '40' });
+            setSavedComponentWeights({ lecture: '60', laboratory: '40' });
           } else if (loadedComponentMode === 'lecture' && loadedStructure === 'lecture_laboratory') {
             draftMode = 'lecture_laboratory';
             const labRows = (period: 'Midterm' | 'Final') => buildDefaultLectureLaboratoryCategories(period).filter(r => r.component === 'Laboratory');
             mDraft = [...mRows, ...labRows('Midterm')];
             fDraft = [...fRows, ...labRows('Final')];
             setComponentWeights({ lecture: '60', laboratory: '40' });
+            setSavedComponentWeights({ lecture: '60', laboratory: '40' });
             setStructureNotice('now-laboratory');
           }
+          // Baseline the loaded draft so opening a structure-adjusted course is not treated as an unsaved user edit.
           setComponentMode(draftMode);
+          setSavedComponentMode(draftMode);
           setMidtermCategories(mDraft);
+          setSavedMidtermCategories(mDraft);
           setFinalCategories(fDraft);
+          setSavedFinalCategories(fDraft);
 
           setCategoryRows([]);
           setSavedCategoryRows([]);
@@ -2380,6 +2387,8 @@ export const GradeComputation: React.FC = () => {
     setStructureNotice(null);
     setComponentWeights({ lecture: '60', laboratory: '40' });
     setSavedComponentWeights({ lecture: '60', laboratory: '40' });
+    setTermRatio({ midterm: '50', final: '50' });
+    setSavedTermRatio({ midterm: '50', final: '50' });
     setActiveComponentEditorTab('Lecture');
     setAttendanceDateRanges({ midterm: { startDate: '', endDate: '' }, final: { startDate: '', endDate: '' } });
     setSavedAttendanceDateRanges({ midterm: { startDate: '', endDate: '' }, final: { startDate: '', endDate: '' } });
