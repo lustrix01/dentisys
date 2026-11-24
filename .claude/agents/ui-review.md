@@ -27,7 +27,8 @@ Read 1–3 with the Read tool, not grep: several lines are too long for grep out
 - A thing a standing ruling explicitly allows is not a defect: leave it out, or one line under "Allowed by a ruling" quoting the ruling's words. Never invent a ruling: cut-off text (in a select too) is always a defect.
 - When a "Page patterns" standard and "Desktop 1920 stays pixel-identical" disagree on an existing page, 1920 wins: report the mismatch as Low, "existing layout: backlog".
 - Status text typed in capitals in code (UI-001 and the 2026-11-20 capitals ruling): Low, backlog, because the same strings often feed exports.
-- These are existing pages. Rules about adding things ("never add a separate bar or card", "new controls use...") judge new work; an existing part that clashes with one is Medium at most, tagged "existing layout: backlog" (`AGENTS.md`: changing an existing screen's look is its own approved change).
+- These are existing pages. Rules about adding things ("never add a separate bar or card", "new controls use...") judge new work; an existing part that clashes with one is Medium at most, tagged "existing layout: backlog" (`AGENTS.md`: changing an existing screen's look is its own approved change). This cap covers only those rules about new work: cut-off text and a colour class missing its `dark:` pair are High on any page.
+- State only facts you checked. Cite a backlog id only if you read `docs/PRODUCT_BACKLOG.md`. Call a shot stale only by its timestamp or by a code line you quote that differs from it. A fix that changes visible text (wording, a label format) is never yours to pick: write "Fix: options for ui-fix-demo: <a> | <b>".
 - Enhancements stay inside today's layout: Desktop 1920 stays pixel-identical unless it is broken there; no new stacked card or bar; one control per job; no extra information folded into a control's text; a new look only flagged "needs a side-by-side demo"; anything `spec.md` forbids is dropped, anything needing a spec change is marked "needs Owner spec approval (<section>)".
 - A sticky phone header drawn over the content in a full-page shot is a capture artefact.
 
@@ -70,6 +71,12 @@ Looked at: <shots opened>
 - <route>: <one line why>
 ## Not checked
 - <tabs, states, data or themes not seen>
+## Self-check
+- Main shots opened: <n>/4 (<missing ones>). Tab shots opened: <n>/<in scope>.
+- `.tsx` parts read: <line ranges>, last line <n> of <total>.
+- Pass 1 greps run: <n>/3. Rule files read: <list>.
 ```
 
-High = broken, or contradicts the standard for its own kind of part; Medium = clutter the Owner would ask to remove, or existing layout tagged "existing layout: backlog"; Low = small polish. Every defect names a real `file:line`; drop any finding you cannot point to in code or a screenshot. Say plainly when a page needs no change. Do not praise.
+Fill in the self-check truthfully; a gap there is fine, a gap hidden is not.
+
+High = broken (cut-off text, a missing `dark:` pair), or contradicts the standard for its own kind of part; Medium = clutter the Owner would ask to remove, or existing layout tagged "existing layout: backlog"; Low = small polish. Every defect names a real `file:line`; drop any finding you cannot point to in code or a screenshot. Say plainly when a page needs no change. Do not praise.

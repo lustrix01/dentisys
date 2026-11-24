@@ -31,7 +31,7 @@ const ROUTES: Record<Role, string[]> = {
 //  3. One safe button per signed-in page whose whole label is View / Details / Help / FAQ / How to ...
 const SAFE_MODAL_BUTTON = /^(view|details|help|faq|how to\b.*)$/i;
 // Tab buttons found next to set*Tab(...) calls in pages/ (labels may carry a count badge after them).
-const TAB_LABEL = /^\s*(Archived Classes|Enrolled Student Roster|Assessments Manager|Grade Weights Editor|Grade Summar\w*|Import Grade Sheets|Retention Watch Lists|Attendance Registers|Interactive Analytics|Remedials|Midterm Watchlist|Remedial Exams|Midterm Advisory|Past Courses|Archived|Upcoming Sessions)\b/i;
+const TAB_LABEL = /^\s*(Archived Classes|Enrolled Student Roster|Assessments Manager|Grade Weights Editor|Grade Summar\w*|Import Grade Sheets|Retention Watch Lists|Retention & Remedials|Attendance Registers|Interactive Analytics|Remedials|Midterm Watchlist|Remedial Exams|Midterm Advisory|Past Courses|Archived|Upcoming Sessions)\b/i;
 
 const themes = (process.env.AUDIT_THEMES ?? 'light,dark').split(',').map(s => s.trim()).filter(Boolean);
 const routeFilter = process.env.AUDIT_ROUTES;
