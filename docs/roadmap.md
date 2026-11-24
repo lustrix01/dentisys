@@ -15,7 +15,7 @@ Two people work at once, in two lanes that never edit the same screen or backend
 7. Emergency branch (9.29, 9.30, 12.9, 12.10, 12.12, 12.13): on production (2026-11-23).
 8. User reports 14.1 to 14.10 (polish branch): on production (2026-11-24).
 9. Gemini swarm fixes (9.27, 9.31, 9.21 part): on production (2026-11-24).
-10. Face enrolment and check-in speed (13.4), after the Owner's real-phone timing session.
+10. Face enrolment and check-in speed (13.4): optional (Owner, 2026-11-25); only if the Owner reopens it, starting with the real-phone timing session.
 11. UI formality pass (12.6), after both lanes are done.
 
 ## Colleague lane (screens only, no new system rules)
