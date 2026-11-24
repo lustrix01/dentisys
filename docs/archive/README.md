@@ -63,6 +63,7 @@ These documents are kept for history. They describe past plans, handoffs, and ev
 - [Rooms and session times audit and merge, November 2026](rooms-times-merge-2026-11.md)
 - [Emergency branch merge, November 2026](emergency-merge-2026-11.md); handoffs [2026-11-22](HANDOFF_2026-11-22_EMERGENCY.md) and [2026-11-23](HANDOFF_2026-11-23_EMERGENCY_TO_CLAUDE.md)
 - [Polish merge (polish1 + polish2), November 2026](polish-merge-2026-11.md); polish2 [brief](brief-polish2-2026-11-23.md) and [report](report-polish2-2026-11-23.md)
+- [Gemini swarm merge (9.27, 9.31, 9.21), November 2026](swarm1124-merge-2026-11.md); [brief](brief-swarm1124-2026-11-24.md) and [report](report-swarm1124-2026-11-24.md)
 
 ## Specification amendment records (applied to spec.md)
 

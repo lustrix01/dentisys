@@ -14,7 +14,7 @@ Owner, 2026-11-23. Full text of each item is in its section below; P1–P3 (2026
 
 **Highest** (agreed with the users and the Owner on 2026-11-23): 14.1 to 14.10, all on production (2026-11-24).
 
-**Not yet prioritised** (the Owner ranks these next): 9.19, 9.20, 9.21, 9.27, 9.28, 9.31, 12.6, 12.7, 12.11, 12.14, 13.4, 13.10, 13.11.
+**Not yet prioritised** (the Owner ranks these next): 9.19, 9.20, 9.21, 9.28, 9.32, 12.6, 12.7, 12.11, 12.14, 13.4, 13.10, 13.11.
 
 ---
 
@@ -35,10 +35,9 @@ Owner, 2026-11-23. Full text of each item is in its section below; P1–P3 (2026
 
 - **9.19** Production `devops` sudo password (Owner, 2026-11-17): it is still the original one from the emergency kit (an earlier `sudo passwd` changed root's password, not `devops`'s). Change it on the production server with `passwd` as `devops` (no `sudo`), then update the emergency kit.
 - **9.20** Face Registration on production (Owner, 2026-11-17): the Owner checks enrolment and biometric check-in with a real phone camera on bu-dentisys.com after the fixes for action frames the server rejected, uploads cut off by the 30 s browser limit, and error text that blamed lighting for every failure. Open: production Traefik uses its default request read timeout, so an upload slower than about 60 s is still cut off. Owner decision (2026-11-20): if the real-phone check shows slow uploads are being cut off, the Owner raises the production Traefik read timeout to 120 s on the production server (Claude never touches production).
-- **9.21** Flaky mocked browser tests (2026-11-17): with 8 workers and one local retry, a test that passes only on retry is reported as "flaky" and does not fail `check.ps1`. Each one hides a timing bug in the app or the test (the TimePicker re-sync race was a real app bug; the Secretary Excused test recorded the page's GET refresh as the request). Fix one, then remove it here; add any new flaky test the run reports.
-- **9.27** Breadcrumb navigation (Owner, 2026-11-20): every part of the trail above the page title takes you to that page, e.g. Home goes to the Dashboard. Owner ruling (2026-11-24): the page you are on is plain text, not a link (the Owhie merge made it a link to itself). Check every crumb for every role goes where its name says. With the Gemini swarm: [brief](archive/brief-swarm1124-2026-11-24.md).
+- **9.21** Flaky mocked browser tests (2026-11-17): with 8 workers and one local retry, a test that passes only on retry is reported as "flaky" and does not fail `check.ps1`. Each one hides a timing bug in the app or the test (the TimePicker re-sync race was a real app bug; the Secretary Excused test recorded the page's GET refresh as the request). Fix one, then remove it here; add any new flaky test the run reports. Open: `e2e/dfd_verification.spec.ts:43` (did not fail in 130 runs on 2026-11-24).
 - **9.28** Capitals (Owner ruling 2026-11-20, `ui-fix-demo/references/dentisys.md`): CSS capitals stay only on table column headers, the printed class list and the emphasised red action button of a dialog that needs it (Cancel · RETIRE, DELETE, CONFIRM). The Owhie merge removed them from 44 small labels; about 260 places still use them (small labels above a value, form labels, chips, headings) and the emphasised dialog buttons do not have them yet. One `ui-fix-demo` batch with its own demo; update `docs/frontend.md` "Page patterns" with the rule.
-- **9.31** Grade Computation leaving the page (found 2026-11-24 in the real app; there before 14.10): after Faculty switch class in Grade Computation, a sidebar link click stays on `/grades`, and a "leave page?" (beforeunload) prompt appears when leaving. Bug routine: reproduce with a failing test first.
+- **9.32** Midterm advisory menu after Publish (found 2026-11-24; fails on the demo, same code as production): `e2e/live/grade-submission.spec.ts:154` fails because after Publish the class refresh unmounts the `Midterm advisory` menu while it is being reopened (`frontend/src/components/GradeSubmissionBanner.tsx` around line 309, `setMidterm(null)` on `refreshToken`). It blocks the `check-postgres` pass. Bug routine: the live test already reproduces it.
 
 ---
 
@@ -81,7 +80,11 @@ Nothing open: every item is on production (see Done).
 
 Built and running on the demo, not yet on production. Each moves to [Done](#done) after the Owner promotes it.
 
-Nothing at the moment.
+Merged into `lighthal9-responsive` from the Gemini swarm ([merge record](archive/swarm1124-merge-2026-11.md)), not yet on the demo:
+
+- **9.27** The page you are on is plain text in the breadcrumb (Owner ruling 2026-11-24); the crumbs above it are links.
+- **9.31** After a class switch in Grade Computation with no edits, a sidebar link leaves the page and closing the tab asks nothing.
+- **9.21** (part) Flaky tests fixed: `grade-release-gates.spec.ts:120`, `roster-import.spec.ts:58` and `:157`.
 
 ---
 
