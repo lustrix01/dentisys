@@ -226,7 +226,8 @@ test.describe('Grade release gates (Backlog 12.12 + 12.13)', () => {
 
     await page.setViewportSize({ width: 1280, height: 800 });
     await signInFaculty(page);
-    await page.goto('/grades');
+    await page.getByRole('link', { name: 'Grade Computation' }).click();
+    await expect(page).toHaveURL('/grades');
 
     // Class-picker bar holds the Midterm advisory menu next to Submit grades; no separate Midterm bar (Owner 2026-11-23).
     const classSelect = page.getByLabel(/Class: course code, section, and course title/);
@@ -258,6 +259,8 @@ test.describe('Grade release gates (Backlog 12.12 + 12.13)', () => {
     await publishDialog.getByRole('button', { name: 'Publish Midterm advisory' }).click();
     await expect.poll(() => publishCalls.length).toBe(1);
     expect(publishCalls[0]).toEqual({ csId: 41 });
+    await expect(publishDialog).toBeHidden();
+    await expect(advisoryTrigger.getByLabel('1 At-Risk, not published')).toBeHidden();
 
     // 2. Clean published: status says published; Update advisory is disabled with its reason
     menu = await openAdvisory();
@@ -289,6 +292,8 @@ test.describe('Grade release gates (Backlog 12.12 + 12.13)', () => {
     await expect(updateDialog).toContainText('Dela Cruz, Juan (2024-0011) — 2.2');
     await updateDialog.getByRole('button', { name: 'Update advisory' }).click();
     await expect.poll(() => publishCalls.length).toBe(2);
+    await expect(updateDialog).toBeHidden();
+    await expect(advisoryTrigger.getByLabel('Scores changed since published')).toBeHidden();
 
     // 4. Unpublish flow
     menu = await openAdvisory();
