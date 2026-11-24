@@ -89,6 +89,8 @@ async function assertBreadcrumbs(page: Page, route: string, expected: CrumbExpec
 }
 
 test.describe('Item 9.27 breadcrumbs', () => {
+  // Each test loads up to 14 pages in turn; under 8 workers that does not fit in the default 30 s.
+  test.beforeEach(() => test.slow());
   test('Faculty routes render plain-text current crumb with aria-current="page" and Home link to /', async ({ page }) => {
     await signInRole(page, 'faculty');
     const routes: Array<[string, CrumbExpectation[]]> = [
