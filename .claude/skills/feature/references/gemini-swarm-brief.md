@@ -35,7 +35,7 @@ What the first run (polish2, 2026-11-23) showed: the 4 workers needed 40 minutes
      `<tag>` is lowercase letters, digits and dashes. Any other prefix fails the backup/restore guard at line 238, about 6 minutes in.
    - The `web` check container mounts `backend/`, `database/` and `tests/` only. A `tests/backend` test that reads `spec.md` must guard the read with `file_exists`.
    - One run with `$env:INTEGRATION_CONTINUE_ON_FAIL = '1'`, fix every failure in one pass, then one confirming run.
-   - Known flaky tests and existing failures (record them, do not debug them): `e2e/dfd_verification.spec.ts:43`, `e2e/roster-import.spec.ts:58` and `:157`, `e2e/grade-release-gates.spec.ts:120`, plus any the brief adds.
+   - Known flaky tests and existing failures (record them, do not debug them): `e2e/dfd_verification.spec.ts:43` (flaky) and `e2e/live/grade-submission.spec.ts:154` (fails every run, backlog 9.32), plus any the brief adds. Check the backlog's 9.21 and 9.32 lines before copying this list.
    - The new contract tests and `npx tsc -b` run inside the worktree's `frontend/`. Never call bare `npx tsc` elsewhere: it tries to download the npm package `tsc`.
 5. **Report (the only handoff):** `docs/archive/report-<branch>-<date>.md`, committed last. It is a factual record:
    - shas;
