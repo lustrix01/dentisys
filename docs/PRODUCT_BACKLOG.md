@@ -80,7 +80,7 @@ Nothing open: every item is on production (see Done).
 
 Built and running on the demo, not yet on production. Each moves to [Done](#done) after the Owner promotes it.
 
-Merged into `lighthal9-responsive` from the Gemini swarm ([merge record](archive/swarm1124-merge-2026-11.md)), not yet on the demo:
+From the Gemini swarm ([merge record](archive/swarm1124-merge-2026-11.md), [full text](archive/backlog-built-2026-11-24-swarm1124.md)):
 
 - **9.27** The page you are on is plain text in the breadcrumb (Owner ruling 2026-11-24); the crumbs above it are links.
 - **9.31** After a class switch in Grade Computation with no edits, a sidebar link leaves the page and closing the tab asks nothing.
