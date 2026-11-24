@@ -80,18 +80,17 @@ Nothing open: every item is on production (see Done).
 
 Built and running on the demo, not yet on production. Each moves to [Done](#done) after the Owner promotes it.
 
-From the Gemini swarm ([merge record](archive/swarm1124-merge-2026-11.md), [full text](archive/backlog-built-2026-11-24-swarm1124.md)):
-
-- **9.27** The page you are on is plain text in the breadcrumb (Owner ruling 2026-11-24); the crumbs above it are links.
-- **9.31** After a class switch in Grade Computation with no edits, a sidebar link leaves the page and closing the tab asks nothing.
-- **9.21** (part) Flaky tests fixed: `grade-release-gates.spec.ts:120`, `roster-import.spec.ts:58` and `:157`.
+Nothing at the moment.
 
 ---
 
 # Done
 
-Full text and Owner decisions of these items: [backlog items closed before 2026-11-14](archive/backlog-done-2026-11.md). Promoted to production on 2026-11-21 (sha c17ad942): [items built on 2026-11-20](archive/backlog-built-2026-11-20.md) [items from the Owhie merge](archive/backlog-built-2026-11-20-owhie.md) and [13.8](archive/backlog-built-2026-11-21.md). Promoted to production on 2026-11-23 (sha 37cf7379): [items from the emergency branch](archive/backlog-built-2026-11-23.md). Promoted to production on 2026-11-24 (sha 1bb190c1): [items from the polish branch](archive/backlog-built-2026-11-24.md), [changelog](archive/changelog-2026-11-24.md).
+Full text and Owner decisions of these items: [backlog items closed before 2026-11-14](archive/backlog-done-2026-11.md). Promoted to production on 2026-11-21 (sha c17ad942): [items built on 2026-11-20](archive/backlog-built-2026-11-20.md) [items from the Owhie merge](archive/backlog-built-2026-11-20-owhie.md) and [13.8](archive/backlog-built-2026-11-21.md). Promoted to production on 2026-11-23 (sha 37cf7379): [items from the emergency branch](archive/backlog-built-2026-11-23.md). Promoted to production on 2026-11-24 (sha 1bb190c1): [items from the polish branch](archive/backlog-built-2026-11-24.md), [changelog](archive/changelog-2026-11-24.md). Promoted to production on 2026-11-24 (sha 87d4e08c): [items from the Gemini swarm](archive/backlog-built-2026-11-24-swarm1124.md), [changelog](archive/changelog-2026-11-24-swarm1124.md).
 
+- **9.27** The page you are on is plain text in the breadcrumb; the crumbs above it are links (78b33bb).
+- **9.31** After a class switch in Grade Computation with no edits, a sidebar link leaves the page and closing the tab asks nothing (1b21689).
+- **9.21** (part) Flaky tests fixed: `grade-release-gates.spec.ts:120`, `roster-import.spec.ts:58` and `:157` (f193cf8, 6fb61fe).
 - **14.1** Faculty main action buttons use #338037 (`clinical-600`) at rest (06bb1a1).
 - **14.2** Secretary requests: Approve selected and Reject selected in each group header; the page-wide select-all and Approve selected are gone (06bb1a1).
 - **14.3** Retention Monitoring Send advisory and Send remedial notices are links to the matching Email Management tab; the row checkboxes are gone (fd41be4).
