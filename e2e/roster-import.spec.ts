@@ -58,6 +58,7 @@ test('an unsupported file shows its error once, inside the dialog, and it stays'
 test('provisional PDF keeps all rows unselected, flags marks, preserves fields and resolves existing server IDs', async ({ page }) => {
   const { creates, enrolls } = await setup(page);
   await page.getByLabel('Class list or student roster file').setInputFiles('e2e/fixtures/provisional-roster.pdf');
+  await page.getByText('Extracting and analyzing registrar student records...').waitFor({ state: 'hidden' });
   await expect(page.getByText('Parsed Students (3)', { exact: true })).toBeVisible();
   await expect(page.getByText('Possible crossed-out row', { exact: true })).toHaveCount(1);
   await expect(page.getByLabel('Include student 2099-01-12345', { exact: true })).not.toBeChecked();
@@ -158,6 +159,7 @@ test('official class list for a class that does not exist creates it, then adds 
   const pdf = await makeClassListPdf(page, classList());
   const { creates, enrolls, classCreates } = await setup(page);
   await page.getByLabel('Class list or student roster file').setInputFiles({ name: 'fictional-class-list.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await page.getByText('Extracting and analyzing registrar student records...').waitFor({ state: 'hidden' });
   await expect(page.getByText('Parsed Students (2)', { exact: true })).toBeVisible();
   await expect(page.getByText('None of your classes matches this file, so a new class is created from it.', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Target class section')).toHaveCount(0);
