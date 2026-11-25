@@ -7,7 +7,10 @@ trigger: always_on
 Precedence: (1) Owner's current request, (2) `AGENTS.md` and `spec.md`, (3) `GEMINI.md` and this rule.
 
 ## Swarm orchestration
-- Orchestrator runs on `gemini-4-neon-high`; do small edits directly **only** when the change is `<= 3 files AND <= 150 total changed lines` AND introduces no new behavior tests. Otherwise delegate via `swarm`.
+- Orchestrator runs on `gemini-4-neon-high`. Choose the path per item and state it with its reason in the readiness answer and the report:
+  - **direct** (you edit): `<= 3 files AND <= 150 total changed lines` AND it does not change product code together with its tests (a tests-only or code-only change).
+  - **one worker** (a `/swarm` with one worker): one read-only job (recon, critic, one screenshot set) or one larger change of a single kind (code-only or tests-only).
+  - **swarm** (2+ workers): two or more independent items, or any item that changes product code together with its tests (implementation and tests always go to separate workers, below).
 - **Strict worker model policy (Neon Medium/Low only; never High, never Hydrogen):**
   - `gemini-4-neon-medium`: complex root-cause debugging, multi-state logic, or any brief slot labeled `high` (replaces Hydrogen High).
   - `gemini-4-neon-low`: standard fixes, flaky-test investigation/stabilization, audits, Playwright screenshots, recon, mechanical edits, or any brief slot labeled `medium` (replaces Hydrogen Medium).
@@ -26,14 +29,14 @@ Precedence: (1) Owner's current request, (2) `AGENTS.md` and `spec.md`, (3) `GEM
 - **Trivial edit** (typo, 1 file, <= 20 lines, no new logic): edit, run `npx tsc -b` or `git diff --check`, commit.
 - **Bug fix**: check `spec.md`, reproduce with a failing test at the real broken layer (`tests/backend`, `tests/database`, or `e2e/live/` for server/DB bugs — never prove server/DB bugs with mocked Playwright), fix, confirm the test passes, run gates.
 - **Visible UI change**: load `dentisys-ui-demo` skill before committing; real-app screenshots only, never hand-written HTML/CSS mockups.
-- **Feature / behavior change**: load `dentisys-feature` skill; contract first and remind Owner to run `/grill-me` unless waived.
+- **Feature / behavior change**: load `dentisys-feature` skill. In a hand-off run the brief is the agreed contract (Claude and the Owner settled it, `/grill-me` included); do not reopen it.
 - **Session wrap-up / high context**: load `dentisys-handoff` skill.
 
 ## Gates, encoding, and logs
 - Never use Windows PowerShell 5.1 (`powershell.exe`) for file writes or gate stamp writes. Use native `write_file`/`edit_file` (UTF-8 no BOM, preserve CRLF) and run official gates with `pwsh`:
   - `pwsh -ExecutionPolicy Bypass -File scripts/check-postgres.ps1`
   - `pwsh -ExecutionPolicy Bypass -File scripts/check.ps1`
-- **Pre-flight Docker check:** Before running `check-postgres.ps1` or `check.ps1`, run `docker info --format '{{.ServerVersion}}'` (1s). If the daemon is stopped, ask the Owner to start Docker Desktop before launching a gate.
+- **Pre-flight Docker check:** Before running `check-postgres.ps1` or `check.ps1`, run `docker info --format '{{.ServerVersion}}'` (1s). If the daemon is stopped, do not wait or ask: finish everything that needs no Docker, and list the gates not run in the report.
 - **Inspect traces before rerunning slow gates:** On any Playwright failure in `check-postgres.ps1`, read `test-results/<case>/error-context.md` and inspect `trace.zip` *before* launching a second full gate run (and *before* running `check.ps1`, which overwrites `test-results/`). Never burn a 10-minute rerun hoping a failure is a one-off flake without checking the trace first.
 - **Parallel worktree isolation (`check-postgres.ps1`):** When working in a sibling worktree or alongside another agent, always isolate Compose project and ports using a name matching the backup/restore guard regex `^dentisys-(integration|final)(-[a-z0-9-]+)?$`:
   `scripts/check-postgres.ps1 -ComposeProject dentisys-integration-<tag> -BackendHttpPort 28080 -FrontendHttpPort 25173 -MailpitUiPort 28025`
@@ -51,6 +54,13 @@ Precedence: (1) Owner's current request, (2) `AGENTS.md` and `spec.md`, (3) `GEM
 ## Boundaries
 - Never push, never read or copy `.env`, `~/.dentisys` or `~/.ssh`, and never run code whose purpose is to get around the guard (`.agents/scripts/agy-handoff-guard.mjs`). Owner ruling 2026-11-26.
 - Start workers only with `/swarm` and the model id `gemini-4-neon-medium` or `gemini-4-neon-low`; never `invoke_subagent` (its `Model` cannot select Neon medium/low). The guard refuses anything else.
-- Work only on the batch branch and worktree the brief names. Never merge into `lighthal9-responsive` or `lumbang_final`, never push without asking, and never touch demo VPS or `promote-prod.ps1`.
+- Work only on the batch branch and worktree the brief names. Never merge into `lighthal9-responsive` or `lumbang_final`, and never touch demo VPS or `promote-prod.ps1`.
 - Commit as `Light505 <181879156+Light505@users.noreply.github.com>` with no AI trailers and full `.githooks/` compliance.
-- When a commit modifies `spec.md` (with explicit Owner approval), include `Spec-approved: YYYY-MM-DD` in the commit message body so `.githooks/check-commit-msg.mjs` and `colleague-merge` have the audit trail.
+- Never edit `spec.md`, `AGENTS.md`, `CLAUDE*.md`, `.agents/`, `.githooks/` or `.claude/` (the guard refuses). A needed spec or rule change goes in the report under "Doubts" with the exact proposed line; Claude applies it after the Owner's OK.
+
+## Hand-off runs (started by Claude)
+- **Never ask mid-run.** Nobody can answer. Readiness pass (plan mode): return every doubt; make no edits. Build pass: a doubt that still appears means that item is left untouched and listed under "Doubts (not acted on)" with the exact question; continue with the other items. Never act on a guess.
+- **Commit lines** (`.githooks/check-commit-msg.mjs`): no AI trailers; a `fix:` commit stages its test file or has `Test: none - <reason>`; a `feat:` subject names the backlog id, e.g. `(13.3)`; any `frontend/src` `.tsx`/`.css` change has `Demo: none - Claude shows the real-app Before/After at the merge`. A refused commit: fix the message, never bypass the hook.
+- **Wording names what exists:** a notice, button or help text that points to a page, tab or control uses its exact current label (check the route or component before writing it).
+- **Docs follow behaviour:** a behaviour change updates the current docs it contradicts (`docs/` outside `docs/archive/`, contracts, README) in the same commit; a contradicting `spec.md` line goes under "Doubts".
+- **Report** (`dentisys-handoff` skill, section 4b) adds: "Path chosen" per item with its reason, "Worker models" (name and model id per worker), and "Doubts (not acted on)".

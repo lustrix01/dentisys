@@ -3,30 +3,6 @@
   "agentMode": "",
   "toolPermission": "request-review",
   "permissions": {
-    "allow": [
-      "command(npm ci)",
-      "command(npm run)",
-      "command(npm test)",
-      "command(npx --no-install)",
-      "command(node)",
-      "command(php)",
-      "command(pwsh -NoProfile -ExecutionPolicy Bypass -File)",
-      "command(pwsh -ExecutionPolicy Bypass -File)",
-      "command(git status)",
-      "command(git diff)",
-      "command(git log)",
-      "command(git show)",
-      "command(git add)",
-      "command(git commit)",
-      "command(git merge)",
-      "command(git restore)",
-      "command(git stash)",
-      "command(git rev-parse)",
-      "command(git ls-files)",
-      "command(git branch --list)",
-      "command(git worktree list)",
-      "command(docker info)",
-      "command(docker ps)"
-    ]
+    "allow": ["command(*)"]
   }
 }
