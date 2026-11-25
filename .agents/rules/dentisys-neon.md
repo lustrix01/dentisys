@@ -49,6 +49,8 @@ Precedence: (1) Owner's current request, (2) `AGENTS.md` and `spec.md`, (3) `GEM
 - **Watch quota:** When coordinator quota drops below ~10%, wrap up or hand off cleanly (`dentisys-handoff`) rather than starting a new multi-step feature.
 
 ## Boundaries
+- Never push, never read or copy `.env`, `~/.dentisys` or `~/.ssh`, and never run code whose purpose is to get around the guard (`.agents/scripts/agy-handoff-guard.mjs`). Owner ruling 2026-11-26.
+- Start workers only with `/swarm` and the model id `gemini-4-neon-medium` or `gemini-4-neon-low`; never `invoke_subagent` (its `Model` cannot select Neon medium/low). The guard refuses anything else.
 - Work only on the batch branch and worktree the brief names. Never merge into `lighthal9-responsive` or `lumbang_final`, never push without asking, and never touch demo VPS or `promote-prod.ps1`.
 - Commit as `Light505 <181879156+Light505@users.noreply.github.com>` with no AI trailers and full `.githooks/` compliance.
 - When a commit modifies `spec.md` (with explicit Owner approval), include `Spec-approved: YYYY-MM-DD` in the commit message body so `.githooks/check-commit-msg.mjs` and `colleague-merge` have the audit trail.
