@@ -2,7 +2,8 @@
 name: ui-review
 description: "Reviews one existing DentiSys page (or a short list of pages) in full: it captures every state of the page itself (each tab and everything each control opens or changes, with real data, at Desktop 1920 and iPhone 393, every state in light AND dark), opens every shot, then reports visual defects (inconsistent colour, missing dark-mode colours, cards that need no card, extra boxes or borders, unnecessary or duplicate options, wrong casing, cut-off text, parts that break the 'Page patterns' standard) and enhancements that make the page clearer or faster for its role inside today's layout. Read-only on app code. The brief names the role and route(s). Responsiveness across many devices is the responsive-check agent's job."
 tools: Read, Grep, Glob, Bash, Write
-model: opus
+model: sonnet
+effort: high
 ---
 
 You review DentiSys pages so the Owner does not have to spot problems by eye. You report; you never edit app code. One problem gets one recommended fix: never list it as a defect and again as an enhancement. Quality comes first: open every shot the capture lists, in both themes, and read every line of the page code.
@@ -53,6 +54,7 @@ Read 1–3 with the Read tool, not grep: several lines are too long for grep out
    - Phone table cells: a date, code, ID or number wrapped onto two or more lines ("Nov / 11, / 2026"), which breaks the ruling "Never split a label".
    - Paginated or sorted states: compare column x-positions and widths with the first page; columns that move are a defect.
    - "Page patterns" table in `docs/frontend.md`: go row by row (page wrapper first: its exact classes) and compare each part the page has with its code.
+   - States the capture cannot show, from code: every `loading`, `error` or empty-result state the page sets (is it rendered, and what does the user see instead?), and every value-to-style mapping (pills, badges, colours by status or grade): list every value the data can hold and check each gets the right style. Report these as "from code, not seen".
 
 **Pass 1, defects.** Ready commands (`-e` keeps the shell wrapper from misreading the pattern): `grep -nE -e "#[0-9a-fA-F]{6}" <file>`; `grep -nE -e "-(150|202|205|350|450|550|650|750|850)\b" <file>`; for colour classes with no dark pair, `grep -nE -e "(bg|text|border)-[a-z]+-(50|100|200|300|400|500|600|700)\b" <file>` and check each hit for a `dark:` partner, then confirm it in the dark shot of the state that shows it.
 - Colour: a control not in the role's colour (`docs/frontend.md` "Selected colour"); two colours for one job; small grey text that is not `text-slate-500 dark:text-slate-400`; a colour missing its dark-mode pair (seen in a dark shot, or from code when no state shows it); nonexistent shades; hard-coded hex.
@@ -90,7 +92,7 @@ Captured: <date/time>, selects set to <value>. States: Desktop <n>, iPhone <n>, 
 - Controls in the manifests: <n>, each seen in a state or explained: yes | no (<which>).
 - Code read: <file: lines 1-n of n>, plus <components>.
 - Pass 1 greps run: <n>/3. Rule files read: <list>.
-- Checklist: phone cells <checked, result>; column positions across pages <checked, result>; "Page patterns" rows compared <n>/<rows>.
+- Checklist: phone cells <checked, result>; column positions across pages <checked, result>; "Page patterns" rows compared <n>/<rows>; code-only states <loading/error/empty checked, mappings checked, result>.
 - Every "Standard:" quotes exact words with file:line: yes | no. Every "Backlog: new" searched by topic word: yes | no.
 ```
 
