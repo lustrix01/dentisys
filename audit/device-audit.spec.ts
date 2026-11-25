@@ -1,7 +1,7 @@
 import { test, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { ACCOUNTS, freshTotp, OUT, PARTS_DIR, wantedDevices, wantedRoles, type Role } from './common';
+import { OUT, PARTS_DIR, signIn, TAB_LABEL, wantedDevices, wantedRoles, type Role } from './common';
 
 // Read-only sweep: only navigates, scrolls, opens the modals listed below and presses Escape.
 // Never submits, saves, deletes or clicks Start/End/Revoke/Approve.
@@ -30,8 +30,6 @@ const ROUTES: Record<Role, string[]> = {
 //  2. Phone/tablet hamburger in the Layout header (sidebar drawer), on the dashboard pages only
 //  3. One safe button per signed-in page whose whole label is View / Details / Help / FAQ / How to ...
 const SAFE_MODAL_BUTTON = /^(view|details|help|faq|how to\b.*)$/i;
-// Tab buttons found next to set*Tab(...) calls in pages/ (labels may carry a count badge after them).
-const TAB_LABEL = /^\s*(Archived Classes|Enrolled Student Roster|Assessments Manager|Grade Weights Editor|Grade Summar\w*|Import Grade Sheets|Retention Watch Lists|Retention & Remedials|Attendance Registers|Interactive Analytics|Remedials|Midterm Watchlist|Remedial Exams|Midterm Advisory|Past Courses|Archived|Upcoming Sessions)\b/i;
 
 const themes = (process.env.AUDIT_THEMES ?? 'light,dark').split(',').map(s => s.trim()).filter(Boolean);
 const routeFilter = process.env.AUDIT_ROUTES;
@@ -344,22 +342,7 @@ for (const device of wantedDevices()) for (const role of wantedRoles()) {
       baseURL: process.env.AUDIT_BASE_URL ?? 'http://localhost:5173',
     });
     const page = await context.newPage();
-    // Refresh tokens are single-use (reuse revokes the session), so a saved storageState cannot be
-    // shared between contexts: sign in once per device x role through the real /login page.
-    if (role !== 'public') {
-      const { email, password, totp, signInPath } = ACCOUNTS[role];
-      await page.goto(signInPath ?? '/login');
-      await page.fill('input[inputmode="email"]', email);
-      await page.fill('input[type="password"]', password);
-      await page.click('button[type="submit"]');
-      if (totp) {
-        await page.waitForURL(u => /^\/2fa\/verify/.test(u.pathname), { timeout: 20_000 });
-        await page.fill('input[inputmode="numeric"]', await freshTotp(totp));
-        await page.click('button[type="submit"]');
-      }
-      await page.waitForURL(u => !/^\/(login|superadmin\/sign-in|2fa|mfa)/.test(u.pathname), { timeout: 20_000 });
-      await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-    }
+    await signIn(page, role);
     const entries: unknown[] = [];
 
     const record = async (theme: string, label: string, extra: Finding[] = []) => {
