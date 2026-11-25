@@ -2,7 +2,7 @@
 
 The Owner-approved list of open work, the standing rules every change follows, and a one-line record of finished items. Implemented behaviour is in [spec.md](../spec.md) and [features.md](features.md); the order of work is in the [roadmap](roadmap.md). Who does which kind of work, and how it is validated, is in [AGENTS.md](../AGENTS.md).
 
-The backlog is not exhaustive. The Owner may add, clarify, remove or reprioritise requirements at any time, especially after manual testing. Omissions are not permission to invent behaviour: when uncertain, ask the Owner.
+The backlog is not exhaustive. The Owner may add, clarify, remove or reprioritise requirements at any time, especially after manual testing. Omissions are not permission to invent behaviour: when uncertain, ask the Owner. Verified defects that are not yet clarified wait in [review-findings.md](review-findings.md) until the Owner moves them here.
 
 Item numbers are permanent; a built item waits in [On the demo, awaiting promotion](#on-the-demo-awaiting-promotion) until the Owner promotes it, then moves to [Done](#done) with its number.
 

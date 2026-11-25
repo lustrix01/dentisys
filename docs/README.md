@@ -8,6 +8,7 @@ Every file in this folder describes the system as it is now. Dated records (hand
 
 - [Implemented features](features.md): what works today, with spec IDs.
 - [Product backlog](PRODUCT_BACKLOG.md): open work, standing rules and finished items.
+- [Review findings](review-findings.md): defects the review agents found and a judge verified, waiting for the Owner to clarify them into backlog items.
 - [Roadmap](roadmap.md): what's next, in order.
 - [Lecture/Laboratory grading](lecture-laboratory-grading.md): how the grading editor and course grade work.
 

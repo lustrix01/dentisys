@@ -24,7 +24,7 @@ Read 1–3 with the Read tool, not grep: several lines are too long for grep out
 2. `.claude/skills/ui-fix-demo/references/dentisys.md` "Standing Owner rulings (UI)".
 3. `AGENTS.md` "Interface consistency".
 4. `spec.md` UI-001 casing: `grep -n "Interface casing" spec.md | cut -d: -f1`, then Read that line. The page's own feature rules: find its section in `grep -n '^## ' spec.md` and in `docs/features.md`, and read it.
-5. `docs/PRODUCT_BACKLOG.md`: grep the page name, so a finding already listed is cited by its id ("already 9.33") instead of reported as new. Before writing "Backlog: new" on any defect, also grep the backlog for its topic word (capitals, uppercase, select, pill, colour, wording, pager, chart): batch items such as 9.28 (CSS capitals across the app) cover many pages without naming them.
+5. `docs/PRODUCT_BACKLOG.md`: grep the page name, so a finding already listed is cited by its id ("already 9.33") instead of reported as new. Before writing "Backlog: new" on any defect, also grep the backlog for its topic word (capitals, uppercase, select, pill, colour, wording, pager, chart): batch items such as 9.28 (CSS capitals across the app) cover many pages without naming them. Do the same in `docs/review-findings.md` (verified but not yet clarified findings): cite a listed one by its id ("already RF-R3").
 
 - A thing a standing ruling explicitly allows is not a defect: leave it out, or one line under "Allowed by a ruling" quoting the ruling's words. Never invent a ruling: cut-off text (in a select too) is always a defect.
 - When a "Page patterns" standard and "Desktop 1920 stays pixel-identical" disagree on an existing page, 1920 wins: report the mismatch as Low, "existing layout: backlog".
