@@ -1,7 +1,7 @@
 import { test, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { OUT, signIn, TAB_LABEL, wantedDevices, type Role } from './common';
+import { OUT, pickOptions, signIn, TAB_LABEL, wantedDevices, type Role } from './common';
 
 // Capture for the ui-review agent: every state of ONE page (each tab, and what each control opens
 // or changes inside it), every state shot in light AND dark from the same DOM.
@@ -131,14 +131,7 @@ for (const device of wantedDevices()) test(device.name, async ({ browser }) => {
     return `state ${id}`;
   };
 
-  const applyPicks = async () => {
-    for (const want of picks) {
-      for (const c of (await listControls(page)).filter(c => c.tag === 'select' && !c.disabled)) {
-        const opt = c.options?.find(o => o.includes(want));
-        if (opt && c.selected !== opt) { await page.locator(`[data-ur="${c.ur}"]`).selectOption({ label: opt }); await settle(page); }
-      }
-    }
-  };
+  const applyPicks = async () => { if (await pickOptions(page, picks)) await settle(page); };
   const clickKey = async (key: string) => {
     const c = (await listControls(page)).find(x => x.key === key);
     if (!c) throw new Error(`control gone: ${key}`);

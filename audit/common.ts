@@ -50,6 +50,26 @@ export function wantedDevices(): AuditDevice[] {
 // Tab buttons found next to set*Tab(...) calls in pages/ (labels may carry a count badge after them).
 export const TAB_LABEL = /^\s*(Archived Classes|Enrolled Student Roster|Assessments Manager|Grade Weights Editor|Grade Summar\w*|Import Grade Sheets|Retention Watch Lists|Retention & Remedials|Attendance Registers|Interactive Analytics|Remedials|Midterm Watchlist|Remedial Exams|Midterm Advisory|Past Courses|Archived|Upcoming Sessions)\b/i;
 
+// In every visible, enabled <select> in <main>, chooses the first option whose text contains one of
+// `picks` (e.g. a seeded class that has rows), so tables show data. Returns true when anything changed.
+export async function pickOptions(page: Page, picks: string[]) {
+  let changed = false;
+  for (const want of picks) {
+    const selects = page.locator('main select:enabled:visible');
+    for (let i = 0; i < await selects.count(); i++) {
+      const s = selects.nth(i);
+      const label = await s.evaluate((e: HTMLSelectElement, w: string) => {
+        const o = Array.from(e.options).find(x => x.text.includes(w));
+        return o && o !== e.selectedOptions[0] ? o.text : null;
+      }, want).catch(() => null);
+      if (!label) continue;
+      await s.selectOption({ label }).then(() => { changed = true; }).catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
+    }
+  }
+  return changed;
+}
+
 // Refresh tokens are single-use (reuse revokes the session), so a saved storageState cannot be
 // shared between contexts: sign in once per context through the real sign-in page.
 export async function signIn(page: Page, role: Role) {

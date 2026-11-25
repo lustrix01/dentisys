@@ -1,7 +1,7 @@
 import { test, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { OUT, PARTS_DIR, signIn, TAB_LABEL, wantedDevices, wantedRoles, type Role } from './common';
+import { OUT, PARTS_DIR, pickOptions, signIn, TAB_LABEL, wantedDevices, wantedRoles, type Role } from './common';
 
 // Read-only sweep: only navigates, scrolls, opens the modals listed below and presses Escape.
 // Never submits, saves, deletes or clicks Start/End/Revoke/Approve.
@@ -33,6 +33,8 @@ const SAFE_MODAL_BUTTON = /^(view|details|help|faq|how to\b.*)$/i;
 
 const themes = (process.env.AUDIT_THEMES ?? 'light,dark').split(',').map(s => s.trim()).filter(Boolean);
 const routeFilter = process.env.AUDIT_ROUTES;
+// Option text to choose in each page's selects first, so tables show rows (e.g. AUDIT_SELECT=CLINIC-4A).
+const picks = (process.env.AUDIT_SELECT ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
 type Finding = { kind: string; severity: 'high' | 'medium' | 'low'; selector: string; text: string; rect: number[] };
 
@@ -313,6 +315,8 @@ async function settle(page: Page) {
   await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
   await page.waitForTimeout(600);
   await page.waitForFunction(() => !document.querySelector('.animate-pulse:not(.rounded-full)'), null, { timeout: 4_000 }).catch(() => {});
+  // Recharts animates in JavaScript: without this, donuts and bars are shot half-drawn.
+  if (await page.locator('.recharts-wrapper').count().catch(() => 0)) await page.waitForTimeout(1_800);
 }
 
 async function scrollAll(page: Page) {
@@ -358,7 +362,16 @@ for (const device of wantedDevices()) for (const role of wantedRoles()) {
       findings.push(...await page.evaluate(inPageCheck, true));
       const shot = `${OUT}/${device.name.replace(/\s+/g, '-')}/${role}/${theme}/${slug(label)}.png`;
       mkdirSync(shot.replace(/\/[^/]+$/, ''), { recursive: true });
-      await page.screenshot({ path: shot, fullPage: true }).catch(() => {});
+      // A fullPage shot resizes the viewport, which restarts Recharts' animation, so charts came out empty or
+      // half-drawn: on chart pages, grow the viewport ourselves, let the charts finish, then shoot.
+      const vp = page.viewportSize();
+      if (vp && await page.locator('.recharts-wrapper').count().catch(() => 0)) {
+        const h = await page.evaluate(() => document.documentElement.scrollHeight);
+        await page.setViewportSize({ width: vp.width, height: Math.min(h, 16_000) });
+        await page.waitForTimeout(1_800);
+        await page.screenshot({ path: shot }).catch(() => {});
+        await page.setViewportSize(vp);
+      } else await page.screenshot({ path: shot, fullPage: true }).catch(() => {});
       entries.push({ device: device.name, viewport: device.viewport, role, theme, route: label, url: page.url(), screenshot: shot, findings: dedupe(findings) });
     };
 
@@ -370,6 +383,7 @@ for (const device of wantedDevices()) for (const role of wantedRoles()) {
         const res = await page.goto(route, { waitUntil: 'domcontentloaded' });
         if (res && !res.ok()) err(`HTTP ${res.status()}`);
         await settle(page);
+        if (picks.length && await pickOptions(page, picks)) await settle(page);
         const path = new URL(page.url()).pathname;
         if (role !== 'public' && /^\/(login|landing|superadmin\/sign-in)/.test(path)) err(`redirected to ${path}`);
         if (await page.getByText(/something went wrong|page not found/i).first().isVisible().catch(() => false)) err('error page text visible');

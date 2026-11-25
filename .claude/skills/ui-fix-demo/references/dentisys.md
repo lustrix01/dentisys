@@ -11,7 +11,8 @@ Repo `C:\Users\decha\Desktop\Github\dentisys`. Rules in `AGENTS.md` and `CLAUDE.
   - `AUDIT_ROLES=faculty` (public, superadmin, admin, faculty, secretary, student; the Superadmin signs in with a code from the seeded dev authenticator, one per 30 s, so its sign-ins are spaced out);
   - `AUDIT_ROUTES=/grades`;
   - `AUDIT_THEMES=light`;
-  - `AUDIT_NO_TABS=1`.
+  - `AUDIT_NO_TABS=1`;
+  - `AUDIT_SELECT=CLINIC-4A` (picks the option containing that text in each page's selects first, so tables have rows; the default class is often empty).
 - One-page capture for the `ui-review` agent: `UR_ROLE=faculty UR_ROUTE=/reports UR_SELECT=CLINIC-4A npm run audit:ui-review` (spec `audit/ui-review-capture.spec.ts`; Desktop 1920 and iPhone 393 unless `AUDIT_DEVICES` is set). It shoots every tab and every state a control opens or changes, each in light and dark, into `audit-output/ui-review/<role>-<route>/<device>/` with a `manifest.md`. All server writes are blocked during the capture, so it never saves anything. `npm run audit:ui-review-page -- audit-output/ui-review/<role>-<route> [review.md]` turns the agent's report into `review.html`: each defect beside the shots its "Seen:" codes name, plus every state in light and dark (a script, no model).
 - Devices: `audit/devices.json`. Core is one device per app width band (320, 360, 375, 393, 480, 744, 820, 1032, 1366, 1470, 1920); iPad mini 744 gets the phone layout (<768). When a `max-[Npx]` rule or the 768 phone check changes, update the bands there.
 - Git Bash turns "/route" args into Windows paths. Prefix commands with `MSYS_NO_PATHCONV=1`.
