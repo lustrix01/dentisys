@@ -23,12 +23,13 @@ Read 1–3 with the Read tool, not grep: several lines are too long for grep out
 2. `.claude/skills/ui-fix-demo/references/dentisys.md` "Standing Owner rulings (UI)".
 3. `AGENTS.md` "Interface consistency".
 4. `spec.md` UI-001 casing: `grep -n "Interface casing" spec.md | cut -d: -f1`, then Read that line. The page's own feature rules: find its section in `grep -n '^## ' spec.md` and in `docs/features.md`, and read it.
-5. `docs/PRODUCT_BACKLOG.md`: grep the page name, so a finding already listed is cited by its id ("already 9.33") instead of reported as new.
+5. `docs/PRODUCT_BACKLOG.md`: grep the page name, so a finding already listed is cited by its id ("already 9.33") instead of reported as new. Before writing "Backlog: new" on any defect, also grep the backlog for its topic word (capitals, uppercase, select, pill, colour, wording, pager, chart): batch items such as 9.28 (CSS capitals across the app) cover many pages without naming them.
 
 - A thing a standing ruling explicitly allows is not a defect: leave it out, or one line under "Allowed by a ruling" quoting the ruling's words. Never invent a ruling: cut-off text (in a select too) is always a defect.
 - When a "Page patterns" standard and "Desktop 1920 stays pixel-identical" disagree on an existing page, 1920 wins: report the mismatch as Low, "existing layout: backlog".
 - Status text typed in capitals in code (UI-001 and the 2026-11-20 capitals ruling): Low, backlog, because the same strings often feed exports.
 - These are existing pages. Rules about adding things ("never add a separate bar or card", "new controls use...") judge new work; an existing part that clashes with one is Medium at most, tagged "existing layout: backlog" (`AGENTS.md`: changing an existing screen's look is its own approved change). This cap covers only those rules about new work: cut-off text and a colour missing its dark-mode pair are High on any page.
+- Every "Standard:" quotes the rule's exact words and its `file:line` (for example `docs/frontend.md:41 "the table scrolls inside a box at most one screen tall"`). Read those words before keeping the defect: if they allow what you saw, it is not a defect; move it to "Allowed by a ruling". A rule from these instructions is cited as `ui-review.md`, never as "Page patterns". No exact words found: write "Standard: none" and keep the defect only if it is cut-off text, a missing dark pair or a broken state.
 - State only facts you checked. A fix that changes visible text (wording, a label format) is never yours to pick: write "Fix: options for ui-fix-demo: <a> | <b>".
 - Enhancements stay inside today's layout: Desktop 1920 stays pixel-identical unless it is broken there; no new stacked card or bar; one control per job; no extra information folded into a control's text; a new look only flagged "needs a side-by-side demo"; anything `spec.md` forbids is dropped, anything needing a spec change is marked "needs Owner spec approval (<section>)".
 - A sticky phone header drawn over the content in a full-page shot is a capture artefact.
@@ -48,6 +49,10 @@ Read 1–3 with the Read tool, not grep: several lines are too long for grep out
 2. Open every shot the manifests list: every state, light AND dark, both devices. Do not skip a dark shot because the light one looks fine: dark mode is where this app breaks most. While you look, write one line per state for the "States seen" table (what this state shows that the previous did not, and anything wrong).
 3. Read the whole page `.tsx`, and the local components it renders whose look is on screen (menus, pickers, dialogs, tables), to the last line.
 4. Select options: check the longest option of each select in the manifests against the select's width in the shots and code (cut-off text in a select is a defect).
+5. Fixed checklist, every page, each item answered in the self-check:
+   - Phone table cells: a date, code, ID or number wrapped onto two or more lines ("Nov / 11, / 2026"), which breaks the ruling "Never split a label".
+   - Paginated or sorted states: compare column x-positions and widths with the first page; columns that move are a defect.
+   - "Page patterns" table in `docs/frontend.md`: go row by row (page wrapper first: its exact classes) and compare each part the page has with its code.
 
 **Pass 1, defects.** Ready commands (`-e` keeps the shell wrapper from misreading the pattern): `grep -nE -e "#[0-9a-fA-F]{6}" <file>`; `grep -nE -e "-(150|202|205|350|450|550|650|750|850)\b" <file>`; for colour classes with no dark pair, `grep -nE -e "(bg|text|border)-[a-z]+-(50|100|200|300|400|500|600|700)\b" <file>` and check each hit for a `dark:` partner, then confirm it in the dark shot of the state that shows it.
 - Colour: a control not in the role's colour (`docs/frontend.md` "Selected colour"); two colours for one job; small grey text that is not `text-slate-500 dark:text-slate-400`; a colour missing its dark-mode pair (seen in a dark shot, or from code when no state shows it); nonexistent shades; hard-coded hex.
@@ -63,13 +68,13 @@ Read 1–3 with the Read tool, not grep: several lines are too long for grep out
 
 ## Output
 
-Write `audit-output/ui-review/<role>-<route slug>/review.md` (this file is the deliverable, so a general "do not write report files" default does not apply), then make your final report the same content, under 150 lines:
+Write `audit-output/ui-review/<role>-<route slug>/review.md`, or the file name the brief gives, in that folder (this file is the deliverable, so a general "do not write report files" default does not apply), then make your final report the same content, under 150 lines:
 
 ```
 # UI review: <role> <route> — job: <one line>
 Captured: <date/time>, selects set to <value>. States: Desktop <n>, iPhone <n>, each light and dark.
 ## Defects (most severe first)
-- [High|Medium|Low] <colour | card | box | option | consistency | wording | cut-off | state>: <what is wrong and why it matters>. Seen: <state id, device, theme> | from code, not seen. Code: <file:line>. Standard: <row or ruling>. Backlog: <id> | new. Fix: <the one recommended fix, naming the existing part to copy>.
+- [High|Medium|Low] <colour | card | box | option | consistency | wording | cut-off | state>: <what is wrong and why it matters>. Seen: <state codes> | from code, not seen. Code: <file:line>. Standard: <row or ruling>. Backlog: <id> | new. Fix: <the one recommended fix, naming the existing part to copy>.
 ## Enhancements (ranked by benefit for the effort)
 1. <suggestion>. Benefit: <concrete>. Where: <file:line>. Copies: <existing part, file> | n/a (text or size change) | new look, needs a side-by-side demo. Size: <small | half day | day+>. Spec: none | needs Owner spec approval (<section>).
 ## Allowed by a ruling (optional)
@@ -85,7 +90,11 @@ Captured: <date/time>, selects set to <value>. States: Desktop <n>, iPhone <n>, 
 - Controls in the manifests: <n>, each seen in a state or explained: yes | no (<which>).
 - Code read: <file: lines 1-n of n>, plus <components>.
 - Pass 1 greps run: <n>/3. Rule files read: <list>.
+- Checklist: phone cells <checked, result>; column positions across pages <checked, result>; "Page patterns" rows compared <n>/<rows>.
+- Every "Standard:" quotes exact words with file:line: yes | no. Every "Backlog: new" searched by topic word: yes | no.
 ```
+
+State codes: `D` = Desktop 1920, `P` = iPhone 393, then the two-digit state id from the manifest, then the theme, comma-separated: `Seen: D07 dark, P06 light, P06 dark`. List the one to three shots that show the problem best, never a range ("D01-03") or "all states": `npm run audit:ui-review-page` turns these codes into the pictures beside each defect on the Owner's review page.
 
 Fill in the self-check truthfully; a gap there is fine, a gap hidden is not. If you opened fewer shots than the manifests list, go back and open them before you write the report.
 

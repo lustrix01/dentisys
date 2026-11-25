@@ -100,7 +100,7 @@ for (const device of wantedDevices()) test(device.name, async ({ browser }) => {
     return r.continue();
   });
 
-  const states: { id: string; name: string; view: string; control: string; light: string; dark: string; url: string }[] = [];
+  const states: { id: string; name: string; view: string; control: string; light: string; dark: string; url: string; focus?: number }[] = [];
   const logs: Log[] = [];
   const views: { name: string; controls: Control[] }[] = [];
   const shotPrints = new Map<string, string>();
@@ -108,7 +108,12 @@ for (const device of wantedDevices()) test(device.name, async ({ browser }) => {
   // One state, two shots: same DOM, only the theme class differs.
   // fullPage resizes the viewport, which closes menus that close on scroll or resize (ExportMenu):
   // states opened by a popup button are shot as the visible screen instead.
-  const shoot = async (name: string, view: string, control: string, screenOnly = false) => {
+  const shoot = async (name: string, view: string, control: string, screenOnly = false, focusLoc?: ReturnType<Page["locator"]>) => {
+    // Where the clicked control sits in the shot (0 = top, 1 = bottom), so the review page can scroll a thumbnail to it.
+    const focus = focusLoc ? await focusLoc.evaluate((e, screen) => {
+      const r = e.getBoundingClientRect();
+      return screen ? (r.top + r.height / 2) / innerHeight : (r.top + scrollY + r.height / 2) / document.documentElement.scrollHeight;
+    }, screenOnly).catch(() => undefined) : undefined;
     const p = await print(page);
     if (shotPrints.has(p)) return `same as state ${shotPrints.get(p)}`;
     const id = String(states.length + 1).padStart(2, '0');
@@ -121,7 +126,7 @@ for (const device of wantedDevices()) test(device.name, async ({ browser }) => {
       await page.screenshot({ path: `${base}-${theme}.png`, fullPage: !screenOnly });
     }
     await page.evaluate(() => document.documentElement.classList.remove('dark'));
-    states.push({ id, name, view, control, light: `${base}-light.png`, dark: `${base}-dark.png`, url: page.url() });
+    states.push({ id, name, view, control, light: `${base}-light.png`, dark: `${base}-dark.png`, url: page.url(), focus });
     shotPrints.set(p, id);
     return `state ${id}`;
   };
@@ -179,7 +184,7 @@ for (const device of wantedDevices()) test(device.name, async ({ browser }) => {
         }
         if ((await print(page)) === basePrint) { logs.push({ view: viewName, control: name, result: 'no visible change' }); continue; }
         const what = isSearch(c) ? `search "zzqx-no-match"` : `click ${name}`;
-        logs.push({ view: viewName, control: name, result: await shoot(`${viewName} - ${what}`, viewName, what, c.popup) });
+        logs.push({ view: viewName, control: name, result: await shoot(`${viewName} - ${what}`, viewName, what, c.popup, loc) });
         await page.keyboard.press('Escape').catch(() => {});
         await settle(page);
       } catch (e) {

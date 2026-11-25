@@ -10,7 +10,8 @@
     "test:e2e": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test-e2e.ps1",
     "test:e2e:live": "playwright test -c playwright.live.config.ts",
     "audit:devices": "playwright test -c playwright.device-audit.config.ts",
-    "audit:ui-review": "playwright test -c playwright.ui-review.config.ts"
+    "audit:ui-review": "playwright test -c playwright.ui-review.config.ts",
+    "audit:ui-review-page": "node audit/ui-review-page.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1"
