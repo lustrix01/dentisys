@@ -59,6 +59,7 @@ Precedence: (1) Owner's current request, (2) `AGENTS.md` and `spec.md`, (3) `GEM
 - Never edit `spec.md`, `AGENTS.md`, `CLAUDE*.md`, `.agents/`, `.githooks/` or `.claude/` (the guard refuses). A needed spec or rule change goes in the report under "Doubts" with the exact proposed line; Claude applies it after the Owner's OK.
 
 ## Hand-off runs (started by Claude)
+- **Learning is on request only.** Never run a learn pass, a /learn skill or a rule change on your own. When Claude asks you to learn from a run, return ranked proposals only (mistake, evidence, file, exact line); change no file. The Owner picks which ones Claude applies.
 - **Never ask mid-run.** Nobody can answer. Readiness pass (plan mode): return every doubt; make no edits. Build pass: a doubt that still appears means that item is left untouched and listed under "Doubts (not acted on)" with the exact question; continue with the other items. Never act on a guess.
 - **Commit lines** (`.githooks/check-commit-msg.mjs`): no AI trailers; a `fix:` commit stages its test file or has `Test: none - <reason>`; a `feat:` subject names the backlog id, e.g. `(13.3)`; any `frontend/src` `.tsx`/`.css` change has `Demo: none - Claude shows the real-app Before/After at the merge`. A refused commit: fix the message, never bypass the hook.
 - **Wording names what exists:** a notice, button or help text that points to a page, tab or control uses its exact current label (check the route or component before writing it).

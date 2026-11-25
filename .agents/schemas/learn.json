@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["fixes"],
+  "properties": {
+    "fixes": { "type": "array", "items": { "type": "object", "required": ["rank", "mistake", "evidence", "file", "proposed_line", "saves"], "properties": {
+      "rank": { "type": "integer" },
+      "mistake": { "type": "string" },
+      "evidence": { "type": "string" },
+      "file": { "type": "string" },
+      "proposed_line": { "type": "string" },
+      "saves": { "type": "string" }
+    } } }
+  }
+}
