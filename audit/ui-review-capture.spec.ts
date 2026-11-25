@@ -110,10 +110,11 @@ for (const device of wantedDevices()) test(device.name, async ({ browser }) => {
   // states opened by a popup button are shot as the visible screen instead.
   const shoot = async (name: string, view: string, control: string, screenOnly = false, focusLoc?: ReturnType<Page["locator"]>) => {
     // Where the clicked control sits in the shot (0 = top, 1 = bottom), so the review page can scroll a thumbnail to it.
+    // A control that removes itself when clicked (e.g. "Clear filters") is gone: the timeout keeps this from waiting forever.
     const focus = focusLoc ? await focusLoc.evaluate((e, screen) => {
       const r = e.getBoundingClientRect();
       return screen ? (r.top + r.height / 2) / innerHeight : (r.top + scrollY + r.height / 2) / document.documentElement.scrollHeight;
-    }, screenOnly).catch(() => undefined) : undefined;
+    }, screenOnly, { timeout: 1_000 }).catch(() => undefined) : undefined;
     const p = await print(page);
     if (shotPrints.has(p)) return `same as state ${shotPrints.get(p)}`;
     const id = String(states.length + 1).padStart(2, '0');

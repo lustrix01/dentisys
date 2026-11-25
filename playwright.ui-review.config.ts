@@ -9,5 +9,6 @@ export default defineConfig({
   workers: 2,
   timeout: 20 * 60 * 1000,
   reporter: 'list',
-  use: { baseURL: process.env.AUDIT_BASE_URL ?? 'http://localhost:5173' },
+  // No step may wait forever: one stuck control is logged as an error and the capture goes on.
+  use: { baseURL: process.env.AUDIT_BASE_URL ?? 'http://localhost:5173', actionTimeout: 15_000, navigationTimeout: 30_000 },
 });
