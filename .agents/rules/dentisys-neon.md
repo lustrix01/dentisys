@@ -4,7 +4,7 @@ trigger: always_on
 
 # DentiSys Neon Operations (Antigravity)
 
-Precedence: (1) Owner's current request, (2) `AGENTS.md` and `spec.md`, (3) `GEMINI.md` and this rule.
+Precedence: (1) Owner's current request, (2) `AGENTS.md` and `spec.md`, (3) this rule (it supersedes the retired `dentisys-emergency` plugin rules and its `current-state.md`), (4) `GEMINI.md`.
 
 ## Swarm orchestration
 - Orchestrator runs on `gemini-4-neon-high`. Choose the path per item and state it with its reason in the readiness answer and the report:
@@ -45,6 +45,7 @@ Precedence: (1) Owner's current request, (2) `AGENTS.md` and `spec.md`, (3) `GEM
 - **SQL & integration debug loop:** Before running `check-postgres.ps1`, verify every raw SQL table's exact columns/`NOT NULL`/`CHECK`/`UNIQUE` constraints against migrations and `git grep` `tests/database/` for existing assertions superseded by the behavior change. Keep `$env:INTEGRATION_CONTINUE_ON_FAIL = '1'` across EVERY retry until 0 failures remain (or iterate in one warm running container via `docker compose exec web php ...`), fix all failures in one pass, then run the normal gate once to stamp `.pg`.
 
 ## Token & quota discipline
+- **Repo-root commands only:** `run_command` has no working-directory parameter and always runs from the workspace root. Pass repo-relative paths (`node --experimental-strip-types --test frontend/src/tests/<file>.test.ts`, `node frontend/node_modules/typescript/bin/tsc -b frontend`); never `cd` into a subfolder first, and never run bare `npx tsc` at the root (it downloads an unrelated npm package).
 - **Prefix-matchable commands (avoid permission re-prompts):** Keep `run_command` strings clean for Antigravity Allow/`unsandboxed(...)` prefix matching: no `;` chains, no `$VAR`/`$LASTEXITCODE`, no `$(...)`, and no `pwsh -Command "..."` wrappers. Write multi-step or redirected commands into `<artifactDir>/scratch/*.ps1` (or `.mjs`) via `write_file` and invoke `pwsh -ExecutionPolicy Bypass -File <path>` or `node <path>`.
 - **Redirect gate logs:** To keep gate output out of chat context without breaking command prefix matching, write a 2-line `<artifactDir>/scratch/run-gate.ps1` wrapper that runs `scripts/check.ps1` or `scripts/check-postgres.ps1` redirected to `<artifactDir>/scratch/*.log` and prints `EXIT=$LASTEXITCODE`, then run `pwsh -ExecutionPolicy Bypass -File <script>` and read only `EXIT` + failing lines / last ~30 lines.
 - **Limit multimodal PNGs in coordinator:** Have the `gemini-4-neon-low` demo worker open and verify **every** PNG via `read_file` with exact `scrollWidth <= innerWidth` metrics; coordinator opens only the 4–6 highest-risk PNGs (mobile 393, modals, primary After screens).
