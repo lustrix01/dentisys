@@ -19,6 +19,7 @@ test('Philippine mobile numbers normalise to 09XXXXXXXXX', () => {
   assert.equal(normalizePhMobile(''), '');
   assert.equal(normalizePhMobile('  '), '');
   assert.equal(normalizePhMobile('0917 123 4567'), '09171234567');
+  assert.equal(normalizePhMobile('0917-123-4567'), '09171234567');
   assert.equal(normalizePhMobile('+63-917-123-4567'), '09171234567');
   assert.equal(normalizePhMobile('639171234567'), '09171234567');
   assert.equal(normalizePhMobile('09171234'), null);
