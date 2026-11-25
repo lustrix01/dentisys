@@ -27,6 +27,7 @@ Only write `docs/archive/HANDOFF_<YYYY-MM-DD>_<topic>.md` when the Owner asks fo
 When writing a handoff for another agent that will review, merge, or fix the branch:
 - Write a **factual report** of what was done — never imperative "Your Steps" telling the receiving agent how to review or merge.
 - Include: worktree/branch/base/commit SHAs, exact files and behavior changed per item, tests added (with fail-before / pass-after evidence), exact gate commands and results (including stamp hashes or why a stamp was not written), file overlaps with peer branches, and known gaps or pre-existing issues left untouched.
+- For a Claude hand-off run, also: **Path chosen** per item (direct / one worker / swarm) with its reason; **Worker models** (each worker's name and model id); **Doubts (not acted on)** with the exact question per item left untouched.
 
 ## 5. Report to Owner
 1. Confirm the report is written and committed on the batch branch.

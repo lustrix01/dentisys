@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "required": ["items", "doubts"],
+  "properties": {
+    "items": { "type": "array", "items": { "type": "object", "required": ["id", "path", "reason", "workers"], "properties": {
+      "id": { "type": "string" },
+      "path": { "type": "string", "enum": ["direct", "one worker", "swarm"] },
+      "reason": { "type": "string" },
+      "workers": { "type": "array", "items": { "type": "object", "required": ["name", "model", "files"], "properties": { "name": { "type": "string" }, "model": { "type": "string" }, "files": { "type": "array", "items": { "type": "string" } } } } }
+    } } },
+    "doubts": { "type": "array", "items": { "type": "string" } }
+  }
+}
