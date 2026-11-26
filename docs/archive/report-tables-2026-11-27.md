@@ -60,3 +60,19 @@
 ## Doubts (not acted on)
 
 None.
+
+## T1-view — Standalone Offline HTML Options Demo
+
+- **Path chosen:** `direct` (1 gitignored generator script `audit-output/tables-neon/build-html.mjs`, 1 artifact note update, and this report section; no product code or tests changed; no swarm workers spawned).
+- **HTML path:** `C:\Users\decha\Desktop\Github\dentisys-tables\audit-output\tables-neon\options-demo.html` (`audit-output/tables-neon/options-demo.html`)
+- **Rebuild script:** `audit-output/tables-neon/build-html.mjs` (Node + existing `@playwright/test` canvas encoder; zero new dependencies; run `node audit-output/tables-neon/build-html.mjs` to rebuild or with `--check` to rebuild and verify).
+- **File size:** `1,690,161` bytes (`1,650.5 KB` / `1.61 MiB`) — all 15 real screenshots embedded as base64 `image/jpeg` data URIs (quality `0.82`, max `1600 px` wide), zero external files/fonts/scripts/network requests.
+- **Artifact updated:** Added a top note in `C:\Users\decha\.gemini\antigravity-cli\brain\fd5390e0-1d94-4f67-b3e5-b45c3630c34f\stage-1-options-demo.md` pointing to the HTML file path.
+- **Playwright verification (`file://` URL via `node audit-output/tables-neon/build-html.mjs --check`):**
+  - Console errors: `0`; page errors: `0`; external network requests: `0`.
+  - Images: `15/15` loaded (`naturalWidth > 0`, `maxNaturalWidth = 1600`, all `data:image/jpeg;base64,`).
+  - Layout overflow: `1920 / 1920` at `1920×947` and `1366 / 1366` at `1366×768` (no horizontal scroll).
+  - Interactions: clicking `iPad 820` tab switched to `ipad-820-light`; `ArrowRight` switched to `iphone-393-light`; `ArrowLeft` returned to `ipad-820-light`; `2` opened Option A full-size overlay; `3` switched overlay to Option B; `Escape` closed overlay.
+  - Visual check screenshot: `audit-output/tables-neon/options-demo-check.png` (inspected directly via `read_file`; layout, tabs, keyboard hints, and side-by-side Before | Option A | Option B cards verified clean).
+- **Tracked product files:** Unchanged (`git status` shows only `docs/archive/report-tables-2026-11-27.md`).
+
