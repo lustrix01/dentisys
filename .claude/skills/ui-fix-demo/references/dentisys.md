@@ -52,6 +52,8 @@ Repo `C:\Users\decha\Desktop\Github\dentisys`. Rules in `AGENTS.md` and `CLAUDE.
   - Small grey text is `text-slate-500 dark:text-slate-400`, except placeholders, disabled text and icons.
   - Tailwind 3.4 has no 150/202/205/350/450/550/650/750/850 shades.
 - Table style (2026-11-27, Course Catalog pilot, "it got worse"): rejected all four of tinted accent chips behind codes, flat icon buttons without their grey boxes, tighter rows with centred numbers and a two-line Classes cell, and phone cards that fold the values into one wrapped labelled line without the status chip. A sideways-scrolling table on phones was dropped too (393 px showed only code and title, no actions).
+- Tables (2026-11-27, Owner's words): tables "felt like looking through a spaghetti wiring. Just plugged in to make things work at first, then left and forgotten." The complaint is inconsistency between pages, worst on phones where Faculty tables turn into cards that differ page to page; fine-looking desktop tables still count. Fix it with one shared table and phone-card standard used everywhere, not by restyling one page.
+- Table standard (2026-11-27): the Owner chose Neon's Option B (`.data-table-ruled`: purple top rule, tinted header, column dividers, purple hover bar; phone cards with a purple left spine, status chip top-right, shaded 2×2 metric box, boxed actions bottom-right) over the denser minimal Option A: "A might look minimalistic, but it's going to be a hassle for the users to look at." Readability for users beats minimalism.
 - Look demos come only from `assets/template.html` via `build-demo.py`. Reuse one link per series (Stage 1 options and Stage 2 final share it).
 
 ## Ship (only when the Owner says push/deploy)
