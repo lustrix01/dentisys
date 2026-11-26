@@ -20,7 +20,7 @@ type Draft = { id: number; courseCode: string; name: string; lectureUnits: strin
 
 const inputClass = 'mt-1.5 min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-800 outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
 const cancelButton = 'min-h-11 rounded-xl px-4 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800';
-const iconButton = 'inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 disabled:opacity-40';
+const iconButton = 'inline-flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center rounded-lg border border-slate-200/80 bg-slate-100 text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-200 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-700 disabled:opacity-40';
 const filterClass = 'min-h-10 w-full min-w-36 cursor-pointer rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200';
 const num = (value: number | null) => (value ?? 0);
 const shownUnits = (value: number | null) => (value === null ? '—' : String(value)); // older courses have no lecture/lab split
@@ -164,29 +164,48 @@ export const CourseCatalog: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className="table-pin table-pin-first hidden rounded-3xl border border-slate-200/80 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900 sm:block">
-            <table className="w-full min-w-[760px] text-left text-xs">
-              <thead className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400"><tr>
-                <th scope="col" aria-sort={ariaSort(sort, 'code')} className="px-5 py-3.5"><SortableHeader label="Course Code" sortKey="code" sort={sort} onSort={setSort} /></th><th scope="col" aria-sort={ariaSort(sort, 'title')} className="px-4 py-3.5"><SortableHeader label="Course Title" sortKey="title" sort={sort} onSort={setSort} /></th><th className="px-4 py-3.5">Lecture Units</th><th className="px-4 py-3.5">Laboratory Units</th><th scope="col" aria-sort={ariaSort(sort, 'units')} className="px-4 py-3.5"><SortableHeader label="Total Units" sortKey="units" sort={sort} onSort={setSort} /></th><th scope="col" aria-sort={ariaSort(sort, 'classes')} className="px-4 py-3.5"><SortableHeader label="Classes" sortKey="classes" first="desc" sort={sort} onSort={setSort} /></th><th className="px-4 py-3.5 text-right">Actions</th>
+          <div className="table-pin table-pin-first data-table-ruled hidden sm:block">
+            <table className="w-full min-w-[650px] text-left text-xs">
+              <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400"><tr>
+                <th scope="col" aria-sort={ariaSort(sort, 'code')} className="whitespace-nowrap pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4"><SortableHeader label="Course Code" sortKey="code" sort={sort} onSort={setSort} /></th>
+                <th scope="col" aria-sort={ariaSort(sort, 'title')} className="px-2 py-2.5 xl:px-4"><SortableHeader label="Course Title" sortKey="title" sort={sort} onSort={setSort} /></th>
+                <th scope="col" className="w-[68px] border-l border-slate-200/70 px-2 py-2.5 text-right leading-tight dark:border-slate-800 xl:w-auto xl:whitespace-nowrap xl:px-4">Lecture Units</th>
+                <th scope="col" className="w-[82px] px-2 py-2.5 text-right leading-tight xl:w-auto xl:whitespace-nowrap xl:px-4">Laboratory Units</th>
+                <th scope="col" aria-sort={ariaSort(sort, 'units')} className="whitespace-nowrap px-2 py-2.5 text-right xl:px-4"><SortableHeader label="Total Units" sortKey="units" sort={sort} onSort={setSort} align="right" /></th>
+                <th scope="col" aria-sort={ariaSort(sort, 'classes')} className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4"><SortableHeader label="Classes" sortKey="classes" first="desc" sort={sort} onSort={setSort} align="right" /></th>
+                <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 text-right dark:border-slate-800 xl:pl-4 xl:pr-5">Actions</th>
               </tr></thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">{filtered.map(course => (
-                <tr key={course.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30">
-                  <td className="px-5 py-4 font-bold text-slate-800 dark:text-slate-100">{course.courseCode}</td>
-                  <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{course.name}</td>
-                  <td className="px-4 py-4 text-slate-500 dark:text-slate-400">{shownUnits(course.lectureUnits)}</td>
-                  <td className="px-4 py-4 text-slate-500 dark:text-slate-400">{shownUnits(course.labUnits)}</td>
-                  <td className="px-4 py-4 font-semibold text-slate-700 dark:text-slate-200">{course.units}</td>
-                  <td className="px-4 py-4 text-slate-500 dark:text-slate-400">{course.classCount} <span>({course.currentClassCount} this year)</span></td>
-                  <td className="px-4 py-3"><div className="flex justify-end gap-1.5">{actions(course)}</div></td>
+              <tbody>{filtered.map(course => (
+                <tr key={course.id}>
+                  <td className="whitespace-nowrap pl-3.5 pr-2 py-3 font-bold text-accent-800 dark:text-accent-300 xl:pl-5 xl:pr-4">{course.courseCode}</td>
+                  <td className="px-2 py-3 font-medium text-slate-800 dark:text-slate-100 xl:px-4">{course.name}</td>
+                  <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right tabular-nums text-slate-600 dark:border-slate-800/80 dark:text-slate-400 xl:px-4">{shownUnits(course.lectureUnits)}</td>
+                  <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums text-slate-600 dark:text-slate-400 xl:px-4">{shownUnits(course.labUnits)}</td>
+                  <td className="whitespace-nowrap px-2 py-3 text-right font-bold tabular-nums text-slate-800 dark:text-slate-100 xl:px-4">{course.units}</td>
+                  <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right tabular-nums text-slate-500 dark:border-slate-800/80 dark:text-slate-400 xl:px-4"><span className="font-semibold text-slate-800 dark:text-slate-100">{course.classCount}</span> <span>({course.currentClassCount} this year)</span></td>
+                  <td className="whitespace-nowrap border-l border-slate-100 pl-2 pr-3.5 py-2 dark:border-slate-800/80 xl:pl-4 xl:pr-5"><div className="flex justify-end gap-1.5">{actions(course)}</div></td>
                 </tr>
               ))}</tbody>
             </table>
           </div>
-          <div className="space-y-3 sm:hidden">{filtered.map(course => (
-            <article key={course.id} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-extrabold tracking-wide text-accent-700 dark:text-accent-300">{course.courseCode}</p><h3 className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100">{course.name}</h3></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${course.status === 'active' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{course.status === 'active' ? 'Active' : 'Retired'}</span></div>
-              <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">{[['Lecture Units', shownUnits(course.lectureUnits)], ['Laboratory Units', shownUnits(course.labUnits)], ['Total Units', String(course.units)], ['Classes', `${course.classCount} (${course.currentClassCount} this year)`]].map(([label, value]) => <div key={label}><dt className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">{label}</dt><dd className="mt-1 text-xs text-slate-700 dark:text-slate-300">{value}</dd></div>)}</dl>
-              <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">{actions(course)}</div>
+          <div className="space-y-2.5 sm:hidden">{filtered.map(course => (
+            <article key={course.id} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-accent-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-accent-400/70 dark:bg-slate-900">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-accent-700 dark:text-accent-300">{course.courseCode}</p>
+                  <h3 className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100">{course.name}</h3>
+                </div>
+                <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold ${course.status === 'active' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{course.status === 'active' ? 'Active' : 'Retired'}</span>
+              </div>
+              <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                {[['Lecture Units', shownUnits(course.lectureUnits)], ['Laboratory Units', shownUnits(course.labUnits)], ['Total Units', String(course.units)], ['Classes', `${course.classCount} (${course.currentClassCount} this year)`]].map(([label, value], idx) => (
+                  <div key={label} className="min-w-0">
+                    <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">{label}</dt>
+                    <dd className={`mt-0.5 whitespace-nowrap text-xs tabular-nums ${idx === 2 ? 'font-bold text-slate-800 dark:text-slate-100' : 'font-medium text-slate-700 dark:text-slate-200'}`}>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="mt-2 flex justify-end gap-1.5">{actions(course)}</div>
             </article>
           ))}</div>
         </>

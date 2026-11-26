@@ -81,6 +81,76 @@ html {
   .table-pin-blocks > table > tbody > tr > :first-child { position: static; box-shadow: none; }
 }
 
+/* Shared table body standard — Option B: Editorial Accent-Ruled (.data-table-ruled).
+   Works with .table-pin and .table-pin-first; keeps sticky headers and pinned first columns opaque. */
+.data-table-ruled {
+  border-radius: 1rem;
+  border: 1px solid #e2e8f0;
+  border-top: 2px solid #9B72CF;
+  background-color: #ffffff;
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+}
+.dark .data-table-ruled {
+  border-color: #1e293b;
+  border-top-color: #aa8dd3;
+  background-color: #0f172a;
+  box-shadow: 0 1px 2px 0 rgba(2, 6, 23, 0.35);
+}
+.data-table-ruled > table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.data-table-ruled > table > thead th {
+  background-color: #f6f3fc;
+  border-bottom: 2px solid #e2e8f0;
+  color: #475569;
+  vertical-align: middle;
+}
+.dark .data-table-ruled > table > thead th {
+  background-color: #171429;
+  border-bottom-color: #334155;
+  color: #94a3b8;
+}
+.data-table-ruled > table > tbody > tr > td {
+  border-bottom: 1px solid #eef2f6;
+  vertical-align: middle;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+.dark .data-table-ruled > table > tbody > tr > td {
+  border-bottom-color: #1e293b;
+}
+.data-table-ruled > table > tbody > tr:last-child > td {
+  border-bottom: 0;
+}
+.data-table-ruled > table > tbody > tr:hover > td {
+  background-color: #f8fafc;
+}
+.dark .data-table-ruled > table > tbody > tr:hover > td {
+  background-color: rgba(30, 41, 59, 0.45);
+}
+.data-table-ruled > table > tbody > tr:hover > :first-child {
+  box-shadow: inset 3px 0 0 #9B72CF;
+}
+.dark .data-table-ruled > table > tbody > tr:hover > :first-child {
+  box-shadow: inset 3px 0 0 #aa8dd3;
+}
+.data-table-ruled.table-pin-first[data-pinned-x] > table > tbody > tr > :first-child {
+  background-color: #ffffff;
+  box-shadow: 1px 0 0 #e2e8f0;
+}
+.data-table-ruled.table-pin-first[data-pinned-x] > table > tbody > tr:hover > :first-child {
+  background-color: #f8fafc;
+  box-shadow: inset 3px 0 0 #9B72CF, 1px 0 0 #e2e8f0;
+}
+.dark .data-table-ruled.table-pin-first[data-pinned-x] > table > tbody > tr > :first-child {
+  background-color: #0f172a;
+  box-shadow: 1px 0 0 #1e293b;
+}
+.dark .data-table-ruled.table-pin-first[data-pinned-x] > table > tbody > tr:hover > :first-child {
+  background-color: #172033;
+  box-shadow: inset 3px 0 0 #aa8dd3, 1px 0 0 #1e293b;
+}
+
 /* Native <select> popups follow the app theme (dark mode is the .dark class on <html>). */
 .dark select {
   color-scheme: dark;
