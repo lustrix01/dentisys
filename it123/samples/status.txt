@@ -1,0 +1,132 @@
+root@Mickole:~/toolkit# ./dentisys-status.sh; echo "exit=$?"
+=== DentiSYS status, 2026-11-24 23:42:52 ===
+Version: 1.0
+
+--- Services ---
+SERVICE     STATE     STATUS
+biometric   running   Up 36 seconds (healthy)
+db          running   Up 44 seconds (healthy)
+frontend    running   Up 13 seconds
+mailpit     running   Up 38 seconds (healthy)
+web         running   Up 24 seconds (healthy)
+
+--- Listening port ---
+Listening on TCP port 8090 (http://192.168.109.192:8090)
+
+--- Health check ---
+Application answers and the database is up.
+
+--- CPU and memory per container ---
+NAME                   CPU %     MEM USAGE / LIMIT     MEM %
+dentisys-biometric-1   0.02%     213.7MiB / 3.826GiB   5.45%
+dentisys-db-1          5.46%     29.46MiB / 3.826GiB   0.75%
+dentisys-frontend-1    0.00%     6.062MiB / 3.826GiB   0.15%
+dentisys-mailpit-1     0.00%     6.855MiB / 3.826GiB   0.17%
+dentisys-web-1         0.00%     21.13MiB / 3.826GiB   0.54%
+
+--- Server ---
+Load average (1, 5, 15 min): 5.06 5.05 5.03
+Mem:           3.8Gi       2.2Gi       253Mi        87Mi       1.7Gi       1.7Gi
+Swap:             0B          0B          0B
+Disk /: 6.2G used of 1007G (1%)
+Disk /var/lib/docker: 6.2G used of 1007G (1%)
+exit=0
+root@Mickole:~/toolkit# ./dentisys-status.sh --watch 5 --count 3 --save
+=== DentiSYS status, 2026-11-24 23:43:50 ===
+Version: 1.0
+
+--- Services ---
+SERVICE     STATE     STATUS
+biometric   running   Up About a minute (healthy)
+db          running   Up About a minute (healthy)
+frontend    running   Up About a minute
+mailpit     running   Up About a minute (healthy)
+web         running   Up About a minute (healthy)
+
+--- Listening port ---
+Listening on TCP port 8090 (http://192.168.109.192:8090)
+
+--- Health check ---
+Application answers and the database is up.
+
+--- CPU and memory per container ---
+NAME                   CPU %     MEM USAGE / LIMIT     MEM %
+dentisys-biometric-1   0.02%     213.7MiB / 3.826GiB   5.45%
+dentisys-db-1          0.02%     30.62MiB / 3.826GiB   0.78%
+dentisys-frontend-1    0.00%     6.562MiB / 3.826GiB   0.17%
+dentisys-mailpit-1     0.00%     6.863MiB / 3.826GiB   0.18%
+dentisys-web-1         0.00%     23.5MiB / 3.826GiB    0.60%
+
+--- Server ---
+Load average (1, 5, 15 min): 5.10 5.07 5.03
+Mem:           3.8Gi       2.2Gi       248Mi        88Mi       1.7Gi       1.7Gi
+Swap:             0B          0B          0B
+Disk /: 6.2G used of 1007G (1%)
+Disk /var/lib/docker: 6.2G used of 1007G (1%)
+(saved to /var/log/dentisys/status-20261124-234350.txt)
+
+=== DentiSYS status, 2026-11-24 23:43:57 ===
+Version: 1.0
+
+--- Services ---
+SERVICE     STATE     STATUS
+biometric   running   Up About a minute (healthy)
+db          running   Up About a minute (healthy)
+frontend    running   Up About a minute
+mailpit     running   Up About a minute (healthy)
+web         running   Up About a minute (healthy)
+
+--- Listening port ---
+Listening on TCP port 8090 (http://192.168.109.192:8090)
+
+--- Health check ---
+Application answers and the database is up.
+
+--- CPU and memory per container ---
+NAME                   CPU %     MEM USAGE / LIMIT     MEM %
+dentisys-biometric-1   23.74%    214.5MiB / 3.826GiB   5.48%
+dentisys-db-1          0.02%     30.37MiB / 3.826GiB   0.78%
+dentisys-frontend-1    0.00%     6.148MiB / 3.826GiB   0.16%
+dentisys-mailpit-1     0.00%     6.863MiB / 3.826GiB   0.18%
+dentisys-web-1         5.06%     23.98MiB / 3.826GiB   0.61%
+
+--- Server ---
+Load average (1, 5, 15 min): 5.01 5.05 5.03
+Mem:           3.8Gi       2.2Gi       241Mi        88Mi       1.7Gi       1.7Gi
+Swap:             0B          0B          0B
+Disk /: 6.2G used of 1007G (1%)
+Disk /var/lib/docker: 6.2G used of 1007G (1%)
+(saved to /var/log/dentisys/status-20261124-234357.txt)
+
+=== DentiSYS status, 2026-11-24 23:44:04 ===
+Version: 1.0
+
+--- Services ---
+SERVICE     STATE     STATUS
+biometric   running   Up About a minute (healthy)
+db          running   Up About a minute (healthy)
+frontend    running   Up About a minute
+mailpit     running   Up About a minute (healthy)
+web         running   Up About a minute (healthy)
+
+--- Listening port ---
+Listening on TCP port 8090 (http://192.168.109.192:8090)
+
+--- Health check ---
+Application answers and the database is up.
+
+--- CPU and memory per container ---
+NAME                   CPU %     MEM USAGE / LIMIT     MEM %
+dentisys-biometric-1   0.02%     213.7MiB / 3.826GiB   5.45%
+dentisys-db-1          0.02%     30.12MiB / 3.826GiB   0.77%
+dentisys-frontend-1    0.00%     6.191MiB / 3.826GiB   0.16%
+dentisys-mailpit-1     0.00%     6.863MiB / 3.826GiB   0.18%
+dentisys-web-1         0.00%     22.85MiB / 3.826GiB   0.58%
+
+--- Server ---
+Load average (1, 5, 15 min): 5.01 5.05 5.03
+Mem:           3.8Gi       2.2Gi       229Mi        88Mi       1.7Gi       1.6Gi
+Swap:             0B          0B          0B
+Disk /: 6.2G used of 1007G (1%)
+Disk /var/lib/docker: 6.2G used of 1007G (1%)
+(saved to /var/log/dentisys/status-20261124-234404.txt)

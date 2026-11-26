@@ -1,0 +1,133 @@
+root@Mickole:~/toolkit# ./dentisys-update.sh /root/dentisys-1.1.tar.gz
+[23:47:58] Checking the update bundle /root/dentisys-1.1.tar.gz ...
+[23:48:05] Update: 1.0 -> 1.1
+[23:48:05] Backing up the database ...
+[23:48:06] Archiving the application files and the database dump ...
+[23:48:09] Backup verified: /var/backups/dentisys/dentisys-backup-20261124-234758-v1.0.tar.gz (38M, 90 files)
+[23:48:09] Loading the new Docker images ...
+Loaded image: dentisys-web:1.1
+Loaded image: dentisys-frontend:1.1
+Loaded image: dentisys-biometric:1.1
+Loaded image: postgres:18
+Loaded image: axllent/mailpit:v1.27
+[23:48:16] Copying the new application files ...
+[23:48:16] Applying pending database migrations ...
+psql:/postgres/init.sql:4: NOTICE:  relation "_schema_migrations" already exists, skipping
+[23:48:19] Recreating the containers with version 1.1 ...
+[23:48:45] Checking that the application answers ...
+
+SUCCESS: DentiSYS updated from 1.0 to 1.1 and responding. Backup: /var/backups/dentisys/dentisys-backup-20261124-234758-v1.0.tar.gz
+root@Mickole:~/toolkit# ./dentisys-update.sh /root/dentisys-1.1-broken.tar.gz; echo "exit=$?"
+[23:49:08] Checking the update bundle /root/dentisys-1.1-broken.tar.gz ...
+[23:49:14] Update: 1.1 -> 1.1-broken
+[23:49:14] Backing up the database ...
+[23:49:14] Archiving the application files and the database dump ...
+[23:49:17] Backup verified: /var/backups/dentisys/dentisys-backup-20261124-234908-v1.1.tar.gz (38M, 90 files)
+[23:49:17] Loading the new Docker images ...
+Loaded image: dentisys-web:1.1-broken
+Loaded image: dentisys-frontend:1.1-broken
+Loaded image: dentisys-biometric:1.1-broken
+Loaded image: postgres:18
+Loaded image: axllent/mailpit:v1.27
+[23:49:22] Copying the new application files ...
+[23:49:22] Applying pending database migrations ...
+psql:/postgres/init.sql:4: NOTICE:  relation "_schema_migrations" already exists, skipping
+[23:49:25] Recreating the containers with version 1.1-broken ...
+
+======================================================================
+UPDATE FAILED: DentiSYS 1.1-broken does not work (the containers did not become healthy).
+The update was NOT undone. Restore the backup by hand:
+
+  1. Put back the application files of version 1.1:
+     sudo rm -rf /opt/dentisys && sudo tar -xzf /var/backups/dentisys/dentisys-backup-20261124-234908-v1.1.tar.gz -C / opt/dentisys
+  2. Put back the database as it was before the update:
+     sudo tar -xzOf /var/backups/dentisys/dentisys-backup-20261124-234908-v1.1.tar.gz db.dump | sudo docker exec -i dentisys-db-1 pg_restore --clean --if-exists -U postgres -d dentisys
+  3. Restart version 1.1 and check it:
+     sudo /root/toolkit/dentisys-service.sh restart && sudo /root/toolkit/dentisys-status.sh
+
+Backup checksum: /var/backups/dentisys/dentisys-backup-20261124-234908-v1.1.tar.gz.sha256   Log: /var/log/dentisys/update-20261124-234908.log
+======================================================================
+exit=7
+root@Mickole:~/toolkit# ./dentisys-status.sh; echo "exit=$?"
+=== DentiSYS status, 2026-11-24 23:51:51 ===
+Version: 1.1-broken
+
+--- Services ---
+SERVICE     STATE     STATUS
+biometric   running   Up 2 minutes (healthy)
+db          running   Up 9 minutes (healthy)
+frontend    created   Created
+mailpit     running   Up 9 minutes (healthy)
+web         running   Up 2 minutes (unhealthy)
+
+--- Listening port ---
+Nothing is listening on TCP port 8090
+
+--- Health check ---
+Application does NOT answer (or its database is down).
+
+--- CPU and memory per container ---
+NAME                   CPU %     MEM USAGE / LIMIT     MEM %
+dentisys-biometric-1   26.27%    212.3MiB / 3.826GiB   5.42%
+dentisys-db-1          0.00%     43.63MiB / 3.826GiB   1.11%
+dentisys-mailpit-1     0.00%     14.91MiB / 3.826GiB   0.38%
+dentisys-web-1         0.45%     27.32MiB / 3.826GiB   0.70%
+
+--- Server ---
+Load average (1, 5, 15 min): 4.59 5.11 5.07
+Mem:           3.8Gi       2.1Gi       678Mi        93Mi       1.3Gi       1.7Gi
+Swap:             0B          0B          0B
+Disk /: 6.3G used of 1007G (1%)
+Disk /var/lib/docker: 6.3G used of 1007G (1%)
+exit=6
+root@Mickole:~/toolkit# sudo rm -rf /opt/dentisys && sudo tar -xzf /var/backups/dentisys/dentisys-backup-20261124-234908-v1.1.tar.gz -C / opt/dentisys
+root@Mickole:~/toolkit# sudo tar -xzOf /var/backups/dentisys/dentisys-backup-20261124-234908-v1.1.tar.gz db.dump | sudo docker exec -i dentisys-db-1 pg_restore --clean --if-exists -U postgres -d dentisys
+root@Mickole:~/toolkit# sudo /root/toolkit/dentisys-service.sh restart && sudo /root/toolkit/dentisys-status.sh
+[23:52:40] Stopping frontend ...
+[23:52:40] Stopping web ...
+[23:52:41] Stopping biometric ...
+[23:52:42] Stopping mailpit ...
+[23:52:43] Stopping db ...
+[23:52:44] DentiSYS is stopped.
+[23:52:44] Starting db ...
+[23:52:50] db is up.
+[23:52:50] Starting mailpit ...
+[23:52:52] mailpit is up.
+[23:52:52] Starting biometric ...
+[23:53:04] biometric is up.
+[23:53:04] Starting web ...
+[23:53:15] web is up.
+[23:53:15] Starting frontend ...
+[23:53:16] frontend is up.
+[23:53:16] DentiSYS is running on port 8090.
+=== DentiSYS status, 2026-11-24 23:53:16 ===
+Version: 1.1
+
+--- Services ---
+SERVICE     STATE     STATUS
+biometric   running   Up 23 seconds (healthy)
+db          running   Up 32 seconds (healthy)
+frontend    running   Up Less than a second
+mailpit     running   Up 26 seconds (healthy)
+web         running   Up 12 seconds (healthy)
+
+--- Listening port ---
+Listening on TCP port 8090 (http://192.168.109.192:8090)
+
+--- Health check ---
+Application answers and the database is up.
+
+--- CPU and memory per container ---
+NAME                   CPU %     MEM USAGE / LIMIT     MEM %
+dentisys-biometric-1   0.02%     198.6MiB / 3.826GiB   5.07%
+dentisys-db-1          0.03%     29.2MiB / 3.826GiB    0.75%
+dentisys-frontend-1    0.00%     9.148MiB / 3.826GiB   0.23%
+dentisys-mailpit-1     0.00%     6.539MiB / 3.826GiB   0.17%
+dentisys-web-1         0.00%     20.21MiB / 3.826GiB   0.52%
+
+--- Server ---
+Load average (1, 5, 15 min): 4.77 5.05 5.06
+Mem:           3.8Gi       2.2Gi       561Mi        88Mi       1.4Gi       1.7Gi
+Swap:             0B          0B          0B
+Disk /: 6.3G used of 1007G (1%)
+Disk /var/lib/docker: 6.3G used of 1007G (1%)

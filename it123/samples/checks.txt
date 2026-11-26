@@ -1,0 +1,43 @@
+# Sample outputs for the checks in 5.1 and 5.4, captured 2026-11-26 from the
+# submitted scripts (WSL Ubuntu 24.04, /root/toolkit).
+
+root@Mickole:~/toolkit# head -n 17 dentisys-service.sh
+#!/bin/bash
+# dentisys-service.sh - start, stop or restart DentiSYS and the services it depends on.
+#
+# Start order: database -> mail (Mailpit) -> face recognition sidecar -> backend
+# -> web front end. Each service must be up (healthy, when it has a health check)
+# before the next one starts. Stop uses the reverse order. "start" refuses to
+# start a second copy when the application is already running.
+#
+# Authors: IT 123 Group 07 (BSIT 4-B), DentiSYS
+# AI use: drafted with Claude Code (Anthropic, Claude Opus 5.5) from our own first
+#          version (written by the group, without AI, on 2026-11-23), then reviewed, run and
+#          explained line by line by the group. The submitted code is AI-assisted;
+#          the member wrote the wording on lines 55, 58, 75 and 78 and the
+#          messages on lines 43, 46, 54, 70 and 90, and Claude corrected and reworded
+#          all of them. README 7.
+#
+# Usage: sudo ./dentisys-service.sh start|stop|restart   (see --help)
+
+root@Mickole:~/toolkit# grep -n -i "pass" dentisys-*.sh
+dentisys-install.sh:156:DB_PASS=$(openssl rand -hex 24)
+dentisys-install.sh:158:DB_ADMIN_PASS=$(openssl rand -hex 24)
+dentisys-update.sh:136:wait_healthy 60 || failed "the health check at http://127.0.0.1:$(app_port)/healthcheck.php did not pass"
+
+root@Mickole:~/toolkit# sed -n 89,99p dentisys-update.sh
+umask 077
+tar -czf "$backup" -C / "${APP_DIR#/}" -C "$work" db.dump || die "could not write $backup; nothing was changed"
+umask 022
+# Verify: gzip can read it all, and the two key members are inside.
+gzip -t "$backup" || die "backup verification failed (gzip); nothing was changed"
+members="$(tar -tzf "$backup")"
+echo "$members" | grep -qx "${APP_DIR#/}/release.env" || die "backup verification failed (no release.env); nothing was changed"
+echo "$members" | grep -qx "db.dump" || die "backup verification failed (no db.dump); nothing was changed"
+sha256sum "$backup" > "$backup.sha256"
+chmod 600 "$backup" "$backup.sha256"
+info "Backup verified: $backup ($(du -h "$backup" | cut -f 1), $(echo "$members" | wc -l) files)"
+
+root@Mickole:~/toolkit# grep -n "START_ORDER" dentisys-lib.sh dentisys-service.sh
+dentisys-lib.sh:27:START_ORDER=(db mailpit biometric web frontend)
+dentisys-service.sh:29:  start     start the services in order: ${START_ORDER[*]}

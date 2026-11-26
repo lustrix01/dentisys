@@ -1,0 +1,259 @@
+.\" dentisys-toolkit.8 - manual page for the DentiSYS sysadmin toolkit (IT 123, Option 1B).
+.\" Based on the template in Appendix C of the IT 123 Final Project Guide.
+.\" AI use: drafted with Claude Code (Anthropic, Claude Opus 5.5) from the group's
+.\"         2026-11-23 version (written without AI), then reviewed and explained. README 7.
+.\" View it with: man ./dentisys-toolkit.8
+.TH DENTISYS-TOOLKIT 8 "2026" "Group 07" "DentiSYS Administration"
+.\" .nh: do not hyphenate words, so paths and options stay whole.
+.nh
+.SH NAME
+dentisys-toolkit \- service lifecycle scripts for DentiSYS
+.SH SYNOPSIS
+.B dentisys-install.sh
+[\-\-port PORT] [\-\-mail\-port PORT] [\-\-dean\-email ADDRESS] BUNDLE
+.br
+.B dentisys-service.sh
+start | stop | restart
+.br
+.B dentisys-status.sh
+[\-\-watch SECONDS] [\-\-count N] [\-\-save]
+.br
+.B dentisys-update.sh
+BUNDLE
+.br
+.B dentisys-pause.sh
+pause | resume | status
+.br
+.B dentisys-maintenance.sh
+on [MESSAGE] | off | status
+.PP
+Every script also accepts
+.B \-\-help
+and must be run as root (with
+.BR sudo ).
+.SH DESCRIPTION
+The DentiSYS toolkit installs and controls DentiSYS, our capstone web system
+(grades, attendance, user accounts), on an Ubuntu Server
+24.04 machine. DentiSYS runs as five Docker containers that start in this order:
+.B db
+(PostgreSQL),
+.B mailpit
+(test e-mail viewer),
+.B biometric
+(face recognition),
+.B web
+(PHP backend) and
+.B frontend
+(nginx). The six scripts install the application from an offline bundle, start
+and stop it in the correct order, report its state, back it up before an update,
+freeze and resume its processes, and show a maintenance page. They are used by
+the server administrator. All scripts load the shared file
+.BR dentisys-lib.sh ,
+and only one toolkit script can change the system at a time (a lock file).
+.SH COMMANDS
+.TP
+.B dentisys-install.sh \fR[\fIOPTIONS\fR] \fIBUNDLE
+Installs DentiSYS on a clean server from
+.IR BUNDLE ,
+a
+.I dentisys-VERSION.tar.gz
+file. It installs Docker and Docker Compose with
+.BR apt-get ,
+checks that both ports are free, creates the
+.B dentisys
+service user and group (no login shell), checks the bundle with
+.BR sha256sum ,
+copies the application to
+.IR /opt/dentisys ,
+loads the Docker images, writes new random secrets to
+.I /etc/dentisys/dentisys.env
+(mode 600), sets ownership and permissions, starts the services (the database
+container creates the database and its user on first start), and checks that the
+application responds. It ends with SUCCESS or FAILURE.
+Options:
+.B \-\-port
+(application port, default 8080),
+.B \-\-mail\-port
+(Mailpit port, default 8025),
+.B \-\-dean\-email
+(the first Dean account; its invitation goes to Mailpit). A run that stopped
+halfway can be repeated; a second run after a successful install is refused.
+.TP
+.B dentisys-service.sh start\fR|\fBstop\fR|\fBrestart
+.B start
+starts the services one at a time in the order db, mailpit, biometric, web,
+frontend, and waits for each to be healthy before the next. It refuses to start
+a second copy when DentiSYS is already running.
+.B stop
+stops them in the reverse order and also ends maintenance mode.
+.B restart
+runs stop, then start.
+.TP
+.B dentisys-status.sh \fR[\fB\-\-watch \fISECONDS\fR] [\fB\-\-count \fIN\fR] [\fB\-\-save\fR]
+Reports the installed version, the state of each service, the TCP port the
+application listens on (from
+.BR ss ),
+whether the application and its database answer the health check, CPU and
+memory per container (from
+.BR "docker stats" ),
+and the server's load average, memory
+.RB ( free )
+and disk
+.RB ( df ).
+.B \-\-watch
+repeats the report every
+.I SECONDS
+seconds,
+.B \-\-count
+stops after
+.I N
+reports, and
+.B \-\-save
+also writes each report to
+.IR /var/log/dentisys/status-DATE.txt .
+.TP
+.B dentisys-update.sh \fIBUNDLE
+Updates DentiSYS to the version in
+.IR BUNDLE .
+It checks the bundle's checksums, then backs up the database
+.RB ( pg_dump )
+and
+.I /opt/dentisys
+into one dated archive in
+.IR /var/backups/dentisys ,
+and verifies it with
+.B gzip \-t
+and
+.BR "tar \-tzf" .
+It then loads the new images, copies the new files, runs pending database
+migrations, recreates the containers, and checks the application. If the check
+fails, it does not undo the update: it prints a framed UPDATE FAILED message with
+the three exact commands to restore the backup by hand, and exits with status 7.
+It refuses a bundle whose version is already installed.
+.TP
+.B dentisys-pause.sh pause\fR|\fBresume\fR|\fBstatus
+.B pause
+sends SIGSTOP
+.RB ( "kill \-STOP" )
+to every process of the frontend, web and biometric containers; their process
+IDs come from
+.BR "docker top" .
+Nothing answers until
+.B resume
+sends SIGCONT
+.RB ( "kill \-CONT" ).
+The database keeps running.
+.B status
+lists the processes and their state (T means stopped).
+.TP
+.B dentisys-maintenance.sh on \fR[\fIMESSAGE\fR]|\fBoff\fR|\fBstatus
+.B on
+stops the front end and starts an nginx container on the same port that answers
+every request with HTTP 503 and a "DentiSYS is temporarily unavailable" page
+showing
+.I MESSAGE
+(for example the time the system will be back). Unlike pause, the server keeps
+answering.
+.B off
+removes the page and starts the front end again.
+.B status
+says whether maintenance mode is on.
+.SH EXAMPLES
+Install version 1.0 on ports 8090 and 8026:
+.PP
+.B sudo ./dentisys-install.sh \-\-port 8090 \-\-mail\-port 8026 \-\-dean\-email dean@bicol-u.edu.ph /root/dentisys-1.0.tar.gz
+.PP
+Stop and start the application:
+.PP
+.B sudo ./dentisys-service.sh stop
+.br
+.B sudo ./dentisys-service.sh start
+.PP
+Three status reports, five seconds apart, each saved to a file:
+.PP
+.B sudo ./dentisys-status.sh \-\-watch 5 \-\-count 3 \-\-save
+.PP
+Back up and update to version 1.1:
+.PP
+.B sudo ./dentisys-update.sh /root/dentisys-1.1.tar.gz
+.PP
+Freeze the application, then let it continue:
+.PP
+.B sudo ./dentisys-pause.sh pause
+.br
+.B sudo ./dentisys-pause.sh resume
+.PP
+Show the maintenance page, then remove it:
+.PP
+.B sudo ./dentisys-maintenance.sh on """Back at 3:00 PM today."""
+.br
+.B sudo ./dentisys-maintenance.sh off
+.SH FILES
+.TP
+.I /opt/dentisys/
+Application files: Compose files, database scripts, face-recognition models and
+the maintenance page template. Owner root, group dentisys, mode 750.
+.TP
+.I /opt/dentisys/release.env
+The installed version and the names of its Docker images. Mode 640.
+.TP
+.I /etc/dentisys/dentisys.env
+Passwords and keys, generated at install. Owner root, mode 600. No script
+contains a password.
+.TP
+.I /var/backups/dentisys/dentisys-backup-DATE-vVERSION.tar.gz
+Backup made by dentisys-update.sh before each update (application files and
+database dump), with a
+.I .sha256
+checksum file beside it. Directory mode 700.
+.TP
+.I /var/log/dentisys/
+Install logs (install-DATE.log), update logs (update-DATE.log) and saved status
+reports (status-DATE.txt).
+.TP
+.I /var/lib/dentisys/maintenance/
+The maintenance page and nginx configuration in use while maintenance mode is on.
+.TP
+.I /run/dentisys/
+The lock file (toolkit.lock) and the pause marker (paused). Cleared at reboot.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+General error: bad input, file not found, a step failed, or DentiSYS is already
+installed.
+.TP
+.B 2
+Not run as root.
+.TP
+.B 3
+A required command is missing.
+.TP
+.B 4
+Another toolkit script is running (the lock is taken).
+.TP
+.B 5
+Wrong state: already running, already paused, paused, or maintenance mode is
+already on or not on.
+.TP
+.B 6
+dentisys-status.sh only: DentiSYS is not running or not healthy.
+.TP
+.B 7
+dentisys-update.sh only: the update was applied but the check failed. Restore
+the backup by hand with the commands the script printed.
+.SH AUTHORS
+IT 123 Group 07, BSIT 4-B, Bicol University: Alvarez, Micaiah Devin N., Castillo, Angela Marielle R., Dechavez, Mickole R., Lumbang, Owhie S., Nator, Jazmin Erika M.
+.SH SEE ALSO
+.BR docker (1),
+.BR docker-compose (1),
+.BR kill (1),
+.BR ss (8),
+.BR tar (1),
+.BR gzip (1),
+.BR sha256sum (1),
+.BR pg_dump (1),
+.BR df (1),
+.BR free (1)

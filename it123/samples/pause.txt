@@ -1,0 +1,24 @@
+root@Mickole:~/toolkit# ./dentisys-pause.sh pause && ./dentisys-pause.sh status
+[23:45:27] Sent SIGSTOP to 16 processes.
+[23:45:27] DentiSYS is paused: requests to port 8090 now wait without an answer.
+    PID STAT %CPU   RSS COMMAND
+   5923 Ts    0.2 27420 gunicorn
+   5949 Tl    0.8 232552 gunicorn
+   6096 Ts    0.0 33180 apache2
+   6144 T     0.0 27352 apache2
+   6145 T     0.0 23936 apache2
+   6146 T     0.0 23872 apache2
+   6147 T     0.0 23936 apache2
+   6148 T     0.0 23924 apache2
+   6258 T     0.0 23924 apache2
+   6324 Ts    0.0  5844 nginx
+   6403 T     0.0  3048 nginx
+   6404 T     0.0  3048 nginx
+   6405 T     0.0  3048 nginx
+   6406 T     0.0  3048 nginx
+   6407 T     0.0  3048 nginx
+   6408 T     0.0  2656 nginx
+DentiSYS is PAUSED since 2026-11-24 23:45:27.
+root@Mickole:~/toolkit# ./dentisys-pause.sh resume
+[23:46:33] Sent SIGCONT to 22 processes.
+[23:46:33] DentiSYS is resumed and answering.

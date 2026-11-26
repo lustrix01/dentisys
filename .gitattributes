@@ -1,2 +1,3 @@
 *.sh text eol=lf
 e2e/fixtures/provisional-roster.pdf binary
+*.8 text eol=lf
