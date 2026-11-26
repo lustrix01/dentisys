@@ -1,0 +1,1 @@
+Rewritten root commit. This commit was created by rewriting it123-sam so the hand-written toolkit versions (it123/drafts/) precede the reviewed ones. Old tip before the rewrite: c50995d (kept locally as backup/it123-sam-pre-drafts; not on origin). Rewrite touched only the root; every later commit is the same change replayed.
