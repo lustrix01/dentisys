@@ -32,9 +32,10 @@ contract. Claude reviews and merges the result with the `colleague-merge` skill.
 - **Proof:** <the test that must fail before and pass after, at the right layer>.
 - **Done when:** <observable result>.
 
-## Gates (once, after every worker is merged back, `--no-ff`)
+## Gates (once, on the final tree: after every worker is merged back `--no-ff`, or after the last direct commit)
 
-1. `node frontend/node_modules/typescript/bin/tsc -b frontend` and the focused tests above.
+1. `node frontend/node_modules/typescript/bin/tsc -b frontend` and the focused tests above (skip the focused run when
+   `npm --prefix frontend test` runs in the same pass and includes them; never rerun an unchanged passing gate).
 2. `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check-postgres.ps1 -ComposeProject dentisys-integration-<tag> -BackendHttpPort 28080 -FrontendHttpPort 25173 -MailpitUiPort 28025`
    when backend, database or `e2e/live` files changed (`$env:INTEGRATION_CONTINUE_ON_FAIL = '1'` for the
    first run).
