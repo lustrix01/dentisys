@@ -25,3 +25,13 @@ test('Philippine mobile numbers normalise to 09XXXXXXXXX', () => {
   assert.equal(normalizePhMobile('09171234'), null);
   assert.equal(normalizePhMobile('02 8123 4567'), null);
 });
+
+test('Philippine mobile edge cases', () => {
+  assert.equal(normalizePhMobile('(0917) 123-4567'), '09171234567');
+  assert.equal(normalizePhMobile('+639171234567'), '09171234567');
+  assert.equal(normalizePhMobile('0917.123.4567'), null);
+  assert.equal(normalizePhMobile('091712345678'), null);
+  assert.equal(normalizePhMobile('0917abc4567'), null);
+  assert.equal(normalizePhMobile('()- '), '');
+  assert.equal(normalizePhMobile('+63 0917 123 4567'), null);
+});
