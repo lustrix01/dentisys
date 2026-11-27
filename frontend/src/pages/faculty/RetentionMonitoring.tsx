@@ -939,7 +939,7 @@ export const RetentionMonitoring: React.FC = () => {
     const titleText = blocked
       ?? (!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam');
     return (
-      <button type="button" onClick={() => openSchedule(record)} disabled={disabled} title={titleText} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button>
+      <button type="button" onClick={() => openSchedule(record)} disabled={disabled} title={titleText} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-400 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button>
     );
   };
 
@@ -966,7 +966,7 @@ export const RetentionMonitoring: React.FC = () => {
       || (row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived');
     return (
       <div className="space-y-1">
-        <div className={`flex items-center justify-end gap-1.5 ${wrap ? 'flex-wrap' : 'flex-nowrap'}`}>
+        <div className={`flex items-center justify-end gap-1.5 ${wrap ? 'flex-wrap' : 'flex-wrap lg:flex-nowrap'}`}>
           <button
             type="button"
             onClick={() => openPolicyProgression(row.record)}
@@ -981,7 +981,7 @@ export const RetentionMonitoring: React.FC = () => {
               disabled={Boolean(blocked)}
               title={blocked ?? undefined}
               onClick={() => openSchedule(row.record)}
-              className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
+              className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
             >
               Schedule attempt {allowedAttemptNumbers(row.progression)[0]}
             </button>
@@ -992,7 +992,7 @@ export const RetentionMonitoring: React.FC = () => {
               disabled={Boolean(blocked)}
               title={blocked ?? undefined}
               onClick={() => openResolve(row)}
-              className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
+              className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
             >
               Grade attempt {pendingAttemptNumber(row.progression)}
             </button>
@@ -1003,7 +1003,7 @@ export const RetentionMonitoring: React.FC = () => {
               disabled={Boolean(blocked)}
               title={blocked ?? undefined}
               onClick={() => openCostRecovery(row)}
-              className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
+              className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
             >
               Record cost recovery
             </button>
@@ -1221,12 +1221,12 @@ export const RetentionMonitoring: React.FC = () => {
             <>
               {!isPhone ? (
               <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
-                <table className="w-full min-w-[650px] text-left text-xs">
+                <table className="w-full lg:min-w-[650px] text-left text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <tr>
                       <th scope="col" className="whitespace-nowrap pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4" aria-sort={ariaSort(midSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={midSort} onSort={setMidSort} /></th>
                       <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4" aria-sort={ariaSort(midSort, 'grade')}><SortableHeader label="Final Midterm Grade" sortKey="grade" sort={midSort} onSort={setMidSort} align="right" /></th>
-                      <th scope="col" className="border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Class</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Class</th>
                       <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Risk Standing</th>
                       <th scope="col" className="whitespace-nowrap pl-2 pr-3.5 py-2.5 xl:pl-4 xl:pr-5">Status</th>
                     </tr>
@@ -1252,7 +1252,7 @@ export const RetentionMonitoring: React.FC = () => {
                             <span className="italic text-slate-500 dark:text-slate-400">Incomplete assessments</span>
                           )}
                         </td>
-                        <td className="border-l border-slate-100 px-2 py-3 font-medium text-slate-700 dark:border-slate-800/80 dark:text-slate-200 xl:px-4">{record.className}</td>
+                        <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 font-medium text-slate-700 dark:border-slate-800/80 dark:text-slate-200 xl:px-4">{record.className}</td>
                         <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 dark:border-slate-800/80 xl:px-4">
                           {isMidtermAtRisk(record) && (
                             <span className="inline-flex rounded-full px-2 py-1 text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300">At risk</span>
@@ -1340,33 +1340,33 @@ export const RetentionMonitoring: React.FC = () => {
             <>
               {!isPhone ? (
               <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
-                <table className="w-full min-w-[700px] text-left text-xs">
+                <table className="w-full lg:min-w-[700px] text-left text-[11px] lg:text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <tr>
-                      <th scope="col" className="whitespace-nowrap pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4" aria-sort={ariaSort(watchSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={watchSort} onSort={setWatchSort} /></th>
-                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4" aria-sort={ariaSort(watchSort, 'grade')}><SortableHeader label="Course Grade" sortKey="grade" sort={watchSort} onSort={setWatchSort} align="right" /></th>
-                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Student No.</th>
-                      <th scope="col" className="whitespace-nowrap px-2 py-2.5 xl:px-4">Subject</th>
-                      <th scope="col" className="px-2 py-2.5 xl:px-4">Class</th>
-                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4" aria-sort={ariaSort(watchSort, 'state')}><SortableHeader label="State" sortKey="state" sort={watchSort} onSort={setWatchSort} /></th>
-                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 text-right dark:border-slate-800 xl:pl-4 xl:pr-5">Actions</th>
+                      <th scope="col" className="whitespace-nowrap pl-2 pr-1 py-2.5 lg:pl-3.5 lg:pr-2 xl:pl-5 xl:pr-4" aria-sort={ariaSort(watchSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={watchSort} onSort={setWatchSort} /></th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-1 py-2.5 text-right dark:border-slate-800 lg:px-2 xl:px-4" aria-sort={ariaSort(watchSort, 'grade')}><SortableHeader label="Course Grade" sortKey="grade" sort={watchSort} onSort={setWatchSort} align="right" /></th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-1 py-2.5 dark:border-slate-800 lg:px-2 xl:px-4">Student No.</th>
+                      <th scope="col" className="whitespace-nowrap px-1 py-2.5 lg:px-2 xl:px-4">Subject</th>
+                      <th scope="col" className="whitespace-nowrap px-1 py-2.5 lg:px-2 xl:px-4">Class</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-1 py-2.5 dark:border-slate-800 lg:px-2 xl:px-4" aria-sort={ariaSort(watchSort, 'state')}><SortableHeader label="State" sortKey="state" sort={watchSort} onSort={setWatchSort} /></th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-1 pr-2 py-2.5 text-right dark:border-slate-800 lg:pl-2 lg:pr-3.5 xl:pl-4 xl:pr-5">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sortedWatchlist.map(record => (
                       <tr key={record.enrollmentId}>
-                        <td className="pl-3.5 pr-2 py-3 font-bold text-slate-800 dark:text-slate-100 xl:pl-5 xl:pr-4">{textOrUnavailable(record.studentName, 'Student name unavailable')}</td>
-                        <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right tabular-nums dark:border-slate-800/80 xl:px-4">
+                        <td className="pl-2 pr-1 py-3 font-bold text-slate-800 dark:text-slate-100 lg:pl-3.5 lg:pr-2 xl:pl-5 xl:pr-4">{textOrUnavailable(record.studentName, 'Student name unavailable')}</td>
+                        <td className="whitespace-nowrap border-l border-slate-100 px-1 py-3 text-right tabular-nums dark:border-slate-800/80 lg:px-2 xl:px-4">
                           <div className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage} grade={record.gwa}>{formatGrade(record.gwa)}</GradeValue> : 'Grade unavailable'}</div>
                           <span className="block text-[10px] font-normal text-slate-500 dark:text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span>
                         </td>
-                        <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 font-bold text-clinical-800 dark:border-slate-800/80 dark:text-clinical-300 xl:px-4">{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
-                        <td className="whitespace-nowrap px-2 py-3 font-bold text-clinical-800 dark:text-clinical-300 xl:px-4">{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
-                        <td className="px-2 py-3 font-medium text-slate-700 dark:text-slate-200 xl:px-4">{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
-                        <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 dark:border-slate-800/80 xl:px-4">
-                          <button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1.5 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button>
+                        <td className="whitespace-nowrap border-l border-slate-100 px-1 py-3 font-bold text-clinical-800 dark:border-slate-800/80 dark:text-clinical-300 lg:px-2 xl:px-4">{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
+                        <td className="whitespace-nowrap px-1 py-3 font-bold text-clinical-800 dark:text-clinical-300 lg:px-2 xl:px-4">{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
+                        <td className="whitespace-nowrap px-1 py-3 font-medium text-slate-700 dark:text-slate-200 lg:px-2 xl:px-4">{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
+                        <td className="whitespace-nowrap border-l border-slate-100 px-1 py-3 dark:border-slate-800/80 lg:px-2 xl:px-4">
+                          <button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300 lg:gap-1.5" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button>
                         </td>
-                        <td className="whitespace-nowrap border-l border-slate-100 pl-2 pr-3.5 py-2 text-right dark:border-slate-800/80 xl:pl-4 xl:pr-5">
+                        <td className="whitespace-nowrap border-l border-slate-100 pl-1 pr-2 py-2 text-right dark:border-slate-800/80 lg:pl-2 lg:pr-3.5 xl:pl-4 xl:pr-5">
                           <div className="flex items-center justify-end gap-1.5">{renderWatchlistRemedialAction(record)}</div>
                         </td>
                       </tr>
@@ -1444,15 +1444,15 @@ export const RetentionMonitoring: React.FC = () => {
             <>
               {!isPhone ? (
               <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
-                <table className="w-full min-w-[820px] text-left text-xs">
+                <table className="w-full lg:min-w-[820px] text-left text-[11px] lg:text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <tr>
-                      <th scope="col" className="whitespace-nowrap pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4" aria-sort={ariaSort(remSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={remSort} onSort={setRemSort} /></th>
-                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4">Original Grade</th>
-                      <th scope="col" className="border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Subject / Class</th>
-                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4">Attempts</th>
-                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4" aria-sort={ariaSort(remSort, 'stage')}><SortableHeader label="Current Stage" sortKey="stage" sort={remSort} onSort={setRemSort} /></th>
-                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 text-right dark:border-slate-800 xl:pl-4 xl:pr-5">Actions</th>
+                      <th scope="col" className="whitespace-nowrap pl-2.5 pr-1.5 py-2.5 lg:pl-3.5 lg:pr-2 xl:pl-5 xl:pr-4" aria-sort={ariaSort(remSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={remSort} onSort={setRemSort} /></th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-1.5 py-2.5 text-right dark:border-slate-800 lg:px-2 xl:px-4">Original Grade</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-1.5 py-2.5 dark:border-slate-800 lg:px-2 xl:px-4">Subject / Class</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-1.5 py-2.5 text-right dark:border-slate-800 lg:px-2 xl:px-4">Attempts</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-1.5 py-2.5 dark:border-slate-800 lg:px-2 xl:px-4" aria-sort={ariaSort(remSort, 'stage')}><SortableHeader label="Current Stage" sortKey="stage" sort={remSort} onSort={setRemSort} /></th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-1.5 pr-2.5 py-2.5 text-right dark:border-slate-800 lg:pl-2 lg:pr-3.5 xl:pl-4 xl:pr-5">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1462,26 +1462,26 @@ export const RetentionMonitoring: React.FC = () => {
                         : (row.progression.attempts[0]?.attemptNumber ?? 1);
                       return (
                         <tr key={row.record.enrollmentId}>
-                          <td className="pl-3.5 pr-2 py-3 xl:pl-5 xl:pr-4">
+                          <td className="pl-2.5 pr-1.5 py-3 lg:pl-3.5 lg:pr-2 xl:pl-5 xl:pr-4">
                             <div className="min-w-0">
                               <div className="font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}</div>
                               <span className="mt-0.5 block whitespace-nowrap text-[11px] font-bold text-clinical-800 dark:text-clinical-300">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span>
                             </div>
                           </td>
-                          <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right font-bold tabular-nums text-slate-800 dark:border-slate-800/80 dark:text-slate-100 xl:px-4">
+                          <td className="whitespace-nowrap border-l border-slate-100 px-1.5 py-3 text-right font-bold tabular-nums text-slate-800 dark:border-slate-800/80 dark:text-slate-100 lg:px-2 xl:px-4">
                             {isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage} grade={row.record.gwa}>{formatGrade(row.record.gwa)}</GradeValue> : <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Grade unavailable</span>}
                           </td>
-                          <td className="border-l border-slate-100 px-2 py-3 dark:border-slate-800/80 xl:px-4">
+                          <td className="border-l border-slate-100 px-1.5 py-3 dark:border-slate-800/80 lg:px-2 xl:px-4">
                             <span className="whitespace-nowrap font-bold text-clinical-800 dark:text-clinical-300">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span>
-                            <span className="mt-0.5 block text-[11px] font-medium text-slate-500 dark:text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span>
+                            <span className="mt-0.5 block whitespace-nowrap text-[11px] font-medium text-slate-500 dark:text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span>
                           </td>
-                          <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right font-bold tabular-nums text-slate-800 dark:border-slate-800/80 dark:text-slate-200 xl:px-4">
+                          <td className="whitespace-nowrap border-l border-slate-100 px-1.5 py-3 text-right font-bold tabular-nums text-slate-800 dark:border-slate-800/80 dark:text-slate-200 lg:px-2 xl:px-4">
                             Attempt {activeAttemptNumber}
                           </td>
-                          <td className="border-l border-slate-100 px-2 py-3 dark:border-slate-800/80 xl:px-4">
+                          <td className="border-l border-slate-100 px-1.5 py-3 dark:border-slate-800/80 lg:px-2 xl:px-4">
                             {renderRemedialStageBadge(row.progression.stage)}
                           </td>
-                          <td className="whitespace-nowrap border-l border-slate-100 pl-2 pr-3.5 py-2 dark:border-slate-800/80 xl:pl-4 xl:pr-5">
+                          <td className="whitespace-nowrap border-l border-slate-100 pl-1.5 pr-2.5 py-2 dark:border-slate-800/80 lg:pl-2 lg:pr-3.5 xl:pl-4 xl:pr-5">
                             {renderRemedialActions(row, false)}
                           </td>
                         </tr>
