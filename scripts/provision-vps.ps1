@@ -117,11 +117,229 @@ function Reset-InstanceHostKeys {
         Write-Host "New SSH host key fingerprints for ${Ip}:$port :"
         Write-Host $fingerprints.Output.Trim()
     }
+    if (-not $scanned) {
+        $fallbackTargets = @(
+            @{ Port = 22; LoginUser = $InitialUser },
+            @{ Port = $SshPort; LoginUser = $User }
+        )
+        foreach ($target in $fallbackTargets) {
+            $tempKnownHosts = Join-Path ([IO.Path]::GetTempPath()) ('dentisys-known-hosts-' + [Guid]::NewGuid().ToString('N'))
+            try {
+                $null = Invoke-CapturedNative 'ssh' @(
+                    '-i', $identity,
+                    '-o', 'IdentitiesOnly=yes',
+                    '-o', "UserKnownHostsFile=$tempKnownHosts",
+                    '-o', 'StrictHostKeyChecking=accept-new',
+                    '-o', 'BatchMode=yes',
+                    '-o', 'ConnectTimeout=10',
+                    '-T', '-p', "$($target.Port)",
+                    "$($target.LoginUser)@$Ip",
+                    'true'
+                )
+                if (Test-Path -LiteralPath $tempKnownHosts -PathType Leaf) {
+                    $keyContent = [IO.File]::ReadAllText($tempKnownHosts, [Text.Encoding]::UTF8)
+                    if ($keyContent.Trim()) {
+                        $fingerprints = Invoke-CapturedNative 'ssh-keygen' @('-l', '-f', '-') $keyContent
+                        if ($fingerprints.ExitCode -ne 0) { throw "Could not fingerprint the scanned host keys: $($fingerprints.Error.Trim())" }
+                        $scanned = $true
+                        Write-Host "New SSH host key fingerprints for ${Ip}:$($target.Port) :"
+                        Write-Host $fingerprints.Output.Trim()
+                        break
+                    }
+                }
+            }
+            finally {
+                if (Test-Path -LiteralPath $tempKnownHosts -PathType Leaf) {
+                    Remove-Item -LiteralPath $tempKnownHosts -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+    }
     if (-not $scanned) { throw 'No replacement host key was obtained. Check the server, IP and cloud firewall; known_hosts was left unchanged.' }
     Write-Host 'Compare these fingerprints with the provider console (EC2: Actions > Monitor and troubleshoot > Get system log > BEGIN SSH HOST KEY FINGERPRINTS; Vultr: View Console, run: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub).'
     Write-Host 'Cancel if they do not match. -NewInstance removes the old entries; the next connection accepts the newly presented key.'
     Invoke-Native 'ssh-keygen' @('-R', $Ip)
     Invoke-Native 'ssh-keygen' @('-R', "[$Ip]:$SshPort")
+}
+function ConvertFrom-SmtpReply {
+    param([string[]]$Lines)
+    $cleanLines = [Collections.Generic.List[string]]::new()
+    $allValid = $true
+    $lastCode = $null
+    if ($null -ne $Lines) {
+        foreach ($line in $Lines) {
+            if ([string]::IsNullOrEmpty($line)) { continue }
+            $clean = $line.TrimEnd("`r")
+            if ([string]::IsNullOrEmpty($clean)) { continue }
+            $cleanLines.Add($clean)
+            if ($clean -match '^(\d{3})([ -].*)?$') {
+                $lastCode = $Matches[1]
+            }
+            else {
+                $allValid = $false
+            }
+        }
+    }
+    $complete = $false
+    if ($allValid -and $cleanLines.Count -gt 0) {
+        $lastLine = $cleanLines[$cleanLines.Count - 1]
+        if ($lastLine.Length -lt 4 -or $lastLine[3] -ne '-') {
+            $complete = $true
+        }
+    }
+    return [pscustomobject]@{
+        Code = $(if ($complete) { [int]$lastCode } else { $null })
+        Complete = $complete
+        Text = ($cleanLines -join "`n")
+    }
+}
+function Resolve-SmtpAuthReply {
+    param([string[]]$Lines)
+    $parsed = ConvertFrom-SmtpReply $Lines
+    $status = 'Unreachable'
+    if ($parsed.Complete -and $parsed.Code -eq 235) {
+        $status = 'Ok'
+    }
+    elseif ($parsed.Complete -and $parsed.Code -ge 500 -and $parsed.Code -le 599) {
+        $status = 'Refused'
+    }
+    return [pscustomobject]@{
+        Status = $status
+        Code = $parsed.Code
+        Detail = $parsed.Text
+    }
+}
+function Test-GmailSmtpLogin {
+    param(
+        [string]$Username,
+        [Security.SecureString]$Password,
+        [string]$SmtpHost = 'smtp.gmail.com',
+        [int]$Port = 587,
+        [int]$TimeoutMs = 10000
+    )
+    $tcp = $null
+    $ssl = $null
+    $bstr = [IntPtr]::Zero
+    $plainPass = $null
+    $passBytes = $null
+    $passB64Bytes = $null
+    $userB64Bytes = $null
+    $readReply = {
+        param([IO.Stream]$Stream)
+        $lines = [Collections.Generic.List[string]]::new()
+        for ($lineNum = 0; $lineNum -lt 64; $lineNum++) {
+            $buf = [Collections.Generic.List[byte]]::new()
+            $eof = $false
+            while ($true) {
+                $b = $Stream.ReadByte()
+                if ($b -eq -1) {
+                    $eof = $true
+                    break
+                }
+                if ($b -eq 0x0A) { break }
+                if ($buf.Count -ge 8192) {
+                    throw 'SMTP reply line exceeded 8192 bytes.'
+                }
+                $buf.Add([byte]$b)
+            }
+            if ($buf.Count -gt 0) {
+                $line = [Text.Encoding]::UTF8.GetString($buf.ToArray()).TrimEnd("`r", "`n")
+                $lines.Add($line)
+            }
+            if ($eof) { break }
+            $parsed = ConvertFrom-SmtpReply $lines.ToArray()
+            if ($parsed.Complete) { break }
+        }
+        return ,$lines.ToArray()
+    }
+    $sendBytes = {
+        param([IO.Stream]$Stream, [byte[]]$Bytes)
+        $Stream.Write($Bytes, 0, $Bytes.Length)
+        $Stream.Flush()
+    }
+    $sendLine = {
+        param([IO.Stream]$Stream, [string]$Command)
+        $cmdBytes = [Text.Encoding]::ASCII.GetBytes($Command + "`r`n")
+        & $sendBytes $Stream $cmdBytes
+    }
+    try {
+        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password)
+        $plainPass = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+        $passBytes = [Text.Encoding]::UTF8.GetBytes($plainPass)
+        $passB64Bytes = [Text.Encoding]::ASCII.GetBytes([Convert]::ToBase64String($passBytes) + "`r`n")
+        $userB64Bytes = [Text.Encoding]::ASCII.GetBytes([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Username)) + "`r`n")
+
+        $tcp = [Net.Sockets.TcpClient]::new()
+        $connectTask = $tcp.ConnectAsync($SmtpHost, $Port)
+        if (-not $connectTask.Wait($TimeoutMs)) {
+            return [pscustomobject]@{ Status = 'Unreachable'; Code = $null; Detail = "Connection to ${SmtpHost}:${Port} timed out." }
+        }
+        $connectTask.GetAwaiter().GetResult()
+
+        $netStream = $tcp.GetStream()
+        $netStream.ReadTimeout = $TimeoutMs
+        $netStream.WriteTimeout = $TimeoutMs
+
+        $greeting = ConvertFrom-SmtpReply (& $readReply $netStream)
+        if (-not ($greeting.Complete -and $greeting.Code -eq 220)) {
+            return [pscustomobject]@{ Status = 'Unreachable'; Code = $greeting.Code; Detail = $greeting.Text }
+        }
+
+        & $sendLine $netStream 'EHLO dentisys.local'
+        $ehlo = ConvertFrom-SmtpReply (& $readReply $netStream)
+        if (-not ($ehlo.Complete -and $ehlo.Code -eq 250 -and $ehlo.Text -match '(?i)\bSTARTTLS\b')) {
+            return [pscustomobject]@{ Status = 'Unreachable'; Code = $ehlo.Code; Detail = $ehlo.Text }
+        }
+
+        & $sendLine $netStream 'STARTTLS'
+        $starttls = ConvertFrom-SmtpReply (& $readReply $netStream)
+        if (-not ($starttls.Complete -and $starttls.Code -eq 220)) {
+            return [pscustomobject]@{ Status = 'Unreachable'; Code = $starttls.Code; Detail = $starttls.Text }
+        }
+
+        $ssl = [Net.Security.SslStream]::new($netStream, $false)
+        $ssl.ReadTimeout = $TimeoutMs
+        $ssl.WriteTimeout = $TimeoutMs
+        $ssl.AuthenticateAsClient($SmtpHost)
+
+        & $sendLine $ssl 'EHLO dentisys.local'
+        $ehloTls = ConvertFrom-SmtpReply (& $readReply $ssl)
+        if (-not ($ehloTls.Complete -and $ehloTls.Code -eq 250)) {
+            return [pscustomobject]@{ Status = 'Unreachable'; Code = $ehloTls.Code; Detail = $ehloTls.Text }
+        }
+
+        & $sendLine $ssl 'AUTH LOGIN'
+        $authLines = & $readReply $ssl
+        $authReply = ConvertFrom-SmtpReply $authLines
+        if (-not ($authReply.Complete -and $authReply.Code -eq 334)) {
+            return Resolve-SmtpAuthReply $authLines
+        }
+
+        & $sendBytes $ssl $userB64Bytes
+        $userLines = & $readReply $ssl
+        $userReply = ConvertFrom-SmtpReply $userLines
+        if (-not ($userReply.Complete -and $userReply.Code -eq 334)) {
+            return Resolve-SmtpAuthReply $userLines
+        }
+
+        & $sendBytes $ssl $passB64Bytes
+        $passLines = & $readReply $ssl
+        $result = Resolve-SmtpAuthReply $passLines
+        try { & $sendLine $ssl 'QUIT' } catch {}
+        return $result
+    }
+    catch {
+        return [pscustomobject]@{ Status = 'Unreachable'; Code = $null; Detail = $_.Exception.Message }
+    }
+    finally {
+        if ($bstr -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        if ($passBytes) { [Array]::Clear($passBytes, 0, $passBytes.Length) }
+        if ($passB64Bytes) { [Array]::Clear($passB64Bytes, 0, $passB64Bytes.Length) }
+        if ($userB64Bytes) { [Array]::Clear($userB64Bytes, 0, $userB64Bytes.Length) }
+        $plainPass = $null
+        if ($ssl) { $ssl.Dispose() }
+        if ($tcp) { $tcp.Dispose() }
+    }
 }
 Push-Location $repoRoot
 try {
@@ -276,10 +494,34 @@ try {
     }
     $answers.GHCR_TOKEN = Read-Secret 'GHCR token (read:packages)'
     if (-not $envExists) {
-        $answers.SMTP_USER = Read-Answer 'Gmail address (SMTP sender and certificate contact)'
-        if ($answers.SMTP_USER -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') { throw 'Enter a valid Gmail address.' }
-        $answers.SMTP_PASS = Read-Secret 'Gmail App Password'
-        $answers.TRAEFIK_ACME_EMAIL = $answers.SMTP_USER
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            $smtpUser = Read-Answer 'Gmail address (SMTP sender and certificate contact)'
+            if ($smtpUser -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') { throw 'Enter a valid Gmail address.' }
+            $smtpPass = Read-Secret 'Gmail App Password'
+            $smtpCheck = Test-GmailSmtpLogin -Username $smtpUser -Password $smtpPass
+            if ($smtpCheck.Status -eq 'Ok') {
+                $answers.SMTP_USER = $smtpUser
+                $answers.SMTP_PASS = $smtpPass
+                $answers.TRAEFIK_ACME_EMAIL = $smtpUser
+                break
+            }
+            elseif ($smtpCheck.Status -eq 'Unreachable') {
+                Write-Host "WARNING: Could not reach smtp.gmail.com:587 from this PC ($($smtpCheck.Detail)); continuing without checking the Gmail login (the server may still reach it)."
+                $answers.SMTP_USER = $smtpUser
+                $answers.SMTP_PASS = $smtpPass
+                $answers.TRAEFIK_ACME_EMAIL = $smtpUser
+                break
+            }
+            else {
+                $smtpPass.Dispose()
+                if ($attempt -lt 3) {
+                    Write-Host 'Gmail refused this address and App Password. Check both and try again.'
+                }
+                else {
+                    throw 'Gmail refused this address and App Password.'
+                }
+            }
+        }
         $answers.FIRST_DEAN_FIRST_NAME = Read-Answer 'First Dean first name'
         $answers.FIRST_DEAN_LAST_NAME = Read-Answer 'First Dean last name'
         $answers.FIRST_DEAN_EMAIL = Read-Answer 'First Dean email'
