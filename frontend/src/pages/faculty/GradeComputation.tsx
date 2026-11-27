@@ -4128,156 +4128,236 @@ export const GradeComputation: React.FC = () => {
             </div>
           </div>
 
-          <div className="table-pin table-pin-first">
-            <table className="min-w-full divide-y dark:divide-slate-800">
-              <thead>
-                <tr className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">
-                  <th className="px-5 py-3">Assessment Title</th>
-                  <th className="px-5 py-3">Category</th>
-                  <th className="px-5 py-3">Grading Period</th>
-                  <th className="px-5 py-3 text-center">Max Score</th>
-                  <th className="px-5 py-3">Due Date</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs">
-                {activeAssessments.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No active assessments created for this course. Click "Add Assessment" to create one.</h3></td>
-                  </tr>
-                ) : filteredAssessments.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No assessments match the selected filters.</h3><button type="button" onClick={() => { setAssessmentSearch(''); setAssessmentPeriodFilter('all'); setAssessmentCategoryFilter('all'); setAssessmentStatusFilter('all'); }} className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-clinical-700 hover:bg-clinical-50 dark:text-clinical-300 dark:hover:bg-clinical-950/40"><X className="h-3.5 w-3.5" />Clear filters</button></td>
-                  </tr>
-                ) : (
-                  filteredAssessments.map(ass => (
-                    <tr key={ass.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-800 dark:text-slate-200">{ass.title}</span>
-                          {currentAssessmentOffering && currentAssessmentOffering.sections.length > 1 && (
-                            <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-mono">
-                              {facultyClasses.find(c => c.id === ass.classId)?.csName || ass.classId}
-                            </span>
-                          )}
-                        </div>
-                        {ass.transmutationEnabled && (
-                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                            <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-bold bg-clinical-50 dark:bg-clinical-950/40 dark:text-clinical-400 border border-clinical-200 dark:border-clinical-800">
-                              Transmuted (50%–100%)
-                            </span>
-                            {ass.attendanceSessionDate ? (
-                              <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">
-                                Linked: {formatShortDate(ass.attendanceSessionDate)}
+          <div className="p-3 sm:p-4">
+            {activeAssessments.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
+                <Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No active assessments created for this course. Click "Add Assessment" to create one.</h3>
+              </div>
+            ) : filteredAssessments.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
+                <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No assessments match the selected filters.</h3>
+                <button type="button" onClick={() => { setAssessmentSearch(''); setAssessmentPeriodFilter('all'); setAssessmentCategoryFilter('all'); setAssessmentStatusFilter('all'); }} className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-clinical-700 hover:bg-clinical-50 dark:text-clinical-300 dark:hover:bg-clinical-950/40"><X className="h-3.5 w-3.5" />Clear filters</button>
+              </div>
+            ) : (() => {
+              const renderCategoryBadge = (ass: Assessment) => {
+                if (assessmentConfigStatus === 'loading') {
+                  return (
+                    <span role="status" className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                      Loading...
+                    </span>
+                  );
+                }
+                if (assessmentConfigStatus === 'configured' && assessmentConfig) {
+                  const matchedCategory = assessmentConfig.categories.find(
+                    c => String(c.id) === String(ass.gradingCategoryId) &&
+                      (assessmentConfig.schemaMode !== 'periods' || !ass.gradingPeriod || !c.gradingPeriod || c.gradingPeriod === ass.gradingPeriod)
+                  );
+                  if (matchedCategory) {
+                    return (
+                      <span className="px-2 py-0.5 rounded-md font-semibold bg-clinical-50 text-clinical-600 dark:bg-clinical-950/40 dark:text-clinical-400 uppercase text-[9px] tracking-wide">
+                        {matchedCategory.component ? `${matchedCategory.component} · ${matchedCategory.name}` : matchedCategory.name}
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 uppercase text-[9px] tracking-wide">
+                      <AlertTriangle className="w-3 h-3" />
+                      Unassigned category
+                    </span>
+                  );
+                }
+                return (
+                  <span className="px-2 py-0.5 rounded-md font-semibold bg-clinical-50 text-clinical-600 dark:bg-clinical-950/40 dark:text-clinical-400 uppercase text-[9px] tracking-wide">
+                    {ass.type}
+                  </span>
+                );
+              };
+
+              const renderAssessmentActions = (ass: Assessment, phone = false) => {
+                const iconBtnClass = phone
+                  ? 'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200/80 bg-slate-100 text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-200 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-700 disabled:opacity-40'
+                  : 'inline-flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center rounded-lg border border-slate-200/80 bg-slate-100 text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-200 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-700 disabled:opacity-40';
+                return (
+                  <>
+                    {availableClasses.some(c => c.id === ass.classId) && (
+                      <button
+                        type="button"
+                        onClick={() => openEditAssessmentModal(ass)}
+                        className={iconBtnClass}
+                        aria-label={`Edit ${ass.title}`}
+                        title="Edit"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (await requestConfirmation(`Archive ${ass.title}?`, 'Archive assessment')) {
+                          try {
+                            await saveFacultyAssessmentsApi([{ ...ass, status: 'Archived' }]);
+                            await refreshAssessments();
+                            setSubmissionRefreshKey(k => k + 1);
+                            showFeedback('Assessment archived.', 'success');
+                          } catch (requestError) {
+                            showFeedback(requestError instanceof Error ? requestError.message : 'Could not archive the assessment.', 'error');
+                          }
+                        }
+                      }}
+                      className={`${iconBtnClass} hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-950/40 dark:hover:text-amber-300`}
+                      aria-label={`Archive ${ass.title}`}
+                      title="Archive"
+                    >
+                      <Archive className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (await requestConfirmation(`Permanently delete ${ass.title}? This will delete all student scores for this assessment.`, 'Delete assessment')) {
+                          try {
+                            const response = await deleteFacultyAssessmentApi(ass.id);
+                            await refreshAssessments();
+                            setSubmissionRefreshKey(k => k + 1);
+                            showFeedback(response.message || 'Assessment deleted.', 'success');
+                          } catch (requestError) {
+                            showFeedback(requestError instanceof Error ? requestError.message : 'Could not delete the assessment.', 'error');
+                          }
+                        }
+                      }}
+                      className={`${iconBtnClass} hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/40 dark:hover:text-rose-300`}
+                      aria-label={`Delete ${ass.title}`}
+                      title="Delete"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </>
+                );
+              };
+
+              return (
+                <>
+                  <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                    <table className="w-full min-w-[580px] text-left text-xs">
+                      <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        <tr>
+                          <th scope="col" className="pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4">Assessment Title</th>
+                          <th scope="col" className="px-2 py-2.5 xl:px-4">Category</th>
+                          <th scope="col" className="px-2 py-2.5 leading-tight xl:whitespace-nowrap xl:px-4">Grading Period</th>
+                          <th scope="col" className="border-l border-slate-200/70 px-2 py-2.5 text-right leading-tight dark:border-slate-800 xl:whitespace-nowrap xl:px-4">Max Score</th>
+                          <th scope="col" className="whitespace-nowrap px-2 py-2.5 xl:px-4">Due Date</th>
+                          <th scope="col" className="whitespace-nowrap px-2 py-2.5 xl:px-4">Status</th>
+                          <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 text-right dark:border-slate-800 xl:pl-4 xl:pr-5">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredAssessments.map(ass => (
+                          <tr key={ass.id}>
+                            <td className="pl-3.5 pr-2 py-3 xl:pl-5 xl:pr-4">
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span className="font-bold text-slate-800 dark:text-slate-200">{ass.title}</span>
+                                {currentAssessmentOffering && currentAssessmentOffering.sections.length > 1 && (
+                                  <span className="whitespace-nowrap shrink-0 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-mono">
+                                    {facultyClasses.find(c => c.id === ass.classId)?.csName || ass.classId}
+                                  </span>
+                                )}
+                              </div>
+                              {ass.transmutationEnabled && (
+                                <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                  <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-bold bg-clinical-50 dark:bg-clinical-950/40 dark:text-clinical-400 border border-clinical-200 dark:border-clinical-800">
+                                    Transmuted (50%–100%)
+                                  </span>
+                                  {ass.attendanceSessionDate ? (
+                                    <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">
+                                      Linked: {formatShortDate(ass.attendanceSessionDate)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] text-slate-500 dark:text-slate-400">
+                                      (No attendance link)
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {ass.instructions && <span className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1">{ass.instructions}</span>}
+                            </td>
+                            <td className="px-2 py-3 xl:px-4">{renderCategoryBadge(ass)}</td>
+                            <td className="whitespace-nowrap px-2 py-3 font-semibold text-slate-700 dark:text-slate-300 xl:px-4">{ass.gradingPeriod}</td>
+                            <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right font-bold tabular-nums text-slate-800 dark:border-slate-800/80 dark:text-slate-100 xl:px-4">{ass.maxScore} pts</td>
+                            <td className="whitespace-nowrap px-2 py-3 tabular-nums text-slate-600 dark:text-slate-400 xl:px-4">{ass.dueDate || 'No deadline'}</td>
+                            <td className="whitespace-nowrap px-2 py-3 xl:px-4">
+                              <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase ${ass.status === 'Active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                }`}>
+                                {ass.status}
                               </span>
-                            ) : (
-                              <span className="text-[9px] text-slate-500 dark:text-slate-400">
-                                (No attendance link)
-                              </span>
-                            )}
+                            </td>
+                            <td className="whitespace-nowrap border-l border-slate-100 pl-2 pr-3.5 py-2 dark:border-slate-800/80 xl:pl-4 xl:pr-5">
+                              <div className="flex justify-end gap-1 xl:gap-1.5">{renderAssessmentActions(ass)}</div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="space-y-2.5 md:hidden">
+                    {filteredAssessments.map(ass => {
+                      const sectionCode = currentAssessmentOffering && currentAssessmentOffering.sections.length > 1
+                        ? (facultyClasses.find(c => c.id === ass.classId)?.csName || ass.classId)
+                        : null;
+                      return (
+                        <article key={ass.id} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              {sectionCode && (
+                                <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-clinical-700 dark:text-clinical-300">{sectionCode}</p>
+                              )}
+                              <h3 className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100">{ass.title}</h3>
+                              {ass.transmutationEnabled && (
+                                <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                  <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-bold bg-clinical-50 dark:bg-clinical-950/40 dark:text-clinical-400 border border-clinical-200 dark:border-clinical-800">
+                                    Transmuted (50%–100%)
+                                  </span>
+                                  {ass.attendanceSessionDate ? (
+                                    <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">
+                                      Linked: {formatShortDate(ass.attendanceSessionDate)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] text-slate-500 dark:text-slate-400">
+                                      (No attendance link)
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {ass.instructions && <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1">{ass.instructions}</p>}
+                            </div>
+                            <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold ${ass.status === 'Active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{ass.status}</span>
                           </div>
-                        )}
-                        {ass.instructions && <span className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1">{ass.instructions}</span>}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        {(() => {
-                          if (assessmentConfigStatus === 'loading') {
-                            return (
-                              <span role="status" className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                                Loading...
-                              </span>
-                            );
-                          }
-                          if (assessmentConfigStatus === 'configured' && assessmentConfig) {
-                            const matchedCategory = assessmentConfig.categories.find(
-                              c => String(c.id) === String(ass.gradingCategoryId) &&
-                                (assessmentConfig.schemaMode !== 'periods' || !ass.gradingPeriod || !c.gradingPeriod || c.gradingPeriod === ass.gradingPeriod)
-                            );
-                            if (matchedCategory) {
-                              return (
-                                <span className="px-2 py-0.5 rounded-md font-semibold bg-clinical-50 text-clinical-600 dark:bg-clinical-950/40 dark:text-clinical-400 uppercase text-[9px] tracking-wide">
-                                  {matchedCategory.component ? `${matchedCategory.component} · ${matchedCategory.name}` : matchedCategory.name}
-                                </span>
-                              );
-                            }
-                            return (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 uppercase text-[9px] tracking-wide">
-                                <AlertTriangle className="w-3 h-3" />
-                                Unassigned category
-                              </span>
-                            );
-                          }
-                          return (
-                            <span className="px-2 py-0.5 rounded-md font-semibold bg-clinical-50 text-clinical-600 dark:bg-clinical-950/40 dark:text-clinical-400 uppercase text-[9px] tracking-wide">
-                              {ass.type}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-5 py-3.5 font-semibold text-slate-700 dark:text-slate-300">{ass.gradingPeriod}</td>
-                      <td className="px-5 py-3.5 text-center font-extrabold text-slate-800 dark:text-slate-100">{ass.maxScore} pts</td>
-                      <td className="px-5 py-3.5 font-mono whitespace-nowrap text-slate-600 dark:text-slate-400">{ass.dueDate || 'No deadline'}</td>
-                      <td className="px-5 py-3.5">
-                        <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase ${ass.status === 'Active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                          }`}>
-                          {ass.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-center">
-                        <div className="flex items-center justify-center space-x-2">
-                          {availableClasses.some(c => c.id === ass.classId) && (
-                          <button
-                            onClick={() => openEditAssessmentModal(ass)}
-                            className="p-1 hover:text-clinical-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900"
-                            title="Edit"
-                          >
-                            <Edit className="w-3.8 h-3.8" />
-                          </button>
-                          )}
-                          <button
-                            onClick={async () => {
-                              if (await requestConfirmation(`Archive ${ass.title}?`, 'Archive assessment')) {
-                                try {
-                                  await saveFacultyAssessmentsApi([{ ...ass, status: 'Archived' }]);
-                                  await refreshAssessments();
-                                  setSubmissionRefreshKey(k => k + 1);
-                                  showFeedback('Assessment archived.', 'success');
-                                } catch (requestError) {
-                                  showFeedback(requestError instanceof Error ? requestError.message : 'Could not archive the assessment.', 'error');
-                                }
-                              }
-                            }}
-                            className="p-1 hover:text-amber-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900"
-                            title="Archive"
-                          >
-                            <Archive className="w-3.8 h-3.8" />
-                          </button>
-                          <button
-                            onClick={async () => {
-                              if (await requestConfirmation(`Permanently delete ${ass.title}? This will delete all student scores for this assessment.`, 'Delete assessment')) {
-                                try {
-                                  const response = await deleteFacultyAssessmentApi(ass.id);
-                                  await refreshAssessments();
-                                  setSubmissionRefreshKey(k => k + 1);
-                                  showFeedback(response.message || 'Assessment deleted.', 'success');
-                                } catch (requestError) {
-                                  showFeedback(requestError instanceof Error ? requestError.message : 'Could not delete the assessment.', 'error');
-                                }
-                              }
-                            }}
-                            className="p-1 hover:text-rose-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.8 h-3.8" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                          <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                            <div className="min-w-0">
+                              <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Category</dt>
+                              <dd className="mt-0.5 text-xs font-medium text-slate-700 dark:text-slate-200">{renderCategoryBadge(ass)}</dd>
+                            </div>
+                            <div className="min-w-0">
+                              <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Grading Period</dt>
+                              <dd className="mt-0.5 whitespace-nowrap text-xs font-medium text-slate-700 dark:text-slate-200">{ass.gradingPeriod}</dd>
+                            </div>
+                            <div className="min-w-0">
+                              <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Max Score</dt>
+                              <dd className="mt-0.5 whitespace-nowrap text-xs font-bold tabular-nums text-slate-800 dark:text-slate-100">{ass.maxScore} pts</dd>
+                            </div>
+                            <div className="min-w-0">
+                              <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Due Date</dt>
+                              <dd className="mt-0.5 whitespace-nowrap text-xs font-medium tabular-nums text-slate-700 dark:text-slate-200">{ass.dueDate || 'No deadline'}</dd>
+                            </div>
+                          </dl>
+                          <div className="mt-2 flex justify-end gap-1.5">{renderAssessmentActions(ass, true)}</div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </Card>
       )}
@@ -5500,176 +5580,216 @@ export const GradeComputation: React.FC = () => {
             </p>
           )}
 
-          <div className="table-pin table-pin-first">
-            <table className="min-w-full divide-y dark:divide-slate-800">
-              <thead>
-                <tr className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-left">
-                  <th className="px-5 py-3" aria-sort={ariaSort(summarySort, 'name')}><SortableHeader label="Student Details" sortKey="name" sort={summarySort} onSort={setSummarySort} /></th>
-                  {isPeriodMode ? (
-                    <>
-                      {isLectureLaboratoryMode ? (
-                        <>
-                          <th className="px-5 py-3 text-center">Midterm Lecture %</th>
-                          <th className="px-5 py-3 text-center">Midterm Laboratory %</th>
-                          <th className="px-5 py-3 text-center">Midterm %</th>
-                          <th className="px-5 py-3 text-center">Finals Lecture %</th>
-                          <th className="px-5 py-3 text-center">Finals Laboratory %</th>
-                          <th className="px-5 py-3 text-center">Finals %</th>
-                        </>
-                      ) : (
-                        <>
-                          <th className="px-5 py-3 text-center">Midterm %</th>
-                          <th className="px-5 py-3 text-center">Final %</th>
-                        </>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <th className="px-5 py-3 text-center">Quizzes</th>
-                      <th className="px-5 py-3 text-center">Practicum</th>
-                      <th className="px-5 py-3 text-center">Exams</th>
-                      <th className="px-5 py-3 text-center">Attendance</th>
-                    </>
-                  )}
-                  <th className="px-5 py-3 text-center" aria-sort={ariaSort(summarySort, 'overall')}><SortableHeader label="Final Grade" sortKey="overall" sort={summarySort} onSort={setSummarySort} align="center" /></th>
-                  <th className="px-5 py-3">Remarks</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs">
-                {sortedSummaryStudents.length === 0 ? (
-                  <tr>
-                    <td colSpan={isPeriodMode ? (isLectureLaboratoryMode ? 9 : 5) : 7} className="px-5 py-8 text-center text-slate-500 dark:text-slate-400">
-                      No matching student grade summaries found.
-                    </td>
-                  </tr>
+          <div className="p-3 sm:p-4">
+            {sortedSummaryStudents.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                No matching student grade summaries found.
+              </div>
+            ) : (() => {
+              const renderPeriodScore = (percentage: number | null, status: string, reasons: string[]) => (
+                percentage !== null ? (
+                  `${percentage.toFixed(2)}%`
+                ) : status === 'pending' ? (
+                  <span className="text-slate-500 dark:text-slate-400 font-sans">Pending</span>
+                ) : reasons.length > 0 ? (
+                  <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold" title={reasons.join(', ')}>
+                    Incomplete
+                  </span>
                 ) : (
-                  sortedSummaryStudents.map(student => {
-                    const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
-                    const computeRes = subj?.enrollmentId ? computeResultsByEnrollment.get(String(subj.enrollmentId)) : null;
+                  <span className="text-slate-500 dark:text-slate-400 font-sans">—</span>
+                )
+              );
 
-                    if (isPeriodMode) {
-                      const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
-                      const isFailsRetention = subj && evalResult.overallGwa !== null && evalResult.overallGwa >= settings.retentionThreshold && evalResult.overallGwa < 5.0 && (evalResult.retentionState != null
-                          ? evalResult.retentionState === 'remedial'
-                          : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
-                            && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
-                      const isFailed = evalResult.overallGwa === 5.0;
-                      const isPending = evalResult.statusText === 'PENDING';
-                      const isIncomplete = evalResult.overallGwa === null;
+              const summaryRows = sortedSummaryStudents.map(student => {
+                const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
+                const computeRes = subj?.enrollmentId ? computeResultsByEnrollment.get(String(subj.enrollmentId)) : null;
+
+                if (isPeriodMode) {
+                  const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
+                  const isFailsRetention = subj && evalResult.overallGwa !== null && evalResult.overallGwa >= settings.retentionThreshold && evalResult.overallGwa < 5.0 && (evalResult.retentionState != null
+                      ? evalResult.retentionState === 'remedial'
+                      : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
+                        && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
+                  const isFailed = evalResult.overallGwa === 5.0;
+                  const isPending = evalResult.statusText === 'PENDING';
+                  const isIncomplete = evalResult.overallGwa === null;
+                  const remarkLabel = isFailed ? 'IRREGULAR REENROLLMENT' : isFailsRetention ? 'FAILS RETENTION' : isPending ? 'PENDING' : isIncomplete ? 'INCOMPLETE' : 'PASS';
+                  const remarkTone = isFailed
+                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+                    : isFailsRetention
+                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+                      : isPending
+                        ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300'
+                        : isIncomplete
+                          ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300';
+                  const finalGradeNode = evalResult.overallGwa !== null ? (
+                    <GradeValue percentage={evalResult.overallPercentage} grade={evalResult.overallGwa} lecture={lectureHoverFor(evalResult.midtermPercentage, evalResult.finalPercentage)}>{formatGrade(evalResult.overallGwa)}</GradeValue>
+                  ) : evalResult.historicalGwa !== null ? (
+                    <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium" title="Prior persisted grade; current recomputation is incomplete">
+                      Prior: {formatGrade(evalResult.historicalGwa)} (Historical)
+                    </span>
+                  ) : (
+                    '—'
+                  );
+                  return { student, subj, evalResult, remarkLabel, remarkTone, finalGradeNode };
+                }
+
+                // Legacy overall view
+                const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
+                const isFailsRetention = subj && evalResult.overallGwa !== null && evalResult.overallGwa >= settings.retentionThreshold && evalResult.overallGwa < 5.0 && (evalResult.retentionState != null
+                    ? evalResult.retentionState === 'remedial'
+                    : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
+                      && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
+                const isFailed = Boolean(subj && typeof subj.grade === 'number' && subj.grade === 5.0);
+                const hasGrade = Boolean(subj && typeof subj.grade === 'number' && subj.grade > 0);
+                const remarkLabel = !hasGrade ? 'UNCOMPUTED' : isFailed ? 'IRREGULAR REENROLLMENT' : isFailsRetention ? 'FAILS RETENTION' : 'PASS';
+                const remarkTone = !hasGrade
+                  ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                  : isFailed
+                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+                    : isFailsRetention
+                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+                      : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300';
+                const finalGradeNode = hasGrade && subj ? (
+                  <GradeValue percentage={evalResult.overallPercentage} grade={subj.grade} lecture={lectureHoverFor(evalResult.midtermPercentage, evalResult.finalPercentage)}>{formatGrade(subj.grade)}</GradeValue>
+                ) : (
+                  '—'
+                );
+                return { student, subj, evalResult, remarkLabel, remarkTone, finalGradeNode };
+              });
+
+              return (
+                <>
+                  <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                    <table className={`w-full text-left text-xs ${isPeriodMode && isLectureLaboratoryMode ? 'min-w-[780px]' : 'min-w-[580px]'}`}>
+                      <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        <tr>
+                          <th scope="col" className="pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4" aria-sort={ariaSort(summarySort, 'name')}><SortableHeader label="Student Details" sortKey="name" sort={summarySort} onSort={setSummarySort} /></th>
+                          {isPeriodMode ? (
+                            <>
+                              {isLectureLaboratoryMode ? (
+                                <>
+                                  <th scope="col" className="border-l border-slate-200/70 px-2 py-2.5 text-right leading-tight dark:border-slate-800 xl:whitespace-nowrap xl:px-4">Midterm Lecture %</th>
+                                  <th scope="col" className="px-2 py-2.5 text-right leading-tight xl:whitespace-nowrap xl:px-4">Midterm Laboratory %</th>
+                                  <th scope="col" className="whitespace-nowrap px-2 py-2.5 text-right xl:px-4">Midterm %</th>
+                                  <th scope="col" className="border-l border-slate-200/70 px-2 py-2.5 text-right leading-tight dark:border-slate-800 xl:whitespace-nowrap xl:px-4">Finals Lecture %</th>
+                                  <th scope="col" className="px-2 py-2.5 text-right leading-tight xl:whitespace-nowrap xl:px-4">Finals Laboratory %</th>
+                                  <th scope="col" className="whitespace-nowrap px-2 py-2.5 text-right xl:px-4">Finals %</th>
+                                </>
+                              ) : (
+                                <>
+                                  <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4">Midterm %</th>
+                                  <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4">Final %</th>
+                                </>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4">Quizzes</th>
+                              <th scope="col" className="whitespace-nowrap px-2 py-2.5 text-right xl:px-4">Practicum</th>
+                              <th scope="col" className="whitespace-nowrap px-2 py-2.5 text-right xl:px-4">Exams</th>
+                              <th scope="col" className="whitespace-nowrap px-2 py-2.5 text-right xl:px-4">Attendance</th>
+                            </>
+                          )}
+                          <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4" aria-sort={ariaSort(summarySort, 'overall')}><SortableHeader label="Final Grade" sortKey="overall" sort={summarySort} onSort={setSummarySort} align="right" /></th>
+                          <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 dark:border-slate-800 xl:pl-4 xl:pr-5">Remarks</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {summaryRows.map(({ student, subj, evalResult, remarkLabel, remarkTone, finalGradeNode }) => (
+                          <tr key={student.id}>
+                            <td className="pl-3.5 pr-2 py-3 xl:pl-5 xl:pr-4">
+                              <div className="font-bold text-slate-800 dark:text-slate-100">{student.name}</div>
+                              <span className="whitespace-nowrap text-[10px] font-bold text-clinical-800 dark:text-clinical-300">{student.studentId}</span>
+                            </td>
+                            {isPeriodMode ? (
+                              <>
+                                {isLectureLaboratoryMode ? (
+                                  <>
+                                    <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right tabular-nums text-slate-700 dark:border-slate-800/80 dark:text-slate-300 xl:px-4">{formatComponentResultCell(evalResult.midtermComponents?.lecture, evalResult.midtermStatus)}</td>
+                                    <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300 xl:px-4">{formatComponentResultCell(evalResult.midtermComponents?.laboratory, evalResult.midtermStatus)}</td>
+                                    <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300 xl:px-4">{renderPeriodScore(evalResult.midtermPercentage, evalResult.midtermStatus, evalResult.midtermReasons)}</td>
+                                    <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right tabular-nums text-slate-700 dark:border-slate-800/80 dark:text-slate-300 xl:px-4">{formatComponentResultCell(evalResult.finalComponents?.lecture, evalResult.finalStatus)}</td>
+                                    <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300 xl:px-4">{formatComponentResultCell(evalResult.finalComponents?.laboratory, evalResult.finalStatus)}</td>
+                                    <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300 xl:px-4">{renderPeriodScore(evalResult.finalPercentage, evalResult.finalStatus, evalResult.finalReasons)}</td>
+                                  </>
+                                ) : (
+                                  <>
+                                    <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right tabular-nums text-slate-700 dark:border-slate-800/80 dark:text-slate-300 xl:px-4">{renderPeriodScore(evalResult.midtermPercentage, evalResult.midtermStatus, evalResult.midtermReasons)}</td>
+                                    <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right tabular-nums text-slate-700 dark:border-slate-800/80 dark:text-slate-300 xl:px-4">{renderPeriodScore(evalResult.finalPercentage, evalResult.finalStatus, evalResult.finalReasons)}</td>
+                                  </>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right tabular-nums text-slate-700 dark:border-slate-800/80 dark:text-slate-300 xl:px-4">{subj && typeof subj.components?.quizzes === 'number' ? `${subj.components.quizzes.toFixed(1)}%` : '—'}</td>
+                                <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300 xl:px-4">{subj && typeof subj.components?.practicum === 'number' ? `${subj.components.practicum.toFixed(1)}%` : '—'}</td>
+                                <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300 xl:px-4">{subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—'}</td>
+                                <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300 xl:px-4">{subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—'}</td>
+                              </>
+                            )}
+                            <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right text-sm font-extrabold tabular-nums text-slate-800 dark:border-slate-800/80 dark:text-slate-100 xl:px-4">{finalGradeNode}</td>
+                            <td className="whitespace-nowrap border-l border-slate-100 pl-2 pr-3.5 py-3 dark:border-slate-800/80 xl:pl-4 xl:pr-5">
+                              <span className={`inline-flex whitespace-nowrap px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${remarkTone}`}>
+                                {remarkLabel}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="space-y-2.5 md:hidden">
+                    {summaryRows.map(({ student, subj, evalResult, remarkLabel, remarkTone, finalGradeNode }) => {
+                      const metrics: Array<{ label: string; value: React.ReactNode; emphasis?: boolean }> = isPeriodMode
+                        ? (isLectureLaboratoryMode
+                          ? [
+                            { label: 'Midterm Lecture %', value: formatComponentResultCell(evalResult.midtermComponents?.lecture, evalResult.midtermStatus) },
+                            { label: 'Midterm Laboratory %', value: formatComponentResultCell(evalResult.midtermComponents?.laboratory, evalResult.midtermStatus) },
+                            { label: 'Midterm %', value: renderPeriodScore(evalResult.midtermPercentage, evalResult.midtermStatus, evalResult.midtermReasons) },
+                            { label: 'Finals Lecture %', value: formatComponentResultCell(evalResult.finalComponents?.lecture, evalResult.finalStatus) },
+                            { label: 'Finals Laboratory %', value: formatComponentResultCell(evalResult.finalComponents?.laboratory, evalResult.finalStatus) },
+                            { label: 'Finals %', value: renderPeriodScore(evalResult.finalPercentage, evalResult.finalStatus, evalResult.finalReasons) },
+                            { label: 'Final Grade', value: finalGradeNode, emphasis: true },
+                          ]
+                          : [
+                            { label: 'Midterm %', value: renderPeriodScore(evalResult.midtermPercentage, evalResult.midtermStatus, evalResult.midtermReasons) },
+                            { label: 'Final %', value: renderPeriodScore(evalResult.finalPercentage, evalResult.finalStatus, evalResult.finalReasons) },
+                            { label: 'Final Grade', value: finalGradeNode, emphasis: true },
+                          ])
+                        : [
+                          { label: 'Quizzes', value: subj && typeof subj.components?.quizzes === 'number' ? `${subj.components.quizzes.toFixed(1)}%` : '—' },
+                          { label: 'Practicum', value: subj && typeof subj.components?.practicum === 'number' ? `${subj.components.practicum.toFixed(1)}%` : '—' },
+                          { label: 'Exams', value: subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—' },
+                          { label: 'Attendance', value: subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—' },
+                          { label: 'Final Grade', value: finalGradeNode, emphasis: true },
+                        ];
 
                       return (
-                        <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
-                          <td className="px-5 py-3">
-                            <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400">{student.studentId}</span>
-                          </td>
-                          {isLectureLaboratoryMode && (
-                            <>
-                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{formatComponentResultCell(evalResult.midtermComponents?.lecture, evalResult.midtermStatus)}</td>
-                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{formatComponentResultCell(evalResult.midtermComponents?.laboratory, evalResult.midtermStatus)}</td>
-                            </>
-                          )}
-                          <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">
-                            {evalResult.midtermPercentage !== null ? (
-                              `${evalResult.midtermPercentage.toFixed(2)}%`
-                            ) : evalResult.midtermStatus === 'pending' ? (
-                              <span className="text-slate-500 dark:text-slate-400 font-sans">Pending</span>
-                            ) : evalResult.midtermReasons.length > 0 ? (
-                              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold" title={evalResult.midtermReasons.join(', ')}>
-                                Incomplete
-                              </span>
-                            ) : (
-                              <span className="text-slate-500 dark:text-slate-400 font-sans">—</span>
-                            )}
-                          </td>
-                          {isLectureLaboratoryMode && (
-                            <>
-                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{formatComponentResultCell(evalResult.finalComponents?.lecture, evalResult.finalStatus)}</td>
-                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{formatComponentResultCell(evalResult.finalComponents?.laboratory, evalResult.finalStatus)}</td>
-                            </>
-                          )}
-                          <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">
-                            {evalResult.finalPercentage !== null ? (
-                              `${evalResult.finalPercentage.toFixed(2)}%`
-                            ) : evalResult.finalStatus === 'pending' ? (
-                              <span className="text-slate-500 dark:text-slate-400 font-sans">Pending</span>
-                            ) : evalResult.finalReasons.length > 0 ? (
-                              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold" title={evalResult.finalReasons.join(', ')}>
-                                Incomplete
-                              </span>
-                            ) : (
-                              <span className="text-slate-500 dark:text-slate-400 font-sans">—</span>
-                            )}
-                          </td>
-                          <td className="px-5 py-3 text-center font-extrabold text-sm dark:text-slate-100">
-                            {evalResult.overallGwa !== null ? (
-                              <GradeValue percentage={evalResult.overallPercentage} grade={evalResult.overallGwa} lecture={lectureHoverFor(evalResult.midtermPercentage, evalResult.finalPercentage)}>{formatGrade(evalResult.overallGwa)}</GradeValue>
-                            ) : evalResult.historicalGwa !== null ? (
-                              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium" title="Prior persisted grade; current recomputation is incomplete">
-                                Prior: {formatGrade(evalResult.historicalGwa)} (Historical)
-                              </span>
-                            ) : (
-                              '—'
-                            )}
-                          </td>
-                          <td className="px-5 py-3">
-                            <span className={`inline-flex whitespace-nowrap px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${isFailed
-                              ? 'bg-rose-100 text-rose-700'
-                              : isFailsRetention
-                                ? 'bg-amber-100 text-amber-700'
-                                : isPending
-                                  ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
-                                  : isIncomplete
-                                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                                    : 'bg-emerald-100 text-emerald-700'
-                              }`}>
-                              {isFailed ? 'IRREGULAR REENROLLMENT' : isFailsRetention ? 'FAILS RETENTION' : isPending ? 'PENDING' : isIncomplete ? 'INCOMPLETE' : 'PASS'}
-                            </span>
-                          </td>
-                        </tr>
+                        <article key={student.id} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-clinical-700 dark:text-clinical-300">{student.studentId}</p>
+                              <h3 className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100">{student.name}</h3>
+                            </div>
+                            <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase ${remarkTone}`}>{remarkLabel}</span>
+                          </div>
+                          <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                            {metrics.map(metric => (
+                              <div key={metric.label} className="min-w-0">
+                                <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">{metric.label}</dt>
+                                <dd className={`mt-0.5 whitespace-nowrap text-xs tabular-nums ${metric.emphasis ? 'font-bold text-slate-800 dark:text-slate-100' : 'font-medium text-slate-700 dark:text-slate-200'}`}>{metric.value}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </article>
                       );
-                    }
-
-                    // Legacy overall view
-                    const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
-                    const isFailsRetention = subj && evalResult.overallGwa !== null && evalResult.overallGwa >= settings.retentionThreshold && evalResult.overallGwa < 5.0 && (evalResult.retentionState != null
-                        ? evalResult.retentionState === 'remedial'
-                        : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
-                          && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
-                    const isFailed = subj && typeof subj.grade === 'number' && subj.grade === 5.0;
-                    const hasGrade = subj && typeof subj.grade === 'number' && subj.grade > 0;
-
-                    return (
-                      <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
-                        <td className="px-5 py-3">
-                          <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">{student.studentId}</span>
-                        </td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{subj && typeof subj.components?.quizzes === 'number' ? `${subj.components.quizzes.toFixed(1)}%` : '—'}</td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{subj && typeof subj.components?.practicum === 'number' ? `${subj.components.practicum.toFixed(1)}%` : '—'}</td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—'}</td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-300">{subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—'}</td>
-                        <td className="px-5 py-3 text-center font-extrabold text-sm dark:text-slate-100">
-                          {hasGrade ? <GradeValue percentage={evalResult.overallPercentage} grade={subj.grade} lecture={lectureHoverFor(evalResult.midtermPercentage, evalResult.finalPercentage)}>{formatGrade(subj.grade)}</GradeValue> : '—'}
-                        </td>
-                        <td className="px-5 py-3">
-                          <span className={`inline-flex whitespace-nowrap px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${!hasGrade
-                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                            : isFailed
-                              ? 'bg-rose-100 text-rose-700'
-                              : isFailsRetention
-                                ? 'bg-amber-100 text-amber-700'
-                                : 'bg-emerald-100 text-emerald-700'
-                            }`}>
-                            {!hasGrade ? 'UNCOMPUTED' : isFailed ? 'IRREGULAR REENROLLMENT' : isFailsRetention ? 'FAILS RETENTION' : 'PASS'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                    })}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </Card>
       )}
