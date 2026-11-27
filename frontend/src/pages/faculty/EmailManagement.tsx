@@ -779,112 +779,188 @@ export const EmailManagement: React.FC = () => {
             </div>
           </div>
 
-          {/* Phones (<768px): each row is shown as a stacked block (name first, then section, status and preview). */}
-          <div className="table-pin table-pin-first table-pin-blocks">
-            <table className="w-full text-left text-xs border-collapse max-md:block">
-              <thead className="max-md:block">
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] max-md:block">
-                  <th className="py-3 px-4 w-10 max-md:block max-md:w-auto max-md:px-0">
-                    <label className="inline-flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={invitationEligibleStudents.length > 0 && selected.length === invitationEligibleStudents.length}
-                        onChange={toggleSelectAll}
-                        aria-label="Select all students"
-                        className="w-4 h-4 accent-emerald-600 cursor-pointer"
-                      />
-                      <span className="md:hidden">Select all</span>
-                    </label>
-                  </th>
-                  <th className="py-3 px-4 max-md:hidden" aria-sort={ariaSort(secretarySort, 'student')}><SortableHeader label="Student Details" sortKey="student" sort={secretarySort} onSort={setSecretarySort} /></th>
-                  <th className="py-3 px-4 max-md:hidden">Enrolled Class Section</th>
-                  <th className="py-3 px-4 text-center max-md:hidden">Roster Invitation Status</th>
-                  <th className="py-3 px-4 text-right max-md:hidden">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
-                {filteredStudents.length === 0 ? (
-                  <tr className="max-md:block">
-                    <td colSpan={5} className="px-6 py-14 text-center max-md:block">
-                      <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
-                      <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No enrolled students match current section filter.</h3>
-                    </td>
-                  </tr>
-                ) : (
-                  sortedFilteredStudents.map(student => {
-                    const isChecked = selected.includes(student.id);
-                    return (
-                      <tr key={student.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:relative max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-2 max-md:py-3.5 max-md:pl-7">
-                        <td className="py-3.5 px-4 max-md:p-0 max-md:absolute max-md:left-0 max-md:top-4">
+          {filteredStudents.length === 0 ? (
+            <div className="px-6 py-14 text-center">
+              <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+              <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No enrolled students match current section filter.</h3>
+            </div>
+          ) : (
+            <>
+              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                <table className="w-full min-w-[600px] text-left text-xs">
+                  <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <tr>
+                      <th scope="col" className="w-10 pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4">
+                        <input
+                          type="checkbox"
+                          checked={invitationEligibleStudents.length > 0 && selected.length === invitationEligibleStudents.length}
+                          onChange={toggleSelectAll}
+                          aria-label="Select all students"
+                          className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                        />
+                      </th>
+                      <th scope="col" className="px-2 py-2.5 xl:px-4" aria-sort={ariaSort(secretarySort, 'student')}><SortableHeader label="Student Details" sortKey="student" sort={secretarySort} onSort={setSecretarySort} /></th>
+                      <th scope="col" className="whitespace-nowrap px-2 py-2.5 xl:px-4">Enrolled Class Section</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-center dark:border-slate-800 xl:px-4">Roster Invitation Status</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 text-right dark:border-slate-800 xl:pl-4 xl:pr-5">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedFilteredStudents.map(student => {
+                      const isChecked = selected.includes(student.id);
+                      const invitation = studentInvitationStates[student.email.toLowerCase()];
+                      const accountStatus = student.accountStatus ?? 'none';
+                      const isAccountKnown = accountStatus === 'active' || accountStatus === 'secretary' || accountStatus === 'disabled';
+                      const statusLabel = isAccountKnown
+                        ? (accountStatus === 'active' ? 'Registered' : accountStatus === 'secretary' ? 'Secretary account' : 'Account disabled')
+                        : !isOfficialBicolEmail(student.email) ? 'Unsupported email domain'
+                          : invitation
+                            ? invitation.status === 'Sent' ? 'Invitation sent'
+                              : invitation.status === 'Failed' ? 'Invitation issued · Delivery failed'
+                                : 'Invitation pending'
+                            : accountStatus === 'pending' ? 'Invitation pending' : 'Enrolled & ready';
+                      const statusTone = isAccountKnown
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60'
+                        : !isOfficialBicolEmail(student.email)
+                          ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200/60'
+                          : invitation?.status === 'Failed'
+                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/60'
+                            : invitation
+                              ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200/60'
+                              : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60';
+                      return (
+                        <tr key={student.id}>
+                          <td className="pl-3.5 pr-2 py-3 xl:pl-5 xl:pr-4">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={!isOfficialBicolEmail(student.email)}
+                              onChange={() => toggleSelect(student.id)}
+                              aria-label={`Select ${student.name}`}
+                              className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                            />
+                          </td>
+
+                          <td className="px-2 py-3 xl:px-4">
+                            <span className="font-bold text-slate-800 dark:text-slate-100 block">{student.name}</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                              <span className="whitespace-nowrap font-bold text-clinical-800 dark:text-clinical-300">{student.studentId}</span>
+                              <span> • </span>
+                              <span className="break-all">{student.email}</span>
+                            </span>
+                            {!isOfficialBicolEmail(student.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Only @bicol-u.edu.ph addresses can receive invitations.</span>}
+                          </td>
+
+                          <td className="whitespace-nowrap px-2 py-3 font-bold text-clinical-800 dark:text-clinical-300 xl:px-4">
+                            {student.classSections?.[0]?.className || 'Section 4-A'}
+                          </td>
+
+                          <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-center dark:border-slate-800/80 xl:px-4">
+                            <span className={`whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border ${statusTone}`}>{statusLabel}</span>
+                          </td>
+
+                          <td className="whitespace-nowrap border-l border-slate-100 pl-2 pr-3.5 py-2 text-right dark:border-slate-800/80 xl:pl-4 xl:pr-5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPreviewType('class_invitation');
+                                setPreviewStudentId(student.id);
+                                setPreview(true);
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-[11px] font-bold transition-all cursor-pointer"
+                            >
+                              Preview
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-2.5 md:hidden">
+                <label className="flex items-center gap-2.5 px-1 pb-1 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={invitationEligibleStudents.length > 0 && selected.length === invitationEligibleStudents.length}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all students"
+                    className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                  />
+                  <span>Select all</span>
+                </label>
+                {sortedFilteredStudents.map(student => {
+                  const isChecked = selected.includes(student.id);
+                  const invitation = studentInvitationStates[student.email.toLowerCase()];
+                  const accountStatus = student.accountStatus ?? 'none';
+                  const isAccountKnown = accountStatus === 'active' || accountStatus === 'secretary' || accountStatus === 'disabled';
+                  const statusLabel = isAccountKnown
+                    ? (accountStatus === 'active' ? 'Registered' : accountStatus === 'secretary' ? 'Secretary account' : 'Account disabled')
+                    : !isOfficialBicolEmail(student.email) ? 'Unsupported email domain'
+                      : invitation
+                        ? invitation.status === 'Sent' ? 'Invitation sent'
+                          : invitation.status === 'Failed' ? 'Invitation issued · Delivery failed'
+                            : 'Invitation pending'
+                        : accountStatus === 'pending' ? 'Invitation pending' : 'Enrolled & ready';
+                  const statusTone = isAccountKnown
+                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60'
+                    : !isOfficialBicolEmail(student.email)
+                      ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200/60'
+                      : invitation?.status === 'Failed'
+                        ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/60'
+                        : invitation
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200/60'
+                          : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60';
+                  return (
+                    <article key={student.id} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5 min-w-0">
                           <input
                             type="checkbox"
                             checked={isChecked}
                             disabled={!isOfficialBicolEmail(student.email)}
                             onChange={() => toggleSelect(student.id)}
                             aria-label={`Select ${student.name}`}
-                            className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                            className="mt-0.5 w-4 h-4 shrink-0 accent-emerald-600 cursor-pointer"
                           />
-                        </td>
-
-                        <td className="py-3.5 px-4 max-md:p-0 max-md:w-full max-md:min-w-0">
-                          <span className="sr-only md:hidden">Student Details: </span>
-                          <span className="font-bold text-slate-800 dark:text-slate-100 block">{student.name}</span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId}<span className="max-md:hidden"> • </span><span className="max-md:block max-md:break-words">{student.email}</span></span>
-                          {!isOfficialBicolEmail(student.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Only @bicol-u.edu.ph addresses can receive invitations.</span>}
-                        </td>
-
-                        <td className="py-3.5 px-4 max-md:p-0">
-                          <span className="sr-only md:hidden">Enrolled Class Section: </span>
-                          <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-[11px] text-slate-700 dark:text-slate-300">
-                            {student.classSections?.[0]?.className || 'Section 4-A'}
-                          </span>
-                        </td>
-
-                        <td className="py-3.5 px-4 text-center max-md:p-0">
-                          <span className="sr-only md:hidden">Roster Invitation Status: </span>
-                          {(() => {
-                            const invitation = studentInvitationStates[student.email.toLowerCase()];
-                            const accountStatus = student.accountStatus ?? 'none';
-                            if (accountStatus === 'active' || accountStatus === 'secretary' || accountStatus === 'disabled') {
-                              const registeredLabel = accountStatus === 'active' ? 'Registered' : accountStatus === 'secretary' ? 'Secretary account' : 'Account disabled';
-                              return <span className="whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60">{registeredLabel}</span>;
-                            }
-                            const label = !isOfficialBicolEmail(student.email) ? 'Unsupported email domain' : invitation
-                              ? invitation.status === 'Sent' ? 'Invitation sent'
-                                : invitation.status === 'Failed' ? 'Invitation issued · Delivery failed'
-                                  : 'Invitation pending'
-                              : accountStatus === 'pending' ? 'Invitation pending' : 'Enrolled & ready';
-                            const tone = !isOfficialBicolEmail(student.email)
-                              ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200/60'
-                              : invitation?.status === 'Failed'
-                              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/60'
-                              : invitation
-                                ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200/60'
-                                : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60';
-                            return <span className={`whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border ${tone}`}>{label}</span>;
-                          })()}
-                        </td>
-
-                        <td className="py-3.5 px-4 text-right max-md:p-0 max-md:ml-auto">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPreviewType('class_invitation');
-                              setPreviewStudentId(student.id);
-                              setPreview(true);
-                            }}
-                            className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-[11px] font-bold transition-all cursor-pointer"
-                          >
-                            Preview
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                          <div className="min-w-0">
+                            <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-clinical-800 dark:text-clinical-300">{student.studentId}</p>
+                            <h3 className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100">{student.name}</h3>
+                          </div>
+                        </div>
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold min-[480px]:whitespace-nowrap text-right ${statusTone}`}>{statusLabel}</span>
+                      </div>
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                        <div className="col-span-2 min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Email</dt>
+                          <dd className="mt-0.5 break-all text-xs font-medium text-slate-700 dark:text-slate-200">{student.email}</dd>
+                          {!isOfficialBicolEmail(student.email) && <p className="mt-1 text-[10px] font-semibold text-rose-600 dark:text-rose-300">Only @bicol-u.edu.ph addresses can receive invitations.</p>}
+                        </div>
+                        <div className="col-span-2 min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Enrolled Class Section</dt>
+                          <dd className="mt-0.5 whitespace-nowrap text-xs font-bold text-clinical-800 dark:text-clinical-300">{student.classSections?.[0]?.className || 'Section 4-A'}</dd>
+                        </div>
+                      </dl>
+                      <div className="mt-2 flex justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPreviewType('class_invitation');
+                            setPreviewStudentId(student.id);
+                            setPreview(true);
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-[11px] font-bold transition-all cursor-pointer"
+                        >
+                          Preview
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </Card>
       )}
 
@@ -915,23 +991,23 @@ export const EmailManagement: React.FC = () => {
           </div>
 
           {/* Student selection for Secretary appointment */}
-          <div className="table-pin table-pin-first table-pin-blocks">
-            <table className="w-full text-left text-xs border-collapse max-md:block">
-              <thead className="max-md:hidden">
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4 w-10">Select</th>
-                  <th className="py-3 px-4" aria-sort={ariaSort(studentSort, 'student')}><SortableHeader label="Student Details" sortKey="student" sort={studentSort} onSort={setStudentSort} /></th>
-                  <th className="py-3 px-4">Class Section</th>
-                  <th className="py-3 px-4 text-center">Role Standing</th>
+          <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+            <table className="w-full min-w-[600px] text-left text-xs">
+              <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <tr>
+                  <th scope="col" className="w-12 pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4">Select</th>
+                  <th scope="col" className="px-2 py-2.5 xl:px-4" aria-sort={ariaSort(studentSort, 'student')}><SortableHeader label="Student Details" sortKey="student" sort={studentSort} onSort={setStudentSort} /></th>
+                  <th scope="col" className="whitespace-nowrap px-2 py-2.5 xl:px-4">Class Section</th>
+                  <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 text-center dark:border-slate-800 xl:pl-4 xl:pr-5">Role Standing</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
+              <tbody>
                 {sortedSecretaryRows.map(({ key, student, section }) => {
                   const isChecked = selected.includes(key);
                   const sectionTaken = sectionHasSecretary(section.classId, section.className);
                   return (
-                    <tr key={key} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:relative max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-2 max-md:py-3.5 max-md:pl-7">
-                      <td className="py-3.5 px-4 max-md:p-0 max-md:absolute max-md:left-0 max-md:top-4">
+                    <tr key={key}>
+                      <td className="pl-3.5 pr-2 py-3 xl:pl-5 xl:pr-4">
                         <input
                           type="checkbox"
                           checked={isChecked}
@@ -942,21 +1018,20 @@ export const EmailManagement: React.FC = () => {
                         />
                       </td>
 
-                      <td className="py-3.5 px-4 max-md:p-0 max-md:w-full max-md:min-w-0">
-                        <span className="sr-only md:hidden">Student Details: </span>
+                      <td className="px-2 py-3 xl:px-4">
                         <span className="font-bold text-slate-800 dark:text-slate-100 block">{student.name}</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId}<span className="max-md:hidden"> • </span><span className="max-md:block max-md:break-words">{student.email}</span></span>
-                      </td>
-
-                      <td className="py-3.5 px-4 max-md:p-0">
-                        <span className="sr-only md:hidden">Class Section: </span>
-                        <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-[11px] text-slate-700 dark:text-slate-300">
-                          {section.className || '—'}
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                          <span className="whitespace-nowrap font-bold text-clinical-800 dark:text-clinical-300">{student.studentId}</span>
+                          <span> • </span>
+                          <span className="break-all">{student.email}</span>
                         </span>
                       </td>
 
-                      <td className="py-3.5 px-4 text-center max-md:p-0 max-md:text-left">
-                        <span className="sr-only md:hidden">Role Standing: </span>
+                      <td className="whitespace-nowrap px-2 py-3 font-bold text-clinical-800 dark:text-clinical-300 xl:px-4">
+                        {section.className || '—'}
+                      </td>
+
+                      <td className="border-l border-slate-100 pl-2 pr-3.5 py-2 text-center dark:border-slate-800/80 xl:pl-4 xl:pr-5">
                         {section.isSecretary ? (
                           <span className="inline-flex items-center gap-2">
                             <span className="whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">Class Secretary</span>
@@ -977,6 +1052,59 @@ export const EmailManagement: React.FC = () => {
                 })}
               </tbody>
             </table>
+          </div>
+
+          <div className="space-y-2.5 md:hidden">
+            {sortedSecretaryRows.map(({ key, student, section }) => {
+              const isChecked = selected.includes(key);
+              const sectionTaken = sectionHasSecretary(section.classId, section.className);
+              const roleLabel = section.isSecretary
+                ? 'Class Secretary'
+                : (student.accountStatus === 'active' || student.accountStatus === 'secretary' ? 'Student (has account)' : 'Student (no account yet)');
+              const roleClass = section.isSecretary
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+              return (
+                <article key={key} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        disabled={sectionTaken || !isOfficialBicolEmail(student.email)}
+                        onChange={() => toggleSecretarySelect(key)}
+                        aria-label={`Select ${student.name} for ${section.className || 'this section'}`}
+                        className="mt-0.5 w-4 h-4 shrink-0 accent-emerald-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                      />
+                      <div className="min-w-0">
+                        <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-clinical-800 dark:text-clinical-300">{student.studentId}</p>
+                        <h3 className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100">{student.name}</h3>
+                      </div>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold min-[480px]:whitespace-nowrap text-right ${roleClass}`}>{roleLabel}</span>
+                  </div>
+                  <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                    <div className="col-span-2 min-w-0">
+                      <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Email</dt>
+                      <dd className="mt-0.5 break-all text-xs font-medium text-slate-700 dark:text-slate-200">{student.email}</dd>
+                      {!isOfficialBicolEmail(student.email) && <p className="mt-1 text-[10px] font-semibold text-rose-600 dark:text-rose-300">Only @bicol-u.edu.ph addresses can receive invitations.</p>}
+                    </div>
+                    <div className="col-span-2 min-w-0">
+                      <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Class Section</dt>
+                      <dd className="mt-0.5 whitespace-nowrap text-xs font-bold text-clinical-800 dark:text-clinical-300">{section.className || '—'}</dd>
+                      {sectionTaken && !section.isSecretary && (
+                        <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Section already has a Class Secretary</p>
+                      )}
+                    </div>
+                  </dl>
+                  {section.isSecretary && (
+                    <div className="mt-2 flex justify-end gap-1.5">
+                      <button type="button" disabled={isSending} onClick={() => void handleRemoveSecretary(student, section.classId, section.className)} className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-bold text-[10px] hover:bg-rose-100 disabled:opacity-50 cursor-pointer">Remove</button>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
           </div>
 
           {/* Active Secretary Invitations Ledger */}
@@ -1099,107 +1227,251 @@ export const EmailManagement: React.FC = () => {
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Try another class, school year, or search term.</p>
             </div>
           ) : tab === 'midterm_advisory' ? (
-            <div className="table-pin table-pin-first table-pin-blocks">
-              <table className="w-full text-left text-xs border-collapse max-md:block">
-                <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 max-md:block">
-                  <tr className="max-md:block">
-                    <th className="w-24 border-b border-slate-200 px-4 py-4 dark:border-slate-800 max-md:hidden">Select</th>
-                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden" aria-sort={ariaSort(noticeSort, 'student')}><SortableHeader label="Student details" sortKey="student" sort={noticeSort} onSort={setNoticeSort} /></th>
-                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Class section</th>
-                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Midterm grade</th>
-                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Midterm GWA</th>
-                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Advisory email</th>
-                  </tr>
-                </thead>
-                <tbody className="max-md:block">
-                  {sortedNoticeRows.map(row => {
-                    const isChecked = selected.includes(row.enrollmentId);
-                    return (
-                      <tr key={row.enrollmentId} className="border-b border-slate-100 last:border-0 dark:border-slate-800 max-md:relative max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-2 max-md:py-3.5 max-md:pl-7">
-                        <td className="px-4 py-5 align-middle max-md:p-0 max-md:absolute max-md:left-0 max-md:top-4">
+            <>
+              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                <table className="w-full min-w-[600px] text-left text-xs">
+                  <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <tr>
+                      <th scope="col" className="w-12 pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4">Select</th>
+                      <th scope="col" className="px-2 py-2.5 xl:px-4" aria-sort={ariaSort(noticeSort, 'student')}><SortableHeader label="Student details" sortKey="student" sort={noticeSort} onSort={setNoticeSort} /></th>
+                      <th scope="col" className="whitespace-nowrap px-2 py-2.5 xl:px-4">Class section</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4">Midterm grade</th>
+                      <th scope="col" className="whitespace-nowrap px-2 py-2.5 text-right xl:px-4">Midterm GWA</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 text-right dark:border-slate-800 xl:pl-4 xl:pr-5">Advisory email</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedNoticeRows.map(row => {
+                      const isChecked = selected.includes(row.enrollmentId);
+                      return (
+                        <tr key={row.enrollmentId}>
+                          <td className="pl-3.5 pr-2 py-3 align-middle xl:pl-5 xl:pr-4">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={!isOfficialBicolEmail(row.email)}
+                              onChange={() => toggleSelect(row.enrollmentId)}
+                              aria-label={`Select ${row.studentName ?? 'student'} for Midterm Advisory`}
+                              className="mt-0.5 h-4 w-4 accent-emerald-600 disabled:opacity-40"
+                            />
+                          </td>
+                          <td className="px-2 py-3 xl:px-4">
+                            <span className="block font-bold text-slate-800 dark:text-slate-100">{row.studentName || 'Student name unavailable'}</span>
+                            <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
+                              {row.studentNumber && <><span className="whitespace-nowrap font-bold text-clinical-800 dark:text-clinical-300">{row.studentNumber}</span><span className="px-1.5">•</span></>}
+                              <span className="break-all">{row.email || 'No valid institutional email on file'}</span>
+                            </span>
+                            {row.email && !isOfficialBicolEmail(row.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Update to an @bicol-u.edu.ph address before sending.</span>}
+                          </td>
+                          <td className="whitespace-nowrap px-2 py-3 font-bold text-clinical-800 dark:text-clinical-300 xl:px-4">
+                            {row.className || 'Class section'}
+                          </td>
+                          <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right font-semibold tabular-nums text-slate-700 dark:border-slate-800/80 dark:text-slate-300 xl:px-4">
+                            {row.midtermPercentage == null ? 'Unavailable' : `${Number(row.midtermPercentage).toFixed(0)}%`}
+                          </td>
+                          <td className="whitespace-nowrap px-2 py-3 text-right font-semibold tabular-nums text-slate-700 dark:text-slate-300 xl:px-4">
+                            {row.midtermGwa == null ? 'Unavailable' : Number(row.midtermGwa).toFixed(1)}
+                          </td>
+                          <td className="whitespace-nowrap border-l border-slate-100 pl-2 pr-3.5 py-3 text-right dark:border-slate-800/80 xl:pl-4 xl:pr-5">
+                            <span className={`inline-flex rounded-full px-3 py-1.5 text-[10px] font-bold ${row.midtermAdvisorySent ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                              {row.midtermAdvisorySent ? 'Sent' : 'Not sent'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-2.5 md:hidden">
+                {sortedNoticeRows.map(row => {
+                  const isChecked = selected.includes(row.enrollmentId);
+                  return (
+                    <article key={row.enrollmentId} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5 min-w-0">
                           <input
                             type="checkbox"
                             checked={isChecked}
                             disabled={!isOfficialBicolEmail(row.email)}
                             onChange={() => toggleSelect(row.enrollmentId)}
                             aria-label={`Select ${row.studentName ?? 'student'} for Midterm Advisory`}
-                            className="mt-0.5 h-4 w-4 accent-emerald-600 disabled:opacity-40"
+                            className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-600 disabled:opacity-40"
                           />
-                        </td>
-                        <td className="px-3 py-5 max-md:p-0 max-md:w-full max-md:min-w-0">
-                          <span className="sr-only md:hidden">Student details: </span>
-                          <span className="block font-bold text-slate-800 dark:text-slate-100">{row.studentName || 'Student name unavailable'}</span>
-                          <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
-                            {row.studentNumber && <>{row.studentNumber}<span className="px-1.5">•</span></>}
-                            <span className="break-all">{row.email || 'No valid institutional email on file'}</span>
-                          </span>
-                          {row.email && !isOfficialBicolEmail(row.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Update to an @bicol-u.edu.ph address before sending.</span>}
-                        </td>
-                        <td className="px-3 py-5 max-md:p-0">
-                          <span className="sr-only md:hidden">Class section: </span>
-                          <span className="inline-flex rounded-lg bg-slate-100 px-3 py-1.5 font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{row.className || 'Class section'}</span>
-                        </td>
-                        <td className="px-3 py-5 font-semibold text-slate-700 dark:text-slate-300 max-md:p-0">
-                          <span className="sr-only md:hidden">Midterm grade: </span>
-                          {row.midtermPercentage == null ? 'Unavailable' : `${Number(row.midtermPercentage).toFixed(0)}%`}
-                        </td>
-                        <td className="px-3 py-5 font-semibold text-slate-700 dark:text-slate-300 max-md:p-0">
-                          <span className="sr-only md:hidden">Midterm GWA: </span>
-                          {row.midtermGwa == null ? 'Unavailable' : Number(row.midtermGwa).toFixed(1)}
-                        </td>
-                        <td className="px-3 py-5 max-md:p-0">
-                          <span className="sr-only md:hidden">Advisory email: </span>
-                          <span className={`inline-flex rounded-full px-3 py-1.5 text-[10px] font-bold ${row.midtermAdvisorySent ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
-                            {row.midtermAdvisorySent ? 'Sent' : 'Not sent'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          <div className="min-w-0">
+                            {row.studentNumber && <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-clinical-800 dark:text-clinical-300">{row.studentNumber}</p>}
+                            <h3 className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100">{row.studentName || 'Student name unavailable'}</h3>
+                          </div>
+                        </div>
+                        <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold ${row.midtermAdvisorySent ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                          {row.midtermAdvisorySent ? 'Sent' : 'Not sent'}
+                        </span>
+                      </div>
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                        <div className="col-span-2 min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Email</dt>
+                          <dd className="mt-0.5 break-all text-xs font-medium text-slate-700 dark:text-slate-200">{row.email || 'No valid institutional email on file'}</dd>
+                          {row.email && !isOfficialBicolEmail(row.email) && <p className="mt-1 text-[10px] font-semibold text-rose-600 dark:text-rose-300">Update to an @bicol-u.edu.ph address before sending.</p>}
+                        </div>
+                        <div className="col-span-2 min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Class Section</dt>
+                          <dd className="mt-0.5 whitespace-nowrap text-xs font-bold text-clinical-800 dark:text-clinical-300">{row.className || 'Class section'}</dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Midterm Grade</dt>
+                          <dd className="mt-0.5 whitespace-nowrap text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-200">{row.midtermPercentage == null ? 'Unavailable' : `${Number(row.midtermPercentage).toFixed(0)}%`}</dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Midterm GWA</dt>
+                          <dd className="mt-0.5 whitespace-nowrap text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-200">{row.midtermGwa == null ? 'Unavailable' : Number(row.midtermGwa).toFixed(1)}</dd>
+                        </div>
+                      </dl>
+                    </article>
+                  );
+                })}
+              </div>
+            </>
           ) : (
-            <div className="table-pin table-pin-first table-pin-blocks">
-              <table className="w-full text-left text-xs border-collapse max-md:block">
-                <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 max-md:block">
-                  <tr className="max-md:block">
-                    <th className="w-24 border-b border-slate-200 px-4 py-4 dark:border-slate-800 max-md:hidden">Select</th>
-                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden" aria-sort={ariaSort(noticeSort, 'student')}><SortableHeader label="Student details" sortKey="student" sort={noticeSort} onSort={setNoticeSort} /></th>
-                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Class section</th>
-                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Attempt / date</th>
-                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Email status</th>
-                    <th className="border-b border-slate-200 px-3 py-4 dark:border-slate-800 max-md:hidden">Schedule</th>
-                  </tr>
-                </thead>
-                <tbody className="max-md:block">
-                  {sortedNoticeRows.map(row => {
-                    const isChecked = selected.includes(row.enrollmentId);
-                    const hasScheduledDate = Boolean(row.pendingAttempt?.scheduledDate);
-                    const rowBlocked = isRemedialRowBlocked(row);
-                    const isEditing = editingRemedialId === row.enrollmentId;
-                    const isSaving = savingRemedialId === row.enrollmentId;
-                    const statusClass = row.remedialNoticeStatus === 'Sent'
-                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                      : row.remedialNoticeStatus === 'Failed'
-                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
-                        : row.remedialNoticeStatus === 'Suppressed'
-                          ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
-                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
-                    const statusLabel = !hasScheduledDate
-                      ? 'Waiting for date'
-                      : row.remedialNoticeStatus === 'Sent'
-                        ? 'Email sent'
+            <>
+              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                <table className="w-full min-w-[600px] text-left text-xs">
+                  <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <tr>
+                      <th scope="col" className="w-12 pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4">Select</th>
+                      <th scope="col" className="px-2 py-2.5 xl:px-4" aria-sort={ariaSort(noticeSort, 'student')}><SortableHeader label="Student details" sortKey="student" sort={noticeSort} onSort={setNoticeSort} /></th>
+                      <th scope="col" className="whitespace-nowrap px-2 py-2.5 xl:px-4">Class section</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Attempt / date</th>
+                      <th scope="col" className="whitespace-nowrap px-2 py-2.5 xl:px-4">Email status</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 text-right dark:border-slate-800 xl:pl-4 xl:pr-5">Schedule</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedNoticeRows.map(row => {
+                      const isChecked = selected.includes(row.enrollmentId);
+                      const hasScheduledDate = Boolean(row.pendingAttempt?.scheduledDate);
+                      const rowBlocked = isRemedialRowBlocked(row);
+                      const isEditing = editingRemedialId === row.enrollmentId;
+                      const isSaving = savingRemedialId === row.enrollmentId;
+                      const statusClass = row.remedialNoticeStatus === 'Sent'
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
                         : row.remedialNoticeStatus === 'Failed'
-                          ? 'Email failed · retry available'
+                          ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
                           : row.remedialNoticeStatus === 'Suppressed'
-                            ? 'Mailpit only'
-                            : row.remedialNoticeStatus === 'Pending'
-                              ? 'Email pending'
-                              : 'Email not sent';
-                    return (
-                      <tr key={row.enrollmentId} className="border-b border-slate-100 last:border-0 dark:border-slate-800 max-md:relative max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-2 max-md:py-3.5 max-md:pl-7">
-                        <td className="px-4 py-5 align-middle max-md:p-0 max-md:absolute max-md:left-0 max-md:top-4">
+                            ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
+                      const statusLabel = !hasScheduledDate
+                        ? 'Waiting for date'
+                        : row.remedialNoticeStatus === 'Sent'
+                          ? 'Email sent'
+                          : row.remedialNoticeStatus === 'Failed'
+                            ? 'Email failed · retry available'
+                            : row.remedialNoticeStatus === 'Suppressed'
+                              ? 'Mailpit only'
+                              : row.remedialNoticeStatus === 'Pending'
+                                ? 'Email pending'
+                                : 'Email not sent';
+                      return (
+                        <tr key={row.enrollmentId}>
+                          <td className="pl-3.5 pr-2 py-3 align-middle xl:pl-5 xl:pr-4">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={!isOfficialBicolEmail(row.email) || !hasScheduledDate || rowBlocked}
+                              onChange={() => toggleSelect(row.enrollmentId)}
+                              aria-label={`Select ${row.studentName ?? 'student'} for Remedial Notice`}
+                              title={rowBlocked ? 'Submit the class grades and close any open grade change in Grade Computation before sending.' : undefined}
+                              className="h-4 w-4 accent-emerald-600 disabled:opacity-40"
+                            />
+                          </td>
+                          <td className="px-2 py-3 xl:px-4">
+                            <span className="block font-bold text-slate-800 dark:text-slate-100">{row.studentName || 'Student name unavailable'}</span>
+                            <span className="mt-0.5 block break-all text-[11px] text-slate-500 dark:text-slate-400">{row.email || 'No valid institutional email on file'}</span>
+                            {row.email && !isOfficialBicolEmail(row.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Update to an @bicol-u.edu.ph address before sending.</span>}
+                          </td>
+                          <td className="whitespace-nowrap px-2 py-3 font-bold text-clinical-800 dark:text-clinical-300 xl:px-4">
+                            {row.className || 'Class section'}
+                          </td>
+                          <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 font-semibold text-slate-700 dark:border-slate-800/80 dark:text-slate-300 xl:px-4">
+                            <span className="block">Attempt {row.pendingAttempt?.attemptNumber ?? '—'}</span>
+                            <span className="mt-0.5 block text-[11px] font-normal text-slate-500 dark:text-slate-400">{remedialDateLabel(row.pendingAttempt?.scheduledDate) ?? 'Date not set'}</span>
+                          </td>
+                          <td className="whitespace-nowrap px-2 py-3 xl:px-4">
+                            <span className={`inline-flex rounded-full px-3 py-1.5 text-[10px] font-bold ${statusClass}`}>{statusLabel}</span>
+                          </td>
+                          <td className="border-l border-slate-100 pl-2 pr-3.5 py-2 text-right dark:border-slate-800/80 xl:pl-4 xl:pr-5">
+                            {isEditing ? (
+                              <div className="flex min-w-[300px] flex-wrap items-center justify-end gap-2">
+                                <input
+                                  type="date"
+                                  aria-label={`Remedial exam date for ${row.studentName ?? 'student'}`}
+                                  min={manilaToday()}
+                                  value={remedialDateDraft}
+                                  onChange={(event) => setRemedialDateDraft(event.target.value)}
+                                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-clinical-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={isSaving || !remedialDateDraft}
+                                  onClick={() => void handleSaveRemedialDate(row)}
+                                  className="rounded-lg bg-clinical-600 px-3 py-2 text-xs font-bold text-white hover:bg-clinical-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                >{isSaving ? 'Saving…' : 'Save date'}</button>
+                                <button
+                                  type="button"
+                                  disabled={isSaving}
+                                  onClick={() => { setEditingRemedialId(null); setRemedialDateDraft(''); }}
+                                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                                >Cancel</button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={rowBlocked}
+                                title={rowBlocked ? 'Submit the class grades and close any open grade change in Grade Computation before updating remedial dates.' : undefined}
+                                onClick={() => {
+                                  setEditingRemedialId(row.enrollmentId);
+                                  setRemedialDateDraft(row.pendingAttempt?.scheduledDate ?? '');
+                                }}
+                                className="whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                              >{hasScheduledDate ? 'Edit date' : 'Add date'}</button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-2.5 md:hidden">
+                {sortedNoticeRows.map(row => {
+                  const isChecked = selected.includes(row.enrollmentId);
+                  const hasScheduledDate = Boolean(row.pendingAttempt?.scheduledDate);
+                  const rowBlocked = isRemedialRowBlocked(row);
+                  const isEditing = editingRemedialId === row.enrollmentId;
+                  const isSaving = savingRemedialId === row.enrollmentId;
+                  const statusClass = row.remedialNoticeStatus === 'Sent'
+                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                    : row.remedialNoticeStatus === 'Failed'
+                      ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+                      : row.remedialNoticeStatus === 'Suppressed'
+                        ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
+                  const statusLabel = !hasScheduledDate
+                    ? 'Waiting for date'
+                    : row.remedialNoticeStatus === 'Sent'
+                      ? 'Email sent'
+                      : row.remedialNoticeStatus === 'Failed'
+                        ? 'Email failed · retry available'
+                        : row.remedialNoticeStatus === 'Suppressed'
+                          ? 'Mailpit only'
+                          : row.remedialNoticeStatus === 'Pending'
+                            ? 'Email pending'
+                            : 'Email not sent';
+                  return (
+                    <article key={row.enrollmentId} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5 min-w-0">
                           <input
                             type="checkbox"
                             checked={isChecked}
@@ -1207,72 +1479,74 @@ export const EmailManagement: React.FC = () => {
                             onChange={() => toggleSelect(row.enrollmentId)}
                             aria-label={`Select ${row.studentName ?? 'student'} for Remedial Notice`}
                             title={rowBlocked ? 'Submit the class grades and close any open grade change in Grade Computation before sending.' : undefined}
-                            className="h-4 w-4 accent-emerald-600 disabled:opacity-40"
+                            className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-600 disabled:opacity-40"
                           />
-                        </td>
-                        <td className="px-3 py-5 max-md:p-0 max-md:w-full max-md:min-w-0">
-                          <span className="sr-only md:hidden">Student details: </span>
-                          <span className="block font-bold text-slate-800 dark:text-slate-100">{row.studentName || 'Student name unavailable'}</span>
-                          <span className="mt-0.5 block break-all text-[11px] text-slate-500 dark:text-slate-400">{row.email || 'No valid institutional email on file'}</span>
-                          {row.email && !isOfficialBicolEmail(row.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Update to an @bicol-u.edu.ph address before sending.</span>}
-                        </td>
-                        <td className="px-3 py-5 max-md:p-0">
-                          <span className="sr-only md:hidden">Class section: </span>
-                          <span className="inline-flex rounded-lg bg-slate-100 px-3 py-1.5 font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{row.className || 'Class section'}</span>
-                        </td>
-                        <td className="px-3 py-5 font-semibold text-slate-700 dark:text-slate-300 max-md:p-0">
-                          <span className="sr-only md:hidden">Attempt / date: </span>
-                          <span className="block">Attempt {row.pendingAttempt?.attemptNumber ?? '—'}</span>
-                          <span className="mt-0.5 block text-[11px] font-normal text-slate-500 dark:text-slate-400">{remedialDateLabel(row.pendingAttempt?.scheduledDate) ?? 'Date not set'}</span>
-                        </td>
-                        <td className="px-3 py-5 max-md:p-0">
-                          <span className="sr-only md:hidden">Email status: </span>
-                          <span className={`inline-flex rounded-full px-3 py-1.5 text-[10px] font-bold ${statusClass}`}>{statusLabel}</span>
-                        </td>
-                        <td className="px-3 py-5 max-md:w-full max-md:p-0">
-                          <span className="sr-only md:hidden">Schedule: </span>
-                          {isEditing ? (
-                            <div className="flex min-w-[300px] max-md:min-w-0 max-md:w-full flex-wrap items-center gap-2">
-                              <input
-                                type="date"
-                                aria-label={`Remedial exam date for ${row.studentName ?? 'student'}`}
-                                min={manilaToday()}
-                                value={remedialDateDraft}
-                                onChange={(event) => setRemedialDateDraft(event.target.value)}
-                                className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-clinical-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                              />
-                              <button
-                                type="button"
-                                disabled={isSaving || !remedialDateDraft}
-                                onClick={() => void handleSaveRemedialDate(row)}
-                                className="rounded-lg bg-clinical-600 px-3 py-2 text-xs font-bold text-white hover:bg-clinical-700 disabled:cursor-not-allowed disabled:opacity-50"
-                              >{isSaving ? 'Saving…' : 'Save date'}</button>
-                              <button
-                                type="button"
-                                disabled={isSaving}
-                                onClick={() => { setEditingRemedialId(null); setRemedialDateDraft(''); }}
-                                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                              >Cancel</button>
-                            </div>
-                          ) : (
+                          <div className="min-w-0">
+                            <h3 className="text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100">{row.studentName || 'Student name unavailable'}</h3>
+                          </div>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold min-[480px]:whitespace-nowrap text-right ${statusClass}`}>{statusLabel}</span>
+                      </div>
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                        <div className="col-span-2 min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Email</dt>
+                          <dd className="mt-0.5 break-all text-xs font-medium text-slate-700 dark:text-slate-200">{row.email || 'No valid institutional email on file'}</dd>
+                          {row.email && !isOfficialBicolEmail(row.email) && <p className="mt-1 text-[10px] font-semibold text-rose-600 dark:text-rose-300">Update to an @bicol-u.edu.ph address before sending.</p>}
+                        </div>
+                        <div className="min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Class Section</dt>
+                          <dd className="mt-0.5 whitespace-nowrap text-xs font-bold text-clinical-800 dark:text-clinical-300">{row.className || 'Class section'}</dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Attempt / Date</dt>
+                          <dd className="mt-0.5 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                            <span className="block">Attempt {row.pendingAttempt?.attemptNumber ?? '—'}</span>
+                            <span className="block text-[11px] font-normal text-slate-500 dark:text-slate-400">{remedialDateLabel(row.pendingAttempt?.scheduledDate) ?? 'Date not set'}</span>
+                          </dd>
+                        </div>
+                      </dl>
+                      <div className="mt-2 flex flex-wrap justify-end gap-1.5">
+                        {isEditing ? (
+                          <>
+                            <input
+                              type="date"
+                              aria-label={`Remedial exam date for ${row.studentName ?? 'student'}`}
+                              min={manilaToday()}
+                              value={remedialDateDraft}
+                              onChange={(event) => setRemedialDateDraft(event.target.value)}
+                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-clinical-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            />
                             <button
                               type="button"
-                              disabled={rowBlocked}
-                              title={rowBlocked ? 'Submit the class grades and close any open grade change in Grade Computation before updating remedial dates.' : undefined}
-                              onClick={() => {
-                                setEditingRemedialId(row.enrollmentId);
-                                setRemedialDateDraft(row.pendingAttempt?.scheduledDate ?? '');
-                              }}
-                              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                            >{hasScheduledDate ? 'Edit date' : 'Add date'}</button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                              disabled={isSaving || !remedialDateDraft}
+                              onClick={() => void handleSaveRemedialDate(row)}
+                              className="rounded-lg bg-clinical-600 px-3 py-2 text-xs font-bold text-white hover:bg-clinical-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >{isSaving ? 'Saving…' : 'Save date'}</button>
+                            <button
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => { setEditingRemedialId(null); setRemedialDateDraft(''); }}
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                            >Cancel</button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={rowBlocked}
+                            title={rowBlocked ? 'Submit the class grades and close any open grade change in Grade Computation before updating remedial dates.' : undefined}
+                            onClick={() => {
+                              setEditingRemedialId(row.enrollmentId);
+                              setRemedialDateDraft(row.pendingAttempt?.scheduledDate ?? '');
+                            }}
+                            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                          >{hasScheduledDate ? 'Edit date' : 'Add date'}</button>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </>
           )}
         </Card>
       )}
