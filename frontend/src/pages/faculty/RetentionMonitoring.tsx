@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useIsPhone } from '../../hooks/useIsPhone';
 import { CalendarDays, CheckCircle2, ChevronRight, Info, Plus, Search, Calculator, Filter, Send } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card';
@@ -297,6 +298,7 @@ const statusBadgeClasses = (state: FacultyRetentionState): string => {
 };
 
 export const RetentionMonitoring: React.FC = () => {
+  const isPhone = useIsPhone();
   const navigate = useNavigate();
   const { user } = useAuth();
   const sharedUserId = user?.user_id;
@@ -1217,6 +1219,7 @@ export const RetentionMonitoring: React.FC = () => {
             )
           ) : (
             <>
+              {!isPhone ? (
               <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
                 <table className="w-full min-w-[650px] text-left text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -1265,6 +1268,7 @@ export const RetentionMonitoring: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+              ) : (
               <div className="space-y-2.5 md:hidden">
                 {sortedMidterm.map(record => (
                   <article key={record.enrollmentId} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
@@ -1306,6 +1310,7 @@ export const RetentionMonitoring: React.FC = () => {
                   </article>
                 ))}
               </div>
+              )}
             </>
           )}
           <p className="text-[11px] text-slate-500">Midterm scores provide an early review. Final retention decisions appear in Retention Status.</p>
@@ -1333,6 +1338,7 @@ export const RetentionMonitoring: React.FC = () => {
             isLoading ? <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading retention records…</div> : <div className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{selectedClassId !== 'all' || selectedSubjectCode !== 'all' || searchQuery.trim() ? 'No students needing retention action match these filters.' : 'No students need retention action in this school year.'}</h3></div>
           ) : (
             <>
+              {!isPhone ? (
               <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
                 <table className="w-full min-w-[700px] text-left text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -1368,6 +1374,7 @@ export const RetentionMonitoring: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+              ) : (
               <div className="space-y-2.5 md:hidden">
                 {sortedWatchlist.map(record => (
                   <article key={record.enrollmentId} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
@@ -1402,6 +1409,7 @@ export const RetentionMonitoring: React.FC = () => {
                   </article>
                 ))}
               </div>
+              )}
             </>
           )}
         </Card>
@@ -1434,6 +1442,7 @@ export const RetentionMonitoring: React.FC = () => {
             isLoading ? <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading remedial records…</div> : <div className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No remedial records match the selected filters.</h3></div>
           ) : (
             <>
+              {!isPhone ? (
               <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
                 <table className="w-full min-w-[820px] text-left text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -1481,6 +1490,7 @@ export const RetentionMonitoring: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+              ) : (
               <div className="space-y-2.5 md:hidden">
                 {sortedRemedials.map(row => {
                   const activeAttemptNumber = row.progression.attempts.length === 2
@@ -1520,6 +1530,7 @@ export const RetentionMonitoring: React.FC = () => {
                   );
                 })}
               </div>
+              )}
             </>
           )}
         </Card>

@@ -3,6 +3,7 @@ import { formatShortDate } from '../../utils/sessionDate';
 import { formatSchoolYear } from '../../utils/schoolYear';
 import { filterPersonNameInput, personNameFieldError, preventInvalidPersonNameKey, type PersonNamePartKey } from '../../utils/personNameValidation';
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
+import { useIsPhone } from '../../hooks/useIsPhone';
 import { createPortal, flushSync } from 'react-dom';
 import {
   BookOpen,
@@ -196,6 +197,7 @@ const parseRoomSchedule = (raw: string | undefined | null) => {
 
 
 export const ClassesAndRosters: React.FC = () => {
+  const isPhone = useIsPhone();
   const [classes, setClasses] = useState<FacultyClassItem[]>([]);
   const [studentsList, setStudentsList] = useState<Student[]>([]);
   const [courses, setCourses] = useState<CourseCatalogItem[]>([]);
@@ -2117,6 +2119,7 @@ const handleSendAllStudentInvites = async () => {
 
             return (
               <>
+                {!isPhone ? (
                 <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
                   <table className="w-full min-w-[600px] text-left text-xs">
                     <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -2181,7 +2184,7 @@ const handleSendAllStudentInvites = async () => {
                     </tbody>
                   </table>
                 </div>
-
+                ) : (
                 <div className="space-y-2.5 md:hidden">
                   {filteredStudents.map((st) => {
                     const assignedSections = st.classSections || [];
@@ -2238,6 +2241,7 @@ const handleSendAllStudentInvites = async () => {
                     );
                   })}
                 </div>
+                )}
 
                 {openStudent && menuPos && createPortal(
                   <div style={menuPos} onClick={(e) => e.stopPropagation()} className="fixed w-44 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-900/10 py-1.5 z-[60] text-xs text-left">

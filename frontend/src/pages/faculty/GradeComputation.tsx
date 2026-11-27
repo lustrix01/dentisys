@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useIsPhone } from '../../hooks/useIsPhone';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Calculator,
@@ -294,6 +295,7 @@ const groupNamesByComponent = (cats: Array<{ name: string; component?: string | 
 
 export const GradeComputation: React.FC = () => {
   const { user } = useAuth();
+  const isPhone = useIsPhone();
   const {
     students,
     attendanceRecords,
@@ -4186,7 +4188,6 @@ export const GradeComputation: React.FC = () => {
                         type="button"
                         onClick={() => openEditAssessmentModal(ass)}
                         className={iconBtnClass}
-                        aria-label={`Edit ${ass.title}`}
                         title="Edit"
                       >
                         <Edit className="h-4 w-4" />
@@ -4207,7 +4208,6 @@ export const GradeComputation: React.FC = () => {
                         }
                       }}
                       className={`${iconBtnClass} hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-950/40 dark:hover:text-amber-300`}
-                      aria-label={`Archive ${ass.title}`}
                       title="Archive"
                     >
                       <Archive className="h-4 w-4" />
@@ -4227,7 +4227,6 @@ export const GradeComputation: React.FC = () => {
                         }
                       }}
                       className={`${iconBtnClass} hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/40 dark:hover:text-rose-300`}
-                      aria-label={`Delete ${ass.title}`}
                       title="Delete"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -4238,6 +4237,7 @@ export const GradeComputation: React.FC = () => {
 
               return (
                 <>
+                  {!isPhone ? (
                   <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
                     <table className="w-full min-w-[580px] text-left text-xs">
                       <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -4299,6 +4299,7 @@ export const GradeComputation: React.FC = () => {
                       </tbody>
                     </table>
                   </div>
+                  ) : (
                   <div className="space-y-2.5 md:hidden">
                     {filteredAssessments.map(ass => {
                       const sectionCode = currentAssessmentOffering && currentAssessmentOffering.sections.length > 1
@@ -4355,6 +4356,7 @@ export const GradeComputation: React.FC = () => {
                       );
                     })}
                   </div>
+                  )}
                 </>
               );
             })()}
@@ -5581,11 +5583,7 @@ export const GradeComputation: React.FC = () => {
           )}
 
           <div className="p-3 sm:p-4">
-            {sortedSummaryStudents.length === 0 ? (
-              <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                No matching student grade summaries found.
-              </div>
-            ) : (() => {
+            {(() => {
               const renderPeriodScore = (percentage: number | null, status: string, reasons: string[]) => (
                 percentage !== null ? (
                   `${percentage.toFixed(2)}%`
@@ -5661,6 +5659,7 @@ export const GradeComputation: React.FC = () => {
 
               return (
                 <>
+                  {!isPhone ? (
                   <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
                     <table className={`w-full text-left text-xs ${isPeriodMode && isLectureLaboratoryMode ? 'min-w-[780px]' : 'min-w-[580px]'}`}>
                       <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -5697,7 +5696,13 @@ export const GradeComputation: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {summaryRows.map(({ student, subj, evalResult, remarkLabel, remarkTone, finalGradeNode }) => (
+                        {summaryRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={isPeriodMode ? (isLectureLaboratoryMode ? 9 : 5) : 7} className="px-5 py-8 text-center text-slate-500 dark:text-slate-400">
+                              No matching student grade summaries found.
+                            </td>
+                          </tr>
+                        ) : summaryRows.map(({ student, subj, evalResult, remarkLabel, remarkTone, finalGradeNode }) => (
                           <tr key={student.id}>
                             <td className="pl-3.5 pr-2 py-3 xl:pl-5 xl:pr-4">
                               <div className="font-bold text-slate-800 dark:text-slate-100">{student.name}</div>
@@ -5740,6 +5745,11 @@ export const GradeComputation: React.FC = () => {
                       </tbody>
                     </table>
                   </div>
+                  ) : summaryRows.length === 0 ? (
+                  <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 md:hidden">
+                    No matching student grade summaries found.
+                  </div>
+                  ) : (
                   <div className="space-y-2.5 md:hidden">
                     {summaryRows.map(({ student, subj, evalResult, remarkLabel, remarkTone, finalGradeNode }) => {
                       const metrics: Array<{ label: string; value: React.ReactNode; emphasis?: boolean }> = isPeriodMode
@@ -5787,6 +5797,7 @@ export const GradeComputation: React.FC = () => {
                       );
                     })}
                   </div>
+                  )}
                 </>
               );
             })()}

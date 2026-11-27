@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { useIsPhone } from '../../hooks/useIsPhone';
 import {
   CheckCircle2,
   Clock3,
@@ -62,6 +63,7 @@ const manilaToday = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: '
 
 export const EmailManagement: React.FC = () => {
   const { user } = useAuth();
+  const isPhone = useIsPhone();
 
   const [dbStudents, setDbStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
@@ -786,6 +788,7 @@ export const EmailManagement: React.FC = () => {
             </div>
           ) : (
             <>
+              {!isPhone ? (
               <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
                 <table className="w-full min-w-[600px] text-left text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -878,7 +881,7 @@ export const EmailManagement: React.FC = () => {
                   </tbody>
                 </table>
               </div>
-
+              ) : (
               <div className="space-y-2.5 md:hidden">
                 <label className="flex items-center gap-2.5 px-1 pb-1 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer">
                   <input
@@ -959,6 +962,7 @@ export const EmailManagement: React.FC = () => {
                   );
                 })}
               </div>
+              )}
             </>
           )}
         </Card>
@@ -991,6 +995,7 @@ export const EmailManagement: React.FC = () => {
           </div>
 
           {/* Student selection for Secretary appointment */}
+          {!isPhone ? (
           <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
             <table className="w-full min-w-[600px] text-left text-xs">
               <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -1053,7 +1058,7 @@ export const EmailManagement: React.FC = () => {
               </tbody>
             </table>
           </div>
-
+          ) : (
           <div className="space-y-2.5 md:hidden">
             {sortedSecretaryRows.map(({ key, student, section }) => {
               const isChecked = selected.includes(key);
@@ -1106,6 +1111,7 @@ export const EmailManagement: React.FC = () => {
               );
             })}
           </div>
+          )}
 
           {/* Active Secretary Invitations Ledger */}
           <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
@@ -1228,6 +1234,7 @@ export const EmailManagement: React.FC = () => {
             </div>
           ) : tab === 'midterm_advisory' ? (
             <>
+              {!isPhone ? (
               <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
                 <table className="w-full min-w-[600px] text-left text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -1283,7 +1290,7 @@ export const EmailManagement: React.FC = () => {
                   </tbody>
                 </table>
               </div>
-
+              ) : (
               <div className="space-y-2.5 md:hidden">
                 {sortedNoticeRows.map(row => {
                   const isChecked = selected.includes(row.enrollmentId);
@@ -1331,9 +1338,11 @@ export const EmailManagement: React.FC = () => {
                   );
                 })}
               </div>
+              )}
             </>
           ) : (
             <>
+              {!isPhone ? (
               <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
                 <table className="w-full min-w-[600px] text-left text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -1442,7 +1451,7 @@ export const EmailManagement: React.FC = () => {
                   </tbody>
                 </table>
               </div>
-
+              ) : (
               <div className="space-y-2.5 md:hidden">
                 {sortedNoticeRows.map(row => {
                   const isChecked = selected.includes(row.enrollmentId);
@@ -1546,6 +1555,7 @@ export const EmailManagement: React.FC = () => {
                   );
                 })}
               </div>
+              )}
             </>
           )}
         </Card>

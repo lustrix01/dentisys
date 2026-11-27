@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
+import { useIsPhone } from '../../hooks/useIsPhone';
 import {
   Search,
   RefreshCw,
@@ -140,6 +141,7 @@ const semesterLabel = (s: string | undefined | null) => {
 };
 
 export const AttendanceMonitoring: React.FC = () => {
+  const isPhone = useIsPhone();
   const { user } = useAuth();
   const sharedUserId = user?.user_id;
   // Assigned classes from API
@@ -1752,7 +1754,7 @@ export const AttendanceMonitoring: React.FC = () => {
             </div>
           ) : (
             <>
-              {/* Desktop/tablet: ruled clinical table */}
+              {!isPhone ? (
               <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
                 <table className="w-full min-w-[600px] text-left text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -1808,8 +1810,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   </tbody>
                 </table>
               </div>
-
-              {/* Phone (< 768 px): stacked cards */}
+              ) : (
               <div className="space-y-2.5 md:hidden">
                 {filteredRoster.map(item => (
                   <article
@@ -1877,6 +1878,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   </article>
                 ))}
               </div>
+              )}
             </>
           )}
           </>)}
