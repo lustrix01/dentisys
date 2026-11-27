@@ -6,12 +6,18 @@ import { requestConfirmation } from './FeedbackCenter';
 import { formatManilaWhen } from '../services/auditService';
 import { formatShortDate } from '../utils/sessionDate';
 import { formatVisibleTime } from '../utils/timeDisplay.ts';
+import { useIsPhone } from '../hooks/useIsPhone';
 import { AttendanceExcusedRequest, FacultyClassItem, decideFacultyExcusedRequestApi, getFacultyExcusedRequestsApi } from '../services/apiClient';
 
 type Filter = 'pending' | 'approved' | 'rejected';
 const word = (status?: string | null) => status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Not recorded';
 const time12 = (value?: string | null) => value ? formatVisibleTime(value) : '—';
 const count = (n: number) => `${n} request${n === 1 ? '' : 's'}`;
+const statusChipTone = (status: string) => {
+  if (status === 'approved') return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300';
+  if (status === 'rejected') return 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300';
+  return 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300';
+};
 
 const OPEN_EVENT = 'open-secretary-request';
 /** Roll call chip target: the requests tab opens filtered to the request's class, then scrolls to the row and focuses it. */
@@ -49,6 +55,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
   /** From the URL: ?class=<classId>&request=<requestId>. */
   initial?: { classId?: string; requestId?: string };
 }> = ({ onDecided, onLoaded, classes = [], active = true, onOpenTab, initial }) => {
+  const isPhone = useIsPhone();
   const [requests, setRequests] = useState<AttendanceExcusedRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -258,53 +265,168 @@ export const FacultyExcusedRequestsPanel: React.FC<{
                       </div>
                     )}
                   </div>
-                  <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {rows.map(request => (
-                      <li key={request.id} id={`secretary-request-${request.id}`} tabIndex={-1} className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 gap-y-1 px-3 py-2 text-xs outline-none focus:bg-sky-50 sm:grid-cols-[auto_minmax(0,1fr)_7.5rem_minmax(0,1.6fr)_auto] dark:focus:bg-sky-950/30">
-                        {filter === 'pending' ? (
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${request.studentName}`}
-                            checked={selected.includes(request.id)}
-                            onChange={event => setSelected(current => event.target.checked ? [...current, request.id] : current.filter(id => id !== request.id))}
-                          />
-                        ) : <span />}
-                        <span className="min-w-0"><strong>{request.studentName}</strong><span className="block text-[11px] text-slate-500 dark:text-slate-400">{request.studentNumber}</span></span>
-                        <span className="col-start-2 font-bold text-slate-800 sm:col-start-auto dark:text-slate-100">
-                          {word(request.currentStatus)} → {word(request.requestedStatus ?? 'excused')}
-                          {request.currentMethod === 'biometric' && <span className="ml-1 font-normal text-slate-500 sm:ml-0 sm:block dark:text-slate-400">(face check-in)</span>}
-                        </span>
-                        <span className="col-start-2 min-w-0 text-slate-700 sm:col-start-auto dark:text-slate-200">
-                          Reason: {request.reason || 'None given'}
-                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">
-                            by {request.requestedBy ?? 'Secretary'}{request.requestedAt ? ` · sent ${formatManilaWhen(request.requestedAt)}` : ''}
-                            {(request.presentCutoff || request.lateCutoff) && ` · Present until ${time12(request.presentCutoff)} · Late until ${time12(request.lateCutoff)}`}
-                          </span>
-                        </span>
-                        <span className="col-start-2 flex flex-wrap items-center gap-1.5 sm:col-start-auto sm:justify-end">
-                          {request.status === 'pending' ? (
-                            <>
-                              <button type="button" aria-expanded={!!noteOpen[request.id]} onClick={() => setNoteOpen(current => ({ ...current, [request.id]: !current[request.id] }))} className={plainBtn}>Note</button>
-                              <button type="button" disabled={busy} onClick={() => void decide([request.id], 'approve')} className={approveBtn}>Approve</button>
-                              <button type="button" disabled={busy} onClick={() => void decide([request.id], 'reject', true)} className={rejectBtn}>Reject</button>
-                            </>
-                          ) : (
-                            <span className="text-slate-500">{word(request.status)}{request.decidedBy ? ` by ${request.decidedBy}` : ''}{request.decidedAt ? ` · ${request.decidedAt}` : ''}{request.decisionNote ? ` · ${request.decisionNote}` : ''}</span>
-                          )}
-                        </span>
-                        {request.status === 'pending' && noteOpen[request.id] && (
-                          <input
-                            aria-label={`Decision note for ${request.studentName}`}
-                            value={notes[request.id] ?? ''}
-                            onChange={event => setNotes(current => ({ ...current, [request.id]: event.target.value }))}
-                            maxLength={500}
-                            placeholder="Optional note (for reject)"
-                            className="col-start-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 sm:col-span-4 dark:border-slate-700 dark:bg-slate-900"
-                          />
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="p-2.5 sm:p-3">
+                    {!isPhone ? (
+                      <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
+                        <table className="w-full min-w-[650px] text-left text-xs">
+                          <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            <tr>
+                              <th scope="col" className="whitespace-nowrap pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4">Student</th>
+                              <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Requested Change</th>
+                              <th scope="col" className="border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Reason</th>
+                              <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 text-right dark:border-slate-800 xl:pl-4 xl:pr-5">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map(request => (
+                              <tr
+                                key={request.id}
+                                id={`secretary-request-${request.id}`}
+                                tabIndex={-1}
+                                className="outline-none focus:bg-sky-50 dark:focus:bg-sky-950/30"
+                              >
+                                <td className="pl-3.5 pr-2 py-3 align-top xl:pl-5 xl:pr-4">
+                                  <div className="flex items-start gap-2">
+                                    {filter === 'pending' && (
+                                      <input
+                                        type="checkbox"
+                                        aria-label={`Select ${request.studentName}`}
+                                        checked={selected.includes(request.id)}
+                                        onChange={event => setSelected(current => event.target.checked ? [...current, request.id] : current.filter(id => id !== request.id))}
+                                        className="mt-0.5 shrink-0"
+                                      />
+                                    )}
+                                    <div className="min-w-0">
+                                      <strong className="block font-bold text-slate-800 dark:text-slate-100">{request.studentName}</strong>
+                                      {request.studentNumber && (
+                                        <span className="block whitespace-nowrap text-[11px] font-semibold text-clinical-800 dark:text-clinical-300">{request.studentNumber}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 align-top font-bold text-slate-800 dark:border-slate-800/80 dark:text-slate-100 xl:px-4">
+                                  {word(request.currentStatus)} → {word(request.requestedStatus ?? 'excused')}
+                                  {request.currentMethod === 'biometric' && (
+                                    <span className="block font-normal text-slate-500 dark:text-slate-400">(face check-in)</span>
+                                  )}
+                                </td>
+                                <td className="border-l border-slate-100 px-2 py-3 align-top text-slate-700 dark:border-slate-800/80 dark:text-slate-200 xl:px-4">
+                                  <div>Reason: {request.reason || 'None given'}</div>
+                                  <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                    by {request.requestedBy ?? 'Secretary'}{request.requestedAt ? ` · sent ${formatManilaWhen(request.requestedAt)}` : ''}
+                                    {(request.presentCutoff || request.lateCutoff) && ` · Present until ${time12(request.presentCutoff)} · Late until ${time12(request.lateCutoff)}`}
+                                  </div>
+                                  {request.status === 'pending' && noteOpen[request.id] && (
+                                    <input
+                                      aria-label={`Decision note for ${request.studentName}`}
+                                      value={notes[request.id] ?? ''}
+                                      onChange={event => setNotes(current => ({ ...current, [request.id]: event.target.value }))}
+                                      maxLength={500}
+                                      placeholder="Optional note (for reject)"
+                                      className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  )}
+                                </td>
+                                <td className="border-l border-slate-100 pl-2 pr-3.5 py-2 align-top text-right dark:border-slate-800/80 xl:pl-4 xl:pr-5">
+                                  {request.status === 'pending' ? (
+                                    <div className="inline-flex flex-wrap items-center justify-end gap-1.5 xl:flex-nowrap">
+                                      <button type="button" aria-expanded={!!noteOpen[request.id]} onClick={() => setNoteOpen(current => ({ ...current, [request.id]: !current[request.id] }))} className={plainBtn}>Note</button>
+                                      <button type="button" disabled={busy} onClick={() => void decide([request.id], 'approve')} className={approveBtn}>Approve</button>
+                                      <button type="button" disabled={busy} onClick={() => void decide([request.id], 'reject', true)} className={rejectBtn}>Reject</button>
+                                    </div>
+                                  ) : (
+                                    <span className="inline-block text-left text-slate-500 dark:text-slate-400">
+                                      {word(request.status)}{request.decidedBy ? ` by ${request.decidedBy}` : ''}{request.decidedAt ? ` · ${request.decidedAt}` : ''}{request.decisionNote ? ` · ${request.decisionNote}` : ''}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5 sm:hidden">
+                        {rows.map(request => (
+                          <article
+                            key={request.id}
+                            id={`secretary-request-${request.id}`}
+                            tabIndex={-1}
+                            className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs outline-none focus:bg-sky-50 dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900 dark:focus:bg-sky-950/30"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex min-w-0 items-start gap-2">
+                                {filter === 'pending' && (
+                                  <input
+                                    type="checkbox"
+                                    aria-label={`Select ${request.studentName}`}
+                                    checked={selected.includes(request.id)}
+                                    onChange={event => setSelected(current => event.target.checked ? [...current, request.id] : current.filter(id => id !== request.id))}
+                                    className="mt-0.5 shrink-0"
+                                  />
+                                )}
+                                <div className="min-w-0">
+                                  {request.studentNumber && (
+                                    <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-clinical-800 dark:text-clinical-300">{request.studentNumber}</p>
+                                  )}
+                                  <h3 className="mt-0.5 break-words text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100">{request.studentName}</h3>
+                                </div>
+                              </div>
+                              <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold ${statusChipTone(request.status)}`}>
+                                {word(request.status)}
+                              </span>
+                            </div>
+                            <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                              <div className="col-span-2 min-w-0">
+                                <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Requested Change</dt>
+                                <dd className="mt-0.5 text-xs font-bold text-slate-800 dark:text-slate-100">
+                                  {word(request.currentStatus)} → {word(request.requestedStatus ?? 'excused')}
+                                  {request.currentMethod === 'biometric' && (
+                                    <span className="ml-1 font-normal text-slate-500 dark:text-slate-400">(face check-in)</span>
+                                  )}
+                                </dd>
+                              </div>
+                              <div className="col-span-2 min-w-0">
+                                <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Reason</dt>
+                                <dd className="mt-0.5 break-words text-xs text-slate-700 dark:text-slate-200">
+                                  Reason: {request.reason || 'None given'}
+                                  <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
+                                    by {request.requestedBy ?? 'Secretary'}{request.requestedAt ? ` · sent ${formatManilaWhen(request.requestedAt)}` : ''}
+                                    {(request.presentCutoff || request.lateCutoff) && ` · Present until ${time12(request.presentCutoff)} · Late until ${time12(request.lateCutoff)}`}
+                                  </span>
+                                </dd>
+                              </div>
+                              {request.status !== 'pending' && (
+                                <div className="col-span-2 min-w-0">
+                                  <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Decision</dt>
+                                  <dd className="mt-0.5 break-words text-xs text-slate-600 dark:text-slate-300">
+                                    {word(request.status)}{request.decidedBy ? ` by ${request.decidedBy}` : ''}{request.decidedAt ? ` · ${request.decidedAt}` : ''}{request.decisionNote ? ` · ${request.decisionNote}` : ''}
+                                  </dd>
+                                </div>
+                              )}
+                            </dl>
+                            {request.status === 'pending' && noteOpen[request.id] && (
+                              <input
+                                aria-label={`Decision note for ${request.studentName}`}
+                                value={notes[request.id] ?? ''}
+                                onChange={event => setNotes(current => ({ ...current, [request.id]: event.target.value }))}
+                                maxLength={500}
+                                placeholder="Optional note (for reject)"
+                                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              />
+                            )}
+                            {request.status === 'pending' && (
+                              <div className="mt-2 flex flex-wrap justify-end gap-1.5">
+                                <button type="button" aria-expanded={!!noteOpen[request.id]} onClick={() => setNoteOpen(current => ({ ...current, [request.id]: !current[request.id] }))} className={plainBtn}>Note</button>
+                                <button type="button" disabled={busy} onClick={() => void decide([request.id], 'approve')} className={approveBtn}>Approve</button>
+                                <button type="button" disabled={busy} onClick={() => void decide([request.id], 'reject', true)} className={rejectBtn}>Reject</button>
+                              </div>
+                            )}
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}

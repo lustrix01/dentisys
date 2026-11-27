@@ -1561,8 +1561,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
     await page.goto('/attendance?tab=requests');
     const panel = page.getByRole('region', { name: 'Secretary requests' });
-    const alice = panel.getByRole('listitem').filter({ hasText: 'Alice Green' });
-    const bob = panel.getByRole('listitem').filter({ hasText: 'Bob White' });
+    const alice = panel.getByRole('row').filter({ hasText: 'Alice Green' });
+    const bob = panel.getByRole('row').filter({ hasText: 'Bob White' });
 
     await alice.getByRole('button', { name: 'Approve', exact: true }).click();
     const approve = page.getByRole('dialog', { name: 'Approve attendance request' });
@@ -1608,15 +1608,15 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     const panel = page.getByRole('region', { name: 'Secretary requests' });
     await expect(panel).toContainText('Secretary Requests · 3 waiting');
     await expect(panel).toContainText('Sent by class Secretaries. Approving applies the requested status; rejecting leaves the record unchanged.');
-    const alice = panel.getByRole('listitem').filter({ hasText: 'Alice Green' });
+    const alice = panel.getByRole('row').filter({ hasText: 'Alice Green' });
     await expect(alice).toContainText('Present → Present');
     await expect(alice).toContainText('(face check-in)');
     await expect(alice).toContainText('Present until 8:15 AM');
     await expect(alice).toContainText('Late until 8:45 AM');
-    await expect(panel.getByRole('listitem').filter({ hasText: 'Bob White' })).toContainText('Absent → Late');
+    await expect(panel.getByRole('row').filter({ hasText: 'Bob White' })).toContainText('Absent → Late');
     await expect(panel).not.toContainText('Old Decided');
     // Reject one with a note.
-    const cara = panel.getByRole('listitem').filter({ hasText: 'Cara Gray' });
+    const cara = panel.getByRole('row').filter({ hasText: 'Cara Gray' });
     await cara.getByRole('button', { name: 'Note', exact: true }).click();
     await cara.getByLabel('Decision note for Cara Gray').fill('Student was absent');
     await cara.getByRole('button', { name: 'Reject' }).click();
