@@ -311,7 +311,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
                                   )}
                                 </td>
                                 <td className="border-l border-slate-100 px-2 py-3 align-top text-slate-700 dark:border-slate-800/80 dark:text-slate-200 xl:px-4">
-                                  <div>Reason: {request.reason || 'None given'}</div>
+                                  <div>{request.reason || 'None given'}</div>
                                   <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                                     by {request.requestedBy ?? 'Secretary'}{request.requestedAt ? ` · sent ${formatManilaWhen(request.requestedAt)}` : ''}
                                     {(request.presentCutoff || request.lateCutoff) && ` · Present until ${time12(request.presentCutoff)} · Late until ${time12(request.lateCutoff)}`}
@@ -389,7 +389,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
                               <div className="col-span-2 min-w-0">
                                 <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Reason</dt>
                                 <dd className="mt-0.5 break-words text-xs text-slate-700 dark:text-slate-200">
-                                  Reason: {request.reason || 'None given'}
+                                  {request.reason || 'None given'}
                                   <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
                                     by {request.requestedBy ?? 'Secretary'}{request.requestedAt ? ` · sent ${formatManilaWhen(request.requestedAt)}` : ''}
                                     {(request.presentCutoff || request.lateCutoff) && ` · Present until ${time12(request.presentCutoff)} · Late until ${time12(request.lateCutoff)}`}
