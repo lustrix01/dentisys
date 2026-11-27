@@ -2045,49 +2045,145 @@ const handleSendAllStudentInvites = async () => {
               }
             />
 
-          {/* Phones (<768px): each table row is shown as a stacked block (name first, then ID, year, email, section, actions). */}
-          <div className="table-pin table-pin-first table-pin-blocks min-h-[220px]">
-            <table className="w-full text-left text-xs border-collapse max-md:block">
-              <thead className="max-md:hidden">
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4" aria-sort={ariaSort(rosterSort, 'studentId')}><SortableHeader label="Student No." sortKey="studentId" sort={rosterSort} onSort={setRosterSort} /></th>
-                  <th className="py-3 px-4" aria-sort={ariaSort(rosterSort, 'name')}><SortableHeader label="Full Name" sortKey="name" sort={rosterSort} onSort={setRosterSort} /></th>
-                  <th className="py-3 px-4">BU Email Address</th>
-                  <th className="py-3 px-4">Enrolled Class Section</th>
-                  <th className="py-3 px-4">Year Level</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
-                {loading ? (
-                  <tr className="max-md:block">
-                    <td role="status" colSpan={6} className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400 max-md:block">
-                      Loading student roster…
-                    </td>
-                  </tr>
-                ) : filteredStudents.length === 0 ? (
-                  <tr className="max-md:block">
-                    <td colSpan={6} className="px-6 py-14 text-center max-md:block">
-                      <Users className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
-                      <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">
-                        {searchQuery
-                          ? 'No students match your search criteria.'
-                          : 'No students are currently enrolled in this class section.'}
-                      </h3>
-                      {searchQuery && <button type="button" onClick={() => setSearchQuery('')} className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40"><X className="h-3.5 w-3.5" />Clear filters</button>}
-                      {classes.length > 0 && !searchQuery && (
-                        <button
-                          onClick={() => handleOpenAddStudent()}
-                          className="inline-flex items-center gap-1.5 mt-3 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-sm"
-                        >
-                          <UserPlus className="w-3.5 h-3.5" />
-                          <span>Enroll Students</span>
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredStudents.map((st) => {
+          {loading ? (
+            <div role="status" className="rounded-2xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+              Loading student roster…
+            </div>
+          ) : filteredStudents.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200/80 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
+              <Users className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+              <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">
+                {searchQuery
+                  ? 'No students match your search criteria.'
+                  : 'No students are currently enrolled in this class section.'}
+              </h3>
+              {searchQuery && <button type="button" onClick={() => setSearchQuery('')} className="mt-3 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40"><X className="h-3.5 w-3.5" />Clear filters</button>}
+              {classes.length > 0 && !searchQuery && (
+                <button
+                  onClick={() => handleOpenAddStudent()}
+                  className="inline-flex items-center gap-1.5 mt-3 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-sm"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Enroll Students</span>
+                </button>
+              )}
+            </div>
+          ) : (() => {
+            const renderStatusChip = (st: typeof filteredStudents[number]) => {
+              const accountStatus = st.accountStatus ?? 'none';
+              if (!isOfficialBicolEmail(st.email)) {
+                return <span className="shrink-0 whitespace-nowrap rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">Unsupported email domain</span>;
+              }
+              if (accountStatus === 'active' || accountStatus === 'secretary') {
+                return (
+                  <span className="shrink-0 inline-flex items-center gap-1 whitespace-nowrap px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Registered</span>
+                  </span>
+                );
+              }
+              const inviteStatus = inviteStatusByEmail[st.email.toLowerCase()];
+              const [label, tone] = inviteStatus === 'Failed'
+                ? ['Delivery failed', 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300']
+                : inviteStatus || accountStatus === 'pending'
+                  ? ['Invite sent', 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300']
+                  : ['Not invited', 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'];
+              return <span className={`shrink-0 whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold ${tone}`}>{label}</span>;
+            };
+
+            const handleToggleStudentMenu = (st: typeof filteredStudents[number], e: React.MouseEvent<HTMLButtonElement>) => {
+              if (openStudentMenuId === st.id) { setOpenStudentMenuId(null); return; }
+              const r = e.currentTarget.getBoundingClientRect();
+              const right = window.innerWidth - r.right;
+              // Open upward when the menu (about 250px) does not fit below.
+              setMenuPos(window.innerHeight - r.bottom < 250 && r.top > window.innerHeight - r.bottom
+                ? { bottom: window.innerHeight - r.top + 6, right }
+                : { top: r.bottom + 6, right });
+              setOpenStudentMenuId(st.id);
+            };
+
+            const menuButtonClass = (isOpen: boolean) => `inline-flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center rounded-lg border transition-colors cursor-pointer disabled:opacity-40 ${
+              isOpen
+                ? 'border-slate-300 bg-slate-200 text-slate-900 dark:border-slate-600 dark:bg-slate-700 dark:text-white'
+                : 'border-slate-200/80 bg-slate-100 text-slate-600 hover:border-slate-300 hover:bg-slate-200 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-700'
+            }`;
+
+            const openStudent = openStudentMenuId !== null ? filteredStudents.find(s => s.id === openStudentMenuId) : undefined;
+            const openStudentSections = openStudent
+              ? (selectedClassFilterId !== 'all'
+                ? (openStudent.classSections || []).filter(s => String(s.classId) === String(selectedClassFilterId))
+                : (openStudent.classSections || []))
+              : [];
+
+            return (
+              <>
+                <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                  <table className="w-full min-w-[600px] text-left text-xs">
+                    <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      <tr>
+                        <th scope="col" className="whitespace-nowrap pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4" aria-sort={ariaSort(rosterSort, 'studentId')}><SortableHeader label="Student No." sortKey="studentId" sort={rosterSort} onSort={setRosterSort} /></th>
+                        <th scope="col" className="px-2 py-2.5 xl:px-4" aria-sort={ariaSort(rosterSort, 'name')}><SortableHeader label="Full Name" sortKey="name" sort={rosterSort} onSort={setRosterSort} /></th>
+                        <th scope="col" className="px-2 py-2.5 xl:px-4">BU Email Address</th>
+                        <th scope="col" className="px-2 py-2.5 xl:px-4">Enrolled Class Section</th>
+                        <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4">Year Level</th>
+                        <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 text-right dark:border-slate-800 xl:pl-4 xl:pr-5">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredStudents.map((st) => {
+                        const assignedSections = st.classSections || [];
+                        const displayedSections = selectedClassFilterId !== 'all'
+                          ? assignedSections.filter(s => String(s.classId) === String(selectedClassFilterId))
+                          : assignedSections;
+                        const assignedClassLabel = displayedSections.map(s => s.className).join(', ') || 'No class section';
+
+                        return (
+                          <tr key={st.id}>
+                            <td className="whitespace-nowrap pl-3.5 pr-2 py-3 font-bold text-clinical-800 dark:text-clinical-300 xl:pl-5 xl:pr-4">
+                              {st.studentId}
+                            </td>
+                            <td className="px-2 py-3 font-medium text-slate-800 dark:text-slate-100 xl:px-4">
+                              {st.name}
+                            </td>
+                            <td className="max-w-[140px] break-all px-2 py-3 text-slate-600 dark:text-slate-300 xl:max-w-none xl:break-normal xl:px-4">
+                              {st.email}
+                              {!isOfficialBicolEmail(st.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Only @bicol-u.edu.ph addresses can receive invitations.</span>}
+                            </td>
+                            <td className="whitespace-nowrap px-2 py-3 font-bold text-clinical-800 dark:text-clinical-300 xl:px-4">
+                              {assignedClassLabel}
+                            </td>
+                            <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right tabular-nums text-slate-600 dark:border-slate-800/80 dark:text-slate-400 xl:px-4">
+                              Year {st.yearLevel}
+                            </td>
+                            <td className="border-l border-slate-100 pl-2 pr-3.5 py-2 text-right dark:border-slate-800/80 xl:whitespace-nowrap xl:pl-4 xl:pr-5">
+                              <div className="relative inline-flex flex-wrap items-center justify-end gap-1 xl:flex-nowrap xl:gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                {displayedSections.some(sec => sec.isSecretary) && (
+                                  <span className="whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold bg-clinical-50 dark:bg-clinical-950/40 text-clinical-700 dark:text-clinical-300 border border-clinical-200/60 dark:border-clinical-800/40">Class Secretary</span>
+                                )}
+                                {renderStatusChip(st)}
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleToggleStudentMenu(st, e)}
+                                  className={menuButtonClass(openStudentMenuId === st.id)}
+                                  title="Actions"
+                                  aria-label={`Actions for ${st.name}`}
+                                  aria-haspopup="menu"
+                                  aria-expanded={openStudentMenuId === st.id}
+                                >
+                                  <MoreVertical className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="space-y-2.5 md:hidden">
+                  {filteredStudents.map((st) => {
                     const assignedSections = st.classSections || [];
                     const displayedSections = selectedClassFilterId !== 'all'
                       ? assignedSections.filter(s => String(s.classId) === String(selectedClassFilterId))
@@ -2095,167 +2191,137 @@ const handleSendAllStudentInvites = async () => {
                     const assignedClassLabel = displayedSections.map(s => s.className).join(', ') || 'No class section';
 
                     return (
-                      <tr key={st.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
-                        <td className="py-3.5 px-4 whitespace-nowrap font-mono font-bold text-slate-700 dark:text-slate-200 max-md:order-2 max-md:p-0">
-                          <span className="sr-only md:hidden">Student No.: </span>{st.studentId}
-                        </td>
-                        <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm">
-                          <span className="sr-only md:hidden">Full Name: </span>{st.name}
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 max-md:order-4 max-md:w-full max-md:p-0 max-md:break-all">
-                          <span className="sr-only md:hidden">BU Email Address: </span>{st.email}
-                          {!isOfficialBicolEmail(st.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Only @bicol-u.edu.ph addresses can receive invitations.</span>}
-                        </td>
-                        <td className="py-3.5 px-4 max-md:order-5 max-md:p-0">
-                          <span className="sr-only md:hidden">Enrolled Class Section: </span>
-                          <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-clinical-50 dark:bg-clinical-950/40 text-clinical-700 dark:text-clinical-300 font-extrabold text-[10px] uppercase tracking-wider border border-clinical-200/60 dark:border-clinical-800/40">
-                            {assignedClassLabel}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-500 max-md:order-3 max-md:p-0">
-                          Year {st.yearLevel}
-                        </td>
-                        <td className="py-3.5 px-4 text-right max-md:order-6 max-md:ml-auto max-md:p-0">
-                          <div className="relative inline-flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <article key={st.id} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-clinical-800 dark:text-clinical-300">{st.studentId}</p>
+                            <h3 className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100 break-words">{st.name}</h3>
+                          </div>
+                          <div className="flex flex-col items-end gap-1 shrink-0">
+                            {renderStatusChip(st)}
                             {displayedSections.some(sec => sec.isSecretary) && (
-                              <span className="whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold bg-clinical-50 dark:bg-clinical-950/40 text-clinical-700 dark:text-clinical-300 border border-clinical-200/60 dark:border-clinical-800/40">Class Secretary</span>
-                            )}
-                            {(() => {
-                              const accountStatus = st.accountStatus ?? 'none';
-                              if (!isOfficialBicolEmail(st.email)) {
-                                return <span className="whitespace-nowrap rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">Unsupported email domain</span>;
-                              }
-                              if (accountStatus === 'active' || accountStatus === 'secretary') {
-                                return (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
-                                    <CheckCircle2 className="w-3 h-3" />
-                                    <span>Registered</span>
-                                  </span>
-                                );
-                              }
-                              const inviteStatus = inviteStatusByEmail[st.email.toLowerCase()];
-                              const [label, tone] = inviteStatus === 'Failed'
-                                ? ['Delivery failed', 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300']
-                                : inviteStatus || accountStatus === 'pending'
-                                  ? ['Invite sent', 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300']
-                                  : ['Not invited', 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'];
-                              return <span className={`whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold ${tone}`}>{label}</span>;
-                            })()}
-
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                if (openStudentMenuId === st.id) { setOpenStudentMenuId(null); return; }
-                                const r = e.currentTarget.getBoundingClientRect();
-                                const right = window.innerWidth - r.right;
-                                // Open upward when the menu (about 250px) does not fit below.
-                                setMenuPos(window.innerHeight - r.bottom < 250 && r.top > window.innerHeight - r.bottom
-                                  ? { bottom: window.innerHeight - r.top + 6, right }
-                                  : { top: r.bottom + 6, right });
-                                setOpenStudentMenuId(st.id);
-                              }}
-                              className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                                openStudentMenuId === st.id
-                                  ? 'bg-slate-200 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white'
-                                  : 'bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
-                              }`}
-                              title="Actions"
-                              aria-label={`Actions for ${st.name}`}
-                              aria-haspopup="menu"
-                              aria-expanded={openStudentMenuId === st.id}
-                            >
-                              <MoreVertical className="w-4 h-4" />
-                            </button>
-
-                            {openStudentMenuId === st.id && menuPos && createPortal(
-                              <div style={menuPos} onClick={(e) => e.stopPropagation()} className="fixed w-44 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-900/10 py-1.5 z-[60] text-xs text-left">
-                                {/* Edit */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenStudentMenuId(null);
-                                    handleOpenEditStudent(st);
-                                  }}
-                                  disabled={!isStudentEditable(st)}
-                                  className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                                >
-                                  <Pencil className="w-3.5 h-3.5 text-blue-500" />
-                                  <span>Edit Student</span>
-                                </button>
-
-                                {/* Invite */}
-                                {(() => {
-                                  const accountStatus = st.accountStatus ?? 'none';
-                                  const isReissue = accountStatus === 'pending';
-                                  const isRegistered = accountStatus === 'active' || accountStatus === 'secretary';
-                                  return (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setOpenStudentMenuId(null);
-                                        handleSendStudentEmailInvite(st);
-                                      }}
-                                      disabled={isSendingInvitations || isRegistered || !isOfficialBicolEmail(st.email)}
-                                      className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                                      title={!isOfficialBicolEmail(st.email) ? 'Only @bicol-u.edu.ph addresses are supported' : isRegistered ? 'Student already has an active account' : undefined}
-                                    >
-                                      <Send className="w-3.5 h-3.5 text-emerald-500" />
-                                      <span>{isRegistered ? 'Already registered' : isReissue ? 'Reissue invite' : 'Send invite'}</span>
-                                    </button>
-                                  );
-                                })()}
-
-                                {/* Class Secretary (current school year only) */}
-                                {displayedSections.filter(sec => !isHistoricalClass(classes.find(c => String(c.csId) === String(sec.classId)))).map(sec => {
-                                  const classId = String(sec.classId);
-                                  const suffix = displayedSections.length > 1 ? ` (${sec.className})` : '';
-                                  if (sec.isSecretary) {
-                                    return (
-                                      <button key={classId} type="button"
-                                        onClick={() => { setOpenStudentMenuId(null); void handleRemoveSecretary(st, classId, sec.className); }}
-                                        className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors cursor-pointer">
-                                        <ShieldCheck className="w-3.5 h-3.5 text-rose-500" />
-                                        <span>Remove as Class Secretary{suffix}</span>
-                                      </button>
-                                    );
-                                  }
-                                  if (sectionHasSecretary(classId, sec.className)) return null;
-                                  return (
-                                    <button key={classId} type="button"
-                                      onClick={() => { setOpenStudentMenuId(null); void handleMakeSecretary(st, classId, sec.className); }}
-                                      className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors cursor-pointer">
-                                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                                      <span>Make Class Secretary{suffix}</span>
-                                    </button>
-                                  );
-                                })}
-
-                                <div className="my-1 border-t border-slate-100 dark:border-slate-800"></div>
-
-                                {/* Delete */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenStudentMenuId(null);
-                                    handleDeleteStudent(st);
-                                  }}
-                                  className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold transition-colors cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                                  <span>Remove from class</span>
-                                </button>
-                              </div>,
-                              document.body
+                              <span className="shrink-0 whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold bg-clinical-50 dark:bg-clinical-950/40 text-clinical-700 dark:text-clinical-300 border border-clinical-200/60 dark:border-clinical-800/40">Class Secretary</span>
                             )}
                           </div>
-                        </td>
-                      </tr>
+                        </div>
+                        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                          <div className="col-span-2 min-w-0">
+                            <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">BU Email Address</dt>
+                            <dd className="mt-0.5 break-all text-xs font-medium text-slate-700 dark:text-slate-200">
+                              {st.email}
+                              {!isOfficialBicolEmail(st.email) && <span className="mt-1 block text-[10px] font-semibold text-rose-600 dark:text-rose-300">Only @bicol-u.edu.ph addresses can receive invitations.</span>}
+                            </dd>
+                          </div>
+                          <div className="min-w-0">
+                            <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Enrolled Class Section</dt>
+                            <dd className="mt-0.5 whitespace-nowrap text-xs font-bold text-clinical-800 dark:text-clinical-300">{assignedClassLabel}</dd>
+                          </div>
+                          <div className="min-w-0">
+                            <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Year Level</dt>
+                            <dd className="mt-0.5 whitespace-nowrap text-xs font-medium tabular-nums text-slate-700 dark:text-slate-200">Year {st.yearLevel}</dd>
+                          </div>
+                        </dl>
+                        <div className="mt-2 flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={(e) => handleToggleStudentMenu(st, e)}
+                            className={menuButtonClass(openStudentMenuId === st.id)}
+                            title="Actions"
+                            aria-label={`Actions for ${st.name}`}
+                            aria-haspopup="menu"
+                            aria-expanded={openStudentMenuId === st.id}
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </article>
                     );
-                  })
+                  })}
+                </div>
+
+                {openStudent && menuPos && createPortal(
+                  <div style={menuPos} onClick={(e) => e.stopPropagation()} className="fixed w-44 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-900/10 py-1.5 z-[60] text-xs text-left">
+                    {/* Edit */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenStudentMenuId(null);
+                        handleOpenEditStudent(openStudent);
+                      }}
+                      disabled={!isStudentEditable(openStudent)}
+                      className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      <Pencil className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Edit Student</span>
+                    </button>
+
+                    {/* Invite */}
+                    {(() => {
+                      const accountStatus = openStudent.accountStatus ?? 'none';
+                      const isReissue = accountStatus === 'pending';
+                      const isRegistered = accountStatus === 'active' || accountStatus === 'secretary';
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenStudentMenuId(null);
+                            handleSendStudentEmailInvite(openStudent);
+                          }}
+                          disabled={isSendingInvitations || isRegistered || !isOfficialBicolEmail(openStudent.email)}
+                          className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                          title={!isOfficialBicolEmail(openStudent.email) ? 'Only @bicol-u.edu.ph addresses are supported' : isRegistered ? 'Student already has an active account' : undefined}
+                        >
+                          <Send className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>{isRegistered ? 'Already registered' : isReissue ? 'Reissue invite' : 'Send invite'}</span>
+                        </button>
+                      );
+                    })()}
+
+                    {/* Class Secretary (current school year only) */}
+                    {openStudentSections.filter(sec => !isHistoricalClass(classes.find(c => String(c.csId) === String(sec.classId)))).map(sec => {
+                      const classId = String(sec.classId);
+                      const suffix = openStudentSections.length > 1 ? ` (${sec.className})` : '';
+                      if (sec.isSecretary) {
+                        return (
+                          <button key={classId} type="button"
+                            onClick={() => { setOpenStudentMenuId(null); void handleRemoveSecretary(openStudent, classId, sec.className); }}
+                            className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors cursor-pointer">
+                            <ShieldCheck className="w-3.5 h-3.5 text-rose-500" />
+                            <span>Remove as Class Secretary{suffix}</span>
+                          </button>
+                        );
+                      }
+                      if (sectionHasSecretary(classId, sec.className)) return null;
+                      return (
+                        <button key={classId} type="button"
+                          onClick={() => { setOpenStudentMenuId(null); void handleMakeSecretary(openStudent, classId, sec.className); }}
+                          className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors cursor-pointer">
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>Make Class Secretary{suffix}</span>
+                        </button>
+                      );
+                    })}
+
+                    <div className="my-1 border-t border-slate-100 dark:border-slate-800"></div>
+
+                    {/* Delete */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenStudentMenuId(null);
+                        handleDeleteStudent(openStudent);
+                      }}
+                      className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                      <span>Remove from class</span>
+                    </button>
+                  </div>,
+                  document.body
                 )}
-              </tbody>
-            </table>
-          </div>
+              </>
+            );
+          })()}
         </Card>
       )}
 
