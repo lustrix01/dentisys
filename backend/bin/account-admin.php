@@ -8,7 +8,7 @@ declare(strict_types=1);
  * asks "Type YES to continue", runs in one transaction and audits as System with the reason.
  *
  * Usage (inside the web container):
- *   docker compose exec web php /var/www/html/backend/bin/account-admin.php create-superadmin --email <e> --first <f> --last <l> [--prefix <p> --middle <m> --suffix <s>] --reason "..."
+ *   docker compose exec web php /var/www/html/backend/bin/account-admin.php create-superadmin [--skip-if-exists] --email <e> --first <f> --last <l> [--prefix <p> --middle <m> --suffix <s>] --reason "..."
  *   docker compose exec web php /var/www/html/backend/bin/account-admin.php reset-superadmin-2fa --reason "..."
  *   docker compose exec web php /var/www/html/backend/bin/account-admin.php move-email --to <new email> --reason "..."
  *   docker compose exec web php /var/www/html/backend/bin/account-admin.php unretire-email <email> --reason "..."
@@ -31,7 +31,9 @@ function account_admin_args(array $argv): array
     $command = $argv[1] ?? '';
     $options = [];
     for ($i = 2; $i < count($argv); $i++) {
-        if (str_starts_with($argv[$i], '--')) {
+        if ($argv[$i] === '--skip-if-exists') {
+            $options['skip-if-exists'] = '1';
+        } elseif (str_starts_with($argv[$i], '--')) {
             $options[substr($argv[$i], 2)] = $argv[++$i] ?? '';
         } else {
             $options['arg'] = $argv[$i];
@@ -71,6 +73,14 @@ try {
     $afterCommit = [];
     if ($command === 'create-superadmin') {
         $pdo->beginTransaction();
+        if (isset($options['skip-if-exists'])) {
+            $pdo->query("SELECT pg_advisory_xact_lock(hashtext('dentisys_superadmin'))");
+            if (account_admin_superadmin($pdo) !== null) {
+                $pdo->rollBack();
+                echo "Superadmin already exists; nothing to do.\n";
+                exit(0);
+            }
+        }
         $invitation = superadmin_invitation_issue($pdo, $config, [
             'email' => (string) ($options['email'] ?? ''), 'prefix' => $options['prefix'] ?? null, 'firstName' => $options['first'] ?? null,
             'middleName' => $options['middle'] ?? null, 'lastName' => $options['last'] ?? null, 'suffix' => $options['suffix'] ?? null,

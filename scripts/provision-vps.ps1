@@ -284,12 +284,21 @@ try {
         $answers.FIRST_DEAN_LAST_NAME = Read-Answer 'First Dean last name'
         $answers.FIRST_DEAN_EMAIL = Read-Answer 'First Dean email'
         if ($Production) {
+            $answers.SUPERADMIN_FIRST_NAME = Read-Answer 'Superadmin first name'
+            $answers.SUPERADMIN_LAST_NAME = Read-Answer 'Superadmin last name'
+            $answers.SUPERADMIN_EMAIL = Read-Answer 'Superadmin email'
             # pgAdmin is off by default on production; the server accepts these placeholders when it is disabled.
             $answers.PGADMIN_ENABLED = 'false'
             $answers.PGADMIN_DEFAULT_EMAIL = 'disabled@example.invalid'
             $answers.PGADMIN_DEFAULT_PASSWORD = 'unused'
         }
         else {
+            $superadminEmail = Read-Answer 'Superadmin email' -Optional
+            if (-not [string]::IsNullOrWhiteSpace($superadminEmail)) {
+                $answers.SUPERADMIN_FIRST_NAME = Read-Answer 'Superadmin first name'
+                $answers.SUPERADMIN_LAST_NAME = Read-Answer 'Superadmin last name'
+                $answers.SUPERADMIN_EMAIL = $superadminEmail
+            }
             $answers.PGADMIN_DEFAULT_EMAIL = Read-Answer 'pgAdmin email' $answers.SMTP_USER
             if ($answers.PGADMIN_DEFAULT_EMAIL -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') { throw 'Enter a valid pgAdmin email.' }
             $answers.PGADMIN_DEFAULT_PASSWORD = Read-Secret 'pgAdmin password'
@@ -299,6 +308,10 @@ try {
         $answers.ALLOWED_EMAIL_DOMAINS = Read-Answer 'ALLOWED_EMAIL_DOMAINS (comma-separated)' $allowedDefault
         $allowed = @($answers.ALLOWED_EMAIL_DOMAINS.Split(',') | ForEach-Object { $_.Trim().ToLowerInvariant() })
         if ($answers.FIRST_DEAN_EMAIL -notmatch '^[^@\s]+@([^@\s]+)$' -or $Matches[1].ToLowerInvariant() -notin $allowed) { throw 'First Dean email must use an allowed domain.' }
+        if ($answers.Contains('SUPERADMIN_EMAIL')) {
+            if ($answers.SUPERADMIN_EMAIL -notmatch '^[^@\s]+@([^@\s]+)$' -or $Matches[1].ToLowerInvariant() -notin $allowed) { throw 'Superadmin email must use an allowed domain.' }
+            if ($answers.SUPERADMIN_EMAIL.Trim().ToLowerInvariant() -eq $answers.FIRST_DEAN_EMAIL.Trim().ToLowerInvariant()) { throw 'Superadmin email must differ from First Dean email.' }
+        }
         $answers.GOOGLE_CLIENT_ID = Read-Answer 'GOOGLE_CLIENT_ID' $defaults['GOOGLE_CLIENT_ID'] -Optional
         foreach ($name in 'STUDENT_AUTH_ENABLED', 'BIOMETRIC_SIDECAR_ENABLED') {
             $answers[$name] = (Read-Answer $name 'true').ToLowerInvariant()

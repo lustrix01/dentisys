@@ -51,7 +51,7 @@ declare -A input=()
 while IFS= read -r -d '' key; do
   [[ "$key" != END ]] || break
   case "$key" in
-    MODE|SUDO_USER_NAME|INITIAL_USER|IP|DOMAIN|SSH_PORT|NO_DB_TUNNEL|SG_CONFIRMED|GHCR_USERNAME|GHCR_TOKEN|SMTP_USER|SMTP_PASS|TRAEFIK_ACME_EMAIL|FIRST_DEAN_FIRST_NAME|FIRST_DEAN_LAST_NAME|FIRST_DEAN_EMAIL|PGADMIN_DEFAULT_EMAIL|PGADMIN_DEFAULT_PASSWORD|PGADMIN_ENABLED|IMAGE_SET|ALLOWED_EMAIL_DOMAINS|GOOGLE_CLIENT_ID|STUDENT_AUTH_ENABLED|BIOMETRIC_SIDECAR_ENABLED|BIOMETRIC_YUNET_SCORE_THRESHOLD|BIOMETRIC_MIN_FACE_PX|BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE|BIOMETRIC_SFACE_COSINE_THRESHOLD|BIOMETRIC_MATCH_COUNT|BIOMETRIC_BLINK_THRESHOLD|BIOMETRIC_HEAD_TURN_RATIO|BIOMETRIC_CHALLENGE_TTL_SECONDS) ;;
+    MODE|SUDO_USER_NAME|INITIAL_USER|IP|DOMAIN|SSH_PORT|NO_DB_TUNNEL|SG_CONFIRMED|GHCR_USERNAME|GHCR_TOKEN|SMTP_USER|SMTP_PASS|TRAEFIK_ACME_EMAIL|FIRST_DEAN_FIRST_NAME|FIRST_DEAN_LAST_NAME|FIRST_DEAN_EMAIL|SUPERADMIN_FIRST_NAME|SUPERADMIN_LAST_NAME|SUPERADMIN_EMAIL|PGADMIN_DEFAULT_EMAIL|PGADMIN_DEFAULT_PASSWORD|PGADMIN_ENABLED|IMAGE_SET|ALLOWED_EMAIL_DOMAINS|GOOGLE_CLIENT_ID|STUDENT_AUTH_ENABLED|BIOMETRIC_SIDECAR_ENABLED|BIOMETRIC_YUNET_SCORE_THRESHOLD|BIOMETRIC_MIN_FACE_PX|BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE|BIOMETRIC_SFACE_COSINE_THRESHOLD|BIOMETRIC_MATCH_COUNT|BIOMETRIC_BLINK_THRESHOLD|BIOMETRIC_HEAD_TURN_RATIO|BIOMETRIC_CHALLENGE_TTL_SECONDS) ;;
     *) fail 'Unexpected input field.' ;;
   esac
   [[ ! -v "input[$key]" ]] || fail 'Duplicate input field.'
@@ -102,6 +102,25 @@ if [[ "$mode" != verify && ! -f "$env_file" ]]; then
     [[ "${email_domain,,}" != "${dean_domain,,}" ]] || allowed=true
   done
   [[ "$allowed" == true ]] || fail 'First Dean email must use an allowed domain.'
+  if [[ "${input[IMAGE_SET]:-demo}" == prod ]]; then
+    for key in SUPERADMIN_FIRST_NAME SUPERADMIN_LAST_NAME SUPERADMIN_EMAIL; do
+      [[ -n "${input[$key]:-}" && "${input[$key]}" != *replace_with_* ]] || fail "Missing fresh configuration: $key."
+    done
+  fi
+  if [[ -n "${input[SUPERADMIN_EMAIL]:-}" ]]; then
+    for key in SUPERADMIN_FIRST_NAME SUPERADMIN_LAST_NAME; do
+      [[ -n "${input[$key]:-}" && "${input[$key]}" != *replace_with_* ]] || fail "Missing fresh configuration: $key."
+    done
+    [[ "${input[SUPERADMIN_EMAIL]}" == *@* ]] || fail 'Superadmin email must use an allowed domain.'
+    superadmin_domain="${input[SUPERADMIN_EMAIL]##*@}"
+    superadmin_allowed=false
+    for email_domain in "${domains[@]}"; do
+      email_domain="${email_domain//[[:space:]]/}"
+      [[ "${email_domain,,}" != "${superadmin_domain,,}" ]] || superadmin_allowed=true
+    done
+    [[ "$superadmin_allowed" == true ]] || fail 'Superadmin email must use an allowed domain.'
+    [[ "${input[SUPERADMIN_EMAIL],,}" != "${input[FIRST_DEAN_EMAIL],,}" ]] || fail 'Superadmin email must differ from First Dean email.'
+  fi
 fi
 export DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=none NEEDRESTART_MODE=a
 
@@ -182,7 +201,7 @@ else
   declare -A values=()
   for key in "${!input[@]}"; do
     case "$key" in
-      SMTP_*|TRAEFIK_ACME_EMAIL|FIRST_DEAN_*|PGADMIN_*|ALLOWED_EMAIL_DOMAINS|GOOGLE_CLIENT_ID|STUDENT_AUTH_ENABLED|BIOMETRIC_*) values["$key"]="${input[$key]}" ;;
+      SMTP_*|TRAEFIK_ACME_EMAIL|FIRST_DEAN_*|SUPERADMIN_*|PGADMIN_*|ALLOWED_EMAIL_DOMAINS|GOOGLE_CLIENT_ID|STUDENT_AUTH_ENABLED|BIOMETRIC_*) values["$key"]="${input[$key]}" ;;
     esac
   done
   values[APP_DOMAIN]="$domain"

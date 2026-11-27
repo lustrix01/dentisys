@@ -156,7 +156,7 @@ foreach (["'not_active_faculty'", 'Only an active Faculty member can become Dean
 }
 
 // ---- Section 6: server script ----
-foreach (["'create-superadmin'", "'reset-superadmin-2fa'", "'move-email'", "'unretire-email'", 'Type YES to continue', "'role' => 'system'"] as $needle) {
+foreach (["'create-superadmin'", "'reset-superadmin-2fa'", "'move-email'", "'unretire-email'", 'Type YES to continue', "'role' => 'system'", '--skip-if-exists', 'Superadmin already exists; nothing to do.'] as $needle) {
     assert_split(str_contains($script, $needle), "Section 6: account-admin.php has {$needle}");
 }
 foreach (["'superadmin_invited'", "'superadmin_2fa_reset'"] as $needle) {

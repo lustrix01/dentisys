@@ -214,6 +214,16 @@ compose exec -T --interactive=false frontend wget -q -O /dev/null http://127.0.0
 # Same maintenance as the LAN script; report failures without stopping the stack.
 compose exec -T --interactive=false -u www-data web php /var/www/html/backend/bin/bootstrap-grade-weights.php || echo 'WARNING: Grade-weight setup did not finish.' >&2
 compose exec -T --interactive=false -u www-data web php /var/www/html/backend/bin/bootstrap-first-dean.php || { if [[ "$non_interactive" == true ]]; then fail 'First Dean invitation failed; check SMTP configuration and rerun.'; else echo 'WARNING: First Dean invitation did not finish (check FIRST_DEAN_*).' >&2; fi; }
+SUPERADMIN_EMAIL="$(env_value SUPERADMIN_EMAIL)"
+SUPERADMIN_FIRST_NAME="$(env_value SUPERADMIN_FIRST_NAME)"
+SUPERADMIN_FIRST_NAME="${SUPERADMIN_FIRST_NAME//\\\'/\'}"
+SUPERADMIN_LAST_NAME="$(env_value SUPERADMIN_LAST_NAME)"
+SUPERADMIN_LAST_NAME="${SUPERADMIN_LAST_NAME//\\\'/\'}"
+if [[ -n "${SUPERADMIN_EMAIL//[[:space:]]/}" ]]; then
+  compose exec -T -u www-data web php /var/www/html/backend/bin/account-admin.php create-superadmin --skip-if-exists --email "$SUPERADMIN_EMAIL" --first "$SUPERADMIN_FIRST_NAME" --last "$SUPERADMIN_LAST_NAME" --reason 'Created at server setup' <<< 'YES' || { if [[ "$non_interactive" == true ]]; then fail 'Superadmin invitation failed; check SUPERADMIN_* and SMTP configuration and rerun.'; else echo 'WARNING: Superadmin invitation did not finish (check SUPERADMIN_*).' >&2; fi; }
+else
+  echo 'SKIP: Superadmin setup skipped (SUPERADMIN_EMAIL is blank).'
+fi
 compose exec -T --interactive=false -u www-data web php /var/www/html/backend/bin/expire-biometrics.php || echo 'WARNING: Biometric expiry sweep did not finish.' >&2
 
 sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y cron

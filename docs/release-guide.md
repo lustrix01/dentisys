@@ -102,7 +102,7 @@ It reads `~\.dentisys\prod-test.env` (yours only: `PROD_BASE_URL` and an email a
 
 ### A site without a Superadmin
 
-The Superadmin account exists only after the server script creates it (spec SYS-001, README B5a). When a release brings the Superadmin role (migration `068_superadmin_role.sql`) to a site that has no Superadmin yet, the Dean loses the setup and account pages at once, so create the Superadmin right after the new version runs:
+New servers create the Superadmin during setup (`provision-vps.ps1`), so this manual step is only for an existing site without a Superadmin (spec SYS-001, README B5a). When a release brings the Superadmin role (migration `068_superadmin_role.sql`) to an existing site that has no Superadmin yet, the Dean loses the setup and account pages at once, so create the Superadmin right after the new version runs:
 
 - Demo: Claude, right after step 5, runs `account-admin.php create-superadmin` in the demo's web container through `.\scripts\demo-vps.ps1 run` (pipe `YES` to it), with the demo Superadmin address from `~/.dentisys/demo.env`.
 - Production: the Owner, right after step 9, runs the same command on the production server with the college's Superadmin address. The link goes to that address; the Superadmin sets the password and, at the first sign-in (at `/superadmin/sign-in`, where the page sends it), 2FA.
@@ -153,8 +153,8 @@ Then install Docker Desktop, Node.js and Git, clone the repository, and run `npm
 
 ## Setting up a new server
 
-- **Production:** see "Production VPS" in [deploy-from-scratch.md](deploy-from-scratch.md). Promote the images first, then run `provision-vps.ps1 -Production`, then create `~\.dentisys\prod.env`.
-- **Demo:** `provision-vps.ps1` as in [deploy-from-scratch.md](deploy-from-scratch.md), using the bot's read token at the GHCR prompt (GHCR username stays `Light505`). Then:
+- **Production:** see "Production VPS" in [deploy-from-scratch.md](deploy-from-scratch.md). Promote the images first, then run `provision-vps.ps1 -Production` (it prompts for and creates the Superadmin at setup), then create `~\.dentisys\prod.env`.
+- **Demo:** `provision-vps.ps1` as in [deploy-from-scratch.md](deploy-from-scratch.md), using the bot's read token at the GHCR prompt (GHCR username stays `Light505`) and leaving `Superadmin email` blank (the demo seed brings its own test Superadmin). Then:
   1. Fill in `DEMO_SSH_*` in `~\.dentisys\demo.env`. Leave the `DEMO_*_EMAIL` and `DEMO_*_PASSWORD` lines empty.
   2. The Owner runs this once and types the sudo password. It gives `devops` password-free sudo on the **demo VPS only**:
      ```powershell

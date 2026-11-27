@@ -323,6 +323,30 @@ foreach ([['another domain', "sp-x-{$spTag}@gmail.com"], ['an address an account
 [$spCodeNo] = $spCreate($spNewEmail, "no\n");
 expect_true($spCode !== 0 && $spCodeNo !== 0 && $spCount('SELECT COUNT(*) FROM user_accounts WHERE login_email = ?', [$spNewEmail]) === 0, 'Section 6: a short reason, or anything but YES, creates nothing');
 
+// --skip-if-exists: creates once when no Superadmin exists, then exits 0 as a no-op while Pending Activation.
+$spSkipEmail = "sp-skip-{$spTag}@bicol-u.edu.ph";
+$spSkipMailBefore = $spOutbox($spSkipEmail);
+$spSkipInvitedBefore = $spCount("SELECT COUNT(*) FROM audit_events WHERE action_code = 'superadmin_invited' AND description LIKE ?", ['%(' . $spSkipEmail . ').']);
+[$spSkipCode1, $spSkipOut1] = $mvRun(['create-superadmin', '--skip-if-exists', '--email', $spSkipEmail, '--first', 'Sam', '--last', "Super{$spLetters}", '--reason', 'Created at server setup'], "YES\n");
+expect_same(0, $spSkipCode1, 'Section 6: create-superadmin --skip-if-exists succeeds when no Superadmin exists');
+$spSkipRows1 = $spRows("SELECT user_id, login_email, role, status FROM user_accounts WHERE role = 'superadmin'");
+expect_true(count($spSkipRows1) === 1 && $spSkipRows1[0]['login_email'] === $spSkipEmail && $spSkipRows1[0]['status'] === 'Pending Activation', 'Section 6: --skip-if-exists creates one Pending Activation Superadmin');
+$spSkipId = (int) $spSkipRows1[0]['user_id'];
+$spSkipLive1 = $spRows("SELECT token_id, (expires_at - issued_at) = INTERVAL '7 days' AS seven FROM security_tokens WHERE user_id = ? AND purpose = 'faculty_invitation' AND used_at IS NULL AND revoked_at IS NULL", [$spSkipId]);
+expect_true(count($spSkipLive1) === 1 && in_array($spSkipLive1[0]['seven'], [true, 't', '1', 1], true), 'Section 6: --skip-if-exists issues one 7-day faculty_invitation token');
+expect_same($spSkipMailBefore + 1, $spOutbox($spSkipEmail), 'Section 6: --skip-if-exists sends one invitation email');
+$spSkipAudit1 = $spRows("SELECT actor_role, reason FROM audit_events WHERE action_code = 'superadmin_invited' AND description LIKE ? ORDER BY event_id", ['%(' . $spSkipEmail . ').']);
+expect_true(count($spSkipAudit1) === $spSkipInvitedBefore + 1 && $spSkipAudit1[count($spSkipAudit1) - 1]['actor_role'] === 'system' && $spSkipAudit1[count($spSkipAudit1) - 1]['reason'] === 'Created at server setup', 'Section 6: --skip-if-exists audits superadmin_invited as system with the reason');
+[$spSkipCode2, $spSkipOut2] = $mvRun(['create-superadmin', '--skip-if-exists', '--email', $spSkipEmail, '--first', 'Sam', '--last', "Super{$spLetters}", '--reason', 'Created at server setup'], "YES\n");
+expect_true($spSkipCode2 === 0 && str_contains($spSkipOut2, 'Superadmin already exists; nothing to do.'), 'Section 6: --skip-if-exists exits 0 with no-op message when a Pending Activation Superadmin exists');
+$spSkipLive2 = $spRows("SELECT token_id FROM security_tokens WHERE user_id = ? AND purpose = 'faculty_invitation' AND used_at IS NULL AND revoked_at IS NULL", [$spSkipId]);
+expect_true($spCount("SELECT COUNT(*) FROM user_accounts WHERE role = 'superadmin'") === 1 && (int) $spOne("SELECT user_id FROM user_accounts WHERE role = 'superadmin'") === $spSkipId, 'Section 6: --skip-if-exists leaves the existing Pending Activation Superadmin untouched');
+expect_true(count($spSkipLive2) === 1 && (int) $spSkipLive2[0]['token_id'] === (int) $spSkipLive1[0]['token_id'], 'Section 6: --skip-if-exists does not revoke or reissue the invitation token');
+expect_same($spSkipMailBefore + 1, $spOutbox($spSkipEmail), 'Section 6: --skip-if-exists sends no second email');
+expect_same($spSkipInvitedBefore + 1, $spCount("SELECT COUNT(*) FROM audit_events WHERE action_code = 'superadmin_invited' AND description LIKE ?", ['%(' . $spSkipEmail . ').']), 'Section 6: --skip-if-exists writes no second superadmin_invited audit row');
+// Free the Superadmin slot again for the non-flag create-superadmin checks below.
+$pdo->prepare("UPDATE user_accounts SET role = 'faculty', status = 'Disabled', disabled_at = CURRENT_TIMESTAMP(6) WHERE user_id = ?")->execute([$spSkipId]);
+
 $spMailBefore = $spOutbox($spNewEmail);
 [$spCode, $spOut] = $spCreate(strtoupper($spNewEmail));
 expect_same(0, $spCode, 'Section 6: create-superadmin succeeds when no Superadmin exists');
@@ -360,6 +384,13 @@ expect_true(password_verify($spPass, (string) $spOne('SELECT password_hash FROM 
 expect_same(400, integration_http_json('/api/auth/faculty/activate', '', ['token' => $spKnownToken, 'password' => 'Another1!Passw0rd'])[0], 'DS10: a used invitation cannot be accepted again');
 [$spCode] = $spCreate("sp-other-{$spTag}@bicol-u.edu.ph");
 expect_true($spCode !== 0 && $spCount("SELECT COUNT(*) FROM user_accounts WHERE role = 'superadmin'") === 1 && $spOutbox("sp-other-{$spTag}@bicol-u.edu.ph") === 0, 'Section 6: create-superadmin refuses a second Superadmin once one is Active');
+$spSkipActiveEmail = "sp-skip-active-{$spTag}@bicol-u.edu.ph";
+$spTokensBeforeSkip = $spCount('SELECT COUNT(*) FROM security_tokens');
+$spInvitedBeforeSkip = $spCount("SELECT COUNT(*) FROM audit_events WHERE action_code = 'superadmin_invited'");
+[$spSkipActiveCode, $spSkipActiveOut] = $mvRun(['create-superadmin', '--skip-if-exists', '--email', $spSkipActiveEmail, '--first', 'Other', '--last', "Admin{$spLetters}", '--reason', 'Created at server setup'], "YES\n");
+expect_true($spSkipActiveCode === 0 && str_contains($spSkipActiveOut, 'Superadmin already exists; nothing to do.'), 'Section 6: --skip-if-exists exits 0 with no-op message when an Active Superadmin exists');
+expect_true($spCount("SELECT COUNT(*) FROM user_accounts WHERE role = 'superadmin'") === 1 && (int) $spOne("SELECT user_id FROM user_accounts WHERE role = 'superadmin'") === $spNewId && $spOne('SELECT login_email FROM user_accounts WHERE user_id = ?', [$spNewId]) === $spNewEmail, 'Section 6: --skip-if-exists leaves the Active Superadmin untouched');
+expect_true($spOutbox($spSkipActiveEmail) === 0 && $spCount('SELECT COUNT(*) FROM security_tokens') === $spTokensBeforeSkip && $spCount("SELECT COUNT(*) FROM audit_events WHERE action_code = 'superadmin_invited'") === $spInvitedBeforeSkip, 'Section 6: --skip-if-exists sends no email and writes no tokens or audit rows when Active Superadmin exists');
 
 // DS11: no 2FA yet -> no session, only a short-lived setup token.
 $spSessionsBefore = $spCount('SELECT COUNT(*) FROM auth_sessions WHERE user_id = ?', [$spNewId]);

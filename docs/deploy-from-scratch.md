@@ -20,7 +20,8 @@ front, uploads a bundle, and then runs unattended on the server:
 3. **Deploy** — Docker, the GHCR images, PostgreSQL with all migrations,
    `WEB_REPLICAS` web + `FRONTEND_REPLICAS` frontend (3 + 3 by default) and 1
    biometric container behind Traefik with Let's Encrypt HTTPS, Watchtower,
-   nightly backups, and the first Dean invitation.
+   nightly backups, the first Dean invitation, and the Superadmin invitation
+   (optional on the demo).
 4. **Verify** — PASS/FAIL checks; then, if Ubuntu needs it, one reboot and a
    second verification pass.
 
@@ -87,6 +88,7 @@ Answer the questions (press Enter to accept a value in brackets):
 | GHCR username / token | The image owner (e.g. `Light505`) and the `read:packages` token |
 | Gmail address / App Password | The sender account; the App Password may contain spaces |
 | First Dean name / email | Must use an allowed domain; receives the first invitation |
+| Superadmin name / email | Required on production; leave email blank on the demo to skip (the demo test seed brings its own Superadmin). Must use an allowed domain and differ from the First Dean email |
 | pgAdmin email / password | Login for the tunnel-only pgAdmin |
 | Allowed domains, Google client ID, Student sign-in, biometrics | Defaults come from your local `.env` |
 

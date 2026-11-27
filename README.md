@@ -371,7 +371,7 @@ If invitation delivery fails, fix the mail configuration and run the start scrip
 
 ### B5a. The Superadmin account and retired emails (system administrator only)
 
-There is exactly one Superadmin (spec SYS-001). The server script creates it and changes its login email; everything else the Superadmin changes itself in its Profile, and the Superadmin hands the Dean role over in the app (People & Accounts). Run the script inside the web container; add the single-server `--env-file` and `-f` flags from B6 on a single server:
+There is exactly one Superadmin (spec SYS-001). New VPS servers create it during setup (`provision-vps.ps1` / `deploy-vps.sh`); use the manual server script below on existing sites without a Superadmin, or to change its login email or reset its 2FA. Everything else the Superadmin changes itself in its Profile, and the Superadmin hands the Dean role over in the app (People & Accounts). Run the script inside the web container; add the single-server `--env-file` and `-f` flags from B6 on a single server:
 
 ```bash
 docker compose exec web php /var/www/html/backend/bin/account-admin.php create-superadmin --email it.admin@bicol-u.edu.ph --first Paolo --last Ramos --reason "College IT office runs DentiSYS"
@@ -380,7 +380,7 @@ docker compose exec web php /var/www/html/backend/bin/account-admin.php move-ema
 docker compose exec web php /var/www/html/backend/bin/account-admin.php unretire-email old.address@bicol-u.edu.ph --reason "College gave the address back"
 ```
 
-- `create-superadmin` creates the Superadmin and emails a set-password link (7 days). Optional `--prefix`, `--middle` and `--suffix` complete the name. Running it again while the account is still pending sends a new link and revokes the old one; a different `--email` replaces a mistyped one. It refuses once the Superadmin has activated, and an address that is not `@bicol-u.edu.ph`, already used, or retired.
+- `create-superadmin` creates the Superadmin and emails a set-password link (7 days). Optional `--prefix`, `--middle` and `--suffix` complete the name. Running it again while the account is still pending sends a new link and revokes the old one; a different `--email` replaces a mistyped one. It refuses once the Superadmin has activated, and an address that is not `@bicol-u.edu.ph`, already used, or retired. Pass `--skip-if-exists` to exit without error and without changing anything when any Superadmin account already exists.
 - On the first sign-in the Superadmin must set up authenticator 2FA before any page opens, and cannot turn it off later. `reset-superadmin-2fa` is for a lockout only (phone and recovery codes both lost): it removes the authenticator and recovery codes and signs the Superadmin out everywhere; the next sign-in sets 2FA up again.
 - `move-email` moves the Superadmin's account to a new address (also how a new person takes the job): the old address is retired, the password, 2FA and Google link are removed, every session ends, and a password-setup link goes to the new address only.
 - `unretire-email` removes an address from the retired list. Moved-away addresses (including those the Superadmin moves in the app) can never be used again until then.
