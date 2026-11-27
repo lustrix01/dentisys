@@ -995,7 +995,7 @@ export const Reports: React.FC = () => {
               </div>
             ) : (
               <>
-                <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
                   <table className={`w-full text-left text-xs ${isLectureLaboratoryMode ? 'min-w-[780px]' : 'min-w-[580px]'}`}>
                     <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       <tr>
@@ -1041,7 +1041,7 @@ export const Reports: React.FC = () => {
                   </table>
                 </div>
 
-                <div className="space-y-2.5 md:hidden">
+                <div className="space-y-2.5 sm:hidden">
                   {paginatedStudentsInSubject.map((student) => {
                     const subj = subjectForSelection(student);
                     const evaluation = courseEvaluation(subj);
@@ -1143,7 +1143,7 @@ export const Reports: React.FC = () => {
               </div>
             ) : (
               <>
-                <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
                   <table className="w-full min-w-[580px] text-left text-xs">
                     <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       <tr>
@@ -1190,7 +1190,7 @@ export const Reports: React.FC = () => {
                   </table>
                 </div>
 
-                <div className="space-y-2.5 md:hidden">
+                <div className="space-y-2.5 sm:hidden">
                   {sortedRetentionStudents.map((student: any) => {
                     const warnings = retentionUnavailable ? [] : (student.enrolledSubjects || []).filter((sub: any) =>
                       assignedSubjects.includes(sub.code)
@@ -1341,7 +1341,7 @@ export const Reports: React.FC = () => {
               </div>
             ) : (
               <>
-                <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
                   <table className="w-full min-w-[580px] text-left text-xs">
                     <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       <tr>
@@ -1376,7 +1376,7 @@ export const Reports: React.FC = () => {
                   </table>
                 </div>
 
-                <div className="space-y-2.5 md:hidden">
+                <div className="space-y-2.5 sm:hidden">
                   {attendanceRecords.map(record => (
                     <article key={record.enrollmentId} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
                       <div className="flex items-start justify-between gap-2">

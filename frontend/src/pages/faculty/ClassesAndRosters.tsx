@@ -2120,7 +2120,7 @@ const handleSendAllStudentInvites = async () => {
             return (
               <>
                 {!isPhone ? (
-                <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
                   <table className="w-full min-w-[600px] text-left text-xs">
                     <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       <tr>
@@ -2185,7 +2185,7 @@ const handleSendAllStudentInvites = async () => {
                   </table>
                 </div>
                 ) : (
-                <div className="space-y-2.5 md:hidden">
+                <div className="space-y-2.5 sm:hidden">
                   {filteredStudents.map((st) => {
                     const assignedSections = st.classSections || [];
                     const displayedSections = selectedClassFilterId !== 'all'

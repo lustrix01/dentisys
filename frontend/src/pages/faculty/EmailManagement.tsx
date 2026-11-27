@@ -789,7 +789,7 @@ export const EmailManagement: React.FC = () => {
           ) : (
             <>
               {!isPhone ? (
-              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
                 <table className="w-full min-w-[600px] text-left text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <tr>
@@ -882,7 +882,7 @@ export const EmailManagement: React.FC = () => {
                 </table>
               </div>
               ) : (
-              <div className="space-y-2.5 md:hidden">
+              <div className="space-y-2.5 sm:hidden">
                 <label className="flex items-center gap-2.5 px-1 pb-1 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer">
                   <input
                     type="checkbox"
@@ -996,7 +996,7 @@ export const EmailManagement: React.FC = () => {
 
           {/* Student selection for Secretary appointment */}
           {!isPhone ? (
-          <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+          <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
             <table className="w-full min-w-[600px] text-left text-xs">
               <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 <tr>
@@ -1059,7 +1059,7 @@ export const EmailManagement: React.FC = () => {
             </table>
           </div>
           ) : (
-          <div className="space-y-2.5 md:hidden">
+          <div className="space-y-2.5 sm:hidden">
             {sortedSecretaryRows.map(({ key, student, section }) => {
               const isChecked = selected.includes(key);
               const sectionTaken = sectionHasSecretary(section.classId, section.className);
@@ -1235,7 +1235,7 @@ export const EmailManagement: React.FC = () => {
           ) : tab === 'midterm_advisory' ? (
             <>
               {!isPhone ? (
-              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
                 <table className="w-full min-w-[600px] text-left text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <tr>
@@ -1291,7 +1291,7 @@ export const EmailManagement: React.FC = () => {
                 </table>
               </div>
               ) : (
-              <div className="space-y-2.5 md:hidden">
+              <div className="space-y-2.5 sm:hidden">
                 {sortedNoticeRows.map(row => {
                   const isChecked = selected.includes(row.enrollmentId);
                   return (
@@ -1343,7 +1343,7 @@ export const EmailManagement: React.FC = () => {
           ) : (
             <>
               {!isPhone ? (
-              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
                 <table className="w-full min-w-[600px] text-left text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <tr>
@@ -1452,7 +1452,7 @@ export const EmailManagement: React.FC = () => {
                 </table>
               </div>
               ) : (
-              <div className="space-y-2.5 md:hidden">
+              <div className="space-y-2.5 sm:hidden">
                 {sortedNoticeRows.map(row => {
                   const isChecked = selected.includes(row.enrollmentId);
                   const hasScheduledDate = Boolean(row.pendingAttempt?.scheduledDate);

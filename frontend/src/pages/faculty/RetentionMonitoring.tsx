@@ -1220,8 +1220,8 @@ export const RetentionMonitoring: React.FC = () => {
           ) : (
             <>
               {!isPhone ? (
-              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
-                <table className="w-full lg:min-w-[650px] text-left text-xs">
+              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
+                <table className="w-full min-w-[650px] md:min-w-0 lg:min-w-[650px] text-left text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <tr>
                       <th scope="col" className="whitespace-nowrap pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4" aria-sort={ariaSort(midSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={midSort} onSort={setMidSort} /></th>
@@ -1269,7 +1269,7 @@ export const RetentionMonitoring: React.FC = () => {
                 </table>
               </div>
               ) : (
-              <div className="space-y-2.5 md:hidden">
+              <div className="space-y-2.5 sm:hidden">
                 {sortedMidterm.map(record => (
                   <article key={record.enrollmentId} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
                     <div className="flex items-start justify-between gap-2">
@@ -1339,8 +1339,8 @@ export const RetentionMonitoring: React.FC = () => {
           ) : (
             <>
               {!isPhone ? (
-              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
-                <table className="w-full lg:min-w-[700px] text-left text-[11px] lg:text-xs">
+              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
+                <table className="w-full min-w-[680px] md:min-w-0 lg:min-w-[700px] text-left text-[11px] lg:text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <tr>
                       <th scope="col" className="whitespace-nowrap pl-2 pr-1 py-2.5 lg:pl-3.5 lg:pr-2 xl:pl-5 xl:pr-4" aria-sort={ariaSort(watchSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={watchSort} onSort={setWatchSort} /></th>
@@ -1375,7 +1375,7 @@ export const RetentionMonitoring: React.FC = () => {
                 </table>
               </div>
               ) : (
-              <div className="space-y-2.5 md:hidden">
+              <div className="space-y-2.5 sm:hidden">
                 {sortedWatchlist.map(record => (
                   <article key={record.enrollmentId} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
                     <div className="flex items-start justify-between gap-2">
@@ -1390,7 +1390,7 @@ export const RetentionMonitoring: React.FC = () => {
                     </div>
                     <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
                       <div className="min-w-0">
-                        <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Course Grade</dt>
+                        <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Course grade</dt>
                         <dd className="mt-0.5 text-xs font-bold tabular-nums text-slate-800 dark:text-slate-100">
                           {isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage} grade={record.gwa}>{formatGrade(record.gwa)}</GradeValue> : 'Grade unavailable'}
                           <span className="ml-1 text-[11px] font-normal text-slate-500 dark:text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span>
@@ -1443,8 +1443,8 @@ export const RetentionMonitoring: React.FC = () => {
           ) : (
             <>
               {!isPhone ? (
-              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
-                <table className="w-full lg:min-w-[820px] text-left text-[11px] lg:text-xs">
+              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
+                <table className="w-full min-w-[720px] md:min-w-0 lg:min-w-[820px] text-left text-[11px] lg:text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <tr>
                       <th scope="col" className="whitespace-nowrap pl-2.5 pr-1.5 py-2.5 lg:pl-3.5 lg:pr-2 xl:pl-5 xl:pr-4" aria-sort={ariaSort(remSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={remSort} onSort={setRemSort} /></th>
@@ -1491,7 +1491,7 @@ export const RetentionMonitoring: React.FC = () => {
                 </table>
               </div>
               ) : (
-              <div className="space-y-2.5 md:hidden">
+              <div className="space-y-2.5 sm:hidden">
                 {sortedRemedials.map(row => {
                   const activeAttemptNumber = row.progression.attempts.length === 2
                     ? 2

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
-/** True below the 768 px phone-card breakpoint (spec.md UI-001). */
-export function useIsPhone(query = '(max-width: 767px)'): boolean {
+/** True below the 640 px phone-card breakpoint (spec.md UI-001). */
+export function useIsPhone(query = '(max-width: 639px)'): boolean {
   const [isPhone, setIsPhone] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia(query).matches : false
   );

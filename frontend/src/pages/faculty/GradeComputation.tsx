@@ -4238,7 +4238,7 @@ export const GradeComputation: React.FC = () => {
               return (
                 <>
                   {!isPhone ? (
-                  <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                  <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
                     <table className="w-full min-w-[580px] text-left text-xs">
                       <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         <tr>
@@ -4300,7 +4300,7 @@ export const GradeComputation: React.FC = () => {
                     </table>
                   </div>
                   ) : (
-                  <div className="space-y-2.5 md:hidden">
+                  <div className="space-y-2.5 sm:hidden">
                     {filteredAssessments.map(ass => {
                       const sectionCode = currentAssessmentOffering && currentAssessmentOffering.sections.length > 1
                         ? (facultyClasses.find(c => c.id === ass.classId)?.csName || ass.classId)
@@ -5660,7 +5660,7 @@ export const GradeComputation: React.FC = () => {
               return (
                 <>
                   {!isPhone ? (
-                  <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                  <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
                     <table className={`w-full text-left text-xs ${isPeriodMode && isLectureLaboratoryMode ? 'min-w-[780px]' : 'min-w-[580px]'}`}>
                       <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         <tr>
@@ -5750,7 +5750,7 @@ export const GradeComputation: React.FC = () => {
                     No matching student grade summaries found.
                   </div>
                   ) : (
-                  <div className="space-y-2.5 md:hidden">
+                  <div className="space-y-2.5 sm:hidden">
                     {summaryRows.map(({ student, subj, evalResult, remarkLabel, remarkTone, finalGradeNode }) => {
                       const metrics: Array<{ label: string; value: React.ReactNode; emphasis?: boolean }> = isPeriodMode
                         ? (isLectureLaboratoryMode

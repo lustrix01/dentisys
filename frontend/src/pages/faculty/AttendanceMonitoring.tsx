@@ -1755,7 +1755,7 @@ export const AttendanceMonitoring: React.FC = () => {
           ) : (
             <>
               {!isPhone ? (
-              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
                 <table className="w-full min-w-[600px] text-left text-xs">
                   <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <tr>
@@ -1811,7 +1811,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 </table>
               </div>
               ) : (
-              <div className="space-y-2.5 md:hidden">
+              <div className="space-y-2.5 sm:hidden">
                 {filteredRoster.map(item => (
                   <article
                     key={item.enrollmentId}
