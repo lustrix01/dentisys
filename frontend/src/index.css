@@ -151,6 +151,34 @@ html {
   box-shadow: inset 3px 0 0 #aa8dd3, 1px 0 0 #1e293b;
 }
 
+/* Role-colour modifier for Faculty pages (clinical green; used together with .data-table-ruled). */
+.data-table-ruled.data-table-ruled-clinical {
+  border-top-color: #43A047;
+}
+.dark .data-table-ruled.data-table-ruled-clinical {
+  border-top-color: #5fc471;
+}
+.data-table-ruled.data-table-ruled-clinical > table > thead th {
+  background-color: #f1faf2;
+  border-bottom-color: #43A047;
+}
+.dark .data-table-ruled.data-table-ruled-clinical > table > thead th {
+  background-color: #122217;
+  border-bottom-color: #5fc471;
+}
+.data-table-ruled.data-table-ruled-clinical > table > tbody > tr:hover > :first-child {
+  box-shadow: inset 3px 0 0 #43A047;
+}
+.dark .data-table-ruled.data-table-ruled-clinical > table > tbody > tr:hover > :first-child {
+  box-shadow: inset 3px 0 0 #5fc471;
+}
+.data-table-ruled.data-table-ruled-clinical.table-pin-first[data-pinned-x] > table > tbody > tr:hover > :first-child {
+  box-shadow: inset 3px 0 0 #43A047, 1px 0 0 #e2e8f0;
+}
+.dark .data-table-ruled.data-table-ruled-clinical.table-pin-first[data-pinned-x] > table > tbody > tr:hover > :first-child {
+  box-shadow: inset 3px 0 0 #5fc471, 1px 0 0 #1e293b;
+}
+
 /* Native <select> popups follow the app theme (dark mode is the .dark class on <html>). */
 .dark select {
   color-scheme: dark;
