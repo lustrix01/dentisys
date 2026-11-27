@@ -71,11 +71,17 @@ test('invitation history matches by invitation id, and falls back to the email f
   assert.deepEqual(ids, ['1', '2', '4']);
 });
 
-test('email history table stacks into row cards below 768px without changing desktop classes', () => {
+test('email history table uses the 640px ruled table standard and phone spine cards', () => {
   const table = read('../components/email/EmailHistoryTable.tsx');
-  assert.match(table, /className="table-pin table-pin-first table-pin-blocks"/);
-  assert.match(table, /<table className="w-full text-left text-xs max-md:block">/);
-  assert.match(table, /<thead className="[^"]*max-md:hidden">/);
-  assert.match(table, /<tr className="hover:bg-slate-50\/50 dark:hover:bg-slate-900\/30 max-md:flex max-md:flex-wrap/);
-  assert.match(table, /max-md:order-4 max-md:w-full/);
+  assert.match(table, /useIsPhone\(\)/);
+  assert.match(table, /table-pin table-pin-first data-table-ruled[^\n]*hidden sm:block/);
+  assert.match(table, /data-table-ruled-clinical/);
+  assert.match(table, /<table className="w-full min-w-\[650px\] text-left text-xs">/);
+  assert.match(table, /<thead className="text-\[10px\] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">/);
+  assert.match(table, /<div className="space-y-2\.5 sm:hidden">/);
+  assert.match(table, /<article[^>]*border-l-\[3px\]/);
+  assert.match(table, /aria-expanded=\{expanded\}/);
+  assert.match(table, /break-all/);
+  const faculty = read('../pages/faculty/EmailManagement.tsx');
+  assert.match(faculty, /<EmailHistoryTable[^>]*color="clinical"/);
 });

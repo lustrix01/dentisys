@@ -1574,7 +1574,7 @@ export const EmailManagement: React.FC = () => {
             <p className="text-xs text-slate-500 dark:text-slate-400">Complete transmission audit ledger for student notifications & invitations.</p>
           </div>
 
-          <EmailHistoryTable actions={logs} search={search} onSearch={setSearch} filter={historyTypeFilter} onFilter={setHistoryTypeFilter} />
+          <EmailHistoryTable actions={logs} search={search} onSearch={setSearch} filter={historyTypeFilter} onFilter={setHistoryTypeFilter} color="clinical" />
         </Card>
       )}
 
