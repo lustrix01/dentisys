@@ -207,6 +207,14 @@ html {
   box-shadow: inset 3px 0 0 #60a5fa, 1px 0 0 #1e293b;
 }
 
+/* Modifier for a ruled table embedded flush inside a parent frame (e.g. session group card). */
+.data-table-ruled.data-table-ruled-flush,
+.dark .data-table-ruled.data-table-ruled-flush {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 /* Native <select> popups follow the app theme (dark mode is the .dark class on <html>). */
 .dark select {
   color-scheme: dark;

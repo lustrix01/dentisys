@@ -244,7 +244,7 @@ export const FacultyExcusedRequestsPanel: React.FC<{
               const all = picked.length === ids.length;
               const which = all ? 'all' : 'selected';
               return (
-                <div key={key} className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                <div key={key} className="overflow-hidden data-table-ruled data-table-ruled-clinical">
                   <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5 bg-slate-50 px-3 py-2 sm:flex sm:flex-wrap sm:gap-2 dark:bg-slate-800/60">
                     {filter === 'pending' && (
                       <input
@@ -265,9 +265,8 @@ export const FacultyExcusedRequestsPanel: React.FC<{
                       </div>
                     )}
                   </div>
-                  <div className="p-2.5 sm:p-3">
-                    {!isPhone ? (
-                      <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden sm:block">
+                  {!isPhone ? (
+                    <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical data-table-ruled-flush hidden sm:block">
                         <table className="w-full min-w-[650px] text-left text-xs">
                           <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                             <tr>
@@ -346,13 +345,13 @@ export const FacultyExcusedRequestsPanel: React.FC<{
                         </table>
                       </div>
                     ) : (
-                      <div className="space-y-2.5 sm:hidden">
+                      <div className="divide-y divide-slate-100 dark:divide-slate-800 sm:hidden">
                         {rows.map(request => (
                           <article
                             key={request.id}
                             id={`secretary-request-${request.id}`}
                             tabIndex={-1}
-                            className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs outline-none focus:bg-sky-50 dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900 dark:focus:bg-sky-950/30"
+                            className="px-3 py-3 outline-none focus:bg-sky-50 dark:focus:bg-sky-950/30"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex min-w-0 items-start gap-2">
@@ -426,7 +425,6 @@ export const FacultyExcusedRequestsPanel: React.FC<{
                         ))}
                       </div>
                     )}
-                  </div>
                 </div>
               );
             })}

@@ -1656,8 +1656,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(panel).toContainText('2 requests');
     // No "Select all shown" and no top "Approve selected": each group has its own pair, greyed out while nothing is ticked.
     await expect(panel.getByText('Select all shown')).toHaveCount(0);
-    const group = panel.locator('div.rounded-xl').filter({ has: page.getByRole('checkbox', { name: /^Select all in CLIN401 Section A · Sep 20/ }) });
-    const other = panel.locator('div.rounded-xl').filter({ has: page.getByRole('checkbox', { name: /^Select all in CLIN401 Section A · Sep 21/ }) });
+    const group = panel.locator('div.overflow-hidden.data-table-ruled-clinical').filter({ has: page.getByRole('checkbox', { name: /^Select all in CLIN401 Section A · Sep 20/ }) });
+    const other = panel.locator('div.overflow-hidden.data-table-ruled-clinical').filter({ has: page.getByRole('checkbox', { name: /^Select all in CLIN401 Section A · Sep 21/ }) });
     await expect(group.getByRole('button', { name: 'Approve selected' })).toBeDisabled();
     await expect(group.getByRole('button', { name: 'Reject selected' })).toBeDisabled();
     // One ticked row: "selected", and the dialog names one request.
