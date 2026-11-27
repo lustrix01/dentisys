@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import { downloadXlsx } from '../utils/xlsxDownload';
 import { buildReportSheet } from '../utils/reportWorkbook';
 import { PrintStyle, PrintHeader, PrintCaption, formatPrintedAt } from './PrintSheet';
+import { useIsPhone } from '../hooks/useIsPhone';
 
 type Role = 'admin' | 'faculty' | 'secretary';
 // superadmin: the Dean in Superadmin mode (ADM-001) gets the Activity / Class work list switch.
@@ -20,9 +21,30 @@ type Props = { role: Role; title: string; subtitle: string; allLogs?: boolean; s
 type Term = { startDate: string | null; endDate: string | null };
 
 const themes = {
-  accent: { button: 'bg-accent-600 hover:bg-accent-700', icon: 'text-accent-500', surface: 'border-accent-200/60 bg-accent-50/50 dark:border-accent-900/30 dark:bg-accent-950/15' },
-  clinical: { button: 'bg-clinical-600 hover:bg-clinical-700', icon: 'text-clinical-500', surface: 'border-clinical-200/60 bg-clinical-50/50 dark:border-clinical-900/30 dark:bg-clinical-950/15' },
-  blue: { button: 'bg-blue-600 hover:bg-blue-700', icon: 'text-blue-500', surface: 'border-blue-200/60 bg-blue-50/50 dark:border-blue-900/30 dark:bg-blue-950/15' },
+  accent: {
+    button: 'bg-accent-600 hover:bg-accent-700',
+    icon: 'text-accent-500',
+    surface: 'border-accent-200/60 bg-accent-50/50 dark:border-accent-900/30 dark:bg-accent-950/15',
+    ruled: '',
+    spine: 'border-l-accent-500/80 dark:border-l-accent-400/70',
+    code: 'text-accent-800 dark:text-accent-300',
+  },
+  clinical: {
+    button: 'bg-clinical-600 hover:bg-clinical-700',
+    icon: 'text-clinical-500',
+    surface: 'border-clinical-200/60 bg-clinical-50/50 dark:border-clinical-900/30 dark:bg-clinical-950/15',
+    ruled: 'data-table-ruled-clinical',
+    spine: 'border-l-clinical-500/80 dark:border-l-clinical-400/70',
+    code: 'text-clinical-800 dark:text-clinical-300',
+  },
+  blue: {
+    button: 'bg-blue-600 hover:bg-blue-700',
+    icon: 'text-blue-500',
+    surface: 'border-blue-200/60 bg-blue-50/50 dark:border-blue-900/30 dark:bg-blue-950/15',
+    ruled: 'data-table-ruled-blue',
+    spine: 'border-l-blue-500/80 dark:border-l-blue-400/70',
+    code: 'text-blue-800 dark:text-blue-300',
+  },
 };
 const statusClass: Record<AuditStatus, string> = {
   Success: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400',
@@ -124,6 +146,7 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, 
 
 export const AuditTrailPage: React.FC<Props> = ({ role, title, accent, superadmin = false, own = false }) => {
   const theme = themes[accent];
+  const isPhone = useIsPhone();
   const { user } = useAuth();
   const [printRows, setPrintRows] = useState<string[][] | null>(null);
   const [printedAt, setPrintedAt] = useState<Date | null>(null);
@@ -474,142 +497,154 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, accent, superadmi
             {classWork ? 'Class Work Records' : 'Activity Records'}
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-0 md:overflow-x-auto md:max-h-[500px] md:overflow-y-auto">
+        <CardContent className="p-3 sm:p-4">
           {loading ? (
             <div className="py-12 text-center">
               <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
               <p className="text-xs text-slate-500 dark:text-slate-400">Loading audit trail records...</p>
             </div>
-          ) : (<>
-            <table className="hidden md:table w-full min-w-[900px] text-left text-xs">
-              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-20 shadow-sm">
-                <tr className="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
-                  <th className="px-5 py-3 sticky left-0 z-30 bg-slate-50 dark:bg-slate-900 w-36 min-w-[9rem]">When</th>
-                  <th className="px-5 py-3">Who</th>
-                  <th className="px-5 py-3">What</th>
-                  <th className="px-5 py-3">Record</th>
-                  <th className="px-5 py-3">Change</th>
-                  <th className="px-5 py-3 text-right">Status</th>
-                </tr>
-              </thead>
-              {groups.map(group => (
-                <tbody key={group.key} className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  <tr className="bg-slate-50 dark:bg-slate-900">
-                    <th colSpan={6} scope="colgroup" className="px-5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      <span className="sticky left-5">{group.label}</span>
-                    </th>
-                  </tr>
-                  {group.entries.map(entry => (
-                    <React.Fragment key={entry.id}>
-                      <tr className="align-top hover:bg-slate-50/60 dark:hover:bg-slate-900/30">
-                        <td className="px-5 py-3 sticky left-0 z-10 bg-white dark:bg-slate-950 w-36 min-w-[9rem] text-slate-500">{formatManilaWhen(entry.occurredAt)}</td>
-                        <td className="px-5 py-3 break-words min-w-[9rem]">
-                          <p className="font-bold text-slate-800 dark:text-slate-200">{entry.who ? entry.who.name : entry.whoText ?? '—'}</p>
-                          {entry.who && <p className="text-[10px] text-slate-500 dark:text-slate-400">{entry.who.roleLabel}</p>}
-                        </td>
-                        <td className="px-5 py-3 font-semibold text-slate-700 dark:text-slate-300 break-words min-w-[8rem]">{entry.what}</td>
-                        <td className="px-5 py-3 text-slate-600 dark:text-slate-400 max-2xl:whitespace-nowrap 2xl:break-words min-w-[10rem]">{entry.record}</td>
-                        <td className="px-5 py-3 text-slate-600 dark:text-slate-400 break-words min-w-[8rem]">
-                          {entry.change}
-                          {entry.batch && (
-                            <button type="button" onClick={() => toggle(entry.id)} aria-expanded={expanded.has(entry.id)}
-                              className={`ml-2 min-h-[44px] xl:min-h-0 px-2 text-[10px] font-bold ${theme.icon}`}>
-                              {entry.batch.count} {expanded.has(entry.id) ? '▾' : '▸'}
-                            </button>
-                          )}
-                        </td>
-                        <td className="px-5 py-3 text-right whitespace-nowrap">
-                          <StatusBadge status={entry.status} />
-                          <button type="button" onClick={() => setSelected(entry)} aria-label="View audit log details" title="View audit log details" className={`ml-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg ${theme.icon}`}>
-                            <Eye className="h-4 w-4" />
-                          </button>
-                        </td>
-                      </tr>
-                      {entry.batch && expanded.has(entry.id) && (
-                        <tr className="bg-slate-50/60 dark:bg-slate-900/30">
-                          <td className="sticky left-0 bg-slate-50 dark:bg-slate-900" />
-                          <td colSpan={5} className="px-5 py-2">
-                            <ul className="max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
-                              {entry.batch.members.map((m, i) => (
-                                <li key={i} className="py-1.5 flex flex-wrap gap-x-4 break-words">
-                                  <span className="text-slate-600 dark:text-slate-400">{m.record}</span>
-                                  <span className="text-slate-500">{m.change}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              ))}
-              {entries.length === 0 && (
-                <tbody>
+          ) : !isPhone ? (
+            <div className={`overflow-auto max-h-[500px] data-table-ruled ${theme.ruled} hidden sm:block`}>
+              <table className="w-full min-w-[820px] text-left text-xs">
+                <thead className="sticky top-0 z-20 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   <tr>
-                    <td colSpan={6} className="px-5 py-10 text-center text-slate-500 dark:text-slate-400">
-                      {emptyText}
-                    </td>
+                    <th className="sticky left-0 z-30 w-36 min-w-[9rem] whitespace-nowrap pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4">When</th>
+                    <th className="px-2 py-2.5 xl:px-4">Who</th>
+                    <th className="px-2 py-2.5 xl:px-4">What</th>
+                    <th className="border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Record</th>
+                    <th className="px-2 py-2.5 xl:px-4">Change</th>
+                    <th className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 text-right dark:border-slate-800 xl:pl-4 xl:pr-5">Status</th>
                   </tr>
-                </tbody>
-              )}
-            </table>
-            {/* Phones: one block per entry instead of a 900px table scrolled sideways inside a short box. */}
-            <div className="md:hidden text-xs">
-              {entries.length === 0 && <p className="px-5 py-10 text-center text-slate-500 dark:text-slate-400">{emptyText}</p>}
-              {groups.map(group => (
-                <section key={group.key} aria-label={group.label}>
-                  <h3 className="px-4 py-1.5 bg-slate-50 dark:bg-slate-900 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{group.label}</h3>
-                  <ul className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                </thead>
+                {groups.map(group => (
+                  <tbody key={group.key}>
+                    <tr className="bg-slate-50/90 dark:bg-slate-800/60">
+                      <th colSpan={6} scope="colgroup" className="pl-3.5 pr-3.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 xl:pl-5 xl:pr-5">
+                        <span className="sticky left-3.5 xl:left-5">{group.label}</span>
+                      </th>
+                    </tr>
                     {group.entries.map(entry => (
-                      <li key={entry.id} className="px-4 py-3">
-                        <dl className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
-                          <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">When</dt>
-                          <dd className="text-slate-600 dark:text-slate-400">{formatManilaWhen(entry.occurredAt)}</dd>
-                          <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Who</dt>
-                          <dd className="min-w-0 break-words">
-                            <span className="font-bold text-slate-800 dark:text-slate-200">{entry.who ? entry.who.name : entry.whoText ?? '—'}</span>
-                            {entry.who && <span className="block text-slate-500 dark:text-slate-400">{entry.who.roleLabel}</span>}
-                          </dd>
-                          <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">What</dt>
-                          <dd className="font-semibold text-slate-700 dark:text-slate-300 break-words">{entry.what}</dd>
-                          <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Record</dt>
-                          <dd className="text-slate-600 dark:text-slate-400 break-words">{entry.record}</dd>
-                          <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Change</dt>
-                          <dd className="text-slate-600 dark:text-slate-400 break-words">
+                      <React.Fragment key={entry.id}>
+                        <tr className="align-top">
+                          <td className="sticky left-0 z-10 bg-white dark:bg-slate-900 w-36 min-w-[9rem] pl-3.5 pr-2 py-3 text-slate-500 dark:text-slate-400 shadow-[1px_0_0_#e2e8f0] dark:shadow-[1px_0_0_#1e293b] xl:pl-5 xl:pr-4">{formatManilaWhen(entry.occurredAt)}</td>
+                          <td className="px-2 py-3 break-words min-w-[9rem] xl:px-4">
+                            <p className="font-bold text-slate-800 dark:text-slate-200">{entry.who ? entry.who.name : entry.whoText ?? '—'}</p>
+                            {entry.who && <p className="text-[10px] text-slate-500 dark:text-slate-400">{entry.who.roleLabel}</p>}
+                          </td>
+                          <td className="px-2 py-3 font-semibold text-slate-700 dark:text-slate-300 break-words min-w-[8rem] xl:px-4">{entry.what}</td>
+                          <td className="border-l border-slate-200/70 px-2 py-3 text-slate-600 dark:border-slate-800 dark:text-slate-400 max-2xl:whitespace-nowrap 2xl:break-words min-w-[10rem] xl:px-4">{entry.record}</td>
+                          <td className="px-2 py-3 text-slate-600 dark:text-slate-400 break-words min-w-[8rem] xl:px-4">
                             {entry.change}
                             {entry.batch && (
                               <button type="button" onClick={() => toggle(entry.id)} aria-expanded={expanded.has(entry.id)}
-                                className={`ml-2 min-h-[44px] px-2 text-[10px] font-bold ${theme.icon}`}>
+                                className={`ml-2 min-h-[44px] xl:min-h-0 px-2 text-[10px] font-bold ${theme.icon}`}>
                                 {entry.batch.count} {expanded.has(entry.id) ? '▾' : '▸'}
                               </button>
                             )}
-                          </dd>
-                          <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 self-center">Status</dt>
-                          <dd className="flex items-center justify-between gap-2">
+                          </td>
+                          <td className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-3 text-right dark:border-slate-800 xl:pl-4 xl:pr-5">
                             <StatusBadge status={entry.status} />
-                            <button type="button" onClick={() => setSelected(entry)} aria-label="View audit log details" title="View audit log details" className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg ${theme.icon}`}>
+                            <button type="button" onClick={() => setSelected(entry)} aria-label="View audit log details" title="View audit log details" className="ml-2 inline-flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center rounded-lg border border-slate-200/80 bg-slate-100 text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-200 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-700">
                               <Eye className="h-4 w-4" />
                             </button>
-                          </dd>
+                          </td>
+                        </tr>
+                        {entry.batch && expanded.has(entry.id) && (
+                          <tr className="bg-slate-50/60 dark:bg-slate-900/30">
+                            <td className="sticky left-0 bg-slate-50 dark:bg-slate-900" />
+                            <td colSpan={5} className="px-3.5 py-2 xl:px-5">
+                              <ul className="max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
+                                {entry.batch.members.map((m, i) => (
+                                  <li key={i} className="py-1.5 flex flex-wrap gap-x-4 break-words">
+                                    <span className="text-slate-600 dark:text-slate-400">{m.record}</span>
+                                    <span className="text-slate-500">{m.change}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                ))}
+                {entries.length === 0 && (
+                  <tbody>
+                    <tr>
+                      <td colSpan={6} className="px-5 py-10 text-center text-slate-500 dark:text-slate-400">
+                        {emptyText}
+                      </td>
+                    </tr>
+                  </tbody>
+                )}
+              </table>
+            </div>
+          ) : (
+            <div className="space-y-4 sm:hidden">
+              {entries.length === 0 && <p className="px-5 py-10 text-center text-xs text-slate-500 dark:text-slate-400">{emptyText}</p>}
+              {groups.map(group => (
+                <section key={group.key} aria-label={group.label} className="space-y-2.5">
+                  <h3 className="px-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{group.label}</h3>
+                  <div className="space-y-2.5">
+                    {group.entries.map(entry => (
+                      <article key={entry.id} className={`rounded-2xl border border-slate-200/90 border-l-[3px] ${theme.spine} bg-white p-3 shadow-2xs dark:border-slate-800 dark:bg-slate-900`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">{formatManilaWhen(entry.occurredAt)}</p>
+                            <p className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100 break-words">
+                              {entry.who ? entry.who.name : entry.whoText ?? '—'}
+                            </p>
+                            {entry.who && <p className="text-[11px] text-slate-500 dark:text-slate-400">{entry.who.roleLabel}</p>}
+                          </div>
+                          <div className="shrink-0">
+                            <StatusBadge status={entry.status} />
+                          </div>
+                        </div>
+                        <dl className="mt-2 grid grid-cols-1 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                          <div className="min-w-0">
+                            <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">What</dt>
+                            <dd className="text-xs font-semibold text-slate-700 dark:text-slate-200 break-words">{entry.what}</dd>
+                          </div>
+                          <div className="min-w-0">
+                            <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Record</dt>
+                            <dd className={`text-xs font-medium break-words ${theme.code}`}>{entry.record}</dd>
+                          </div>
+                          <div className="min-w-0">
+                            <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Change</dt>
+                            <dd className="text-xs text-slate-600 dark:text-slate-300 break-words">
+                              {entry.change}
+                              {entry.batch && (
+                                <button type="button" onClick={() => toggle(entry.id)} aria-expanded={expanded.has(entry.id)}
+                                  className={`ml-2 min-h-[36px] px-2 text-[10px] font-bold ${theme.icon}`}>
+                                  {entry.batch.count} {expanded.has(entry.id) ? '▾' : '▸'}
+                                </button>
+                              )}
+                            </dd>
+                          </div>
                         </dl>
                         {entry.batch && expanded.has(entry.id) && (
-                          <ul className="mt-2 max-h-64 overflow-y-auto rounded-lg bg-slate-50 dark:bg-slate-900 px-3 divide-y divide-slate-100 dark:divide-slate-800/60">
+                          <ul className="mt-2 max-h-64 overflow-y-auto rounded-xl bg-slate-50 dark:bg-slate-800/60 px-3 divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
                             {entry.batch.members.map((m, i) => (
                               <li key={i} className="py-1.5 break-words">
-                                <span className="text-slate-600 dark:text-slate-400">{m.record}</span>
-                                <span className="block text-slate-500">{m.change}</span>
+                                <span className="text-slate-600 dark:text-slate-300">{m.record}</span>
+                                <span className="block text-slate-500 dark:text-slate-400">{m.change}</span>
                               </li>
                             ))}
                           </ul>
                         )}
-                      </li>
+                        <div className="mt-2 flex justify-end gap-1.5">
+                          <button type="button" onClick={() => setSelected(entry)} aria-label="View audit log details" title="View audit log details"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200/80 bg-slate-100 text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-200 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-700">
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </article>
                     ))}
-                  </ul>
+                  </div>
                 </section>
               ))}
             </div>
-          </>)}
+          )}
         </CardContent>
       </Card>
 
