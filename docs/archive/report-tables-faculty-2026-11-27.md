@@ -156,3 +156,47 @@ None.
   - `audit-output/tables-faculty/check-review.mjs` passed (0 console errors, 0 broken images; `rv-retention-phone.png` visually verified).
   - `audit-output/tables-faculty/build-html.mjs --check` rebuilt the per-page demos (`retention.html`, `email.html`, `index.html`) from the updated shots.
 - **T2-R Doubts (not acted on):** None.
+
+---
+
+## T2-640: Ruling Preview — Faculty Tables from 640 px (Patch-Only)
+
+- **Path chosen:**
+  - Capture & metrics across all 14 Faculty views × 4 widths (`t768/` vs `t640/`): **one worker** (`demo-640`, `gemini-4-neon-low`, `workspace: "inherit"`, killed after wrap-up).
+  - Preview patch creation (`t640.patch`), gate runs (`tsc -b`, `scripts/check.ps1`), branch restore, and review HTML update: **direct** (preview patch only; restored afterwards; zero product commits).
+- **Worker models:** `demo-640` -> `gemini-4-neon-low`.
+- **Saved preview patch (no product commit on branch):** `audit-output/tables-faculty/t640.patch` (`296` lines, verified `git apply --check` exit `0` against branch `HEAD`). Ports `bp640.patch` onto `9ee81213`: switches `useIsPhone` default to `(max-width: 639px)`, swaps all 14 Faculty table/card wrappers from `md:` to `sm:`, and preserves `RetentionMonitoring.tsx` `min-w-[650px]` / `min-w-[680px]` / `min-w-[720px]` at `640–767 px` (`md:min-w-0 lg:min-w-*`) so columns are never squeezed while keeping iPad 820 fit intact.
+- **Per-view sideways scroll & pinning results (`audit-output/tables-faculty/t640-metrics.json`, all 56 shots `pageOverflow: false`):**
+
+| View (`t768/` vs `t640/`) | S.Y. used | 744 px scroll (`sw/cw`) | 700 px scroll (`sw/cw`) | 640 px scroll (`sw/cw`) | 393 px cards check |
+| --- | --- | --- | --- | --- | --- |
+| `classes/roster` | `2026–2027` | no (`652/652`) | no (`608/608`) | **yes** (`600/548`) | `15` cards (`0` rows) |
+| `attendance/rollcall` | `2026–2027` | no (`652/652`) | no (`608/608`) | **yes** (`600/548`) | `15` cards (`0` rows) |
+| `retention/watchlist` | `2025–2026` | **yes** (`680/652`) | **yes** (`680/608`) | **yes** (`680/548`) | `2` cards (`0` rows) |
+| `retention/remedials` | `2025–2026` | **yes** (`720/652`) | **yes** (`720/608`) | **yes** (`720/548`) | `2` cards (`0` rows) |
+| `retention/midterm` | `2025–2026` | n/a (`0` rows) | n/a (`0` rows) | n/a (`0` rows) | `0` cards (`0` rows) |
+| `email/student_invites` | `2026–2027` | no (`652/652`) | no (`608/608`) | **yes** (`600/548`) | `49` cards (`0` rows) |
+| `email/secretary` | `2026–2027` | no (`652/652`) | no (`608/608`) | **yes** (`600/548`) | `51` cards (`0` rows) |
+| `email/midterm_advisory` | `2025–2026` | n/a (`0` rows) | n/a (`0` rows) | n/a (`0` rows) | `0` cards (`0` rows) |
+| `email/remedial` | `2025–2026` | no (`652/652`) | **yes** (`614/608`) | **yes** (`614/548`) | `2` cards (`0` rows) |
+| `reports/academic` | `2026–2027` | no (`620/620`) | **yes** (`580/576`) | **yes** (`580/516`) | `10` cards (`0` rows) |
+| `reports/retention` | `2025–2026` | **yes** (`624/620`) | **yes** (`624/576`) | **yes** (`624/516`) | `2` cards (`0` rows) |
+| `reports/attendance` | `2025–2026` / `2026–2027` | no (`620/620`) | **yes** (`580/576`) | **yes** (`580/516`) | `15` cards (`0` rows) |
+| `grades/assessments` | `2026–2027` | no (`620/620`) | **yes** (`580/576`) | **yes** (`609/516`) | `15` cards (`0` rows) |
+| `grades/summaries` | `2026–2027` | no (`620/620`) | **yes** (`580/576`) | **yes** (`580/516`) | `15` cards (`0` rows) |
+
+- **Sticky header & pinned first column verification (640+ shots):**
+  - All 12 populated views at 640 / 700 / 744 px: `headerSticky: true`, `headerOpaque: true` (`rgb(241, 250, 242)`), `firstColSticky: true`.
+  - Every sideways-scrolling table set `[data-pinned-x]` on scroll (`pinnedXAttr: true`, `pinnedXWorks: true`, `pinnedXDelta <= 1 px`), applying `.data-table-ruled.table-pin-first[data-pinned-x] > table > tbody > tr > :first-child { background-color: #ffffff }` (CSS `120ms` transition on `td` causes a brief fade-in on first scroll pixel).
+- **Gates with `t640.patch` applied (before restoring branch):**
+  - `node frontend/node_modules/typescript/bin/tsc -b frontend` — **exit `0`**.
+  - `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check.ps1` — **exit `0`** (`390` frontend unit tests, `381/381` mocked E2E tests passed, **0 failing tests**; `e2e/faculty.spec.ts:882` tests at `390 px` phone and `1280 px` desktop, so the `640 px` switch passed without changing any test).
+  - Product files restored via `git restore -- frontend/` immediately afterwards; branch remains clean at the 768 px build.
+- **Review HTML rebuilt & verified:**
+  - Added **"Ruling preview: tables from 640 px"** section (after Breakpoint) to `audit-output/tables-faculty/build-review.mjs` showing 768 build vs 640 build side by side at `744`, `700`, and `640` (plus a `393` unchanged-cards filter tab) with the per-view sideways-scroll note.
+  - Rebuilt `audit-output/tables-faculty/review-before-after.html` and verified with `audit-output/tables-faculty/check-review.mjs` (0 console errors, 0 broken images).
+- **Things that looked notable at 640 px (for Owner & Claude before any `spec.md` change):**
+  1. On Email Management (`student_invites`, `secretary`, `remedial`), `.table-pin-first` pins the first column (`SELECT` checkbox), so when scrolling sideways at `640 px` the checkbox stays pinned while the student name scrolls away.
+  2. `classes/roster-640` breaks email addresses mid-word (`break-all`) across 4–5 lines inside the `600 px` table, and `grades/assessments-640` wraps the `MIDTERM EXAM` badge onto 2 lines.
+  3. On initial sideways scroll, `td` has `transition: background-color 120ms ease` (`frontend/src/index.css:117`), so `[data-pinned-x]` takes 120 ms to reach full opacity on the pinned first column.
+- **T2-640 Doubts (not acted on):** None (preview only; `spec.md` UI-001 untouched awaiting Owner approval).
