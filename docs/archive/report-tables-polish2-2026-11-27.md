@@ -132,3 +132,80 @@ Root cause of "lighter" look: `renderClassCard` renders `<Card>` (`Card.tsx`), w
 ## Doubts (not acted on)
 
 None. All 6 readiness doubts were settled in the brief before the build pass, and no new ambiguity arose during execution.
+
+---
+
+## T3-a rework (2026-11-28)
+
+- **Date:** 2026-11-28
+- **Base SHA:** `1eb8d39e` (detached HEAD on `dentisys-tables-polish2`, preserving T3-b `958b0ff5`, `c62a51b9`, T3-c `d7aa2ce8`, and T3-d `1eb8d39e` untouched)
+- **Commit:** `d4bb3e84` — `feat(ui): Secretary requests: one card per session, flat rows inside (T3)` (tree `d7d8dbf89390`, matches recorded `.check` pass stamp)
+
+### Path chosen per item
+
+| Item | Path | Reason |
+|---|---|---|
+| T3-a rework | `swarm` | Changes product code (`frontend/src/index.css`, `frontend/src/components/FacultyExcusedRequestsPanel.tsx`) together with E2E group locators (`e2e/faculty.spec.ts`); `.agents/rules/dentisys-neon.md` requires separate implementation and test workers with disjoint file ownership. |
+| T3-a demo | `one worker` | Single screenshot/demo job isolated to `audit-output/tables-polish2/`: Before (`1eb8d39e`) and After captures, `review.html` update, `check-review.mjs` check, and PNG inspection. |
+| T3-a report | `direct` | Single archive markdown update (`<= 3` files, `<= 150` lines, docs-only) appended and committed directly by coordinator after gates pass. |
+
+### Worker models
+
+| Worker | Model ID | Scope / Owned files |
+|---|---|---|
+| `t3a-impl` | `gemini-4-neon-low` | `frontend/src/index.css`, `frontend/src/components/FacultyExcusedRequestsPanel.tsx` |
+| `t3a-tests` | `gemini-4-neon-low` | `e2e/faculty.spec.ts` |
+| `t3a-demo` | `gemini-4-neon-low` | `audit-output/tables-polish2/capture.mjs`, `audit-output/tables-polish2/build-review.mjs`, `audit-output/tables-polish2/review.html` |
+
+All three workers were terminated (`swarm kill`) before running `scripts/check.ps1`.
+
+### Changes and `.data-table-ruled-flush`
+
+- **`.data-table-ruled-flush` was needed (`frontend/src/index.css`, `+8`):**
+  - `.data-table-ruled` and `.data-table-ruled.data-table-ruled-clinical` apply outer `border`, `border-top` (2 px green rule), `border-radius: 1rem`, and `box-shadow` directly on the table's scroll wrapper while also styling `> table` children (header tint, bottom rule, hairline row dividers, hover left bar, pinned column).
+  - Added `.data-table-ruled.data-table-ruled-flush` and `.dark .data-table-ruled.data-table-ruled-flush` immediately after `.data-table-ruled-blue` setting `border: 0; border-radius: 0; box-shadow: none;` so the desktop/tablet table sits flush edge-to-edge inside the session card without a second frame.
+- **`frontend/src/components/FacultyExcusedRequestsPanel.tsx` (`groups.map` only, `+5 / -7`):**
+  - Outer session group container changed from `overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700` to `overflow-hidden data-table-ruled data-table-ruled-clinical` (single Faculty green ruled frame: `1rem` radius, `1px` slate border `#e2e8f0`/`#1e293b`, `2px` green top line `#43A047`/`#5fc471`, solid white/`#0f172a` fill, same small shadow).
+  - Kept header band (`bg-slate-50 dark:bg-slate-800/60`, checkbox, label, count, `Approve selected/all`, `Reject selected/all`) unchanged.
+  - Removed the inner `p-2.5 sm:p-3` padding wrapper.
+  - Desktop/tablet (`!isPhone`): added `data-table-ruled-flush` to the `table-pin table-pin-first data-table-ruled data-table-ruled-clinical` wrapper; kept table headers, columns, padding, rules, row hover, sticky first column, `id`, `tabIndex={-1}`, and focus tint untouched.
+  - Phone (`isPhone`, `< 640 px`): replaced `space-y-2.5 sm:hidden` with `divide-y divide-slate-100 dark:divide-slate-800 sm:hidden`, and stripped row card chrome from `<article>` to `px-3 py-3 outline-none focus:bg-sky-50 dark:focus:bg-sky-950/30` (no border, left spine, own background, radius, or shadow; all row content, `id`, `tabIndex={-1}`, handlers, and wording preserved).
+
+### Test changes
+
+- **`e2e/faculty.spec.ts` (`+2 / -2`):**
+  - Line 1659: `panel.locator('div.rounded-xl').filter(...)` -> `panel.locator('div.overflow-hidden.data-table-ruled-clinical').filter(...)`
+  - Line 1660: `panel.locator('div.rounded-xl').filter(...)` -> `panel.locator('div.overflow-hidden.data-table-ruled-clinical').filter(...)`
+  - All desktop `getByRole('row')` locators, `#secretary-request-31` focus assertions, and all other assertions remained untouched.
+
+### Device checks and offline demo
+
+- **Offline review page:** `audit-output/tables-polish2/review.html` (9.1 MB, 110 embedded real-app screenshots, 0 missing).
+  - T3-a section replaced with **Before (T3-a v1 at `1eb8d39e`)** vs **After (one card per session)** across 6 devices (`iPhone 393 light/dark`, `640 × 900 light`, `iPad 820 light`, `Desktop 1920 light/dark`), plus a second T3-a view with the two extra After states (`desktop-1920-light-note.png` with inline Note input open; `desktop-1920-light-approved.png` showing `Approved (2)` with 2 decided rows in `CLIN401 CLINIC-4B · Oct 28, 2026`).
+  - T3-b (`958b0ff5`), T3-c (`d7aa2ce8`), and T3-d (`1eb8d39e`) marked `Approved, committed` with their existing shots preserved.
+- **Automated review check (`check-review.mjs`):** exit 0, `errs: []`, `broken: { overview: 0, t3a: 0, t3b: 0, t3c: 0, t3d: 0 }`, 3-way zoom cycle verified.
+- **Per-shot layout metrics (`after-t3a-rework/metrics.json`, 0 overflows across all 8 After captures and all 6 Before captures):**
+  - `desktop-1920-light` / `desktop-1920-dark`: `scrollWidth=1920 <= 1920`, `tableRows=3`, `cards=0`.
+  - `ipad-820-light`: `scrollWidth=820 <= 820`, `tableRows=3`, `cards=0`.
+  - `bp-640-light`: `scrollWidth=640 <= 640`, `tableRows=3`, `cards=0`.
+  - `iphone-393-light` / `iphone-393-dark`: `scrollWidth=393 <= 393`, `tableRows=0`, `cards=3` (flat `divide-y` `<article>` rows inside the session card).
+  - `desktop-1920-light-note`: `scrollWidth=1920 <= 1920`, `tableRows=3`, inline `Optional note (for reject)` input visible.
+  - `desktop-1920-light-approved`: `scrollWidth=1920 <= 1920`, `tableRows=2` (`approvedTotal=2`).
+- **Coordinator visual inspection:** opened `review-checks/rv-t3a.png` and After PNGs (`iphone-393-light`, `iphone-393-dark`, `desktop-1920-light`, `desktop-1920-dark`, `desktop-1920-light-note`, `desktop-1920-light-approved`) directly; single session frame, flush table, flat phone rows, Note input, and Approved decided rows all confirmed clean.
+
+### Gate results
+
+1. **`node frontend/node_modules/typescript/bin/tsc -b frontend`:** PASS (exit 0).
+2. **Secretary requests E2E (`pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test-e2e.ps1 e2e/faculty.spec.ts -g "Secretary"`):** PASS — 7/7 passed in 11.0s (first attempt, 0 retries). Running bare `npx playwright test` without Vite on `127.0.0.1:15174` fails with `ERR_CONNECTION_REFUSED`, so `scripts/test-e2e.ps1` was used to start/stop the Vite dev server for the focused run.
+3. **`pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check.ps1`:** PASS (exit 0) on the final uncommitted tree (`d7d8dbf89390`, matching commit `d4bb3e84`):
+   - Production Vite build + `tsc -b`: PASS.
+   - Frontend unit tests: 390/390 PASS.
+   - Git hook tests: 4/4 PASS.
+   - Backend PHP lint & contract tests + documentation contract: PASS.
+   - Mocked Playwright E2E: 381/381 PASS on first attempt in 4.7m (0 failures, 0 retries; covers T3-a rework, T3-c `d7aa2ce8`, and T3-d `1eb8d39e`).
+4. **`scripts/check-postgres.ps1`:** not run (no backend, database, sidecar, Docker, or `e2e/live` changes).
+
+### Doubts (not acted on)
+
+None.
+
