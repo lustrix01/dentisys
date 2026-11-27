@@ -1540,58 +1540,58 @@ const handleSendAllStudentInvites = async () => {
                   </button>
                 );
                 return (
-                <Card key={cls.id} className={`p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4 ${historicalClass ? 'border-slate-300/80 dark:border-slate-700' : ''}`}>
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-y-2">
-                      <span className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-clinical-50 dark:bg-clinical-950/40 text-clinical-700 dark:text-clinical-300 text-[10px] font-extrabold uppercase tracking-wider">
-                        {cls.courseCode} &bull; Year {cls.yearLevel}
-                      </span>
-                      <div className={`flex flex-wrap items-center gap-1.5 max-sm:gap-1 lg:max-[1535px]:gap-1 min-w-0 ${historicalClass ? 'ml-auto max-sm:ml-0 max-sm:order-3 max-sm:basis-full lg:max-[1535px]:ml-0 lg:max-[1535px]:order-3 lg:max-[1535px]:basis-full' : ''}`}>
-                        {archivedClass && (reason === 'cancelled' || reason === 'mistake'
-                          ? <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900 text-[9px] font-extrabold uppercase tracking-wider">{reasonLabel}</span>
-                          : <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 text-[9px] font-extrabold uppercase tracking-wider">Completed</span>)}
-                        <span className="whitespace-nowrap text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mr-1 max-sm:mr-0 lg:max-[1535px]:mr-0">
-                          {cls.csName || cls.block}
-                        </span>
-                        {!historicalClass && editButton}
-                        {!historicalClass && (
-                          <button
-                            onClick={() => openArchiveDialog(cls)}
-                            className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                            title="Archive this class section"
-                          >
-                            <Archive className="w-3 h-3" />
-                            <span>Archive</span>
-                          </button>
+                <article key={cls.id} className={`rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-4 sm:p-5 shadow-2xs transition-all hover:shadow-sm dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900 flex flex-col justify-between space-y-3.5 ${historicalClass ? 'border-slate-300/80 dark:border-slate-700' : ''}`}>
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <span className="text-[11px] font-extrabold tracking-wide text-clinical-800 dark:text-clinical-300 whitespace-nowrap">
+                            {cls.courseCode} &bull; Year {cls.yearLevel}
+                          </span>
+                          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                            {cls.csName || cls.block}
+                          </span>
+                        </div>
+                        <h3 className="mt-0.5 text-[15px] font-bold font-heading leading-snug text-slate-800 dark:text-slate-100">
+                          {cls.courseName}
+                        </h3>
+                        {componentsLabel && (
+                          <div className="mt-1.5">
+                            <span className="inline-flex px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-300 text-[10px] font-bold" data-testid="class-course-components">
+                              {componentsLabel}
+                            </span>
+                          </div>
                         )}
                       </div>
-                      {historicalClass && (
-                        <div className="flex ml-1.5 max-sm:ml-auto max-sm:order-2 lg:max-[1535px]:ml-auto lg:max-[1535px]:order-2">{editButton}</div>
-                      )}
-                    </div>
-
-                    <h3 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
-                      {cls.courseName}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {componentsLabel && (
-                        <span className="inline-flex px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-300 text-[10px] font-bold" data-testid="class-course-components">
-                          {componentsLabel}
-                        </span>
-                      )}
-                      {!historicalClass && (() => {
+                      {!historicalClass ? (() => {
                         const chip = gradeStatusChip(cls);
                         return (
-                          <span data-testid="class-grade-status" className={`inline-flex whitespace-nowrap px-2 py-0.5 rounded-md text-[10px] font-bold ${chip.tone}`}>{chip.label}</span>
+                          <span data-testid="class-grade-status" className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold ${chip.tone}`}>
+                            {chip.label}
+                          </span>
                         );
-                      })()}
+                      })() : (reason === 'cancelled' || reason === 'mistake'
+                        ? <span className="shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900">{reasonLabel}</span>
+                        : <span className="shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">Completed</span>)}
                     </div>
 
-                      <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-3.5 h-3.5 text-clinical-600 dark:text-clinical-400 flex-shrink-0" />
-                          <span>{semesterLabel(cls.semester)} &bull; {formatSchoolYear(cls.schoolYear || '2025-2026')}</span>
+                    <div className="rounded-xl bg-slate-50/90 px-3 py-2.5 dark:bg-slate-800/50 space-y-2">
+                      <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                        <div>
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Enrolled</dt>
+                          <dd className="mt-0.5 text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5">
+                            <Users className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span>{studentsLabel(cls.enrolledCount)}</span>
+                          </dd>
                         </div>
+                        <div>
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Term</dt>
+                          <dd className="mt-0.5 text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+                            {semesterLabel(cls.semester)} &middot; {formatSchoolYear(cls.schoolYear || '2025-2026')}
+                          </dd>
+                        </div>
+                      </dl>
+                      <div className="border-t border-slate-200/70 pt-2 dark:border-slate-700/60 space-y-1.5 text-xs text-slate-500 dark:text-slate-400">
                         <div className="flex items-start gap-2">
                           <MapPin className="w-3.5 h-3.5 text-clinical-600 dark:text-clinical-400 flex-shrink-0 mt-0.5" />
                           <div className="space-y-0.5">
@@ -1610,20 +1610,31 @@ const handleSendAllStudentInvites = async () => {
                         </div>
                         {!historicalClass && cls.joinCode && <ClassCardJoinCode code={cls.joinCode} enabled={cls.joinCodeEnabled !== false} />}
                       </div>
-                      {!historicalClass && <RetiredRoomWarning rooms={rooms} names={[cls.lecRoom, cls.labRoom].map(room => room?.replace(/\s+\([A-Z][a-z]{2}\b.*\)$/, '')).concat((cls.meetings ?? []).map(meeting => meeting.room))} />}
-                      {archivedClass && (
-                        <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                          {cls.archiveReason
-                            ? `Archived ${archivedDateLabel} · ${reasonLabel}`
-                            : `Archived automatically when ${formatSchoolYear(cls.schoolYear)} ended`}
-                        </div>
-                      )}
+                    </div>
+
+                    {!historicalClass && <RetiredRoomWarning rooms={rooms} names={[cls.lecRoom, cls.labRoom].map(room => room?.replace(/\s+\([A-Z][a-z]{2}\b.*\)$/, '')).concat((cls.meetings ?? []).map(meeting => meeting.room))} />}
+                    {archivedClass && (
+                      <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                        {cls.archiveReason
+                          ? `Archived ${archivedDateLabel} · ${reasonLabel}`
+                          : `Archived automatically when ${formatSchoolYear(cls.schoolYear)} ended`}
+                      </div>
+                    )}
                   </div>
 
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex max-sm:flex-wrap lg:max-[1535px]:flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
-                      <Users className="w-4 h-4 text-slate-400" />
-                      <span>{studentsLabel(cls.enrolledCount)}</span>
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      {editButton}
+                      {!historicalClass && (
+                        <button
+                          onClick={() => openArchiveDialog(cls)}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                          title="Archive this class section"
+                        >
+                          <Archive className="w-3 h-3" />
+                          <span>Archive</span>
+                        </button>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2 max-sm:gap-1.5">
@@ -1658,7 +1669,7 @@ const handleSendAllStudentInvites = async () => {
                       </button>
                     </div>
                   </div>
-                </Card>
+                </article>
                 );
   };
 
