@@ -124,3 +124,35 @@ All 7 offline self-contained HTML pages verified via `node audit-output/tables-f
 ## Doubts (not acted on)
 
 None.
+
+---
+
+## T2-R: Recapture of Five Empty Views with S.Y. 2025–2026
+
+- **Path chosen:**
+  - Screenshot recapture & visual sweep: **one worker** (`demo-recapture`, `gemini-4-neon-low`, `workspace: "inherit"`) — single read-only/untracked screenshot-set job per `.agents/rules/dentisys-neon.md`.
+  - Revealed visual defect fix (`frontend/src/pages/faculty/RetentionMonitoring.tsx`): **direct** (`1` file, `38+`/`38-` lines, code-only visual fix, no test changes).
+- **Worker models:** `demo-recapture` -> `gemini-4-neon-low`.
+- **Per-tab school year, class, rows, and Before/After comparison (`audit-output/tables-faculty/recapture-selection.json`):**
+
+| View (files) | School year | Class / Course filter | Rows / Phone cards | Before vs After (5 devices) |
+| --- | --- | --- | --- | --- |
+| Retention Status (`retention/watchlist-*`) | `S.Y. 2025–2026` | `All classes` | `2` rows / `2` cards | **5/5 differ** (populated table & green phone cards) |
+| Remedials (`retention/remedials-*`) | `S.Y. 2025–2026` | `All classes` | `2` rows / `2` cards | **5/5 differ** (populated table & green phone cards; old unframed stack replaced) |
+| At-Risk Students (`retention/midterm-*`) | `S.Y. 2025–2026` (probed all S.Y.s & classes) | — (`empty_all_years: true`) | `0` rows / `0` cards | Empty across every school year/class in dev DB (server rule requires complete midterm ≤ 2.5 with no final grade or remedial record); no data faked |
+| Midterm Advisory (`email/midterm_advisory-*`) | `S.Y. 2025–2026` (probed all S.Y.s & classes) | — (`empty_all_years: true`) | `0` rows / `0` cards | **5/5 identical** empty screen across every school year/class in dev DB; no data faked |
+| Scheduled Remedial Notices (`email/remedial-*`) | `S.Y. 2025–2026` | `All courses` | `2` rows / `2` cards | **5/5 differ** (populated table & green phone cards) |
+
+- **Phone scroll framing:** For populated `iphone-393-light` and `iphone-393-dark` views (`retention/watchlist`, `retention/remedials`, `email/remedial`), both Before (`f791ef59`) and After (`9ee8121`) scroll the section `<h2>` to `y = 76 px` so both student rows/cards stay completely inside the `393 × 852` frame below the archived-year banner.
+- **Defects revealed & fixed (`9ee8121`, `fix(ui): Faculty Retention Monitoring table iPad fit, class code wrap and dark disabled button (T2)`):**
+  1. `DMAT-2B` wrapped across two lines (`DMAT-` / `2B`) on iPad 820 in Retention Status -> added `whitespace-nowrap` on Class cells across Retention tables.
+  2. `ACTIONS` column clipped horizontally at iPad 820 on Retention Status (`min-w-[700px]`) and Remedial Progression (`min-w-[820px]`, `flex-nowrap`) -> width-scoped `lg:min-w-*`, tightened `md` padding/font (`lg:` unchanged), and `flex-wrap lg:flex-nowrap` on remedial actions.
+  3. Disabled `+ Remedial` (and disabled remedial action) buttons rendered bright light-gray with faint white text in dark mode (exposed by archived `S.Y. 2025–2026` view-only state) -> added `disabled:bg-slate-200 disabled:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-400`.
+- **Gates rerun on `9ee8121` (`9e8b57a57eda`):**
+  - `node frontend/node_modules/typescript/bin/tsc -b frontend` — **exit `0`**
+  - `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check.ps1` — **exit `0`** (`390` frontend unit tests, `381/381` mocked E2E tests passed; `.check` stamp written for `9e8b57a57eda`; initial run hit one transient CPU-contention timeout in unrelated Grade Weights test `e2e/faculty.spec.ts:2596`, confirmed via `error-context.md`, passed cleanly on rerun).
+- **Review HTML rebuilt & checked:**
+  - `audit-output/tables-faculty/build-review.mjs` updated (`retention` & `email` `gap` notes + Overview `Known gaps`) and rebuilt `audit-output/tables-faculty/review-before-after.html`.
+  - `audit-output/tables-faculty/check-review.mjs` passed (0 console errors, 0 broken images; `rv-retention-phone.png` visually verified).
+  - `audit-output/tables-faculty/build-html.mjs --check` rebuilt the per-page demos (`retention.html`, `email.html`, `index.html`) from the updated shots.
+- **T2-R Doubts (not acted on):** None.
