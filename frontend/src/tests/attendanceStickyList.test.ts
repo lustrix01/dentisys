@@ -3,14 +3,22 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 // Backlog 5.6: roll-call tables scroll inside a bounded box with an opaque sticky header.
+test('../pages/faculty/AttendanceMonitoring.tsx roll-call table has a bounded scroll box and an opaque sticky header', () => {
+  const src = readFileSync(new URL('../pages/faculty/AttendanceMonitoring.tsx', import.meta.url), 'utf8');
+  assert.match(src, /table-pin table-pin-first data-table-ruled data-table-ruled-clinical[^"]*">\s*<table/);
+  assert.match(src, /<thead className="text-\[10px\] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">/);
+  assert.doesNotMatch(src, /backdrop-blur-xs/);
+});
+
+test('../pages/secretary/AttendanceList.tsx roll-call table has a bounded scroll box and an opaque sticky header', () => {
+  const src = readFileSync(new URL('../pages/secretary/AttendanceList.tsx', import.meta.url), 'utf8');
+  const box = /table-pin table-pin-first[^"]*">\s*<table/;
+  assert.match(src, box);
+  assert.match(src, /<thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 /);
+  assert.doesNotMatch(src, /backdrop-blur-xs/);
+});
+
 for (const file of ['../pages/faculty/AttendanceMonitoring.tsx', '../pages/secretary/AttendanceList.tsx']) {
-  test(`${file} roll-call table has a bounded scroll box and an opaque sticky header`, () => {
-    const src = readFileSync(new URL(file, import.meta.url), 'utf8');
-    const box = /table-pin table-pin-first[^"]*">\s*<table/;
-    assert.match(src, box);
-    assert.match(src, /<thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 /);
-    assert.doesNotMatch(src, /backdrop-blur-xs/);
-  });
   test(`${file} scheduled pill detail line is not indented under a dotless title`, () => {
     const src = readFileSync(new URL(file, import.meta.url), 'utf8');
     assert.doesNotMatch(src, /pl-\[14px\][^"]*text-indigo-700\/90/);

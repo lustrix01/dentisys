@@ -275,14 +275,6 @@ export const AttendanceMonitoring: React.FC = () => {
   const [showPastRevoked, setShowPastRevoked] = useState(false);
   const [pastCounts, setPastCounts] = useState<{ csId: string; counts: Map<string, SessionCounts> | null } | null>(null);
   const [viewMode, setViewMode] = useState<'classes' | 'worksheet'>('classes');
-  // Phones get stacked roll-call rows instead of the sideways-scrolling table (same as Secretary).
-  const [isPhone, setIsPhone] = useState(() => window.matchMedia('(max-width: 767px)').matches);
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)');
-    const onChange = () => setIsPhone(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
 
   const handleOpenClassSessionModal = (classItem: FacultyClassItem) => {
     setSelectedCourseId(classItem.courseId);
@@ -1753,102 +1745,139 @@ export const AttendanceMonitoring: React.FC = () => {
             </div>
           </div>
 
-          {isPhone ? (
-            // Phones: one stacked block per student instead of a sideways-scrolling table (matches Secretary).
-            <div className="max-h-[560px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60 border border-slate-200/80 dark:border-slate-800 rounded-xl">
-              {filteredRoster.length === 0 ? (
-                <div className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{emptyRosterText}</h3></div>
-              ) : (
-                filteredRoster.map(item => (
-                  <div key={item.enrollmentId} className="space-y-3 p-4 text-xs">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <span className="block break-words font-bold text-slate-800 dark:text-slate-100 text-sm">{item.studentName}</span>
-                        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{item.studentNumber} • Year {item.yearLevel || 1}</span>
-                      </div>
-                      <div className="shrink-0">{actionControl(item)}</div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                      <div data-testid="attendance-status"><span className="sr-only">Attendance Status: </span>{statusChip(item)}</div>
-                      <div className="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200">
-                        <Clock className="w-4 h-4 text-slate-400 stroke-[2.2]" />
-                        <span><span className="sr-only">Check-In Time: </span>{item.timeRecorded ? formatCheckInTime(item.timeRecorded) : '—'}</span>
-                      </div>
-                      {item.status && <div><span className="sr-only">Verification Method: </span>{methodChip(item)}</div>}
-                    </div>
-                  </div>
-                ))
-              )}
+          {filteredRoster.length === 0 ? (
+            <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 px-6 py-14 text-center">
+              <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+              <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{emptyRosterText}</h3>
             </div>
           ) : (
-          /* Roster Table: Bounded Scroll Container with Sticky Header */
-          <div className="table-pin table-pin-first border border-slate-200/80 dark:border-slate-800 rounded-xl">
-            <table className="w-full min-w-[640px] text-left text-xs border-collapse">
-              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 z-10">
-                <tr>
-                  <th className="py-3 px-4 sm:py-4 sm:px-6" aria-sort={ariaSort(rosterSort, 'studentName')}><SortableHeader label="Student Details" sortKey="studentName" sort={rosterSort} onSort={setRosterSort} /></th>
-                  <th className="py-3 px-4 sm:py-4 sm:px-6">Check-In Time</th>
-                  <th className="py-3 px-4 sm:py-4 sm:px-6">Verification Method</th>
-                  <th className="py-3 px-4 sm:py-4 sm:px-6" aria-sort={ariaSort(rosterSort, 'status')}><SortableHeader label="Attendance Status" sortKey="status" sort={rosterSort} onSort={setRosterSort} /></th>
-                  <th className="py-3 px-4 sm:py-4 sm:px-6 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {filteredRoster.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-14 text-center">
-                      <Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
-                      <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{emptyRosterText}</h3>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredRoster.map(item => (
-                    <tr
-                      key={item.enrollmentId}
-                      className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
-                    >
-                      {/* Column 1: STUDENT DETAILS */}
-                      <td className="py-3 px-4 sm:py-4 sm:px-6">
-                        <span className="font-bold text-slate-800 dark:text-slate-100 block text-xs sm:text-sm">
-                          {item.studentName}
-                        </span>
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                          {item.studentNumber} • Year {item.yearLevel || 1}
-                        </span>
-                      </td>
-
-                      {/* Column 2: CHECK-IN TIME */}
-                      <td className="py-3 px-4 sm:py-4 sm:px-6">
-                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-bold text-xs sm:text-sm">
-                          <Clock className="w-4 h-4 text-slate-400 stroke-[2.2]" />
-                          <span>
-                            {item.timeRecorded
-                              ? formatCheckInTime(item.timeRecorded)
-                              : '—'}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Column 3: VERIFICATION METHOD */}
-                      <td className="py-3 px-4 sm:py-4 sm:px-6">
-                        {methodChip(item)}
-                      </td>
-
-                      {/* Column 4: ATTENDANCE STATUS */}
-                      <td className="py-3 px-4 sm:py-4 sm:px-6" data-testid="attendance-status">
-                        {statusChip(item)}
-                      </td>
-
-                      {/* Column 5: ACTIONS */}
-                      <td className="py-3 px-4 sm:py-4 sm:px-6 text-right">
-                        {actionControl(item)}
-                      </td>
+            <>
+              {/* Desktop/tablet: ruled clinical table */}
+              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                <table className="w-full min-w-[600px] text-left text-xs">
+                  <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <tr>
+                      <th className="pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4" aria-sort={ariaSort(rosterSort, 'studentName')}><SortableHeader label="Student Details" sortKey="studentName" sort={rosterSort} onSort={setRosterSort} /></th>
+                      <th className="border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Check-In Time</th>
+                      <th className="px-2 py-2.5 xl:px-4">Verification Method</th>
+                      <th className="px-2 py-2.5 xl:px-4" aria-sort={ariaSort(rosterSort, 'status')}><SortableHeader label="Attendance Status" sortKey="status" sort={rosterSort} onSort={setRosterSort} /></th>
+                      <th className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 text-right dark:border-slate-800 xl:pl-4 xl:pr-5">Actions</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody className="font-medium">
+                    {filteredRoster.map(item => (
+                      <tr key={item.enrollmentId}>
+                        {/* Column 1: STUDENT DETAILS */}
+                        <td className="pl-3.5 pr-2 py-3 xl:pl-5 xl:pr-4">
+                          <span className="font-bold text-slate-800 dark:text-slate-100 block text-xs sm:text-sm">
+                            {item.studentName}
+                          </span>
+                          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                            <span className="whitespace-nowrap font-bold text-clinical-800 dark:text-clinical-300">{item.studentNumber}</span> · Year {item.yearLevel || 1}
+                          </span>
+                        </td>
+
+                        {/* Column 2: CHECK-IN TIME */}
+                        <td className="border-l border-slate-100 px-2 py-3 dark:border-slate-800/80 xl:px-4">
+                          <div className="flex items-center gap-2 whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-200 font-bold text-xs sm:text-sm">
+                            <Clock className="w-4 h-4 shrink-0 text-slate-400 stroke-[2.2]" />
+                            <span>
+                              {item.timeRecorded
+                                ? formatCheckInTime(item.timeRecorded)
+                                : '—'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Column 3: VERIFICATION METHOD */}
+                        <td className="px-2 py-3 xl:px-4">
+                          {methodChip(item)}
+                        </td>
+
+                        {/* Column 4: ATTENDANCE STATUS */}
+                        <td className="px-2 py-3 xl:px-4" data-testid="attendance-status">
+                          {statusChip(item)}
+                        </td>
+
+                        {/* Column 5: ACTIONS */}
+                        <td className="border-l border-slate-100 pl-2 pr-3.5 py-2 text-right dark:border-slate-800/80 xl:pl-4 xl:pr-5">
+                          {actionControl(item)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Phone (< 768 px): stacked cards */}
+              <div className="space-y-2.5 md:hidden">
+                {filteredRoster.map(item => (
+                  <article
+                    key={item.enrollmentId}
+                    className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-clinical-800 dark:text-clinical-300">
+                          {item.studentNumber} · Year {item.yearLevel || 1}
+                        </p>
+                        <h3 className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100 break-words">
+                          {item.studentName}
+                        </h3>
+                      </div>
+                      <div className="shrink-0 flex flex-col items-end gap-1" data-testid="attendance-status">
+                        <span className="sr-only">Attendance Status: </span>
+                        {item.status ? (
+                          <span
+                            className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              item.status === 'present'
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                : item.status === 'late'
+                                ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                                : item.status === 'absent'
+                                ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+                                : 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'
+                            }`}
+                          >
+                            {STATUS_LABELS[item.status as SupportedStatus] ?? item.status}
+                          </span>
+                        ) : (
+                          <span className="shrink-0 whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            Not recorded
+                          </span>
+                        )}
+                        {pendingByRow[`${item.studentId}:${item.attendanceSessionId ?? ''}`] && (
+                          <button
+                            type="button"
+                            onClick={() => openSecretaryRequest(pendingByRow[`${item.studentId}:${item.attendanceSessionId ?? ''}`])}
+                            className="block rounded-full border border-dashed border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 px-2.5 py-0.5 text-[11px] font-bold text-sky-700 dark:text-sky-300 cursor-pointer"
+                          >
+                            Request pending
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                      <div className="min-w-0">
+                        <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Check-In Time</dt>
+                        <dd className="mt-0.5 whitespace-nowrap text-xs font-medium tabular-nums text-slate-700 dark:text-slate-200">
+                          {item.timeRecorded ? formatCheckInTime(item.timeRecorded) : '—'}
+                        </dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Verification Method</dt>
+                        <dd className="mt-0.5 text-xs font-medium text-slate-700 dark:text-slate-200">
+                          {item.status ? attendanceMethodLabel(item.verificationMethod, item.overrideReason) : '—'}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="mt-2 flex justify-end gap-1.5">
+                      {actionControl(item)}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </>
           )}
           </>)}
         </Card>
