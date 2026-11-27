@@ -931,6 +931,95 @@ export const RetentionMonitoring: React.FC = () => {
     setIsPolicyOpen(true);
   };
 
+  const renderWatchlistRemedialAction = (record: FacultyRetentionRecord) => {
+    const blocked = remedialWriteBlockedReason(record);
+    const disabled = !canScheduleRecord(record) || Boolean(blocked);
+    const titleText = blocked
+      ?? (!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam');
+    return (
+      <button type="button" onClick={() => openSchedule(record)} disabled={disabled} title={titleText} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button>
+    );
+  };
+
+  const renderRemedialStageBadge = (stage: RemedialStage, extraClass = '') => (
+    <span className={`inline-flex rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
+      stage === 'passed' || stage === 'cost_recovery_passed'
+        ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+        : stage === 'cost_recovery_required' || stage === 'cost_recovery_failed'
+          ? 'border-rose-200/60 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+          : stage === 'legacy_unclassified'
+            ? 'border-slate-200 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+            : 'border-amber-200/60 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+    } ${extraClass}`}>
+      {stage === 'passed' || stage === 'cost_recovery_passed'
+        ? 'Cleared'
+        : stageLabel(stage)}
+    </span>
+  );
+
+  const renderRemedialActions = (row: RetentionRemedialRow, wrap: boolean) => {
+    const blocked = remedialWriteBlockedReason(row.record);
+    const hasWriteAction = (canScheduleRecord(row.record) && !isPastYearRecord(row.record))
+      || Boolean(pendingAttemptNumber(row.progression) && row.record.state !== 'archived')
+      || (row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived');
+    return (
+      <div className="space-y-1">
+        <div className={`flex items-center justify-end gap-1.5 ${wrap ? 'flex-wrap' : 'flex-nowrap'}`}>
+          <button
+            type="button"
+            onClick={() => openPolicyProgression(row.record)}
+            className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+            title="View complete attempt history and progression details"
+          >
+            Details <ChevronRight className="h-3 w-3" />
+          </button>
+          {canScheduleRecord(row.record) && !isPastYearRecord(row.record) && (
+            <button
+              type="button"
+              disabled={Boolean(blocked)}
+              title={blocked ?? undefined}
+              onClick={() => openSchedule(row.record)}
+              className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
+            >
+              Schedule attempt {allowedAttemptNumbers(row.progression)[0]}
+            </button>
+          )}
+          {pendingAttemptNumber(row.progression) && row.record.state !== 'archived' && (
+            <button
+              type="button"
+              disabled={Boolean(blocked)}
+              title={blocked ?? undefined}
+              onClick={() => openResolve(row)}
+              className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
+            >
+              Grade attempt {pendingAttemptNumber(row.progression)}
+            </button>
+          )}
+          {row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived' && (
+            <button
+              type="button"
+              disabled={Boolean(blocked)}
+              title={blocked ?? undefined}
+              onClick={() => openCostRecovery(row)}
+              className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
+            >
+              Record cost recovery
+            </button>
+          )}
+          {row.progression.legacyUnclassified && (
+            <span className="text-[10px] text-amber-600" title="Legacy remedial data must be classified by the server before another write">
+              Legacy / unclassified
+            </span>
+          )}
+          <span className="sr-only" title="No approved authoritative delete endpoint exists">Removal unavailable</span>
+        </div>
+        {blocked && hasWriteAction && (
+          <p className={`text-[10px] font-medium text-amber-700 dark:text-amber-300 ${wrap ? 'text-right' : 'whitespace-normal text-right'}`}>{blocked}</p>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
 
@@ -1104,59 +1193,7 @@ export const RetentionMonitoring: React.FC = () => {
             </div>
           )}
 
-          <div className="table-pin table-pin-first table-pin-blocks">
-            <table className="w-full text-left text-xs max-md:block">
-              <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 max-md:hidden">
-                <tr>
-                  <th className="p-3" aria-sort={ariaSort(midSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={midSort} onSort={setMidSort} /></th>
-                  <th className="p-3" aria-sort={ariaSort(midSort, 'grade')}><SortableHeader label="Final Midterm Grade" sortKey="grade" sort={midSort} onSort={setMidSort} /></th>
-                  <th className="p-3">Class</th>
-                  <th className="p-3">Risk Standing</th>
-                  <th className="p-3">Status</th>
-                </tr>
-              </thead>
-              <tbody className="max-md:block">
-                {sortedMidterm.map(record => {
-                  return (
-                    <tr key={record.enrollmentId} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
-                      <td className="p-3 font-bold max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm">
-                        <div className="min-w-0">
-                          <span className="sr-only md:hidden">Student: </span>{record.studentName}
-                          <span className="block text-[10px] font-normal text-slate-500 dark:text-slate-400 max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{record.studentNumber}</span>
-                        </div>
-                      </td>
-                      <td className="p-3 max-md:order-2 max-md:p-0">
-                        <span className="sr-only md:hidden">Final Midterm Grade: </span>
-                        {isFiniteNumber(record.midtermPercentage) ? (
-                          <div className="font-mono">
-                            <span className="font-bold">{record.midtermPercentage.toFixed(2)}%</span>
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400 ml-1.5 font-normal">
-                              (Final Midterm grade: <GradeValue percentage={record.midtermPercentage} raw={record.midtermRawPercentage} period="Midterm">{percentageToGWA(record.midtermPercentage, 'Midterm').toFixed(1)}</GradeValue>)
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-500 dark:text-slate-400 italic">Incomplete assessments</span>
-                        )}
-                      </td>
-                      <td className="p-3 max-md:order-3 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Class: </span>{record.className}</td>
-                      <td className="p-3 max-md:order-4 max-md:p-0 max-md:empty:hidden">
-                        {isMidtermAtRisk(record) && (
-                          <span className="inline-flex rounded-full px-2 py-1 text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300">At risk</span>
-                        )}
-                      </td>
-                      <td className="p-3 max-md:order-5 max-md:ml-auto max-md:p-0">
-                        <span className="sr-only md:hidden">Status: </span>
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60">
-                          {watchlistStatusText(record)}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {midtermDisplayRecords.length === 0 && (
+          {midtermDisplayRecords.length === 0 ? (
             isLoading ? (
               <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading records…</div>
             ) : (
@@ -1178,6 +1215,98 @@ export const RetentionMonitoring: React.FC = () => {
               )}
             </div>
             )
+          ) : (
+            <>
+              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                <table className="w-full min-w-[650px] text-left text-xs">
+                  <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <tr>
+                      <th scope="col" className="whitespace-nowrap pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4" aria-sort={ariaSort(midSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={midSort} onSort={setMidSort} /></th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4" aria-sort={ariaSort(midSort, 'grade')}><SortableHeader label="Final Midterm Grade" sortKey="grade" sort={midSort} onSort={setMidSort} align="right" /></th>
+                      <th scope="col" className="border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Class</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Risk Standing</th>
+                      <th scope="col" className="whitespace-nowrap pl-2 pr-3.5 py-2.5 xl:pl-4 xl:pr-5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedMidterm.map(record => (
+                      <tr key={record.enrollmentId}>
+                        <td className="pl-3.5 pr-2 py-3 xl:pl-5 xl:pr-4">
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-800 dark:text-slate-100">{record.studentName}</div>
+                            <span className="mt-0.5 block whitespace-nowrap text-[11px] font-bold text-clinical-800 dark:text-clinical-300">{record.studentNumber}</span>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right tabular-nums dark:border-slate-800/80 xl:px-4">
+                          {isFiniteNumber(record.midtermPercentage) ? (
+                            <div>
+                              <span className="font-bold text-slate-800 dark:text-slate-100">{record.midtermPercentage.toFixed(2)}%</span>
+                              <span className="ml-1.5 text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                                (Final Midterm grade: <GradeValue percentage={record.midtermPercentage} raw={record.midtermRawPercentage} period="Midterm">{percentageToGWA(record.midtermPercentage, 'Midterm').toFixed(1)}</GradeValue>)
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="italic text-slate-500 dark:text-slate-400">Incomplete assessments</span>
+                          )}
+                        </td>
+                        <td className="border-l border-slate-100 px-2 py-3 font-medium text-slate-700 dark:border-slate-800/80 dark:text-slate-200 xl:px-4">{record.className}</td>
+                        <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 dark:border-slate-800/80 xl:px-4">
+                          {isMidtermAtRisk(record) && (
+                            <span className="inline-flex rounded-full px-2 py-1 text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300">At risk</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap pl-2 pr-3.5 py-3 xl:pl-4 xl:pr-5">
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60">
+                            {watchlistStatusText(record)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="space-y-2.5 md:hidden">
+                {sortedMidterm.map(record => (
+                  <article key={record.enrollmentId} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-clinical-800 dark:text-clinical-300">{record.studentNumber}</p>
+                        <h3 className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100">{record.studentName}</h3>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-1 min-[480px]:shrink-0">
+                        {isMidtermAtRisk(record) && (
+                          <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 min-[480px]:whitespace-nowrap">At risk</span>
+                        )}
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 min-[480px]:whitespace-nowrap">
+                          {watchlistStatusText(record)}
+                        </span>
+                      </div>
+                    </div>
+                    <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                      <div className="col-span-2 min-w-0">
+                        <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Final Midterm Grade</dt>
+                        <dd className="mt-0.5 text-xs tabular-nums text-slate-800 dark:text-slate-100">
+                          {isFiniteNumber(record.midtermPercentage) ? (
+                            <>
+                              <span className="font-bold">{record.midtermPercentage.toFixed(2)}%</span>
+                              <span className="ml-1.5 text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                                (Final Midterm grade: <GradeValue percentage={record.midtermPercentage} raw={record.midtermRawPercentage} period="Midterm">{percentageToGWA(record.midtermPercentage, 'Midterm').toFixed(1)}</GradeValue>)
+                              </span>
+                            </>
+                          ) : (
+                            <span className="italic text-slate-500 dark:text-slate-400">Incomplete assessments</span>
+                          )}
+                        </dd>
+                      </div>
+                      <div className="col-span-2 min-w-0">
+                        <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Class</dt>
+                        <dd className="mt-0.5 text-xs font-medium text-slate-700 dark:text-slate-200">{record.className}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                ))}
+              </div>
+            </>
           )}
           <p className="text-[11px] text-slate-500">Midterm scores provide an early review. Final retention decisions appear in Retention Status.</p>
         </Card>
@@ -1203,32 +1332,77 @@ export const RetentionMonitoring: React.FC = () => {
             // Outside the table so the message is not centred across a table wider than a phone screen.
             isLoading ? <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading retention records…</div> : <div className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{selectedClassId !== 'all' || selectedSubjectCode !== 'all' || searchQuery.trim() ? 'No students needing retention action match these filters.' : 'No students need retention action in this school year.'}</h3></div>
           ) : (
-          <div className="table-pin table-pin-first table-pin-blocks">
-            <table className="w-full text-left text-xs border-collapse max-md:block">
-              <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4" aria-sort={ariaSort(watchSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={watchSort} onSort={setWatchSort} /></th><th className="py-3 px-4 text-center" aria-sort={ariaSort(watchSort, 'grade')}><SortableHeader label="Course Grade" sortKey="grade" sort={watchSort} onSort={setWatchSort} /></th><th className="py-3 px-4">Student No.</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4" aria-sort={ariaSort(watchSort, 'state')}><SortableHeader label="State" sortKey="state" sort={watchSort} onSort={setWatchSort} /></th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
+            <>
+              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                <table className="w-full min-w-[700px] text-left text-xs">
+                  <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <tr>
+                      <th scope="col" className="whitespace-nowrap pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4" aria-sort={ariaSort(watchSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={watchSort} onSort={setWatchSort} /></th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4" aria-sort={ariaSort(watchSort, 'grade')}><SortableHeader label="Course Grade" sortKey="grade" sort={watchSort} onSort={setWatchSort} align="right" /></th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Student No.</th>
+                      <th scope="col" className="whitespace-nowrap px-2 py-2.5 xl:px-4">Subject</th>
+                      <th scope="col" className="px-2 py-2.5 xl:px-4">Class</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4" aria-sort={ariaSort(watchSort, 'state')}><SortableHeader label="State" sortKey="state" sort={watchSort} onSort={setWatchSort} /></th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 text-right dark:border-slate-800 xl:pl-4 xl:pr-5">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedWatchlist.map(record => (
+                      <tr key={record.enrollmentId}>
+                        <td className="pl-3.5 pr-2 py-3 font-bold text-slate-800 dark:text-slate-100 xl:pl-5 xl:pr-4">{textOrUnavailable(record.studentName, 'Student name unavailable')}</td>
+                        <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right tabular-nums dark:border-slate-800/80 xl:px-4">
+                          <div className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage} grade={record.gwa}>{formatGrade(record.gwa)}</GradeValue> : 'Grade unavailable'}</div>
+                          <span className="block text-[10px] font-normal text-slate-500 dark:text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span>
+                        </td>
+                        <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 font-bold text-clinical-800 dark:border-slate-800/80 dark:text-clinical-300 xl:px-4">{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
+                        <td className="whitespace-nowrap px-2 py-3 font-bold text-clinical-800 dark:text-clinical-300 xl:px-4">{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
+                        <td className="px-2 py-3 font-medium text-slate-700 dark:text-slate-200 xl:px-4">{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
+                        <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 dark:border-slate-800/80 xl:px-4">
+                          <button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1.5 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button>
+                        </td>
+                        <td className="whitespace-nowrap border-l border-slate-100 pl-2 pr-3.5 py-2 text-right dark:border-slate-800/80 xl:pl-4 xl:pr-5">
+                          <div className="flex items-center justify-end gap-1.5">{renderWatchlistRemedialAction(record)}</div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="space-y-2.5 md:hidden">
                 {sortedWatchlist.map(record => (
-                  <tr key={record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm"><span className="sr-only md:hidden">Student: </span>{textOrUnavailable(record.studentName, 'Student name unavailable')}</td>
-                    <td className="py-3.5 px-4 text-center font-mono max-md:order-2 max-md:p-0 max-md:text-left"><span className="md:hidden font-sans text-slate-500 dark:text-slate-400">Course grade </span>{isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage} grade={record.gwa}>{formatGrade(record.gwa)}</GradeValue> : 'Grade unavailable'}<span className="block text-[10px] text-slate-500 dark:text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
-                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-mono max-md:order-3 max-md:p-0 max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student Number: </span>{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
-                    <td className="py-3.5 px-4 font-mono max-md:order-4 max-md:p-0"><span className="sr-only md:hidden">Subject: </span>{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
-                    <td className="py-3.5 px-4 max-md:order-5 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Class: </span>{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
-                    <td className="py-3.5 px-4 max-md:order-6 max-md:p-0"><span className="sr-only md:hidden">State: </span><button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1.5 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button></td>
-                    <td className="py-3.5 px-4 text-right max-md:order-7 max-md:ml-auto max-md:p-0"><div className="flex items-center justify-end gap-1.5">{(() => {
-                      const blocked = remedialWriteBlockedReason(record);
-                      const disabled = !canScheduleRecord(record) || Boolean(blocked);
-                      const titleText = blocked
-                        ?? (!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam');
-                      return (
-                        <button type="button" onClick={() => openSchedule(record)} disabled={disabled} title={titleText} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button>
-                      );
-                    })()}</div></td>
-                  </tr>
+                  <article key={record.enrollmentId} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-clinical-800 dark:text-clinical-300">{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</p>
+                        <h3 className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100">{textOrUnavailable(record.studentName, 'Student name unavailable')}</h3>
+                      </div>
+                      <button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300 min-[480px]:shrink-0 min-[480px]:whitespace-nowrap" title="View retention policy progression">
+                        <span>{renderStatusBadge(record.state)}</span>
+                        <ChevronRight className="h-3 w-3 shrink-0 text-slate-400" />
+                      </button>
+                    </div>
+                    <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                      <div className="min-w-0">
+                        <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Course Grade</dt>
+                        <dd className="mt-0.5 text-xs font-bold tabular-nums text-slate-800 dark:text-slate-100">
+                          {isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage} grade={record.gwa}>{formatGrade(record.gwa)}</GradeValue> : 'Grade unavailable'}
+                          <span className="ml-1 text-[11px] font-normal text-slate-500 dark:text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span>
+                        </dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Subject</dt>
+                        <dd className="mt-0.5 whitespace-nowrap text-xs font-bold text-clinical-800 dark:text-clinical-300">{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</dd>
+                      </div>
+                      <div className="col-span-2 min-w-0">
+                        <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Class</dt>
+                        <dd className="mt-0.5 text-xs font-medium text-slate-700 dark:text-slate-200">{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</dd>
+                      </div>
+                    </dl>
+                    <div className="mt-2 flex justify-end gap-1.5">{renderWatchlistRemedialAction(record)}</div>
+                  </article>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            </>
           )}
         </Card>
       )}
@@ -1259,121 +1433,94 @@ export const RetentionMonitoring: React.FC = () => {
             // Outside the table so the message is not centred across a table wider than a phone screen.
             isLoading ? <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading remedial records…</div> : <div className="px-6 py-14 text-center"><Search className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No remedial records match the selected filters.</h3></div>
           ) : (
-          <div className="table-pin table-pin-first table-pin-blocks">
-            <table className="w-full min-w-[1080px] table-fixed text-left text-xs border-collapse max-md:min-w-0 max-md:table-auto max-md:block">
-              <colgroup className="max-md:hidden"><col style={{ width: '20%' }} /><col style={{ width: '10%' }} /><col style={{ width: '17%' }} /><col style={{ width: '12%' }} /><col style={{ width: '22%' }} /><col style={{ width: '19%' }} /></colgroup>
-              <thead className="max-md:hidden"><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-3" aria-sort={ariaSort(remSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={remSort} onSort={setRemSort} /></th><th className="py-3 px-3 text-center">Original Grade</th><th className="py-3 px-3">Subject / Class</th><th className="py-3 px-3 text-center">Attempts</th><th className="py-3 px-3" aria-sort={ariaSort(remSort, 'stage')}><SortableHeader label="Current Stage" sortKey="stage" sort={remSort} onSort={setRemSort} /></th><th className="py-3 px-3">Actions</th></tr></thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium max-md:block">
-                {sortedRemedials.map(row => (
-                  <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1.5 max-md:py-3.5">
-                    <td className="py-3.5 px-3 font-bold text-slate-800 dark:text-slate-100 max-md:order-1 max-md:w-full max-md:p-0 max-md:text-sm">
-                      <div className="min-w-0">
-                        <span className="sr-only md:hidden">Student: </span>{textOrUnavailable(row.record.studentName, 'Student name unavailable')}
-                        <span className="block text-[10px] text-slate-500 dark:text-slate-400 font-mono max-md:whitespace-nowrap"><span className="sr-only md:hidden">Student number: </span>{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-3 text-center font-bold text-slate-800 dark:text-slate-100 max-md:order-2 max-md:p-0 max-md:text-left"><span className="md:hidden font-normal text-slate-500 dark:text-slate-400">Original grade </span>{isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage} grade={row.record.gwa}>{formatGrade(row.record.gwa)}</GradeValue> : <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Grade unavailable</span>}</td>
-                    <td className="py-3.5 px-3 max-md:order-3 max-md:w-full max-md:p-0"><span className="sr-only md:hidden">Subject / Class: </span><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-500 dark:text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
-                    <td className="py-3.5 px-3 text-center max-md:order-4 max-md:w-full max-md:p-0 max-md:text-left">
-                      <span className="sr-only md:hidden">Attempts: </span>
-                      {(() => {
-                        const activeAttemptNumber = row.progression.attempts.length === 2
-                          ? 2
-                          : (row.progression.attempts[0]?.attemptNumber ?? 1);
-                        return (
-                          <div className="font-bold text-slate-800 dark:text-slate-200">
-                            Attempt {activeAttemptNumber}
-                          </div>
-                        );
-                      })()}
-                    </td>
-                    <td className="py-3.5 px-3 max-md:order-5 max-md:w-full max-md:p-0">
-                      <span className="sr-only md:hidden">Current Stage: </span>
-                      <div className="flex items-center gap-2 max-md:flex-wrap">
-                        <span className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
-                          row.progression.stage === 'passed' || row.progression.stage === 'cost_recovery_passed'
-                            ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                            : row.progression.stage === 'cost_recovery_required' || row.progression.stage === 'cost_recovery_failed'
-                              ? 'border-rose-200/60 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
-                              : row.progression.stage === 'legacy_unclassified'
-                                ? 'border-slate-200 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                                : 'border-amber-200/60 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
-                        }`}>
-                          {row.progression.stage === 'passed' || row.progression.stage === 'cost_recovery_passed'
-                            ? 'Cleared'
-                            : stageLabel(row.progression.stage)}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-3 max-md:order-6 max-md:w-full max-md:p-0">
-                      {(() => {
-                        const blocked = remedialWriteBlockedReason(row.record);
-                        const hasWriteAction = (canScheduleRecord(row.record) && !isPastYearRecord(row.record))
-                          || Boolean(pendingAttemptNumber(row.progression) && row.record.state !== 'archived')
-                          || (row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived');
-                        return (
-                          <div className="space-y-1">
-                            <div className="flex flex-nowrap items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => openPolicyProgression(row.record)}
-                                className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
-                                title="View complete attempt history and progression details"
-                              >
-                                Details <ChevronRight className="h-3 w-3" />
-                              </button>
-                              {canScheduleRecord(row.record) && !isPastYearRecord(row.record) && (
-                                <button
-                                  type="button"
-                                  disabled={Boolean(blocked)}
-                                  title={blocked ?? undefined}
-                                  onClick={() => openSchedule(row.record)}
-                                  className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
-                                >
-                                  Schedule attempt {allowedAttemptNumbers(row.progression)[0]}
-                                </button>
-                              )}
-                              {pendingAttemptNumber(row.progression) && row.record.state !== 'archived' && (
-                                <button
-                                  type="button"
-                                  disabled={Boolean(blocked)}
-                                  title={blocked ?? undefined}
-                                  onClick={() => openResolve(row)}
-                                  className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
-                                >
-                                  Grade attempt {pendingAttemptNumber(row.progression)}
-                                </button>
-                              )}
-                              {row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived' && (
-                                <button
-                                  type="button"
-                                  disabled={Boolean(blocked)}
-                                  title={blocked ?? undefined}
-                                  onClick={() => openCostRecovery(row)}
-                                  className="shrink-0 whitespace-nowrap px-2 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-[10px] transition-all cursor-pointer shadow-xs"
-                                >
-                                  Record cost recovery
-                                </button>
-                              )}
-                              {row.progression.legacyUnclassified && (
-                                <span className="text-[10px] text-amber-600" title="Legacy remedial data must be classified by the server before another write">
-                                  Legacy / unclassified
-                                </span>
-                              )}
-                              <span className="sr-only" title="No approved authoritative delete endpoint exists">Removal unavailable</span>
+            <>
+              <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                <table className="w-full min-w-[820px] text-left text-xs">
+                  <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <tr>
+                      <th scope="col" className="whitespace-nowrap pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4" aria-sort={ariaSort(remSort, 'student')}><SortableHeader label="Student" sortKey="student" sort={remSort} onSort={setRemSort} /></th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4">Original Grade</th>
+                      <th scope="col" className="border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Subject / Class</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4">Attempts</th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4" aria-sort={ariaSort(remSort, 'stage')}><SortableHeader label="Current Stage" sortKey="stage" sort={remSort} onSort={setRemSort} /></th>
+                      <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 text-right dark:border-slate-800 xl:pl-4 xl:pr-5">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedRemedials.map(row => {
+                      const activeAttemptNumber = row.progression.attempts.length === 2
+                        ? 2
+                        : (row.progression.attempts[0]?.attemptNumber ?? 1);
+                      return (
+                        <tr key={row.record.enrollmentId}>
+                          <td className="pl-3.5 pr-2 py-3 xl:pl-5 xl:pr-4">
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}</div>
+                              <span className="mt-0.5 block whitespace-nowrap text-[11px] font-bold text-clinical-800 dark:text-clinical-300">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span>
                             </div>
-                            {blocked && hasWriteAction && (
-                              <p className="text-[10px] font-medium text-amber-700 dark:text-amber-300">{blocked}</p>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                          </td>
+                          <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right font-bold tabular-nums text-slate-800 dark:border-slate-800/80 dark:text-slate-100 xl:px-4">
+                            {isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage} grade={row.record.gwa}>{formatGrade(row.record.gwa)}</GradeValue> : <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Grade unavailable</span>}
+                          </td>
+                          <td className="border-l border-slate-100 px-2 py-3 dark:border-slate-800/80 xl:px-4">
+                            <span className="whitespace-nowrap font-bold text-clinical-800 dark:text-clinical-300">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span>
+                            <span className="mt-0.5 block text-[11px] font-medium text-slate-500 dark:text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span>
+                          </td>
+                          <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right font-bold tabular-nums text-slate-800 dark:border-slate-800/80 dark:text-slate-200 xl:px-4">
+                            Attempt {activeAttemptNumber}
+                          </td>
+                          <td className="border-l border-slate-100 px-2 py-3 dark:border-slate-800/80 xl:px-4">
+                            {renderRemedialStageBadge(row.progression.stage)}
+                          </td>
+                          <td className="whitespace-nowrap border-l border-slate-100 pl-2 pr-3.5 py-2 dark:border-slate-800/80 xl:pl-4 xl:pr-5">
+                            {renderRemedialActions(row, false)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="space-y-2.5 md:hidden">
+                {sortedRemedials.map(row => {
+                  const activeAttemptNumber = row.progression.attempts.length === 2
+                    ? 2
+                    : (row.progression.attempts[0]?.attemptNumber ?? 1);
+                  return (
+                    <article key={row.record.enrollmentId} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-clinical-800 dark:text-clinical-300">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</p>
+                          <h3 className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}</h3>
+                        </div>
+                        {renderRemedialStageBadge(row.progression.stage, 'min-[480px]:shrink-0 min-[480px]:whitespace-nowrap')}
+                      </div>
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                        <div className="min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Original Grade</dt>
+                          <dd className="mt-0.5 text-xs font-bold tabular-nums text-slate-800 dark:text-slate-100">
+                            {isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage} grade={row.record.gwa}>{formatGrade(row.record.gwa)}</GradeValue> : <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Grade unavailable</span>}
+                          </dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Attempts</dt>
+                          <dd className="mt-0.5 whitespace-nowrap text-xs font-bold tabular-nums text-slate-800 dark:text-slate-200">Attempt {activeAttemptNumber}</dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Subject</dt>
+                          <dd className="mt-0.5 whitespace-nowrap text-xs font-bold text-clinical-800 dark:text-clinical-300">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Class</dt>
+                          <dd className="mt-0.5 text-xs font-medium text-slate-700 dark:text-slate-200">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</dd>
+                        </div>
+                      </dl>
+                      <div className="mt-2">{renderRemedialActions(row, true)}</div>
+                    </article>
+                  );
+                })}
+              </div>
+            </>
           )}
         </Card>
       )}
