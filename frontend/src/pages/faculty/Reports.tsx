@@ -864,12 +864,12 @@ export const Reports: React.FC = () => {
   const renderRemark = (remark: string) => (
     <span className={`inline-flex whitespace-nowrap px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
       remark === 'FAILED'
-        ? 'bg-rose-100 text-rose-700'
+        ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
         : remark === 'PENDING' || remark === 'RETENTION UNAVAILABLE'
-        ? 'bg-slate-100 text-slate-600'
+        ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
         : remark === 'REVIEW RETENTION'
-        ? 'bg-amber-100 text-amber-700'
-        : 'bg-emerald-100 text-emerald-700'
+        ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
     }`}>
       {remark}
     </span>
@@ -987,103 +987,103 @@ export const Reports: React.FC = () => {
             </div>
           </div>
 
-          {/* Phones: one block per student (name first, then the grade fields) instead of a clipped table. */}
-          <ul className="md:hidden max-h-[480px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium">
+          <div className="p-3 sm:p-4">
             {paginatedStudentsInSubject.length === 0 ? (
-              <li className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No student records found for the selected course and class section.</h3></li>
+              <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
+                <Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No student records found for the selected course and class section.</h3>
+              </div>
             ) : (
-              paginatedStudentsInSubject.map((student) => {
-                const subj = subjectForSelection(student);
-                const evaluation = courseEvaluation(subj);
-                const fields: [string, React.ReactNode][] = [
-                  ...(isLectureLaboratoryMode ? [
-                    ['Midterm Lecture', formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus)],
-                    ['Midterm Laboratory', formatComponentResult(evaluation.midtermComponents?.laboratory, evaluation.midtermStatus)],
-                  ] as [string, React.ReactNode][] : []),
-                  ['Midterm', formatPercent(evaluation.midtermPercentage)],
-                  ...(isLectureLaboratoryMode ? [
-                    ['Finals Lecture', formatComponentResult(evaluation.finalComponents?.lecture, evaluation.finalStatus)],
-                    ['Finals Laboratory', formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus)],
-                  ] as [string, React.ReactNode][] : []),
-                  [isLectureLaboratoryMode ? 'Finals' : 'Final', formatPercent(evaluation.finalPercentage)],
-                ];
-                return (
-                  <li key={student.id} className="px-5 py-3.5 space-y-2">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId}</span>
-                      </div>
-                      <span className="shrink-0 text-right">{renderRemark(courseRemark(student, subj))}</span>
-                    </div>
-                    <dl className="grid grid-cols-3 gap-2">
-                      {fields.map(([label, value]) => (
-                        <div key={label} className="min-w-0">
-                          <dt className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</dt>
-                          <dd className="font-mono text-slate-700 dark:text-slate-200">{value}</dd>
-                        </div>
-                      ))}
-                      <div className="min-w-0">
-                        <dt className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Grade</dt>
-                        <dd className="font-extrabold text-sm text-slate-800 dark:text-slate-100">{renderCourseGrade(evaluation)}</dd>
-                      </div>
-                    </dl>
-                  </li>
-                );
-              })
-            )}
-          </ul>
+              <>
+                <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                  <table className={`w-full text-left text-xs ${isLectureLaboratoryMode ? 'min-w-[780px]' : 'min-w-[580px]'}`}>
+                    <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      <tr>
+                        <th scope="col" className="whitespace-nowrap pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4" aria-sort={ariaSort(gradeSort, 'name')}><SortableHeader label="Student Details" sortKey="name" sort={gradeSort} onSort={setGradeSort} /></th>
+                        {isLectureLaboratoryMode && <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4">Midterm Lecture</th>}
+                        {isLectureLaboratoryMode && <th scope="col" className="whitespace-nowrap px-2 py-2.5 text-right xl:px-4">Midterm Laboratory</th>}
+                        <th scope="col" className={`whitespace-nowrap px-2 py-2.5 text-right xl:px-4 ${!isLectureLaboratoryMode ? 'border-l border-slate-200/70 dark:border-slate-800' : ''}`}>Midterm</th>
+                        {isLectureLaboratoryMode && <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4">Finals Lecture</th>}
+                        {isLectureLaboratoryMode && <th scope="col" className="whitespace-nowrap px-2 py-2.5 text-right xl:px-4">Finals Laboratory</th>}
+                        <th scope="col" className={`whitespace-nowrap px-2 py-2.5 text-right xl:px-4 ${!isLectureLaboratoryMode ? 'border-l border-slate-200/70 dark:border-slate-800' : ''}`}>{isLectureLaboratoryMode ? 'Finals' : 'Final'}</th>
+                        <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4" aria-sort={ariaSort(gradeSort, 'grade')}><SortableHeader label="Grade" sortKey="grade" sort={gradeSort} onSort={setGradeSort} align="right" /></th>
+                        <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 dark:border-slate-800 xl:pl-4 xl:pr-5">Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedStudentsInSubject.map((student: any) => {
+                        const subj = subjectForSelection(student);
+                        const evaluation = courseEvaluation(subj);
+                        const remark = courseRemark(student, subj);
 
-          <div className="table-pin table-pin-first hidden md:block">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
-                  <th className="px-5 py-3" aria-sort={ariaSort(gradeSort, 'name')}><SortableHeader label="Student Details" sortKey="name" sort={gradeSort} onSort={setGradeSort} /></th>
-                  {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Midterm Lecture</th>}
-                  {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Midterm Laboratory</th>}
-                  <th className="px-5 py-3 text-center">Midterm</th>
-                  {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Finals Lecture</th>}
-                  {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Finals Laboratory</th>}
-                  <th className="px-5 py-3 text-center">{isLectureLaboratoryMode ? 'Finals' : 'Final'}</th>
-                  <th className="px-5 py-3 text-center" aria-sort={ariaSort(gradeSort, 'grade')}><SortableHeader label="Grade" sortKey="grade" sort={gradeSort} onSort={setGradeSort} /></th>
-                  <th className="px-5 py-3">Remarks</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium">
-                {paginatedStudentsInSubject.length === 0 ? (
-                  <tr>
-                    <td colSpan={isLectureLaboratoryMode ? 9 : 5} className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No student records found for the selected course and class section.</h3></td>
-                  </tr>
-                ) : (
-                  paginatedStudentsInSubject.map((student: any) => {
+                        return (
+                          <tr key={student.id}>
+                            <td className="pl-3.5 pr-2 py-3 xl:pl-5 xl:pr-4">
+                              <div className="font-bold text-slate-800 dark:text-slate-100">{student.name}</div>
+                              <span className="whitespace-nowrap text-[11px] font-bold text-clinical-800 dark:text-clinical-300">{student.studentId}</span>
+                            </td>
+                            {isLectureLaboratoryMode && <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right tabular-nums text-slate-600 dark:border-slate-800/80 dark:text-slate-300 xl:px-4">{formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus)}</td>}
+                            {isLectureLaboratoryMode && <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums text-slate-600 dark:text-slate-300 xl:px-4">{formatComponentResult(evaluation.midtermComponents?.laboratory, evaluation.midtermStatus)}</td>}
+                            <td className={`whitespace-nowrap px-2 py-3 text-right tabular-nums text-slate-700 dark:text-slate-200 xl:px-4 ${!isLectureLaboratoryMode ? 'border-l border-slate-100 dark:border-slate-800/80' : ''}`}>{formatPercent(evaluation.midtermPercentage)}</td>
+                            {isLectureLaboratoryMode && <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right tabular-nums text-slate-600 dark:border-slate-800/80 dark:text-slate-300 xl:px-4">{formatComponentResult(evaluation.finalComponents?.lecture, evaluation.finalStatus)}</td>}
+                            {isLectureLaboratoryMode && <td className="whitespace-nowrap px-2 py-3 text-right tabular-nums text-slate-600 dark:text-slate-300 xl:px-4">{formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus)}</td>}
+                            <td className={`whitespace-nowrap px-2 py-3 text-right tabular-nums text-slate-700 dark:text-slate-200 xl:px-4 ${!isLectureLaboratoryMode ? 'border-l border-slate-100 dark:border-slate-800/80' : ''}`}>{formatPercent(evaluation.finalPercentage)}</td>
+                            <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right font-extrabold tabular-nums text-sm text-slate-800 dark:border-slate-800/80 dark:text-slate-100 xl:px-4">
+                              {renderCourseGrade(evaluation)}
+                            </td>
+                            <td className="border-l border-slate-100 pl-2 pr-3.5 py-3 dark:border-slate-800/80 xl:pl-4 xl:pr-5">
+                              {renderRemark(remark)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="space-y-2.5 md:hidden">
+                  {paginatedStudentsInSubject.map((student) => {
                     const subj = subjectForSelection(student);
                     const evaluation = courseEvaluation(subj);
-                    const remark = courseRemark(student, subj);
-
+                    const fields: [string, React.ReactNode][] = [
+                      ...(isLectureLaboratoryMode ? [
+                        ['Midterm Lecture', formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus)],
+                        ['Midterm Laboratory', formatComponentResult(evaluation.midtermComponents?.laboratory, evaluation.midtermStatus)],
+                      ] as [string, React.ReactNode][] : []),
+                      ['Midterm', formatPercent(evaluation.midtermPercentage)],
+                      ...(isLectureLaboratoryMode ? [
+                        ['Finals Lecture', formatComponentResult(evaluation.finalComponents?.lecture, evaluation.finalStatus)],
+                        ['Finals Laboratory', formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus)],
+                      ] as [string, React.ReactNode][] : []),
+                      [isLectureLaboratoryMode ? 'Finals' : 'Final', formatPercent(evaluation.finalPercentage)],
+                    ];
                     return (
-                      <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
-                        <td className="px-5 py-3.5">
-                          <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
-                          <span className="whitespace-nowrap text-[10px] text-slate-500 dark:text-slate-400 font-mono">{student.studentId}</span>
-                        </td>
-                        {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus)}</td>}
-                        {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.midtermComponents?.laboratory, evaluation.midtermStatus)}</td>}
-                        <td className="px-5 py-3.5 text-center font-mono">{formatPercent(evaluation.midtermPercentage)}</td>
-                        {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.finalComponents?.lecture, evaluation.finalStatus)}</td>}
-                        {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus)}</td>}
-                        <td className="px-5 py-3.5 text-center font-mono">{formatPercent(evaluation.finalPercentage)}</td>
-                        <td className="px-5 py-3.5 text-center font-extrabold text-sm dark:text-slate-100">
-                          {renderCourseGrade(evaluation)}
-                        </td>
-                        <td className="px-5 py-3.5">
-                          {renderRemark(remark)}
-                        </td>
-                      </tr>
+                      <article key={student.id} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-clinical-700 dark:text-clinical-300">{student.studentId}</p>
+                            <h3 className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100">{student.name}</h3>
+                          </div>
+                          <span className="shrink-0 text-right">{renderRemark(courseRemark(student, subj))}</span>
+                        </div>
+                        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                          {fields.map(([label, value]) => (
+                            <div key={label} className="min-w-0">
+                              <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">{label}</dt>
+                              <dd className="mt-0.5 whitespace-nowrap text-xs font-medium tabular-nums text-slate-700 dark:text-slate-200">{value}</dd>
+                            </div>
+                          ))}
+                          <div className="min-w-0">
+                            <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Grade</dt>
+                            <dd className="mt-0.5 whitespace-nowrap text-xs font-bold tabular-nums text-slate-800 dark:text-slate-100">{renderCourseGrade(evaluation)}</dd>
+                          </div>
+                        </dl>
+                      </article>
                     );
-                  })
-                )}
-              </tbody>
-            </table>
+                  })}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Pagination controls */}
@@ -1135,53 +1135,106 @@ export const Reports: React.FC = () => {
             />
           </div>
 
-          <div className="table-pin table-pin-first table-pin-blocks">
-            <table className="w-full text-left max-md:block">
-              <thead className="max-md:hidden">
-                <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
-                  <th className="px-5 py-3" aria-sort={ariaSort(retentionSort, 'name')}><SortableHeader label="Student Details" sortKey="name" sort={retentionSort} onSort={setRetentionSort} /></th>
-                  <th className="px-5 py-3 text-center" aria-sort={ariaSort(retentionSort, 'grade')}><SortableHeader label="Standing Grade" sortKey="grade" sort={retentionSort} onSort={setRetentionSort} /></th>
-                  <th className="px-5 py-3 text-center">Courses in Remedial</th>
-                  <th className="px-5 py-3">Remedial Program Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium max-md:block">
-                {sortedRetentionStudents.length === 0 ? (
-                  <tr className="max-md:block"><td colSpan={4} className="px-6 py-14 text-center max-md:block"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{retentionLoading ? 'Loading retention records…' : retentionLoadError ? 'Retention records could not be loaded.' : 'No students in retention or remedial for the selected school year.'}</h3></td></tr>
-                ) : sortedRetentionStudents.map((student: any) => {
-                  const warnings = retentionUnavailable ? [] : (student.enrolledSubjects || []).filter((sub: any) =>
-                    assignedSubjects.includes(sub.code)
-                    && retentionIsAtRisk(retentionForStudentSubject(student, sub))
-                  );
-                  const gwa = standingGwa(student);
-                  const remedialStatus = remedialStatusFor(student);
+          <div className="p-3 sm:p-4">
+            {sortedRetentionStudents.length === 0 ? (
+              <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
+                <Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{retentionLoading ? 'Loading retention records…' : retentionLoadError ? 'Retention records could not be loaded.' : 'No students in retention or remedial for the selected school year.'}</h3>
+              </div>
+            ) : (
+              <>
+                <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                  <table className="w-full min-w-[580px] text-left text-xs">
+                    <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      <tr>
+                        <th scope="col" className="whitespace-nowrap pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4" aria-sort={ariaSort(retentionSort, 'name')}><SortableHeader label="Student Details" sortKey="name" sort={retentionSort} onSort={setRetentionSort} /></th>
+                        <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 text-right dark:border-slate-800 xl:px-4" aria-sort={ariaSort(retentionSort, 'grade')}><SortableHeader label="Standing Grade" sortKey="grade" sort={retentionSort} onSort={setRetentionSort} align="right" /></th>
+                        <th scope="col" className="whitespace-nowrap px-2 py-2.5 text-right xl:px-4">Courses in Remedial</th>
+                        <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 dark:border-slate-800 xl:pl-4 xl:pr-5">Remedial Program Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedRetentionStudents.map((student: any) => {
+                        const warnings = retentionUnavailable ? [] : (student.enrolledSubjects || []).filter((sub: any) =>
+                          assignedSubjects.includes(sub.code)
+                          && retentionIsAtRisk(retentionForStudentSubject(student, sub))
+                        );
+                        const gwa = standingGwa(student);
+                        const remedialStatus = remedialStatusFor(student);
 
-                  return (
-                    <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10 max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1 max-md:border-t max-md:border-slate-100 max-md:px-4 max-md:py-3.5 dark:max-md:border-slate-800">
-                      <td className="px-5 py-3.5 max-md:order-1 max-md:w-full max-md:px-0 max-md:pb-0">
-                        <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
-                        <span className="whitespace-nowrap text-[10px]">{student.studentId} • Year {student.yearLevel}</span>
-                      </td>
-                      <td className="px-5 py-3.5 text-center font-bold text-slate-800 dark:text-slate-100 max-md:order-2 max-md:px-0 max-md:py-1 max-md:text-left">
-                        <span className="mr-1 font-normal text-slate-500 dark:text-slate-400 md:hidden">Standing grade:</span>
-                        {gwa !== null ? gwa.toFixed(2) : '—'}
-                      </td>
-                      <td className={`px-5 py-3.5 text-center font-semibold max-md:order-3 max-md:px-0 max-md:py-1 max-md:text-left ${!retentionUnavailable && warnings.length > 0 ? 'text-rose-500' : 'text-slate-500 dark:text-slate-400'}`}><span className="mr-1 font-normal text-slate-500 dark:text-slate-400 md:hidden">Courses in remedial:</span>{retentionUnavailable ? 'Unavailable' : warnings.length}</td>
-                      <td className="px-5 py-3.5 dark:text-slate-400 max-md:order-4 max-md:w-full max-md:px-0 max-md:pt-1">
-                        <span className="mr-1 text-slate-500 dark:text-slate-400 md:hidden">Remedial program status:</span>
-                        {remedialStatus === 'No remedial' || remedialStatus === 'Unavailable' ? (
-                          <span className="font-medium text-slate-500 dark:text-slate-400">{remedialStatus}</span>
-                        ) : (
-                          <span className="font-semibold flex items-center gap-1 min-[480px]:whitespace-nowrap">
-                            <Clock className="w-3.5 h-3.5 shrink-0" /> {remedialStatus}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        return (
+                          <tr key={student.id}>
+                            <td className="pl-3.5 pr-2 py-3 xl:pl-5 xl:pr-4">
+                              <div className="font-bold text-slate-800 dark:text-slate-100">{student.name}</div>
+                              <span className="whitespace-nowrap text-[11px] font-bold text-clinical-800 dark:text-clinical-300">{student.studentId} · Year {student.yearLevel}</span>
+                            </td>
+                            <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 text-right font-bold tabular-nums text-slate-800 dark:border-slate-800/80 dark:text-slate-100 xl:px-4">
+                              {gwa !== null ? gwa.toFixed(2) : '—'}
+                            </td>
+                            <td className={`whitespace-nowrap px-2 py-3 text-right font-semibold tabular-nums xl:px-4 ${!retentionUnavailable && warnings.length > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                              {retentionUnavailable ? 'Unavailable' : warnings.length}
+                            </td>
+                            <td className="border-l border-slate-100 pl-2 pr-3.5 py-3 dark:border-slate-800/80 dark:text-slate-300 xl:pl-4 xl:pr-5">
+                              {remedialStatus === 'No remedial' || remedialStatus === 'Unavailable' ? (
+                                <span className="font-medium text-slate-500 dark:text-slate-400">{remedialStatus}</span>
+                              ) : (
+                                <span className="font-semibold flex items-center gap-1 whitespace-nowrap">
+                                  <Clock className="w-3.5 h-3.5 shrink-0" /> {remedialStatus}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="space-y-2.5 md:hidden">
+                  {sortedRetentionStudents.map((student: any) => {
+                    const warnings = retentionUnavailable ? [] : (student.enrolledSubjects || []).filter((sub: any) =>
+                      assignedSubjects.includes(sub.code)
+                      && retentionIsAtRisk(retentionForStudentSubject(student, sub))
+                    );
+                    const gwa = standingGwa(student);
+                    const remedialStatus = remedialStatusFor(student);
+
+                    return (
+                      <article key={student.id} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-clinical-700 dark:text-clinical-300">{student.studentId} · Year {student.yearLevel}</p>
+                            <h3 className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100">{student.name}</h3>
+                          </div>
+                          {remedialStatus === 'No remedial' || remedialStatus === 'Unavailable' ? (
+                            <span className="shrink-0 max-w-[50%] rounded-full bg-slate-100 px-2 py-0.5 text-right text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                              {remedialStatus}
+                            </span>
+                          ) : (
+                            <span className="shrink-0 max-w-[55%] inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-right text-[10px] font-bold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                              <Clock className="w-3 h-3 shrink-0" />
+                              <span>{remedialStatus}</span>
+                            </span>
+                          )}
+                        </div>
+                        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                          <div className="min-w-0">
+                            <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Standing Grade</dt>
+                            <dd className="mt-0.5 whitespace-nowrap text-xs font-bold tabular-nums text-slate-800 dark:text-slate-100">{gwa !== null ? gwa.toFixed(2) : '—'}</dd>
+                          </div>
+                          <div className="min-w-0">
+                            <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Courses in Remedial</dt>
+                            <dd className={`mt-0.5 whitespace-nowrap text-xs font-semibold tabular-nums ${!retentionUnavailable && warnings.length > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-200'}`}>
+                              {retentionUnavailable ? 'Unavailable' : warnings.length}
+                            </dd>
+                          </div>
+                        </dl>
+                      </article>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         </Card>
       )}
@@ -1272,50 +1325,89 @@ export const Reports: React.FC = () => {
             </div>
           </div>
 
-          <div className="table-pin table-pin-first">
+          <div className="p-3 sm:p-4 space-y-3">
             {attendanceError && (
-              <div className="m-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+              <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{attendanceError}</span>
               </div>
             )}
-            {attendanceLoading && <div role="status" className="p-12 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">Loading persisted attendance records…</div>}
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
-                  <th className="px-5 py-3">Date</th>
-                  <th className="px-5 py-3">Student Details</th>
-                  <th className="px-5 py-3">Subject Code</th>
-                  <th className="px-5 py-3">Recorded Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium">
-                {!attendanceLoading && attendanceRecords.length === 0 ? (
-                  <tr><td colSpan={4} className="px-6 py-14 text-center"><Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" /><h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No persisted attendance records for this class and date.</h3></td></tr>
-                ) : attendanceRecords.map(record => {
-                    return (
-                      <tr key={record.enrollmentId} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
-                        <td className="px-5 py-3 font-mono">{formatShortDate(record.date)}</td>
-                        <td className="px-5 py-3">
-                          <div className="font-bold text-slate-800 dark:text-slate-200">{record.studentName || 'Student name unavailable'}</div>
-                          <span className="whitespace-nowrap text-[10px] text-slate-500 dark:text-slate-400 font-mono">{record.studentNumber || 'Student number unavailable'}</span>
-                        </td>
-                        <td className="px-5 py-3 font-bold font-mono">{selectedClass?.courseCode || 'Course unavailable'}</td>
-                        <td className="px-5 py-3">
-                          <span className={`whitespace-nowrap px-2 py-0.5 rounded font-extrabold uppercase text-[9px] ${
-                            record.status === 'present' ? 'bg-emerald-100 text-emerald-700' :
-                            record.status === 'late' ? 'bg-amber-100 text-amber-700' :
-                            record.status === 'excused' ? 'bg-sky-100 text-sky-700' :
-                            record.status === null ? 'bg-slate-100 text-slate-500' : 'bg-rose-100 text-rose-700'
-                          }`}>
-                            {record.status || 'Not recorded'}
-                          </span>
-                        </td>
+            {attendanceLoading ? (
+              <div role="status" className="rounded-3xl border border-slate-200/80 bg-white p-12 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">Loading persisted attendance records…</div>
+            ) : attendanceRecords.length === 0 ? (
+              <div className="rounded-3xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900">
+                <Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+                <h3 className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No persisted attendance records for this class and date.</h3>
+              </div>
+            ) : (
+              <>
+                <div className="table-pin table-pin-first data-table-ruled data-table-ruled-clinical hidden md:block">
+                  <table className="w-full min-w-[580px] text-left text-xs">
+                    <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      <tr>
+                        <th scope="col" className="whitespace-nowrap pl-3.5 pr-2 py-2.5 xl:pl-5 xl:pr-4">Date</th>
+                        <th scope="col" className="px-2 py-2.5 xl:px-4">Student Details</th>
+                        <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 px-2 py-2.5 dark:border-slate-800 xl:px-4">Subject Code</th>
+                        <th scope="col" className="whitespace-nowrap border-l border-slate-200/70 pl-2 pr-3.5 py-2.5 dark:border-slate-800 xl:pl-4 xl:pr-5">Recorded Status</th>
                       </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                      {attendanceRecords.map(record => (
+                        <tr key={record.enrollmentId}>
+                          <td className="whitespace-nowrap pl-3.5 pr-2 py-3 tabular-nums text-slate-700 dark:text-slate-200 xl:pl-5 xl:pr-4">{formatShortDate(record.date)}</td>
+                          <td className="px-2 py-3 xl:px-4">
+                            <div className="font-bold text-slate-800 dark:text-slate-100">{record.studentName || 'Student name unavailable'}</div>
+                            <span className="whitespace-nowrap text-[11px] font-bold text-clinical-800 dark:text-clinical-300">{record.studentNumber || 'Student number unavailable'}</span>
+                          </td>
+                          <td className="whitespace-nowrap border-l border-slate-100 px-2 py-3 font-bold text-clinical-800 dark:border-slate-800/80 dark:text-clinical-300 xl:px-4">{selectedClass?.courseCode || 'Course unavailable'}</td>
+                          <td className="border-l border-slate-100 pl-2 pr-3.5 py-3 dark:border-slate-800/80 xl:pl-4 xl:pr-5">
+                            <span className={`whitespace-nowrap px-2 py-0.5 rounded font-extrabold uppercase text-[9px] ${
+                              record.status === 'present' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' :
+                              record.status === 'late' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' :
+                              record.status === 'excused' ? 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300' :
+                              record.status === null ? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+                            }`}>
+                              {record.status || 'Not recorded'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="space-y-2.5 md:hidden">
+                  {attendanceRecords.map(record => (
+                    <article key={record.enrollmentId} className="rounded-2xl border border-slate-200/90 border-l-[3px] border-l-clinical-500/80 bg-white p-3 shadow-2xs dark:border-slate-800 dark:border-l-clinical-400/70 dark:bg-slate-900">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="whitespace-nowrap text-[11px] font-extrabold tracking-wide text-clinical-700 dark:text-clinical-300">{record.studentNumber || 'Student number unavailable'}</p>
+                          <h3 className="mt-0.5 text-[13px] font-bold leading-snug text-slate-800 dark:text-slate-100">{record.studentName || 'Student name unavailable'}</h3>
+                        </div>
+                        <span className={`shrink-0 whitespace-nowrap px-2 py-0.5 rounded font-extrabold uppercase text-[9px] ${
+                          record.status === 'present' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' :
+                          record.status === 'late' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' :
+                          record.status === 'excused' ? 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300' :
+                          record.status === null ? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+                        }`}>
+                          {record.status || 'Not recorded'}
+                        </span>
+                      </div>
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl bg-slate-50/90 px-2.5 py-2 dark:bg-slate-800/50">
+                        <div className="min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Date</dt>
+                          <dd className="mt-0.5 whitespace-nowrap text-xs font-medium tabular-nums text-slate-700 dark:text-slate-200">{formatShortDate(record.date)}</dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className="text-[10px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Subject Code</dt>
+                          <dd className="mt-0.5 whitespace-nowrap text-xs font-bold text-clinical-800 dark:text-clinical-300">{selectedClass?.courseCode || 'Course unavailable'}</dd>
+                        </div>
+                      </dl>
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </Card>
       )}
