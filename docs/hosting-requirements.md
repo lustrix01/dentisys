@@ -7,15 +7,15 @@ What the demo and production servers need, in one place (spec DEL-001). How to s
 | | Requirement |
 |---|---|
 | Environments | Two: **demo** (Claude deploys and tests) and **production** (Owner only). Same setup, separate images. |
-| Provider | Any VPS provider; currently **Vultr**, one account, Singapore region. |
+| Provider | Any VPS provider; currently **AWS EC2**, one account, **Singapore (`ap-southeast-1`)**. |
 | Operating system | **Ubuntu Server 26.04 LTS** only (the hardening script refuses others). |
 | CPU type | **x86-64 (amd64)**. Images are built for `linux/amd64`; ARM servers do not work. |
-| Size, each | **Vultr High Frequency AMD, 1 vCPU / 2 GB RAM** (about 1.6 GB usable), 30 GB disk or more, on both servers. Benchmark results (`benchmarks/results/`, method in [benchmark.md](benchmark.md)): about 34 requests/s, no errors at 25 simultaneous users, and 4 face check-ins at once add under 2 s each. A plain 1 vCPU / 1 GB plan works for the demo but swaps heavily and is roughly 2.5× slower. Move to 2 vCPU if many people browse heavily at once. 8 GB disks run out while pulling images. |
+| Size, each | **Demo: `t3.small` (2 vCPU / 2 GB RAM). Production: `c7i-flex.large` (2 vCPU / 4 GB RAM).** 30 GB gp3 disk or more on both. The benchmark below was measured on a Vultr High Frequency AMD 1 vCPU / 2 GB server, before the move to AWS. Benchmark results (`benchmarks/results/`, method in [benchmark.md](benchmark.md)): about 34 requests/s, no errors at 25 simultaneous users, and 4 face check-ins at once add under 2 s each. A plain 1 vCPU / 1 GB plan works for the demo but swaps heavily and is roughly 2.5× slower. Move to 2 vCPU if many people browse heavily at once. 8 GB disks run out while pulling images. |
 | App copies | `WEB_REPLICAS` / `FRONTEND_REPLICAS` in the server's `.env` (default 3 each, for updates without downtime). **Both servers run 1 and 1**: on 1 vCPU this removed the errors at 25 simultaneous users and cut face check-in delay in the benchmark; each update briefly interrupts the site. Each server's own `.env` holds the number it runs. |
-| IP address | One fixed public IPv4. A Vultr server keeps its IP for its lifetime; a Reserved IP is needed only to rebuild a server on the same IP. On AWS use an Elastic IP. |
-| SSH keys | **A separate key per server, both made before the first server is created**: the demo key (no passphrase; Claude uses it for demo deploys and tests) and the production key (passphrase; Owner only). Never select the demo key for production, so a leaked demo key cannot open production and Claude has no way in. |
-| First login | The server's own SSH key, selected when the server is created. Vultr logs in as `root` (setup option `-InitialUser root`); AWS logs in as `ubuntu` (the default). |
-| Recovery | The provider's web console (Vultr *View Console*; AWS Session Manager or EC2 Instance Connect). Keep it available before hardening. |
+| IP address | One fixed public IPv4: an **Elastic IP** associated with each instance. An Elastic IP belongs to one region and cannot move to another; moving region means a new IP and a DNS update. |
+| SSH keys | **Intended: a separate key per server**: the demo key (no passphrase; Claude uses it for demo deploys and tests) and the production key (passphrase; Owner only), so a leaked demo key cannot open production. **Today both servers use the one EC2 key pair `AWSCloud.pem`** (Owner's choice; see Accepted risks). |
+| First login | The EC2 key pair selected when the instance is created. AWS logs in as `ubuntu` (the default `-InitialUser`); after hardening, as the sudo account (`devops`) on port 2202. |
+| Recovery | AWS Session Manager or EC2 Instance Connect. Keep it available before hardening. |
 
 ## Hardening
 
@@ -24,11 +24,11 @@ Applied by the setup script: the Owner's [Ubuntu 26.04 hardening guide](https://
 - System updates, then one reboot if Ubuntu asks for it.
 - A sudo account (`devops` by default; never `root` or `ubuntu`).
 - SSH on **port 2202, keys only**; root and password logins off.
-- **Before the first setup run**, check the provider's own SSH files: `grep -ri passwordauthentication /etc/ssh/sshd_config.d/`. If any says `yes` (Vultr's `50-cloud-init.conf` does), change it to `no` and run `systemctl reload ssh`; otherwise the setup script stops (“An existing SSH setting overrides the guide”) without changing anything.
+- **Before the first setup run**, check the provider's own SSH files: `grep -ri passwordauthentication /etc/ssh/sshd_config.d/`. If any says `yes` (some provider images, such as Vultr's `50-cloud-init.conf`, do), change it to `no` and run `systemctl reload ssh`; otherwise the setup script stops (“An existing SSH setting overrides the guide”) without changing anything.
 - **UFW firewall**: only 2202 (rate-limited), 80 and 443 open.
 - **fail2ban** against repeated login attempts.
 - Production: no database tunnel; pgAdmin off by default and loopback-only when on. PostgreSQL, Mailpit and the face service stay inside Docker; Traefik is the only public entry point.
-- A cloud firewall (Vultr Firewall Group, AWS Security Group) is optional; if one is used it must allow 2202, 80 and 443. Limiting 2202 to one IP locks you out when that IP changes.
+- The AWS Security Group is required; it must allow 2202, 80 and 443 (22 for the first setup run only). Security Groups do not copy between regions. Limiting 2202 to one IP locks you out when that IP changes.
 
 ## Software versions
 
@@ -72,4 +72,4 @@ Pinned in the repository; change them there, not on the server.
 
 - Both servers are on one provider account and one payment method: a billing or account problem takes both down together.
 - There is no off-server backup, so test data can be lost.
-- The first production server was created with the demo key. Until it is replaced with a production key, one leaked key opens both servers, and Claude must still never connect to production.
+- Both servers use the same key pair (`AWSCloud.pem`). One leaked key opens both servers until production gets its own key, and Claude must still never connect to production.

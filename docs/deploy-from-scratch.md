@@ -2,7 +2,7 @@
 
 This guide takes a developer from an empty VPS provider account to a running,
 verified DentiSYS server with **one command**. Both servers (demo and
-production) live on **Vultr** (spec DEL-001); any provider that meets
+production) live on **AWS EC2, Singapore** (spec DEL-001); any provider that meets
 [hosting-requirements.md](hosting-requirements.md) works. Sections 1–5 set up the **demo**; the production server is in
 [Production VPS](#production-vps). Reference details for every step are in
 [vps-deployment.md](vps-deployment.md).
@@ -39,24 +39,26 @@ firewall, DNS) is always done by hand.
 | Gmail account with **2-Step Verification** and an **App Password** | Google account | Sends invitations and notices (~500 emails/day limit). |
 | GitHub account and the published images `ghcr.io/<owner>/dentisys-{web,frontend,biometric}:demo` | GitHub | To use your own namespace: `docker login ghcr.io`, then `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-images.ps1 -Namespace <your-github-user>`. Then create a **classic token with `read:packages`** for the server. |
 | Google OAuth client ID (optional, for Google Sign-In) | Google Cloud Console | Add the site URL to *Authorized JavaScript origins* after step 2. |
-| VPS provider account and **two SSH key pairs, made before creating any server** | Vultr (or AWS) | One key per server, never shared: a demo key (`ssh-keygen -t ed25519 -f $HOME\.ssh\dentisys-demo`, no passphrase, so Claude can run demo deploys and tests) and a production key with a passphrase (`ssh-keygen -t ed25519 -f $HOME\.ssh\dentisys-prod`; only the Owner uses it). Add both `.pub` files under *Account → SSH Keys* and select only the matching one when creating each server. AWS: one EC2 key pair (`.pem`) per server. Keep private keys in `%USERPROFILE%\.ssh\` (see troubleshooting for permissions). |
+| VPS provider account and **two SSH key pairs, made before creating any server** | AWS (or Vultr) | One key per server, never shared: a demo key (`ssh-keygen -t ed25519 -f $HOME\.ssh\dentisys-demo`, no passphrase, so Claude can run demo deploys and tests) and a production key with a passphrase (`ssh-keygen -t ed25519 -f $HOME\.ssh\dentisys-prod`; only the Owner uses it). Add both `.pub` files under *Account → SSH Keys* and select only the matching one when creating each server. AWS: one EC2 key pair (`.pem`) per server. Keep private keys in `%USERPROFILE%\.ssh\` (see troubleshooting for permissions). |
 
 ## 2. The server (manual)
 
-**Vultr:**
-1. *Deploy* → Cloud Compute, **High Frequency AMD, 1 vCPU / 2 GB** (the
-   benchmarked size in [hosting-requirements.md](hosting-requirements.md)),
-   region **Singapore**, image **Ubuntu 26.04 LTS x64** (check it is not
-   26.10), only that server's SSH key selected. No Firewall Group is needed
-   (the script sets up UFW); if you add one, allow `22` (first run only),
-   `2202`, `80` and `443`.
+**AWS (current):** in region **Singapore (`ap-southeast-1`)**, an Ubuntu
+Server 26.04 LTS x86-64 instance (**t3.small** for the demo,
+**c7i-flex.large** for production; **30 GB** gp3 disk), an **Elastic IP**
+associated with it, and a Security Group with `22` (first run only), `2202`,
+`80` and `443`. Check the console region before launching: the Elastic IP,
+key pair and Security Group exist per region and cannot be moved.
+
+**Vultr (other provider):**
+1. *Deploy* → Cloud Compute, **High Frequency AMD, 1 vCPU / 2 GB**, region
+   **Singapore**, image **Ubuntu 26.04 LTS x64** (check it is not 26.10),
+   only that server's SSH key selected. No Firewall Group is needed (the
+   script sets up UFW); if you add one, allow `22` (first run only), `2202`,
+   `80` and `443`.
 2. Wait for **Running** and note the IPv4. The server keeps it for its
    lifetime; use a Reserved IP only to rebuild a server on the same address.
 3. Check that *View Console* opens: it is the recovery route if SSH breaks.
-
-**AWS:** an Ubuntu Server 26.04 LTS x86-64 instance (**c7i-flex.large** or
-larger, **30 GB** gp3 disk), an **Elastic IP** associated with it, and a
-Security Group with `22` (first run only), `2202`, `80` and `443`.
 
 **Address:** point the server's record at its IP in Cloudflare (DNS-only):
 `@` for production (`bu-dentisys.com`), `demo` for the demo
