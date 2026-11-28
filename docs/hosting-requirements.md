@@ -13,7 +13,7 @@ What the demo and production servers need, in one place (spec DEL-001). How to s
 | Size, each | **Demo: `t3.small` (2 vCPU / 2 GB RAM). Production: `c7i-flex.large` (2 vCPU / 4 GB RAM).** 30 GB gp3 disk or more on both. The benchmark below was measured on a Vultr High Frequency AMD 1 vCPU / 2 GB server, before the move to AWS. Benchmark results (`benchmarks/results/`, method in [benchmark.md](benchmark.md)): about 34 requests/s, no errors at 25 simultaneous users, and 4 face check-ins at once add under 2 s each. A plain 1 vCPU / 1 GB plan works for the demo but swaps heavily and is roughly 2.5× slower. Move to 2 vCPU if many people browse heavily at once. 8 GB disks run out while pulling images. |
 | App copies | `WEB_REPLICAS` / `FRONTEND_REPLICAS` in the server's `.env` (default 3 each, for updates without downtime). **Both servers run 1 and 1**: on 1 vCPU this removed the errors at 25 simultaneous users and cut face check-in delay in the benchmark; each update briefly interrupts the site. Each server's own `.env` holds the number it runs. |
 | IP address | One fixed public IPv4: an **Elastic IP** associated with each instance. An Elastic IP belongs to one region and cannot move to another; moving region means a new IP and a DNS update. |
-| SSH keys | **Intended: a separate key per server**: the demo key (no passphrase; Claude uses it for demo deploys and tests) and the production key (passphrase; Owner only), so a leaked demo key cannot open production. **Today both servers use the one EC2 key pair `AWSCloud.pem`** (Owner's choice; see Accepted risks). |
+| SSH keys | **Both servers use the one EC2 key pair `AWSCloud.pem`** (Owner's decision, intended; see Accepted risks). Claude still never connects to production: production `sudo` needs the Owner's password. |
 | First login | The EC2 key pair selected when the instance is created. AWS logs in as `ubuntu` (the default `-InitialUser`); after hardening, as the sudo account (`devops`) on port 2202. |
 | Recovery | AWS Session Manager or EC2 Instance Connect. Keep it available before hardening. |
 
@@ -72,4 +72,4 @@ Pinned in the repository; change them there, not on the server.
 
 - Both servers are on one provider account and one payment method: a billing or account problem takes both down together.
 - There is no off-server backup, so test data can be lost.
-- Both servers use the same key pair (`AWSCloud.pem`). One leaked key opens both servers until production gets its own key, and Claude must still never connect to production.
+- Both servers use the same key pair (`AWSCloud.pem`, intended). One leaked key opens both servers, so keep the `.pem` private. Claude must still never connect to production.
